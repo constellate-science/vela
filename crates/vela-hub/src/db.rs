@@ -422,6 +422,80 @@ impl HubDb {
             .collect())
     }
 
+    /// One page of a frontier's objects of a given type (raw_json), ordered by
+    /// seq, with the total count — so the site renders a detail surface (sources,
+    /// proposals, …) without pulling the whole multi-MB snapshot. Returns
+    /// `(objects, total)`.
+    pub async fn frontier_objects_page(
+        &self,
+        vfr_id: &str,
+        object_type: &str,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<Value>, i64), String> {
+        let (rows, total): (Vec<String>, i64) = match self {
+            Self::Postgres(p) => {
+                let rows: Vec<String> = sqlx::query_scalar(
+                    "SELECT raw_json::text FROM frontier_objects \
+                     WHERE vfr_id = $1 AND object_type = $2 ORDER BY seq LIMIT $3 OFFSET $4",
+                )
+                .bind(vfr_id).bind(object_type).bind(limit).bind(offset)
+                .fetch_all(p).await.map_err(|e| e.to_string())?;
+                let total: i64 = sqlx::query_scalar(
+                    "SELECT COUNT(*)::bigint FROM frontier_objects WHERE vfr_id = $1 AND object_type = $2",
+                )
+                .bind(vfr_id).bind(object_type).fetch_one(p).await.map_err(|e| e.to_string())?;
+                (rows, total)
+            }
+            Self::Sqlite(p) => {
+                let rows: Vec<String> = sqlx::query_scalar(
+                    "SELECT raw_json FROM frontier_objects \
+                     WHERE vfr_id = ? AND object_type = ? ORDER BY seq LIMIT ? OFFSET ?",
+                )
+                .bind(vfr_id).bind(object_type).bind(limit).bind(offset)
+                .fetch_all(p).await.map_err(|e| e.to_string())?;
+                let total: i64 = sqlx::query_scalar(
+                    "SELECT COUNT(*) FROM frontier_objects WHERE vfr_id = ? AND object_type = ?",
+                )
+                .bind(vfr_id).bind(object_type).fetch_one(p).await.map_err(|e| e.to_string())?;
+                (rows, total)
+            }
+        };
+        let objects = rows
+            .into_iter()
+            .filter_map(|s| serde_json::from_str::<Value>(&s).ok())
+            .collect();
+        Ok((objects, total))
+    }
+
+    /// A single frontier object by `(type, object_id)` — a primary-key point
+    /// lookup. Returns the raw_json, or None if absent.
+    pub async fn frontier_object(
+        &self,
+        vfr_id: &str,
+        object_type: &str,
+        object_id: &str,
+    ) -> Result<Option<Value>, String> {
+        let row: Option<String> = match self {
+            Self::Postgres(p) => sqlx::query_scalar(
+                "SELECT raw_json::text FROM frontier_objects \
+                 WHERE vfr_id = $1 AND object_type = $2 AND object_id = $3 LIMIT 1",
+            )
+            .bind(vfr_id).bind(object_type).bind(object_id)
+            .fetch_optional(p).await.map_err(|e| e.to_string())?,
+            Self::Sqlite(p) => sqlx::query_scalar(
+                "SELECT raw_json FROM frontier_objects \
+                 WHERE vfr_id = ? AND object_type = ? AND object_id = ? LIMIT 1",
+            )
+            .bind(vfr_id).bind(object_type).bind(object_id)
+            .fetch_optional(p).await.map_err(|e| e.to_string())?,
+        };
+        match row {
+            Some(s) => serde_json::from_str::<Value>(&s).map(Some).map_err(|e| e.to_string()),
+            None => Ok(None),
+        }
+    }
+
     /// v0.201: look up a Scientific Diff Pack by its `vsd_*` id.
     /// Returns the raw signed pack JSON if the pack has been
     /// registered with this hub via a `diff_pack.released` federation

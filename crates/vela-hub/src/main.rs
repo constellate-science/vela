@@ -554,6 +554,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/entries/{vfr_id}/summary", get(get_entry_summary))
         .route("/entries/{vfr_id}/manifest", get(get_entry_manifest))
         .route("/search", get(search_endpoint))
+        .route("/entries/{vfr_id}/objects/{otype}", get(get_entry_objects))
+        .route("/entries/{vfr_id}/objects/{otype}/{object_id}", get(get_entry_object))
         .route(
             "/entries/{vfr_id}/events",
             get(get_entry_events).post(post_entry_event),
@@ -1132,6 +1134,89 @@ async fn search_endpoint(
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": format!("search: {e}")})),
+        )
+            .into_response(),
+    }
+}
+
+/// One page of a frontier's objects of a given type — lets detail surfaces
+/// (sources, proposals, …) render without pulling the whole snapshot. Params:
+/// limit (default 100, max 500), offset (default 0). Returns {objects, total}.
+async fn get_entry_objects(
+    State(state): State<AppState>,
+    Path((vfr_id, otype)): Path<(String, String)>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Response {
+    let limit: i64 = params
+        .get("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(100)
+        .clamp(1, 500);
+    let offset: i64 = params
+        .get("offset")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0)
+        .max(0);
+    match state.db.get_live_entry(&vfr_id).await {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": format!("{vfr_id} not found")})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("query: {e}")})),
+            )
+                .into_response();
+        }
+    }
+    match state
+        .db
+        .frontier_objects_page(&vfr_id, &otype, limit, offset)
+        .await
+    {
+        Ok((objects, total)) => (
+            StatusCode::OK,
+            [(axum::http::header::CACHE_CONTROL, "public, max-age=60")],
+            Json(json!({
+                "vfr_id": vfr_id, "type": otype,
+                "limit": limit, "offset": offset, "total": total,
+                "objects": objects,
+            })),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("objects: {e}")})),
+        )
+            .into_response(),
+    }
+}
+
+/// A single frontier object by (type, object_id) — a primary-key point lookup.
+async fn get_entry_object(
+    State(state): State<AppState>,
+    Path((vfr_id, otype, object_id)): Path<(String, String, String)>,
+) -> Response {
+    match state.db.frontier_object(&vfr_id, &otype, &object_id).await {
+        Ok(Some(obj)) => (
+            StatusCode::OK,
+            [(axum::http::header::CACHE_CONTROL, "public, max-age=60")],
+            Json(obj),
+        )
+            .into_response(),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("{object_id} not found in {vfr_id}")})),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("object: {e}")})),
         )
             .into_response(),
     }
