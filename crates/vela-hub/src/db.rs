@@ -496,6 +496,36 @@ impl HubDb {
         }
     }
 
+    /// All of a frontier's events as raw_json Values, ordered by seq — the input
+    /// to the Merkle transparency log (P2). Unbounded: transparency needs the
+    /// whole log, not a page.
+    pub async fn all_event_values(&self, vfr_id: &str) -> Result<Vec<Value>, String> {
+        match self {
+            Self::Postgres(p) => sqlx::query(
+                "SELECT raw_json FROM frontier_events WHERE vfr_id = $1 ORDER BY seq ASC",
+            )
+            .bind(vfr_id)
+            .fetch_all(p)
+            .await
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(|row| row.try_get::<Value, _>("raw_json").map_err(|e| e.to_string()))
+            .collect(),
+            Self::Sqlite(p) => {
+                let rows: Vec<String> = sqlx::query_scalar(
+                    "SELECT raw_json FROM frontier_events WHERE vfr_id = ? ORDER BY seq ASC",
+                )
+                .bind(vfr_id)
+                .fetch_all(p)
+                .await
+                .map_err(|e| e.to_string())?;
+                rows.into_iter()
+                    .map(|s| serde_json::from_str::<Value>(&s).map_err(|e| e.to_string()))
+                    .collect()
+            }
+        }
+    }
+
     /// v0.201: look up a Scientific Diff Pack by its `vsd_*` id.
     /// Returns the raw signed pack JSON if the pack has been
     /// registered with this hub via a `diff_pack.released` federation

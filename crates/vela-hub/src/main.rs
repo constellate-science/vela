@@ -556,6 +556,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/search", get(search_endpoint))
         .route("/entries/{vfr_id}/objects/{otype}", get(get_entry_objects))
         .route("/entries/{vfr_id}/objects/{otype}/{object_id}", get(get_entry_object))
+        .route("/entries/{vfr_id}/log/sth", get(get_log_sth))
+        .route("/entries/{vfr_id}/log/proof/{event_id}", get(get_log_proof))
         .route(
             "/entries/{vfr_id}/events",
             get(get_entry_events).post(post_entry_event),
@@ -1220,6 +1222,168 @@ async fn get_entry_object(
         )
             .into_response(),
     }
+}
+
+/// Load a frontier's event log as Merkle leaves — each leaf is an event's
+/// content-address preimage (the vev_ preimage), ordered by seq.
+async fn log_leaves(state: &AppState, vfr_id: &str) -> Result<Vec<Vec<u8>>, String> {
+    let values = state.db.all_event_values(vfr_id).await?;
+    let mut leaves = Vec::with_capacity(values.len());
+    for v in &values {
+        let ev: vela_protocol::events::StateEvent =
+            serde_json::from_value(v.clone()).map_err(|e| format!("event parse: {e}"))?;
+        leaves.push(vela_protocol::events::event_content_preimage_bytes(&ev));
+    }
+    Ok(leaves)
+}
+
+/// Signed Tree Head (P2 transparency log): a signed RFC 6962 Merkle commitment to
+/// the frontier's whole event log. Lets anyone verify the hub cannot silently
+/// rewrite history (against a non-equivocating hub; witness co-signing adds
+/// split-view resistance). Signed with the hub key (same key as
+/// /.well-known/vela); verifiers MUST pin the pubkey out-of-band, not trust the
+/// pubkey in the signature block.
+async fn get_log_sth(State(state): State<AppState>, Path(vfr_id): Path<String>) -> Response {
+    match state.db.get_live_entry(&vfr_id).await {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": format!("{vfr_id} not found")})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("query: {e}")})),
+            )
+                .into_response();
+        }
+    }
+    let leaves = match log_leaves(&state, &vfr_id).await {
+        Ok(l) => l,
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e}))).into_response();
+        }
+    };
+    let root = vela_protocol::merkle::merkle_root(&leaves);
+    let tree_size = leaves.len() as u64;
+    let timestamp = chrono::Utc::now().to_rfc3339();
+    let log_id = match &state.signing_key {
+        Some(key) => format!("vela-log:{}:{}", vfr_id, vsign::pubkey_hex(key)),
+        None => format!("vela-log:{vfr_id}:unsigned"),
+    };
+    let sth = json!({
+        "schema": "vela.sth.v1",
+        "log_id": log_id,
+        "vfr_id": vfr_id,
+        "tree_size": tree_size,
+        "root_hash": vela_protocol::merkle::to_commitment(&root),
+        "timestamp": timestamp,
+    });
+    match (&state.signing_key, canonical::to_canonical_bytes(&sth)) {
+        (Some(key), Ok(bytes)) => {
+            let sig = vsign::sign_bytes(key, &bytes);
+            (
+                StatusCode::OK,
+                [(axum::http::header::CACHE_CONTROL, "public, max-age=30")],
+                Json(json!({
+                    "sth": sth,
+                    "signature": {
+                        "alg": "Ed25519",
+                        "alg_variant": "pure",
+                        "pubkey": vsign::pubkey_hex(key),
+                        "value": hex::encode(sig),
+                        "canonical_format": "vela.canonical-json/v1",
+                        "verifier_steps": [
+                            "1. pin the hub pubkey out-of-band (/.well-known/vela); do NOT trust this block's pubkey",
+                            "2. re-canonicalize `sth` to bytes; Ed25519 (pure, not ph) verify the signature over them",
+                            "3. recompute leaves = event content-address preimages ordered by seq; merkle_root must equal sth.root_hash"
+                        ]
+                    },
+                    "mode": "signed",
+                })),
+            )
+                .into_response()
+        }
+        _ => (
+            StatusCode::OK,
+            Json(json!({"sth": sth, "signature": null, "mode": "unsigned"})),
+        )
+            .into_response(),
+    }
+}
+
+/// Inclusion proof that `event_id` is in the frontier's log (RFC 6962 audit
+/// path), checkable against the STH root.
+async fn get_log_proof(
+    State(state): State<AppState>,
+    Path((vfr_id, event_id)): Path<(String, String)>,
+) -> Response {
+    let values = match state.db.all_event_values(&vfr_id).await {
+        Ok(v) => v,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("events: {e}")})),
+            )
+                .into_response();
+        }
+    };
+    let mut leaves: Vec<Vec<u8>> = Vec::with_capacity(values.len());
+    let mut found: Option<usize> = None;
+    for (i, v) in values.iter().enumerate() {
+        match serde_json::from_value::<vela_protocol::events::StateEvent>(v.clone()) {
+            Ok(ev) => {
+                if ev.id == event_id {
+                    found = Some(i);
+                }
+                leaves.push(vela_protocol::events::event_content_preimage_bytes(&ev));
+            }
+            Err(e) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": format!("event parse: {e}")})),
+                )
+                    .into_response();
+            }
+        }
+    }
+    let m = match found {
+        Some(i) => i,
+        None => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": format!("event {event_id} not in {vfr_id}")})),
+            )
+                .into_response();
+        }
+    };
+    let proof = match vela_protocol::merkle::inclusion_proof(&leaves, m) {
+        Some(p) => p,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "proof generation failed"})),
+            )
+                .into_response();
+        }
+    };
+    let root = vela_protocol::merkle::merkle_root(&leaves);
+    (
+        StatusCode::OK,
+        [(axum::http::header::CACHE_CONTROL, "public, max-age=30")],
+        Json(json!({
+            "vfr_id": vfr_id,
+            "event_id": event_id,
+            "leaf_index": m,
+            "tree_size": leaves.len(),
+            "root_hash": vela_protocol::merkle::to_commitment(&root),
+            "audit_path": proof.iter().map(hex::encode).collect::<Vec<_>>(),
+        })),
+    )
+        .into_response()
 }
 
 /// v0.201: federation handle for a Scientific Diff Pack (`vsd_*`).
