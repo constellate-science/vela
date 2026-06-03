@@ -558,6 +558,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/entries/{vfr_id}/objects/{otype}/{object_id}", get(get_entry_object))
         .route("/entries/{vfr_id}/log/sth", get(get_log_sth))
         .route("/entries/{vfr_id}/log/proof/{event_id}", get(get_log_proof))
+        .route("/entries/{vfr_id}/log/consistency", get(get_log_consistency))
         .route(
             "/entries/{vfr_id}/events",
             get(get_entry_events).post(post_entry_event),
@@ -1381,6 +1382,74 @@ async fn get_log_proof(
             "tree_size": leaves.len(),
             "root_hash": vela_protocol::merkle::to_commitment(&root),
             "audit_path": proof.iter().map(hex::encode).collect::<Vec<_>>(),
+        })),
+    )
+        .into_response()
+}
+
+#[derive(Debug, Deserialize)]
+struct ConsistencyQuery {
+    /// Old (first) tree size — the size of the STH you already trust.
+    first: usize,
+    /// New (second) tree size; defaults to the current log length.
+    second: Option<usize>,
+}
+
+/// RFC 6962 §2.1.2 consistency proof: that the size-`first` tree is an
+/// append-only prefix of the size-`second` tree (defaults to the current
+/// length). Lets a verifier holding an older signed STH confirm the log only
+/// grew — never forked or rewrote history — before trusting a newer STH.
+async fn get_log_consistency(
+    State(state): State<AppState>,
+    Path(vfr_id): Path<String>,
+    Query(q): Query<ConsistencyQuery>,
+) -> Response {
+    let leaves = match log_leaves(&state, &vfr_id).await {
+        Ok(l) => l,
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e}))).into_response();
+        }
+    };
+    let total = leaves.len();
+    let m = q.first;
+    let n = q.second.unwrap_or(total);
+    if m == 0 || m > n || n > total {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "error": format!("require 1 <= first <= second <= tree_size; got first={m}, second={n}, tree_size={total}"),
+            })),
+        )
+            .into_response();
+    }
+    let proof = match vela_protocol::merkle::consistency_proof(&leaves[..n], m) {
+        Some(p) => p,
+        None => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": "consistency proof generation failed"})),
+            )
+                .into_response();
+        }
+    };
+    let first_root = vela_protocol::merkle::merkle_root(&leaves[..m]);
+    let second_root = vela_protocol::merkle::merkle_root(&leaves[..n]);
+    (
+        StatusCode::OK,
+        [(axum::http::header::CACHE_CONTROL, "public, max-age=30")],
+        Json(json!({
+            "schema": "vela.consistency-proof.v1",
+            "vfr_id": vfr_id,
+            "first_size": m,
+            "second_size": n,
+            "first_root": vela_protocol::merkle::to_commitment(&first_root),
+            "second_root": vela_protocol::merkle::to_commitment(&second_root),
+            "consistency_proof": proof.iter().map(hex::encode).collect::<Vec<_>>(),
+            "verifier_steps": [
+                "1. first_root must equal the root of the older STH you already trust (size=first_size)",
+                "2. second_root must equal the root of the newer STH (size=second_size)",
+                "3. verify_consistency(first_size, second_size, first_root, second_root, proof) — confirms append-only"
+            ],
         })),
     )
         .into_response()

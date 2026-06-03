@@ -79,6 +79,50 @@ def largest_pow2_lt(n: int) -> int:
     return k
 
 
+def verify_consistency(m: int, n: int, first: bytes, second: bytes, proof: list[bytes]) -> bool:
+    """RFC 6962 consistency: the size-m tree (root `first`) is a prefix of the
+    size-n tree (root `second`). Reconstructs both roots from the proof alone."""
+    if m > n:
+        return False
+    if m == n:
+        return not proof and first == second
+    if m == 0:
+        return not proof
+    node, last = m - 1, n - 1
+    while node & 1:
+        node >>= 1
+        last >>= 1
+    idx = 0
+    if node > 0:
+        if not proof:
+            return False
+        h1 = h2 = proof[0]
+        idx = 1
+    else:
+        h1 = h2 = first
+    while node > 0:
+        if node & 1:
+            if idx >= len(proof):
+                return False
+            h1 = hash_node(proof[idx], h1)
+            h2 = hash_node(proof[idx], h2)
+            idx += 1
+        elif node < last:
+            if idx >= len(proof):
+                return False
+            h2 = hash_node(h2, proof[idx])
+            idx += 1
+        node >>= 1
+        last >>= 1
+    while last > 0:
+        if idx >= len(proof):
+            return False
+        h2 = hash_node(h2, proof[idx])
+        idx += 1
+        last >>= 1
+    return idx == len(proof) and h1 == first and h2 == second
+
+
 def reconstruct_root(m: int, n: int, leaf_hash: bytes, proof: list[bytes]) -> bytes | None:
     """Rebuild the root from (leaf, index m, tree size n, audit path) alone."""
     idx = [0]
@@ -126,6 +170,15 @@ def vev_id(ev: dict) -> str:
     return "vev_" + hashlib.sha256(event_preimage(ev)).hexdigest()[:16]
 
 
+def merkle_root(ls: list[bytes]) -> bytes:
+    if not ls:
+        return hashlib.sha256(b"").digest()
+    if len(ls) == 1:
+        return hash_leaf(ls[0])
+    k = largest_pow2_lt(len(ls))
+    return hash_node(merkle_root(ls[:k]), merkle_root(ls[k:]))
+
+
 def fetch_all_events(hub: str, vfr: str) -> list[dict]:
     """Page through /events in seq order (oldest first), as the log is built."""
     events: list[dict] = []
@@ -149,6 +202,8 @@ def main() -> int:
     ap.add_argument("--vfr", required=True, help="frontier id, e.g. vfr_06cfcbe7c449d86a")
     ap.add_argument("--event", help="event id (vev_...) to prove inclusion of; default: first event")
     ap.add_argument("--pubkey", help="expected Ed25519 pubkey hex (pin out-of-band; STRONGLY recommended)")
+    ap.add_argument("--consistency-from", type=int, metavar="SIZE",
+                    help="also verify the log is an append-only extension of the tree at this earlier size")
     args = ap.parse_args()
     hub = args.hub.rstrip("/")
 
@@ -206,14 +261,6 @@ def main() -> int:
     else:
         print(f"  ✓ all {len(events)} events' content reproduces their vev_ id")
 
-    def merkle_root(ls: list[bytes]) -> bytes:
-        if not ls:
-            return hashlib.sha256(b"").digest()
-        if len(ls) == 1:
-            return hash_leaf(ls[0])
-        k = largest_pow2_lt(len(ls))
-        return hash_node(merkle_root(ls[:k]), merkle_root(ls[k:]))
-
     recomputed = merkle_root(leaves).hex()
     if recomputed == sth_root_hex:
         print(f"  ✓ recomputed root matches the signed STH root")
@@ -240,6 +287,29 @@ def main() -> int:
             print("  ✓ inclusion proof reconstructs the signed STH root")
         else:
             print(f"  ✗ inclusion root {rebuilt.hex()[:24]}… != STH root {sth_root_hex[:24]}…")
+            ok = False
+
+    # 5. (optional) append-only consistency from an earlier tree size
+    if args.consistency_from:
+        m = args.consistency_from
+        cp = get_json(f"{hub}/entries/{args.vfr}/log/consistency?first={m}&second={tree_size}")
+        first_root = bytes.fromhex(cp["first_root"].removeprefix("sha256:"))
+        second_root = bytes.fromhex(cp["second_root"].removeprefix("sha256:"))
+        path = [bytes.fromhex(h) for h in cp["consistency_proof"]]
+        # the new root the proof commits to must be the signed STH root
+        local_first = merkle_root(leaves[:m]) if m <= len(leaves) else b""
+        print(f"CONSISTENCY first_size={m} second_size={cp['second_size']} proof_len={len(path)}")
+        if second_root.hex() != sth_root_hex:
+            print("  ✗ consistency second_root != signed STH root")
+            ok = False
+        elif local_first != first_root:
+            print("  ✗ consistency first_root != our recomputed size-m root")
+            ok = False
+        elif verify_consistency(m, tree_size, first_root, second_root, path):
+            print("  ✓ log is an append-only extension of the size-m tree")
+            print("    (pin first_root from your earlier saved STH to make this a real tamper check)")
+        else:
+            print("  ✗ consistency proof did not verify")
             ok = False
 
     print()
