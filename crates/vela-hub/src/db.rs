@@ -338,6 +338,36 @@ impl HubDb {
         })))
     }
 
+    /// Lightweight object index for the frontier manifest: `(type, id, target_id,
+    /// seq)` for every object, WITHOUT the bulk raw_json. Lets a client list a
+    /// frontier and then fetch only the objects it opens (sparse / partial clone),
+    /// instead of pulling the whole multi-MB snapshot.
+    pub async fn frontier_object_index(&self, vfr_id: &str) -> Result<Vec<Value>, String> {
+        type Row = (String, String, Option<String>, i64);
+        let rows: Vec<Row> = match self {
+            Self::Postgres(p) => sqlx::query_as(
+                "SELECT object_type, object_id, target_id, seq FROM frontier_objects \
+                 WHERE vfr_id = $1 ORDER BY object_type, seq",
+            )
+            .bind(vfr_id)
+            .fetch_all(p)
+            .await
+            .map_err(|e| e.to_string())?,
+            Self::Sqlite(p) => sqlx::query_as(
+                "SELECT object_type, object_id, target_id, seq FROM frontier_objects \
+                 WHERE vfr_id = ? ORDER BY object_type, seq",
+            )
+            .bind(vfr_id)
+            .fetch_all(p)
+            .await
+            .map_err(|e| e.to_string())?,
+        };
+        Ok(rows
+            .into_iter()
+            .map(|(t, id, tgt, seq)| json!({"type": t, "id": id, "target_id": tgt, "seq": seq}))
+            .collect())
+    }
+
     /// v0.201: look up a Scientific Diff Pack by its `vsd_*` id.
     /// Returns the raw signed pack JSON if the pack has been
     /// registered with this hub via a `diff_pack.released` federation

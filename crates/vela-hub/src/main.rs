@@ -552,6 +552,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/entries/{vfr_id}", get(get_entry))
         .route("/entries/{vfr_id}/snapshot", get(get_entry_snapshot))
         .route("/entries/{vfr_id}/summary", get(get_entry_summary))
+        .route("/entries/{vfr_id}/manifest", get(get_entry_manifest))
         .route(
             "/entries/{vfr_id}/events",
             get(get_entry_events).post(post_entry_event),
@@ -1038,6 +1039,61 @@ async fn get_entry_summary(
         )
             .into_response(),
     }
+}
+
+/// Frontier manifest (L1): the small "list, then fetch only what you open"
+/// primitive — counts + log head + an index of object ids by type, WITHOUT the
+/// bulk raw_json. A client reads this, then pulls individual objects on demand
+/// (sparse / partial clone) rather than the whole multi-MB snapshot.
+async fn get_entry_manifest(
+    State(state): State<AppState>,
+    Path(vfr_id): Path<String>,
+) -> Response {
+    let entry = match state.db.get_live_entry(&vfr_id).await {
+        Ok(Some(e)) => e,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": format!("{vfr_id} not found")})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("query: {e}")})),
+            )
+                .into_response();
+        }
+    };
+    let counts = match state.db.frontier_summary(&vfr_id).await {
+        Ok(Some(s)) => s,
+        _ => json!({}),
+    };
+    let objects = match state.db.frontier_object_index(&vfr_id).await {
+        Ok(o) => o,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("index: {e}")})),
+            )
+                .into_response();
+        }
+    };
+    let manifest = json!({
+        "vfr_id": vfr_id,
+        "name": entry.get("name").cloned().unwrap_or(Value::Null),
+        "log_head": entry.get("latest_event_log_hash").cloned().unwrap_or(Value::Null),
+        "snapshot_hash": entry.get("latest_snapshot_hash").cloned().unwrap_or(Value::Null),
+        "counts": counts,
+        "objects": objects,
+    });
+    (
+        StatusCode::OK,
+        [(axum::http::header::CACHE_CONTROL, "public, max-age=60")],
+        Json(manifest),
+    )
+        .into_response()
 }
 
 /// v0.201: federation handle for a Scientific Diff Pack (`vsd_*`).
