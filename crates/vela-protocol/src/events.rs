@@ -1723,7 +1723,14 @@ pub fn compute_event_id(event: &StateEvent) -> String {
     event_id(event)
 }
 
-fn event_id(event: &StateEvent) -> String {
+/// The canonical content-address preimage bytes of an event — the exact bytes
+/// hashed to form its `vev_` id. Deliberately EXCLUDES the event's own `id`,
+/// `signature`, and `schema_artifact_id`, so the preimage is stable under
+/// legitimate re-signing/co-signing. Shared by `event_id` and the Merkle
+/// transparency log (`crate::merkle`) so a log leaf is exactly the event's
+/// content address — immune to re-signing and reproducible by any independent
+/// implementation. Changing this shape is a protocol break.
+pub fn event_content_preimage_bytes(event: &StateEvent) -> Vec<u8> {
     let content = json!({
         "schema": event.schema,
         "kind": event.kind,
@@ -1736,8 +1743,14 @@ fn event_id(event: &StateEvent) -> String {
         "payload": event.payload,
         "caveats": event.caveats,
     });
-    let bytes = canonical::to_canonical_bytes(&content).unwrap_or_default();
-    format!("vev_{}", &hex::encode(Sha256::digest(bytes))[..16])
+    canonical::to_canonical_bytes(&content).unwrap_or_default()
+}
+
+fn event_id(event: &StateEvent) -> String {
+    format!(
+        "vev_{}",
+        &hex::encode(Sha256::digest(event_content_preimage_bytes(event)))[..16]
+    )
 }
 
 #[cfg(test)]

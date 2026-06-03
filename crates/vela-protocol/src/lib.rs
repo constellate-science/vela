@@ -38,6 +38,7 @@ pub mod entity_resolve;
 pub mod evaluation_record;
 pub mod events;
 pub mod evidence_ci;
+pub mod merkle;
 pub mod export;
 pub mod contradiction;
 pub mod federation;
