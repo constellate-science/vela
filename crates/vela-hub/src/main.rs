@@ -551,6 +551,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/entries", get(list_entries).post(publish_entry))
         .route("/entries/{vfr_id}", get(get_entry))
         .route("/entries/{vfr_id}/snapshot", get(get_entry_snapshot))
+        .route("/entries/{vfr_id}/summary", get(get_entry_summary))
         .route(
             "/entries/{vfr_id}/events",
             get(get_entry_events).post(post_entry_event),
@@ -1007,6 +1008,33 @@ async fn get_entry(
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": format!("query: {e}")})),
+        )
+            .into_response(),
+    }
+}
+
+/// Lightweight per-frontier counts for list/dashboard views. Computed by cheap
+/// projection-table aggregates (never the multi-MB snapshot), so the catalogue
+/// can render real numbers without downloading whole frontiers. JSON only.
+async fn get_entry_summary(
+    State(state): State<AppState>,
+    Path(vfr_id): Path<String>,
+) -> Response {
+    match state.db.frontier_summary(&vfr_id).await {
+        Ok(Some(value)) => (
+            StatusCode::OK,
+            [(axum::http::header::CACHE_CONTROL, "public, max-age=60")],
+            Json(value),
+        )
+            .into_response(),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("{vfr_id} not found")})),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("summary: {e}")})),
         )
             .into_response(),
     }

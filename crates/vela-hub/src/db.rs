@@ -249,6 +249,95 @@ impl HubDb {
         }
     }
 
+    /// Lightweight per-frontier counts for list/dashboard views, computed by
+    /// cheap aggregates over the projection tables — never by reading the full
+    /// (multi-MB) snapshot. object_type counts come from `frontier_objects`
+    /// (indexed on `(vfr_id, object_type)`); events from `frontier_events`;
+    /// contested/human_reviewed/avg_confidence from finding `review_state` flags
+    /// and confidence scores. Returns None when the frontier is not live.
+    pub async fn frontier_summary(&self, vfr_id: &str) -> Result<Option<Value>, String> {
+        if self.get_live_entry(vfr_id).await?.is_none() {
+            return Ok(None);
+        }
+        type FlagAgg = (i64, i64, Option<f64>);
+        let (obj_counts, events, flags): (Vec<(String, i64)>, i64, FlagAgg) = match self {
+            Self::Postgres(p) => {
+                let rows: Vec<(String, i64)> = sqlx::query_as(
+                    "SELECT object_type, COUNT(*)::bigint FROM frontier_objects \
+                     WHERE vfr_id = $1 GROUP BY object_type",
+                )
+                .bind(vfr_id)
+                .fetch_all(p)
+                .await
+                .map_err(|e| e.to_string())?;
+                let events: i64 = sqlx::query_scalar(
+                    "SELECT COUNT(*)::bigint FROM frontier_events WHERE vfr_id = $1",
+                )
+                .bind(vfr_id)
+                .fetch_one(p)
+                .await
+                .map_err(|e| e.to_string())?;
+                let flags: FlagAgg = sqlx::query_as(
+                    "SELECT \
+                       COUNT(CASE WHEN raw_json #>> '{flags,review_state}' = 'contested' THEN 1 END)::bigint, \
+                       COUNT(CASE WHEN raw_json #>> '{flags,review_state}' = 'accepted'  THEN 1 END)::bigint, \
+                       AVG((raw_json #>> '{confidence,score}')::double precision) \
+                     FROM frontier_objects WHERE vfr_id = $1 AND object_type = 'finding'",
+                )
+                .bind(vfr_id)
+                .fetch_one(p)
+                .await
+                .map_err(|e| e.to_string())?;
+                (rows, events, flags)
+            }
+            Self::Sqlite(p) => {
+                let rows: Vec<(String, i64)> = sqlx::query_as(
+                    "SELECT object_type, COUNT(*) FROM frontier_objects \
+                     WHERE vfr_id = ? GROUP BY object_type",
+                )
+                .bind(vfr_id)
+                .fetch_all(p)
+                .await
+                .map_err(|e| e.to_string())?;
+                let events: i64 = sqlx::query_scalar(
+                    "SELECT COUNT(*) FROM frontier_events WHERE vfr_id = ?",
+                )
+                .bind(vfr_id)
+                .fetch_one(p)
+                .await
+                .map_err(|e| e.to_string())?;
+                let flags: FlagAgg = sqlx::query_as(
+                    "SELECT \
+                       COUNT(CASE WHEN json_extract(raw_json,'$.flags.review_state') = 'contested' THEN 1 END), \
+                       COUNT(CASE WHEN json_extract(raw_json,'$.flags.review_state') = 'accepted'  THEN 1 END), \
+                       AVG(json_extract(raw_json,'$.confidence.score')) \
+                     FROM frontier_objects WHERE vfr_id = ? AND object_type = 'finding'",
+                )
+                .bind(vfr_id)
+                .fetch_one(p)
+                .await
+                .map_err(|e| e.to_string())?;
+                (rows, events, flags)
+            }
+        };
+        let map: std::collections::BTreeMap<String, i64> = obj_counts.into_iter().collect();
+        let g = |k: &str| map.get(k).copied().unwrap_or(0);
+        let (contested, human_reviewed, avg_confidence) = flags;
+        Ok(Some(json!({
+            "vfr_id": vfr_id,
+            "findings": g("finding"),
+            "sources": g("source"),
+            "evidence_atoms": g("evidence_atom"),
+            "links": g("link"),
+            "proposals": g("proposal"),
+            "negative_results": g("negative_result"),
+            "events": events,
+            "contested": contested,
+            "human_reviewed": human_reviewed,
+            "avg_confidence": avg_confidence.unwrap_or(0.0),
+        })))
+    }
+
     /// v0.201: look up a Scientific Diff Pack by its `vsd_*` id.
     /// Returns the raw signed pack JSON if the pack has been
     /// registered with this hub via a `diff_pack.released` federation
