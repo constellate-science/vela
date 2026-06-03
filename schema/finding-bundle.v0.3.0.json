@@ -1,0 +1,784 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vela.science/schema/finding-bundle/v0.3.0",
+  "title": "Vela Finding Bundle v0.2.0",
+  "description": "The atomic object of the Vela protocol. A finding bundle is a discrete scientific claim with its evidence, conditions, provenance, frontier confidence, and lineage attached. It is richer than a triple and smaller than a paper. v0.3.0 introduces frontier confidence semantics, entity resolution with candidates, link provenance, and content-addressing specification.",
+  "type": "object",
+  "required": [
+    "id",
+    "version",
+    "assertion",
+    "evidence",
+    "provenance",
+    "confidence",
+    "created"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^vf_[a-f0-9]{16}$",
+      "$comment": "Content-addressed identifier. Canonical pre-image: SHA-256(normalize(assertion.text) + '|' + assertion.type + '|' + (provenance.doi || provenance.pmid || provenance.title)). normalize() = lowercase, collapse whitespace to single space, strip trailing punctuation. If both doi and pmid are null, use title as the third component. The id is the first 16 hex characters of the resulting SHA-256 hash, prefixed with 'vf_'. Changes if any content field in the pre-image changes.",
+      "description": "Content-addressed identifier. First 16 hex chars of SHA-256(normalize(assertion.text) | assertion.type | provenance identifier), prefixed with 'vf_'."
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Monotonically increasing version number. Increments on correction or update."
+    },
+    "previous_version": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "ID of the previous version of this finding, if updated. Null for first version."
+    },
+    "assertion": {
+      "type": "object",
+      "required": [
+        "text",
+        "type"
+      ],
+      "description": "The scientific claim being made.",
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "The claim stated precisely. Should be a single testable assertion."
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "mechanism",
+            "therapeutic",
+            "diagnostic",
+            "epidemiological",
+            "observational",
+            "review",
+            "methodological",
+            "computational",
+            "theoretical",
+            "negative"
+          ],
+          "description": "The category of claim. 'observational' is for single observational studies (distinct from 'epidemiological' which covers population-level analyses). 'review' is for systematic review findings that are not meta-analyses."
+        },
+        "entities": {
+          "type": "array",
+          "description": "Normalized entities mentioned in the assertion.",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "type"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Canonical name of the entity after resolution."
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "gene",
+                  "protein",
+                  "compound",
+                  "disease",
+                  "cell_type",
+                  "organism",
+                  "pathway",
+                  "assay",
+                  "anatomical_structure",
+                  "other"
+                ]
+              },
+              "identifiers": {
+                "type": "object",
+                "description": "External identifiers for this entity.",
+                "properties": {
+                  "uniprot": {
+                    "type": "string"
+                  },
+                  "chebi": {
+                    "type": "string"
+                  },
+                  "mesh": {
+                    "type": "string"
+                  },
+                  "umls": {
+                    "type": "string"
+                  },
+                  "ncbi_gene": {
+                    "type": "string"
+                  },
+                  "go": {
+                    "type": "string"
+                  },
+                  "doid": {
+                    "type": "string"
+                  },
+                  "other": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  }
+                }
+              },
+              "resolution_confidence": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Confidence in entity resolution. If below 0.8, the candidates array MUST contain more than one entry."
+              },
+              "candidates": {
+                "type": "array",
+                "description": "Alternative entity resolutions considered during matching. Required to have >1 entry when resolution_confidence < 0.8.",
+                "items": {
+                  "type": "object",
+                  "required": [
+                    "source",
+                    "id",
+                    "confidence",
+                    "matched_name"
+                  ],
+                  "properties": {
+                    "source": {
+                      "type": "string",
+                      "description": "Knowledge base or ontology the candidate was found in (e.g., 'UniProt', 'MeSH', 'ChEBI', 'NCBI Gene')."
+                    },
+                    "id": {
+                      "type": "string",
+                      "description": "Identifier in the source system (e.g., 'P05067', 'D000544')."
+                    },
+                    "confidence": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1,
+                      "description": "Confidence that this candidate is the correct resolution."
+                    },
+                    "matched_name": {
+                      "type": "string",
+                      "description": "The name as it appears in the source system."
+                    }
+                  }
+                }
+              },
+              "resolution_method": {
+                "type": "string",
+                "enum": [
+                  "exact_match",
+                  "fuzzy_match",
+                  "llm_inference",
+                  "manual"
+                ],
+                "description": "How this entity was resolved to its canonical form."
+              },
+              "resolved_at": {
+                "type": "string",
+                "format": "date-time",
+                "description": "Timestamp of when entity resolution was performed."
+              },
+              "species_context": {
+                "type": "string",
+                "description": "Species this entity refers to when the same name maps to orthologs (e.g., 'Homo sapiens' vs 'Mus musculus' for APP)."
+              }
+            }
+          }
+        },
+        "relation": {
+          "type": "string",
+          "description": "The relation or predicate if the assertion is relational (e.g., 'inhibits', 'crosses', 'causes', 'correlates_with')."
+        },
+        "direction": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "positive",
+            "negative",
+            "bidirectional",
+            "none",
+            null
+          ],
+          "description": "Direction of effect if applicable."
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "description": "The evidence basis for this finding.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "experimental",
+            "observational",
+            "computational",
+            "theoretical",
+            "meta_analysis",
+            "systematic_review",
+            "case_report"
+          ]
+        },
+        "model_system": {
+          "type": "string",
+          "description": "The model system used (e.g., 'mouse, 5xFAD', 'human BMEC in vitro', 'computational')."
+        },
+        "species": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Species if applicable (e.g., 'Mus musculus', 'Homo sapiens')."
+        },
+        "method": {
+          "type": "string",
+          "description": "Key method or assay used."
+        },
+        "sample_size": {
+          "type": [
+            "integer",
+            "string",
+            "null"
+          ],
+          "description": "Sample size if reported. String for complex designs (e.g., '3 cohorts of 20')."
+        },
+        "effect_size": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Effect size if reported, with units."
+        },
+        "p_value": {
+          "type": [
+            "number",
+            "string",
+            "null"
+          ],
+          "description": "Statistical significance if reported."
+        },
+        "replicated": {
+          "type": "boolean",
+          "description": "Whether this finding has been independently replicated."
+        },
+        "replication_count": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Number of independent replications if known."
+        },
+        "clinical_trial_phase": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "enum": [
+            1,
+            2,
+            3,
+            4,
+            null
+          ],
+          "description": "Clinical trial phase if this evidence comes from a clinical trial. Null for non-trial evidence."
+        },
+        "blinding": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "enum": [
+            "double_blind",
+            "single_blind",
+            "open_label",
+            "not_applicable",
+            null
+          ],
+          "description": "Blinding status of the study. 'not_applicable' for non-interventional studies. Null if unknown."
+        },
+        "evidence_spans": {
+          "type": "array",
+          "description": "Exact text spans from the source that support this finding.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              },
+              "section": {
+                "type": "string",
+                "description": "Section of paper (abstract, results, discussion, etc.)."
+              },
+              "figure_table": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "Figure or table reference if applicable."
+              }
+            }
+          }
+        }
+      }
+    },
+    "conditions": {
+      "type": "object",
+      "description": "Specific conditions under which this finding holds. This is what makes verification composable.",
+      "properties": {
+        "text": {
+          "type": "string",
+          "description": "Free-text description of conditions."
+        },
+        "species_verified": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Species in which this has been verified."
+        },
+        "species_unverified": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Species in which this has NOT been tested."
+        },
+        "concentration_range": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "duration": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "age_group": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "cell_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "in_vitro": {
+          "type": "boolean"
+        },
+        "in_vivo": {
+          "type": "boolean"
+        },
+        "human_data": {
+          "type": "boolean"
+        },
+        "clinical_trial": {
+          "type": "boolean"
+        }
+      }
+    },
+    "confidence": {
+      "type": "object",
+      "required": [
+        "score",
+        "basis",
+        "components",
+        "method"
+      ],
+      "description": "Frontier epistemic confidence for this finding. In v0.2.0, the score is computed from structured support components and may later be calibration-adjusted; it is not truth probability.",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "frontier_epistemic"
+          ],
+          "default": "frontier_epistemic",
+          "description": "Semantic meaning of the score. Vela v0 emits only 'frontier_epistemic'. Older frontiers may omit this field and default to the same meaning."
+        },
+        "score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Bounded epistemic support for the finding as currently represented in frontier state. Computed as evidence_strength * replication_strength * model_relevance * sample_strength - review_penalty + calibration_adjustment, clamped to [0, 1]."
+        },
+        "basis": {
+          "type": "string",
+          "description": "Human-readable explanation of how frontier support and any later calibration produced this score."
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "computed",
+            "expert_judgment",
+            "llm_initial"
+          ],
+          "description": "How the score was determined. 'computed' means derived from structured support components. 'expert_judgment' means a human or curated import supplied the score directly. 'llm_initial' remains a backward-compatible import mode for older frontiers."
+        },
+        "assigned_by": {
+          "type": "string",
+          "description": "Identifier of who or what computed or supplied this confidence (for example 'vela-compiler-0.2.0' or an ORCID)."
+        },
+        "components": {
+          "type": "object",
+          "required": [
+            "evidence_strength",
+            "replication_strength",
+            "sample_strength",
+            "model_relevance",
+            "review_penalty"
+          ],
+          "description": "Structured breakdown of frontier support and calibration.",
+          "properties": {
+            "evidence_strength": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Derived from evidence.type. meta_analysis=0.95, experimental=0.80, observational=0.65, case_report=0.40, theoretical=0.30. systematic_review=0.90, computational=0.50."
+            },
+            "replication_strength": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "1.0 if replicated, 0.7 if not. Scaled upward by replication_count: min(1.0, 0.7 + 0.1 * replication_count) when replicated."
+            },
+            "sample_strength": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Derived from sample_size buckets. >1000=1.0, >100=0.9, >30=0.8, >10=0.7, <=10 or null=0.6."
+            },
+            "model_relevance": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "human_data=1.0, in_vivo=0.8, in_vitro=0.6. Derived from conditions fields."
+            },
+            "review_penalty": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Reduces the aggregate score when review state shows the finding is contested. 0.15 if contested, else 0.0 in the current deterministic computation."
+            },
+            "calibration_adjustment": {
+              "type": "number",
+              "description": "Additive calibration signal applied after deterministic support is computed. Defaults to 0.0 before any calibration pass."
+            }
+          }
+        },
+        "history": {
+          "type": "array",
+          "description": "Chronological record of confidence changes. Each entry captures a score change with the reason and actor.",
+          "items": {
+            "type": "object",
+            "required": [
+              "score",
+              "timestamp",
+              "reason",
+              "changed_by"
+            ],
+            "properties": {
+              "score": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "The confidence score at this point in time."
+              },
+              "timestamp": {
+                "type": "string",
+                "format": "date-time",
+                "description": "When this change occurred."
+              },
+              "reason": {
+                "type": "string",
+                "description": "Why the confidence changed (e.g., 'new replication found', 'contradicting study published', 'expert review')."
+              },
+              "changed_by": {
+                "type": "string",
+                "description": "Who or what triggered this change (e.g., 'vela-compiler-0.2.0', an ORCID, a reviewer name)."
+              }
+            }
+          }
+        },
+        "extraction_confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Confidence in the accuracy of the extraction itself. Separate from frontier epistemic confidence."
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "source_type"
+      ],
+      "description": "Where this finding came from and how it was derived.",
+      "properties": {
+        "source_type": {
+          "type": "string",
+          "enum": [
+            "published_paper",
+            "preprint",
+            "clinical_trial",
+            "lab_notebook",
+            "model_output",
+            "expert_assertion",
+            "database_record"
+          ]
+        },
+        "doi": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pmid": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pmc": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "openalex_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "authors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "orcid": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        },
+        "year": {
+          "type": "integer"
+        },
+        "journal": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "extraction": {
+          "type": "object",
+          "description": "How this finding was extracted.",
+          "properties": {
+            "method": {
+              "type": "string",
+              "enum": [
+                "llm_extraction",
+                "manual_curation",
+                "database_import",
+                "hybrid"
+              ]
+            },
+            "model": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "LLM model used for extraction."
+            },
+            "model_version": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "extracted_at": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "extractor_version": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Version of the Vela compiler."
+            }
+          }
+        },
+        "review": {
+          "type": [
+            "object",
+            "null"
+          ],
+          "description": "Human review of this extraction, if performed.",
+          "properties": {
+            "reviewed": {
+              "type": "boolean"
+            },
+            "reviewer": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "description": "Reviewer identifier (ORCID preferred)."
+            },
+            "reviewed_at": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "format": "date-time"
+            },
+            "corrections": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "field": {
+                    "type": "string"
+                  },
+                  "original": {
+                    "type": "string"
+                  },
+                  "corrected": {
+                    "type": "string"
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "flags": {
+      "type": "object",
+      "description": "Status flags for this finding.",
+      "properties": {
+        "gap": {
+          "type": "boolean",
+          "default": false,
+          "description": "This finding sits in underexplored territory."
+        },
+        "negative_space": {
+          "type": "boolean",
+          "default": false,
+          "description": "This is a failed/null/unpublished result."
+        },
+        "contested": {
+          "type": "boolean",
+          "default": false,
+          "description": "This finding is contradicted by comparable evidence."
+        },
+        "retracted": {
+          "type": "boolean",
+          "default": false,
+          "description": "The source has been retracted or is under investigation."
+        },
+        "declining": {
+          "type": "boolean",
+          "default": false,
+          "description": "Confidence has been eroding over time as contradicting evidence accumulates."
+        },
+        "gravity_well": {
+          "type": "boolean",
+          "default": false,
+          "description": "This finding has accumulated citation mass that may distort the field's direction."
+        }
+      }
+    },
+    "links": {
+      "type": "array",
+      "description": "Typed relationships to other findings in the frontier.",
+      "items": {
+        "type": "object",
+        "required": [
+          "target",
+          "type"
+        ],
+        "properties": {
+          "target": {
+            "type": "string",
+            "description": "ID of the target finding."
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "supports",
+              "contradicts",
+              "extends",
+              "depends",
+              "replicates",
+              "supersedes",
+              "synthesized_from"
+            ],
+            "description": "Relationship type. 'synthesized_from' indicates this finding was compiled back from one or more source findings."
+          },
+          "note": {
+            "type": "string",
+            "description": "Brief explanation of the relationship."
+          },
+          "inferred_by": {
+            "type": "string",
+            "enum": [
+              "compiler",
+              "reviewer",
+              "author"
+            ],
+            "description": "Who inferred this link."
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Confidence that this link is correct."
+          },
+          "evidence_spans": {
+            "type": "array",
+            "description": "Text spans from one or both findings that support this link relationship.",
+            "items": {
+              "type": "string"
+            }
+          },
+          "conditional": {
+            "type": "string",
+            "description": "Condition under which this link applies (e.g., 'only in neuronal cells', 'at concentrations above 10uM'). Omit if the link is unconditional."
+          }
+        }
+      }
+    },
+    "created": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "format": "date-time"
+    }
+  }
+}

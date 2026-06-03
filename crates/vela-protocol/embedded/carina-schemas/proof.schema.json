@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/carina/schemas/proof.schema.json",
+  "title": "Carina Proof (v0.3)",
+  "description": "A proof-assistant-formalized verification artifact bound to one finding. The slot Gowers (2026-05-08) names when he writes 'or, better still, that they had been formalized by a proof assistant.' The verifier output is the certification; Vela records who formalized what, when, against which version of which tool.",
+  "type": "object",
+  "required": ["schema", "id", "tool", "tool_version", "script_locator", "verifier_output_hash", "verified_at", "target_finding_id"],
+  "properties": {
+    "schema": { "type": "string", "const": "carina.proof.v0.3" },
+    "id": {
+      "type": "string",
+      "pattern": "^vpf_[a-zA-Z0-9_]+$"
+    },
+    "tool": {
+      "type": "string",
+      "enum": ["lean4", "coq", "isabelle", "agda", "metamath", "rocq", "other"],
+      "description": "The proof-assistant tool that produced the verifier output."
+    },
+    "tool_version": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Tool version, e.g. '4.7.0' for Lean, '8.18' for Coq."
+    },
+    "script_locator": {
+      "type": "string",
+      "description": "Content-addressed pointer to the proof script (sha256:<64hex>) or an external locator (URL, doi:, git+commit)."
+    },
+    "verifier_output_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "description": "sha256 of the verifier's success output. The hash is what makes the certification falsifiable: a third party can re-run the tool against the script and check the output matches."
+    },
+    "verified_at": {
+      "type": "string",
+      "description": "RFC3339 timestamp when the verifier accepted the script."
+    },
+    "target_finding_id": {
+      "type": "string",
+      "pattern": "^vf_[a-zA-Z0-9_]+$",
+      "description": "The finding the proof formalizes."
+    },
+    "scope_note": {
+      "type": "string",
+      "description": "Optional reviewer note on what the formalization covers vs. what stays informal."
+    }
+  }
+}

@@ -1,0 +1,56 @@
+[package]
+name = "vela-protocol"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Core library for the Vela scientific knowledge protocol: replayable frontier state, signed canonical events, and proof packets."
+readme = "../../README.md"
+keywords = ["science", "frontier", "protocol", "ed25519", "replay"]
+categories = ["science", "data-structures", "cryptography"]
+publish = true
+
+[lib]
+name = "vela_protocol"
+path = "src/lib.rs"
+
+# v0.22 (Agent Inbox): the `vela` CLI lives in `crates/vela-cli` so
+# it can depend on both vela-protocol (substrate) and vela-scientist
+# (agents) without inducing a cyclic Cargo dependency. The library
+# in this crate stays a pure substrate library.
+
+[dependencies]
+vela-protocol-core = { workspace = true }
+dotenvy.workspace = true
+clap.workspace = true
+ctrlc.workspace = true
+libc.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+chrono.workspace = true
+indicatif.workspace = true
+hex.workspace = true
+regex.workspace = true
+urlencoding.workspace = true
+colored.workspace = true
+axum.workspace = true
+async-stream.workspace = true
+tower-http.workspace = true
+sqlx.workspace = true
+ed25519-dalek.workspace = true
+rand.workspace = true
+toml.workspace = true
+quick-xml.workspace = true
+tokio-stream.workspace = true
+futures.workspace = true
+tempfile.workspace = true
+
+[dev-dependencies]
+
+[lints]
+workspace = true

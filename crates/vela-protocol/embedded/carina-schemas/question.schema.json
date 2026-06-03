@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/carina/schemas/question.schema.json",
+  "title": "Carina Question (v0.3)",
+  "description": "An open-need posed against a frontier. Becomes scaffolding for findings, experiments, and proposals.",
+  "type": "object",
+  "required": ["schema", "id", "text"],
+  "properties": {
+    "schema": { "type": "string", "const": "carina.question.v0.3" },
+    "id": { "type": "string", "pattern": "^vq_[a-zA-Z0-9_]+$" },
+    "text": { "type": "string", "minLength": 1 },
+    "rationale": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["open", "answered", "dropped"]
+    }
+  }
+}

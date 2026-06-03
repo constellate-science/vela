@@ -1,0 +1,27 @@
+{
+  "claim_boundary": {
+    "claims_benchmark_outperformance": false,
+    "claims_external_validation": false,
+    "claims_scientific_discovery": false,
+    "claims_target_validation": false,
+    "claims_treatment_advice": false,
+    "mutates_frontier_state": false
+  },
+  "required_file_count": 11,
+  "required_files": [
+    "FRONTIER_CARD.md",
+    "FRONTIER_PACKAGE.md",
+    "SCOPE.md",
+    "README.md",
+    "review/frontier-use-map.v1.json",
+    "review/frontier-answer-book.v1.json",
+    "review/source-quality-wave.v1.json",
+    "review/proof-benchmark-parity.v1.json",
+    "review/decision-paths.v1.json",
+    "review/frontier-usability-audit.v1.json",
+    "benchmarks/frontier-review-suite.v1.json"
+  ],
+  "schema": "vela.frontier_factory_template_manifest.v1",
+  "status": "ready_for_local_bootstrap",
+  "template_id": "templates/frontier"
+}

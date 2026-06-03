@@ -1,0 +1,23 @@
+[package]
+name = "vela-protocol-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Minimal-dependency core types and signing primitives for the Vela protocol: Conjecture and ProofPacket. Targets both native server and wasm32 runtimes. Consumed by vela-protocol (full server crate) and vela-protocol-wasm (WASM bindings)."
+readme = "../../README.md"
+publish = true
+
+[lib]
+name = "vela_protocol_core"
+
+[dependencies]
+ed25519-dalek = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+
+[lints]
+workspace = true

@@ -1,0 +1,222 @@
+{
+  "feed": {
+    "updated": "2026-05-29T00:58:27.450Z",
+    "id": "https://cmr.earthdata.nasa.gov:443/search/collections.json?keyword=land%20surface%20temperature%20mineral%20weathering&page_size=3",
+    "title": "ECHO dataset metadata",
+    "entry": [
+      {
+        "cloud_hosted": false,
+        "boxes": [
+          "-79.05 161.9166 -74.6833 164.1166"
+        ],
+        "has_combine": false,
+        "time_start": "2002-10-17T00:00:00.000Z",
+        "dif_ids": [
+          "K056_2002_2005_NZ"
+        ],
+        "version_id": "Not provided",
+        "dataset_id": "Influence of rock moisture on rock weathering processes along the Victoria Land Coast, Antarctica",
+        "entry_id": "K056_2002_2005_NZ",
+        "has_spatial_subsetting": false,
+        "has_transforms": false,
+        "has_variables": false,
+        "data_center": "SCIOPS",
+        "short_name": "K056_2002_2005_NZ",
+        "organizations": [
+          "NZ/NZAI/ANZ"
+        ],
+        "title": "Influence of rock moisture on rock weathering processes along the Victoria Land Coast, Antarctica",
+        "coordinate_system": "CARTESIAN",
+        "summary": "The role of moisture in the weathering of rock at four locations along the Victoria Land Coast, Antarctica was investigated. These locations were Victoria Valley, Gneiss Point, Terra Nova Bay and Teall Island. The primary objective of this research is to improve our understanding of rock weathering processes, and their effectiveness, along a moisture gradient on the Victoria Land Coast. An improved understanding of both the processes involved and the rate at which rock weathering occurs will contribute to our understanding of landscape evolution and soil development, as well as some possible effects of climate change. Field measurements were made to provide data to determine the temperature and moisture regimes of each location which will then be used to simulate the respective rock micro-climates and apply these to rock samples in an environmental cabinet (laboratory). Field data includes: surface and sub-surface rock temperature, surface and sub-surface rock moisture content, rock strength (using a Schmidt hammer and a ultrasonic device), measurements of solar radiation, albedo of the rocks and position of shadows, weather measurements including air temperature, air pressure, relative humidity, wind speed and direction, cloud cover, visibility and precipitation conditions, a general description of the area and relevant features, and digital images of the rock surfaces. The processes operating at each site were determined by developing an algorithm and applying the gathered data.  Rock samples were collected and used in laboratory simulations. A mathematical model was developed that will predict changes in weathering rate depending on changes in moisture in the rock. Rock samples were also analysed for their mineral and chemical composition.",
+        "time_end": "2004-11-22T23:59:59.999Z",
+        "service_features": {
+          "opendap": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          },
+          "esi": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          },
+          "harmony": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          }
+        },
+        "orbit_parameters": {},
+        "id": "C1214590015-SCIOPS",
+        "has_formats": false,
+        "score": 0.5,
+        "original_format": "DIF10",
+        "archive_center": "NZ/NZAI/ANZ",
+        "has_temporal_subsetting": false,
+        "browse_flag": false,
+        "platforms": [
+          "Not provided"
+        ],
+        "online_access_flag": false,
+        "links": [
+          {
+            "rel": "http://esipfed.org/ns/fedsearch/1.1/documentation#",
+            "hreflang": "en-US",
+            "href": "http://www.geog.canterbury.ac.nz/department/staff/christinee.shtml"
+          }
+        ]
+      },
+      {
+        "cloud_hosted": false,
+        "boxes": [
+          "-77.4 163.7333 -77.4 163.7333"
+        ],
+        "has_combine": false,
+        "time_start": "2002-10-17T00:00:00.000Z",
+        "dif_ids": [
+          "K056_2002_2005_NZ_1"
+        ],
+        "version_id": "Not provided",
+        "dataset_id": "The role of moisture in rock weathering at Gneiss Point, Victoria Land, Antarctica",
+        "entry_id": "K056_2002_2005_NZ_1",
+        "has_spatial_subsetting": false,
+        "has_transforms": false,
+        "has_variables": false,
+        "data_center": "SCIOPS",
+        "short_name": "K056_2002_2005_NZ_1",
+        "organizations": [
+          "NZ/NZAI/ANZ"
+        ],
+        "title": "The role of moisture in rock weathering at Gneiss Point, Victoria Land, Antarctica",
+        "coordinate_system": "CARTESIAN",
+        "summary": "Field measurements and rock samples were taken at Gneiss Point (02-03) to determine the role of moisture in rock weathering processes along the Victoria land Coast. Surface and sub-surface temperatures were taken from rocks in the area. Holes were drilled into the rock at 45mm, 90mm and 400mm depths with thermocouples inserted and attached. Measurements were made at one-minute intervals during each physical visit in order to determine the number of times the temperature gradients at either the surface or the individual depths exceeded 2° C per minute, a recognised threshold for thermal weathering to occur. The data loggers were then set to record the temperature hourly for the October to January period.  Surface and sub-surface moisture content was also measured. Surface moisture sensors were attached to the rock surface measuring date, time of surface moisture event and their magnitude. The time events happened was analysed to see how they correlated with changes in moisture at depth within the rock. Manual measurement were recorded at 45mm and 90mm depths within the rock for a 48 hour period. In addition to these measurements the hardness of the rock site was conducted using a Schmidt Hammer and a sonometer (to measure velocity of sound waves) as proxies for rock strength, digital images of rock surfaces were taken, estimation of the availability of moisture using a rainfall sensor, a general description of the area including GPS co-ordinates, weather characteristics and other relevant features were taken, solar radiation, rock albedo and position of shadows were measures and a series of weather observations was undertaken including; air temperature, air pressure, relative humidity, wind speed and direction, cloud cover and type, visibility and precipitation conditions.  Rock samples were collected for later use in laboratory simulations and analysed for their mineral and chemical composition. An empirically based mathematical model will be developed that will predict changes in weathering rate depending on changes in moisture in the rock. In the 04/05 season data on rock surface and sub-surface temperatures at 1 minute intervals, manual recordings of moisture at 45mm and 90mm depths within the rock every 4 hours for approximately 4 days for each of 2 aspects and repeated rock strength, samples and other measurements were carried out.",
+        "time_end": "2004-11-22T23:59:59.999Z",
+        "service_features": {
+          "opendap": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          },
+          "esi": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          },
+          "harmony": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          }
+        },
+        "orbit_parameters": {},
+        "id": "C1214590019-SCIOPS",
+        "has_formats": false,
+        "score": 0.5,
+        "original_format": "DIF10",
+        "archive_center": "NZ/NZAI/ANZ",
+        "has_temporal_subsetting": false,
+        "browse_flag": false,
+        "platforms": [
+          "Not provided"
+        ],
+        "online_access_flag": false,
+        "links": [
+          {
+            "rel": "http://esipfed.org/ns/fedsearch/1.1/documentation#",
+            "hreflang": "en-US",
+            "href": "http://www.geog.canterbury.ac.nz/department/staff/christinee.shtml"
+          }
+        ]
+      },
+      {
+        "cloud_hosted": false,
+        "boxes": [
+          "-77.3833 161.9167 -77.3833 161.9167"
+        ],
+        "has_combine": false,
+        "time_start": "2002-10-17T00:00:00.000Z",
+        "dif_ids": [
+          "K056_2002_2005_NZ_2"
+        ],
+        "version_id": "Not provided",
+        "dataset_id": "The role of moisture in rock weathering at Victoria Valley, Victoria Land, Antarctica",
+        "entry_id": "K056_2002_2005_NZ_2",
+        "has_spatial_subsetting": false,
+        "has_transforms": false,
+        "has_variables": false,
+        "data_center": "SCIOPS",
+        "short_name": "K056_2002_2005_NZ_2",
+        "organizations": [
+          "NZ/NZAI/ANZ"
+        ],
+        "title": "The role of moisture in rock weathering at Victoria Valley, Victoria Land, Antarctica",
+        "coordinate_system": "CARTESIAN",
+        "summary": "Field measurements and rock samples were taken at Victoria Valley (02-03) to determine the role of moisture in rock weathering processes along the Victoria land Coast. Surface and sub-surface temperatures were taken from rocks in the area. Holes were drilled into the rock at 45mm, 90mm and 400mm depths with thermocouples inserted and attached. Measurements were made at one-minute intervals during each physical visit in order to determine the number of times the temperature gradients at either the surface or the individual depths exceeded 2° C per minute, a recognised threshold for thermal weathering to occur. The data loggers were then set to record the temperature hourly for the October to January period.  Surface and sub-surface moisture content was also measured. Surface moisture sensors were attached to the rock surface measuring date, time of surface moisture event and their magnitude. The time events happened was analysed to see how they correlated with changes in moisture at depth within the rock. Manual measurement were recorded at 45mm and 90mm depths within the rock for a 48 hour period. In addition to these measurements the hardness of the rock site was conducted using a Schmidt Hammer and a sonometer (to measure velocity of sound waves) as proxies for rock strength, digital images of rock surfaces were taken, estimation of the availability of moisture using a rainfall sensor, a general description of the area including GPS co-ordinates, weather characteristics and other relevant features were taken, solar radiation, rock albedo and position of shadows were measures and a series of weather observations was undertaken including; air temperature, air pressure, relative humidity, wind speed and direction, cloud cover and type, visibility and precipitation conditions.  Rock samples were collected for later use in laboratory simulations and analysed for their mineral and chemical composition. An empirically based mathematical model will be developed that will predict changes in weathering rate depending on changes in moisture in the rock.  In the 04/05 season data on rock surface and sub-surface temperatures at 1 minute intervals, manual recordings of moisture at 45mm and 90mm depths within the rock every 4 hours for approximately 4 days for each of 2 aspects and repeated rock strength, samples and other measurements were carried out.",
+        "time_end": "2004-11-22T23:59:59.999Z",
+        "service_features": {
+          "opendap": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          },
+          "esi": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          },
+          "harmony": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          }
+        },
+        "orbit_parameters": {},
+        "id": "C1214590016-SCIOPS",
+        "has_formats": false,
+        "score": 0.5,
+        "original_format": "DIF10",
+        "archive_center": "NZ/NZAI/ANZ",
+        "has_temporal_subsetting": false,
+        "browse_flag": false,
+        "platforms": [
+          "Not provided"
+        ],
+        "online_access_flag": false,
+        "links": [
+          {
+            "rel": "http://esipfed.org/ns/fedsearch/1.1/documentation#",
+            "hreflang": "en-US",
+            "href": "http://www.geog.canterbury.ac.nz/department/staff/christinee.shtml"
+          }
+        ]
+      }
+    ]
+  }
+}

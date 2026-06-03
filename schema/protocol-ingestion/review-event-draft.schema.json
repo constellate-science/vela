@@ -1,0 +1,46 @@
+{
+  "$id": "https://vela.science/schema/protocol-ingestion/review-event-draft/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "properties": {
+    "claim_boundary": {
+      "additionalProperties": false,
+      "properties": {
+        "claims_target_validation": { "const": false },
+        "claims_treatment_advice": { "const": false },
+        "draft_only": { "const": true },
+        "mutates_frontier_state": { "const": false },
+        "requires_reviewer_acceptance": { "const": true }
+      },
+      "required": [
+        "draft_only",
+        "mutates_frontier_state",
+        "requires_reviewer_acceptance",
+        "claims_treatment_advice",
+        "claims_target_validation"
+      ],
+      "type": "object"
+    },
+    "created_at": { "minLength": 1, "type": "string" },
+    "draft_id": { "pattern": "^vred_[A-Za-z0-9_:-]+$", "type": "string" },
+    "proposed_action": { "minLength": 1, "type": "string" },
+    "rationale": { "minLength": 1, "type": "string" },
+    "schema": { "const": "vela.review_event_draft.v1" },
+    "source_id": { "minLength": 1, "type": "string" },
+    "status": { "enum": ["draft", "needs_revision", "rejected", "accepted_by_reviewer"] },
+    "target_id": { "minLength": 1, "type": "string" }
+  },
+  "required": [
+    "schema",
+    "draft_id",
+    "created_at",
+    "source_id",
+    "target_id",
+    "status",
+    "proposed_action",
+    "rationale",
+    "claim_boundary"
+  ],
+  "title": "Vela review event draft",
+  "type": "object"
+}

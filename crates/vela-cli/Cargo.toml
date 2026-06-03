@@ -1,0 +1,41 @@
+[package]
+name = "vela-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "The vela command-line tool: build, check, sign, replay, and publish scientific frontier state."
+readme = "../../README.md"
+keywords = ["science", "frontier", "protocol", "cli", "replay"]
+categories = ["science", "command-line-utilities"]
+publish = true
+
+# The `vela` command-line binary. Lives in its own crate (instead of
+# alongside the substrate lib) so it can depend on both the substrate
+# crate (`vela-protocol`) and the agent crate (`vela-scientist`)
+# without inducing a cyclic Cargo dependency.
+#
+# The lib stays a pure substrate library; agent behaviour is wired
+# in here at startup via `register_scout_handler`.
+
+[[bin]]
+name = "vela"
+path = "src/main.rs"
+
+[dependencies]
+vela-protocol = { workspace = true }
+vela-scientist = { workspace = true }
+vela-atlas = { workspace = true }
+vela-constellation = { workspace = true }
+vela-search = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }
+chrono = { workspace = true, features = ["serde"] }
+serde_yaml = { workspace = true }
+colored = { workspace = true }
+axum = { workspace = true }
+tower-http = { workspace = true }
+
+[lints]
+workspace = true

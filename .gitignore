@@ -1,0 +1,30 @@
+# Rust
+/target
+**/target
+Cargo.lock.bak
+
+# Lean
+**/.lake
+
+# Python
+**/__pycache__
+*.pyc
+**/.pytest_cache
+**/.venv
+
+# JS/TS
+**/node_modules
+**/dist
+
+# OS / editor
+.DS_Store
+*.swp
+.idea
+.vscode
+
+# Never commit secrets
+.env
+.env.*
+*.key
+!*.pub.key
+!*.pub.json

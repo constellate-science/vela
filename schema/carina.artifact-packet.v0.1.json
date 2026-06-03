@@ -1,0 +1,127 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vela.science/schema/carina.artifact-packet.v0.1.json",
+  "title": "Carina artifact packet v0.1",
+  "type": "object",
+  "required": [
+    "schema",
+    "packet_id",
+    "producer",
+    "topic",
+    "created_at",
+    "artifacts",
+    "candidate_claims",
+    "open_needs"
+  ],
+  "properties": {
+    "schema": {
+      "const": "carina.artifact_packet.v0.1"
+    },
+    "packet_id": {
+      "type": "string",
+      "pattern": "^cap_[A-Za-z0-9._:-]+$"
+    },
+    "producer": {
+      "type": "object",
+      "required": ["kind", "id", "name"],
+      "properties": {
+        "kind": { "type": "string" },
+        "id": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "topic": {
+      "type": "string",
+      "minLength": 1
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "artifacts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "title", "locator", "content_hash", "parents"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "kind": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "locator": { "type": "string", "minLength": 1 },
+          "content_hash": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "parents": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "candidate_claims": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "assertion", "evidence_artifact_ids"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "assertion": { "type": "string", "minLength": 1 },
+          "assertion_type": { "type": "string" },
+          "evidence_artifact_ids": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" }
+          },
+          "source_refs": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "conditions": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "caveats": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        },
+        "additionalProperties": true
+      }
+    },
+    "open_needs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "question"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "question": { "type": "string", "minLength": 1 },
+          "rationale": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "caveats": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "source_refs": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "additionalProperties": true
+}

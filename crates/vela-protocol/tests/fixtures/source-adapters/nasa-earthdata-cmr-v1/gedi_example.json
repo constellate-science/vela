@@ -1,0 +1,9 @@
+{
+  "id": "C4102339168-ORNL_CLOUD",
+  "title": "West African Footprint-Level GEDI Aboveground Biomass Estimates",
+  "short_name": "Refined_GEDI_Biomass_WAfrica_2475",
+  "summary": "This dataset holds revised NASA's Global Ecosystem Dynamics Investigation (GEDI) footprint-level Aboveground Biomass Density estimates for West Africa based on training data only from the region. New field and uninhabited aerial vehicle (UAV) lidar data were collected across a latitudinal gradient in Ghana and used to produce new GEDI West African biomass models, which were applied to on-orbit quality-filtered GEDI data. GEDI mission has been collecting 3-D forest structure data from the International Space Station (ISS) since 2019 and provides global forest aboveground biomass products. One of GEDI's primary science objectives is to produce accurate forest structure and biomass products that are useful for policy applications, including national reporting. In theory, GEDI biomass data are very well suited to fill gaps in National Forest Inventories (NFIs), but only if they are accurate and regionally validated. No West African reference data were included in the generation of GEDI's global biomass products. These refined products should be more accurate in the region and suitable for national reporting and other desired activities in West African countries. The data are provided in comma separated values (CSV) format.",
+  "time_start": "2019-04-19T00:00:00.000Z",
+  "time_end": "2023-03-17T23:59:59.999Z",
+  "data_center": "ORNL_CLOUD"
+}

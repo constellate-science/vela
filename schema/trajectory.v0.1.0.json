@@ -1,0 +1,76 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vela.science/schema/trajectory/v0.1.0",
+  "title": "Vela Trajectory v0.1.0",
+  "description": "First-class kernel object for the search path that produced (or did not produce) a finding. The eighth essay primitive: 'so the next agent does not re-derive what the last one already ruled out.' Steps are append-only via `trajectory.step_appended` events; the materialized `steps` collection is reproduced by replay from genesis.",
+  "type": "object",
+  "required": ["id", "deposited_by", "created"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^vtr_[a-f0-9]{16}$",
+      "description": "Content-addressed identifier. First 16 hex chars of SHA-256(sorted_target_findings.join(',') | deposited_by | created), prefixed with 'vtr_'. Steps are NOT folded into the id."
+    },
+    "target_findings": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^vf_[a-f0-9]{16}(@vfr_[a-f0-9]+)?$" },
+      "description": "vf_* findings this trajectory describes the search for. May be empty when the trajectory leads nowhere yet."
+    },
+    "deposited_by": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable actor id of the depositor (lab / curator / agent that opens the trajectory)."
+    },
+    "created": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 creation timestamp (also folded into the id)."
+    },
+    "steps": {
+      "type": "array",
+      "description": "Append-only ordered list of steps. Reproduced by replay from `trajectory.step_appended` events.",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "description", "at", "actor"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^vts_[a-f0-9]{16}$",
+            "description": "Content-addressed step id: SHA-256(parent_trajectory_id | kind.canonical() | normalize(description) | at | actor) prefixed with 'vts_'."
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["hypothesis", "tried", "ruled_out", "observed", "refined"],
+            "description": "What kind of step this is. `ruled_out` is the most information-dense for downstream agents."
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Free-text description. For `ruled_out`, prose should name the reason for exclusion."
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "RFC 3339 timestamp the step happened."
+          },
+          "actor": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Stable actor id of who took the step. May differ from the trajectory's deposited_by."
+          },
+          "references": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Optional referenced kernel objects (vf_*, vnr_*, vrep_*, vpred_*, vd_*, vc_*)."
+          }
+        }
+      }
+    },
+    "notes": { "type": "string", "description": "Free-text reviewer note on the trajectory as a whole." },
+    "review_state": {
+      "type": ["string", "null"],
+      "enum": ["accepted", "contested", "needs_revision", "rejected", null]
+    },
+    "retracted": { "type": "boolean" }
+  }
+}

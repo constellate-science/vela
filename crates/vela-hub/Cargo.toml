@@ -1,0 +1,51 @@
+[package]
+name = "vela-hub"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Vela hub: read-only HTTP server over a Postgres-backed registry of signed frontier manifests"
+
+[[bin]]
+name = "vela-hub"
+path = "src/main.rs"
+
+[[bin]]
+name = "vela-hub-backfill-event-first"
+path = "src/bin/backfill_event_first.rs"
+
+[dependencies]
+axum.workspace = true
+tokio.workspace = true
+tower-http.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+dotenvy.workspace = true
+reqwest.workspace = true
+vela-protocol.workspace = true
+async-stream.workspace = true
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# Used by the proof-packet download route to stream a tar.gz of the
+# packet directory. Packets are small (a few MB) so we build the
+# tarball in memory.
+tar = "0.4"
+flate2 = "1.0"
+# v0.49.3: needed for the optional Ed25519 signing of the
+# `/.well-known/vela` discovery manifest.
+ed25519-dalek.workspace = true
+chrono.workspace = true
+hex = "0.4"
+# v0.55.1: substrate distribution via S3-compatible object storage.
+# Production runs against Tigris (Fly's S3-flavoured offering) but the
+# same client speaks to CloudFlare R2 / AWS S3 / Backblaze B2 by
+# changing only the endpoint URL — config-driven, no code change.
+aws-sdk-s3 = { version = "1", default-features = false, features = ["rt-tokio", "default-https-client", "behavior-version-latest"] }
+aws-config = { version = "1", default-features = false, features = ["rt-tokio", "default-https-client", "behavior-version-latest"] }
+aws-credential-types = "1"
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/carina/schemas/verdict_conflict.schema.json",
+  "title": "Verdict Conflict Resolution (v0.1)",
+  "description": "v0.217: a substrate primitive for resolving contradicting verdicts on overlapping Diff Pack members. When reviewer A issues verdict=accept on pack P and reviewer B issues verdict=reject on pack P', and P and P' share a member proposal, the substrate records the conflict and an explicit resolution (majority, owner-override, escalation). Pinned by Lean Theorem 31 (verdict-conflict id injectivity).",
+  "type": "object",
+  "required": [
+    "schema",
+    "conflict_id",
+    "frontier_id",
+    "verdicts",
+    "shared_member_ids",
+    "resolution_mode",
+    "resolution_actor",
+    "resolved_at"
+  ],
+  "properties": {
+    "schema": { "type": "string", "const": "vela.verdict_conflict.v0.1" },
+    "conflict_id": {
+      "type": "string",
+      "pattern": "^vdc_[a-f0-9]{16}$",
+      "description": "Content-addressed conflict record id."
+    },
+    "frontier_id": { "type": "string", "pattern": "^vfr_[a-f0-9]{16}$" },
+    "verdicts": {
+      "type": "array",
+      "minItems": 2,
+      "description": "The contradicting pending-verdict ids (vpv_*) involved in the conflict.",
+      "items": { "type": "string", "pattern": "^vpv_[a-f0-9]{16}$" }
+    },
+    "shared_member_ids": {
+      "type": "array",
+      "minItems": 1,
+      "description": "The vpr_* proposal ids that appear in more than one of the conflicting packs.",
+      "items": { "type": "string", "pattern": "^vpr_[a-f0-9]{16}$" }
+    },
+    "resolution_mode": {
+      "type": "string",
+      "enum": ["majority", "owner_override", "escalation"],
+      "description": "How the conflict was resolved. majority: most verdicts of one outcome win; owner_override: the frontier owner's verdict supersedes peers; escalation: handed up to a higher-authority reviewer."
+    },
+    "resolution_actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The actor whose decision the resolution records. For majority mode, this is the actor authorizing the count."
+    },
+    "resolved_at": { "type": "string", "format": "date-time" },
+    "winning_verdict_id": {
+      "type": ["string", "null"],
+      "pattern": "^vpv_[a-f0-9]{16}$",
+      "description": "Optional: the pending-verdict that won under the resolution. May be null when the resolution opens a new review cycle rather than picking a side."
+    },
+    "rationale": {
+      "type": "string",
+      "description": "Free-text rationale recorded by the resolver."
+    },
+    "signature": { "type": "string" },
+    "signer_pubkey_hex": { "type": "string" }
+  },
+  "additionalProperties": false
+}

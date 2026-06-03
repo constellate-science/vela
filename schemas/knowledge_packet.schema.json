@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "KTP-0 KnowledgePacket",
+  "type": "object",
+  "required": [
+    "object",
+    "kind",
+    "claim"
+  ],
+  "properties": {
+    "object": {
+      "const": "KnowledgePacket"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^kp_[0-9a-f]{16}$"
+    },
+    "kind": {
+      "enum": [
+        "native",
+        "transfer"
+      ]
+    },
+    "claim": {
+      "type": "object",
+      "description": "conventionally has 'formal' (native) or 'derived_via' (transfer)"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "kind": {
+          "const": "native"
+        },
+        "frontier": {
+          "type": "string"
+        },
+        "params": {
+          "type": "object"
+        },
+        "witness": {},
+        "verifier": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "frontier",
+        "params",
+        "witness",
+        "verifier"
+      ]
+    },
+    {
+      "properties": {
+        "kind": {
+          "const": "transfer"
+        },
+        "transfer": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "pattern": "^kp_[0-9a-f]{16}$"
+        }
+      },
+      "required": [
+        "transfer",
+        "source"
+      ]
+    }
+  ]
+}

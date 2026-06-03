@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vela.science/schema/causal-map/v0.1.0",
+  "title": "Vela Alzheimer causal map",
+  "type": "object",
+  "required": ["schema", "frontier", "nodes", "edges", "model_systems", "claim_boundary"],
+  "properties": {
+    "schema": {
+      "const": "vela.alzheimers_causal_map.v0.1"
+    },
+    "frontier": {
+      "type": "string"
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 1
+    },
+    "edges": {
+      "type": "array",
+      "minItems": 1
+    },
+    "model_systems": {
+      "type": "array",
+      "minItems": 1
+    },
+    "claim_boundary": {
+      "type": "object",
+      "required": [
+        "counts_as_review",
+        "mutates_frontier_state",
+        "claims_target_validation",
+        "claims_treatment_advice",
+        "candidate_edges_are_truth_claims"
+      ]
+    }
+  }
+}

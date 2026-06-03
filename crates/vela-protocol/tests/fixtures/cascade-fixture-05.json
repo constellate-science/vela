@@ -1,0 +1,1261 @@
+{
+  "doctrine": "every reducer implementation must agree on per-kind mutation rules across findings, negative_results, trajectories, artifacts, replications, and predictions",
+  "event_log": [
+    {
+      "actor": {
+        "id": "reviewer:negative-results-5",
+        "type": "human"
+      },
+      "after_hash": "sha256:null",
+      "before_hash": "sha256:null",
+      "caveats": [],
+      "id": "vev_da5413bc14cd3d07",
+      "kind": "finding.asserted",
+      "payload": {
+        "proposal_id": "vpr_5_d1f05b0730c755de"
+      },
+      "reason": "negative-results-fixture genesis",
+      "schema": "vela.event.v0.1",
+      "target": {
+        "id": "vf_d1f05b0730c755de",
+        "type": "finding"
+      },
+      "timestamp": "2026-05-02T05:00:00Z"
+    },
+    {
+      "actor": {
+        "id": "reviewer:negative-results-5",
+        "type": "human"
+      },
+      "after_hash": "sha256:null",
+      "before_hash": "sha256:null",
+      "caveats": [],
+      "id": "vev_a76652868cdcb3da",
+      "kind": "finding.asserted",
+      "payload": {
+        "proposal_id": "vpr_5_6f99f0c625a3184b"
+      },
+      "reason": "negative-results-fixture genesis",
+      "schema": "vela.event.v0.1",
+      "target": {
+        "id": "vf_6f99f0c625a3184b",
+        "type": "finding"
+      },
+      "timestamp": "2026-05-02T05:00:01Z"
+    },
+    {
+      "actor": {
+        "id": "reviewer:negative-results-5",
+        "type": "human"
+      },
+      "after_hash": "sha256:null",
+      "before_hash": "sha256:null",
+      "caveats": [],
+      "id": "vev_6d38808826c737b9",
+      "kind": "finding.asserted",
+      "payload": {
+        "proposal_id": "vpr_5_d8ce11917d5ab8d7"
+      },
+      "reason": "negative-results-fixture genesis",
+      "schema": "vela.event.v0.1",
+      "target": {
+        "id": "vf_d8ce11917d5ab8d7",
+        "type": "finding"
+      },
+      "timestamp": "2026-05-02T05:00:02Z"
+    },
+    {
+      "actor": {
+        "id": "reviewer:negative-results-5",
+        "type": "human"
+      },
+      "after_hash": "sha256:null",
+      "before_hash": "sha256:null",
+      "caveats": [],
+      "id": "vev_2629f83988a07a5e",
+      "kind": "finding.asserted",
+      "payload": {
+        "proposal_id": "vpr_5_d12d0027ba6a84cc"
+      },
+      "reason": "negative-results-fixture genesis",
+      "schema": "vela.event.v0.1",
+      "target": {
+        "id": "vf_d12d0027ba6a84cc",
+        "type": "finding"
+      },
+      "timestamp": "2026-05-02T05:00:03Z"
+    },
+    {
+      "actor": {
+        "id": "reviewer:negative-results-5",
+        "type": "human"
+      },
+      "after_hash": "sha256:null",
+      "before_hash": "sha256:null",
+      "caveats": [],
+      "id": "vev_2460225411d67774",
+      "kind": "finding.asserted",
+      "payload": {
+        "proposal_id": "vpr_5_a50114ad702903ea"
+      },
+      "reason": "negative-results-fixture genesis",
+      "schema": "vela.event.v0.1",
+      "target": {
+        "id": "vf_a50114ad702903ea",
+        "type": "finding"
+      },
+      "timestamp": "2026-05-02T05:00:04Z"
+    },
+    {
+      "actor": {
+        "id": "reviewer:negative-results-5",
+        "type": "human"
+      },
+      "after_hash": "sha256:null",
+      "before_hash": "sha256:null",
+      "caveats": [],
+      "id": "vev_bf00ec45b97a7230",
+      "kind": "finding.asserted",
+      "payload": {
+        "proposal_id": "vpr_5_7fd4bb496987ab9e"
+      },
+      "reason": "negative-results-fixture genesis",
+      "schema": "vela.event.v0.1",
+      "target": {
+        "id": "vf_7fd4bb496987ab9e",
+        "type": "finding"
+      },
+      "timestamp": "2026-05-02T05:00:05Z"
+    },
+    {
+      "actor": {
+        "id": "reviewer:negative-results-5",
+        "type": "human"
+      },
+      "after_hash": "sha256:null",
+      "before_hash": "sha256:null",
+      "caveats": [],
+      "id": "vev_9e5a4b406f40efe9",
+      "kind": "finding.asserted",
+      "payload": {
+        "proposal_id": "vpr_5_6195c0198ac56434"
+      },
+      "reason": "negative-results-fixture genesis",
+      "schema": "vela.event.v0.1",
+      "target": {
+        "id": "vf_6195c0198ac56434",
+        "type": "finding"
+      },
+      "timestamp": "2026-05-02T05:00:06Z"
+    },
+    {
+      "actor": {
+        "id": "reviewer:negative-results-5",
+        "type": "human"
+      },
+      "after_hash": "sha256:null",
+      "before_hash": "sha256:null",
+      "caveats": [],
+      "id": "vev_a92a4aa99936d328",
+      "kind": "finding.asserted",
+      "payload": {
+        "proposal_id": "vpr_5_5247246417b8e7d6"
+      },
+      "reason": "negative-results-fixture genesis",
+      "schema": "vela.event.v0.1",
+      "target": {
+        "id": "vf_5247246417b8e7d6",
+        "type": "finding"
+      },
+      "timestamp": "2026-05-02T05:00:07Z"
+    },
+    {
+      "actor": {
+        "id": "reviewer:negative-results-5",
+        "type": "human"
+      },
+      "after_hash": "sha256:null",
+      "before_hash": "sha256:null",
+      "caveats": [],
+      "id": "vev_f84d54448e465502",
+      "kind": "negative_result.asserted",
+      "payload": {
+        "negative_result": {
+          "conditions": {
+            "age_group": "65+",
+            "cell_type": null,
+            "clinical_trial": true,
+            "concentration_range": null,
+            "duration": "18 months",
+            "human_data": true,
+            "in_vitro": false,
+            "in_vivo": true,
+            "species_unverified": [],
+            "species_verified": [
+              "Homo sapiens"
+            ],
+            "text": "Phase III RCT, frontier 5"
+          },
+          "created": "2026-05-02T05:30:40Z",
+          "deposited_by": "trial-pi:cross-impl-5",
+          "id": "vnr_e3b8495c97be23b1",
+          "kind": {
+            "comparator": "placebo",
+            "effect_size_ci": [
+              -0.05,
+              0.05
+            ],
+            "effect_size_threshold": 0.4,
+            "endpoint": "Primary endpoint frontier 5",
+            "intervention": "intervention-arm",
+            "kind": "registered_trial",
+            "n_enrolled": 1200,
+            "population": "early symptomatic, biomarker-positive",
+            "power": 0.9,
+            "registry_id": "NCT00000005"
+          },
+          "notes": "Pre-registered primary endpoint did not meet MCID; CI excludes it.",
+          "provenance": {
+            "authors": [],
+            "citation_count": 0,
+            "doi": null,
+            "extraction": {
+              "extracted_at": "",
+              "extractor_version": "",
+              "method": "",
+              "model": null,
+              "model_version": null
+            },
+            "journal": null,
+            "openalex_id": null,
+            "pmc": null,
+            "pmid": null,
+            "review": null,
+            "source_type": "clinical_trial",
+            "title": "Trial readout, frontier 5",
+            "year": 2026
+          },
+          "target_findings": [
+            "vf_d1f05b0730c755de"
+          ]
+        },
+        "proposal_id": "vpr_nr_5_trial"
+      },
+      "reason": "deposit informative null from pre-registered trial",
+      "schema": "vela.event.v0.1",
+      "target": {
+        "id": "vnr_e3b8495c97be23b1",
+        "type": "negative_result"
+      },
+      "timestamp": "2026-05-02T05:00:08Z"
+    },
+    {
+      "actor": {
+        "id": "reviewer:negative-results-5",
+        "type": "human"
+      },
+      "after_hash": "sha256:null",
+      "before_hash": "sha256:null",
+      "caveats": [],
+      "id": "vev_622c7447772450db",
+      "kind": "negative_result.asserted",
+      "payload": {
+        "negative_result": {
+          "conditions": {
+            "age_group": null,
+            "cell_type": null,
+            "clinical_trial": false,
+            "concentration_range": "1-10 mM",
+            "duration": "72h",
+            "human_data": false,
+            "in_vitro": true,
+            "in_vivo": false,
+            "species_unverified": [],
+            "species_verified": [],
+            "text": "In vitro, frontier 5 synthesis attempts"
+          },
+          "created": "2026-05-02T05:30:41Z",
+          "deposited_by": "lab:cross-impl-5",
+          "id": "vnr_13a387da1f83c222",
+          "kind": {
+            "attempts": 4,
+            "kind": "exploratory",
+            "observation": "no measurable binding under any tested condition",
+            "reagent": "CompoundX-5"
+          },
+          "notes": "Exhausted reasonable parameter sweep; documenting before scope expansion.",
+          "provenance": {
+            "authors": [],
+            "citation_count": 0,
+            "doi": null,
+            "extraction": {
+              "extracted_at": "",
+              "extractor_version": "",
+              "method": "",
+              "model": null,
+              "model_version": null
+            },
+            "journal": null,
+            "openalex_id": null,
+            "pmc": null,
+            "pmid": null,
+            "review": null,
+            "source_type": "lab_notebook",
+            "title": "Lab notebook excerpt, frontier 5",
+            "year": 2026
+          },
+          "target_findings": []
+        },
+        "proposal_id": "vpr_nr_5_lab"
+      },
+      "reason": "deposit exploratory wet-lab dead end",
+      "schema": "vela.event.v0.1",
+      "target": {
+        "id": "vnr_13a387da1f83c222",
+        "type": "negative_result"
+      },
+      "timestamp": "2026-05-02T05:00:09Z"
+    },
+    {
+      "actor": {
+        "id": "reviewer:second-reader-5",
+        "type": "human"
+      },
+      "after_hash": "sha256:null",
+      "before_hash": "sha256:null",
+      "caveats": [],
+      "id": "vev_60aee448f2ff6ed4",
+      "kind": "negative_result.reviewed",
+      "payload": {
+        "proposal_id": "vpr_nr_5_trial_review",
+        "status": "contested"
+      },
+      "reason": "subgroup analysis suggests effect concentrated in APOE4-positive",
+      "schema": "vela.event.v0.1",
+      "target": {
+        "id": "vnr_e3b8495c97be23b1",
+        "type": "negative_result"
+      },
+      "timestamp": "2026-05-02T05:00:10Z"
+    },
+    {
+      "actor": {
+        "id": "reviewer:negative-results-5",
+        "type": "human"
+      },
+      "after_hash": "sha256:null",
+      "before_hash": "sha256:null",
+      "caveats": [],
+      "id": "vev_4d9e7f59caa30535",
+      "kind": "negative_result.retracted",
+      "payload": {
+        "proposal_id": "vpr_nr_5_lab_retract"
+      },
+      "reason": "reagent batch miscatalogued; retract and re-deposit pending",
+      "schema": "vela.event.v0.1",
+      "target": {
+        "id": "vnr_13a387da1f83c222",
+        "type": "negative_result"
+      },
+      "timestamp": "2026-05-02T05:00:11Z"
+    }
+  ],
+  "expected_artifacts": [],
+  "expected_negative_results": [
+    {
+      "access_tier": "public",
+      "id": "vnr_13a387da1f83c222",
+      "retracted": true,
+      "review_state": "none"
+    },
+    {
+      "access_tier": "public",
+      "id": "vnr_e3b8495c97be23b1",
+      "retracted": false,
+      "review_state": "contested"
+    }
+  ],
+  "expected_predictions": [],
+  "expected_replications": [],
+  "expected_states": [
+    {
+      "access_tier": "public",
+      "annotation_ids": [],
+      "confidence_score": "0.700000",
+      "contested": false,
+      "id": "vf_5247246417b8e7d6",
+      "retracted": false,
+      "review_state": "none"
+    },
+    {
+      "access_tier": "public",
+      "annotation_ids": [],
+      "confidence_score": "0.700000",
+      "contested": false,
+      "id": "vf_6195c0198ac56434",
+      "retracted": false,
+      "review_state": "none"
+    },
+    {
+      "access_tier": "public",
+      "annotation_ids": [],
+      "confidence_score": "0.700000",
+      "contested": false,
+      "id": "vf_6f99f0c625a3184b",
+      "retracted": false,
+      "review_state": "none"
+    },
+    {
+      "access_tier": "public",
+      "annotation_ids": [],
+      "confidence_score": "0.700000",
+      "contested": false,
+      "id": "vf_7fd4bb496987ab9e",
+      "retracted": false,
+      "review_state": "none"
+    },
+    {
+      "access_tier": "public",
+      "annotation_ids": [],
+      "confidence_score": "0.700000",
+      "contested": false,
+      "id": "vf_a50114ad702903ea",
+      "retracted": false,
+      "review_state": "none"
+    },
+    {
+      "access_tier": "public",
+      "annotation_ids": [],
+      "confidence_score": "0.700000",
+      "contested": false,
+      "id": "vf_d12d0027ba6a84cc",
+      "retracted": false,
+      "review_state": "none"
+    },
+    {
+      "access_tier": "public",
+      "annotation_ids": [],
+      "confidence_score": "0.700000",
+      "contested": false,
+      "id": "vf_d1f05b0730c755de",
+      "retracted": false,
+      "review_state": "none"
+    },
+    {
+      "access_tier": "public",
+      "annotation_ids": [],
+      "confidence_score": "0.700000",
+      "contested": false,
+      "id": "vf_d8ce11917d5ab8d7",
+      "retracted": false,
+      "review_state": "none"
+    }
+  ],
+  "expected_trajectories": [],
+  "fixture_version": "4",
+  "frontier_idx": 5,
+  "genesis_findings": [
+    {
+      "assertion": {
+        "direction": "positive",
+        "entities": [
+          {
+            "aliases": [],
+            "candidates": [],
+            "identifiers": {},
+            "name": "ProteinX0",
+            "resolution_confidence": 1.0,
+            "type": "protein"
+          }
+        ],
+        "relation": "activates",
+        "text": "Cross-impl finding 0 in frontier 5: protein-X activates pathway-Y.",
+        "type": "mechanism"
+      },
+      "conditions": {
+        "age_group": null,
+        "cell_type": "microglia",
+        "clinical_trial": false,
+        "concentration_range": null,
+        "duration": null,
+        "human_data": false,
+        "in_vitro": true,
+        "in_vivo": false,
+        "species_unverified": [],
+        "species_verified": [
+          "Mus musculus"
+        ],
+        "text": "In vitro, mouse microglia"
+      },
+      "confidence": {
+        "basis": "Cross-impl test fixture",
+        "extraction_confidence": 0.9,
+        "kind": "frontier_epistemic",
+        "method": "llm_initial",
+        "score": 0.7
+      },
+      "created": "2026-05-02T05:30:00Z",
+      "evidence": {
+        "effect_size": null,
+        "evidence_spans": [],
+        "method": "Western blot",
+        "model_system": "mouse",
+        "p_value": "p<0.05",
+        "replicated": true,
+        "replication_count": 3,
+        "sample_size": "n=30",
+        "species": "Mus musculus",
+        "type": "experimental"
+      },
+      "flags": {
+        "contested": false,
+        "declining": false,
+        "gap": false,
+        "gravity_well": false,
+        "negative_space": false,
+        "retracted": false
+      },
+      "id": "vf_d1f05b0730c755de",
+      "links": [
+        {
+          "created_at": "2026-05-02T00:00:00Z",
+          "inferred_by": "vela-cross-impl-fixture/0",
+          "note": "synthetic dependency",
+          "target": "vf_6f99f0c625a3184b",
+          "type": "supports"
+        }
+      ],
+      "previous_version": null,
+      "provenance": {
+        "authors": [
+          {
+            "name": "Cross-Impl A",
+            "orcid": null
+          }
+        ],
+        "citation_count": 0,
+        "doi": "10.0000/crossimpl.frontier0005.finding0000",
+        "extraction": {
+          "extracted_at": "",
+          "extractor_version": "",
+          "method": "",
+          "model": null,
+          "model_version": null
+        },
+        "journal": "Cross Journal",
+        "openalex_id": null,
+        "pmc": null,
+        "pmid": null,
+        "review": null,
+        "source_type": "published_paper",
+        "title": "Cross-impl paper 5-0",
+        "year": 2026
+      },
+      "updated": null,
+      "version": 1
+    },
+    {
+      "assertion": {
+        "direction": "positive",
+        "entities": [
+          {
+            "aliases": [],
+            "candidates": [],
+            "identifiers": {},
+            "name": "ProteinX1",
+            "resolution_confidence": 1.0,
+            "type": "protein"
+          }
+        ],
+        "relation": "activates",
+        "text": "Cross-impl finding 1 in frontier 5: protein-X activates pathway-Y.",
+        "type": "mechanism"
+      },
+      "conditions": {
+        "age_group": null,
+        "cell_type": "microglia",
+        "clinical_trial": false,
+        "concentration_range": null,
+        "duration": null,
+        "human_data": false,
+        "in_vitro": true,
+        "in_vivo": false,
+        "species_unverified": [],
+        "species_verified": [
+          "Mus musculus"
+        ],
+        "text": "In vitro, mouse microglia"
+      },
+      "confidence": {
+        "basis": "Cross-impl test fixture",
+        "extraction_confidence": 0.9,
+        "kind": "frontier_epistemic",
+        "method": "llm_initial",
+        "score": 0.7
+      },
+      "created": "2026-05-02T05:30:01Z",
+      "evidence": {
+        "effect_size": null,
+        "evidence_spans": [],
+        "method": "Western blot",
+        "model_system": "mouse",
+        "p_value": "p<0.05",
+        "replicated": true,
+        "replication_count": 3,
+        "sample_size": "n=30",
+        "species": "Mus musculus",
+        "type": "experimental"
+      },
+      "flags": {
+        "contested": false,
+        "declining": false,
+        "gap": false,
+        "gravity_well": false,
+        "negative_space": false,
+        "retracted": false
+      },
+      "id": "vf_6f99f0c625a3184b",
+      "links": [
+        {
+          "created_at": "2026-05-02T00:00:00Z",
+          "inferred_by": "vela-cross-impl-fixture/0",
+          "note": "synthetic dependency",
+          "target": "vf_d8ce11917d5ab8d7",
+          "type": "supports"
+        }
+      ],
+      "previous_version": null,
+      "provenance": {
+        "authors": [
+          {
+            "name": "Cross-Impl A",
+            "orcid": null
+          }
+        ],
+        "citation_count": 0,
+        "doi": "10.0000/crossimpl.frontier0005.finding0001",
+        "extraction": {
+          "extracted_at": "",
+          "extractor_version": "",
+          "method": "",
+          "model": null,
+          "model_version": null
+        },
+        "journal": "Cross Journal",
+        "openalex_id": null,
+        "pmc": null,
+        "pmid": null,
+        "review": null,
+        "source_type": "published_paper",
+        "title": "Cross-impl paper 5-1",
+        "year": 2026
+      },
+      "updated": null,
+      "version": 1
+    },
+    {
+      "assertion": {
+        "direction": "positive",
+        "entities": [
+          {
+            "aliases": [],
+            "candidates": [],
+            "identifiers": {},
+            "name": "ProteinX2",
+            "resolution_confidence": 1.0,
+            "type": "protein"
+          }
+        ],
+        "relation": "activates",
+        "text": "Cross-impl finding 2 in frontier 5: protein-X activates pathway-Y.",
+        "type": "mechanism"
+      },
+      "conditions": {
+        "age_group": null,
+        "cell_type": "microglia",
+        "clinical_trial": false,
+        "concentration_range": null,
+        "duration": null,
+        "human_data": false,
+        "in_vitro": true,
+        "in_vivo": false,
+        "species_unverified": [],
+        "species_verified": [
+          "Mus musculus"
+        ],
+        "text": "In vitro, mouse microglia"
+      },
+      "confidence": {
+        "basis": "Cross-impl test fixture",
+        "extraction_confidence": 0.9,
+        "kind": "frontier_epistemic",
+        "method": "llm_initial",
+        "score": 0.7
+      },
+      "created": "2026-05-02T05:30:02Z",
+      "evidence": {
+        "effect_size": null,
+        "evidence_spans": [],
+        "method": "Western blot",
+        "model_system": "mouse",
+        "p_value": "p<0.05",
+        "replicated": true,
+        "replication_count": 3,
+        "sample_size": "n=30",
+        "species": "Mus musculus",
+        "type": "experimental"
+      },
+      "flags": {
+        "contested": false,
+        "declining": false,
+        "gap": false,
+        "gravity_well": false,
+        "negative_space": false,
+        "retracted": false
+      },
+      "id": "vf_d8ce11917d5ab8d7",
+      "links": [
+        {
+          "created_at": "2026-05-02T00:00:00Z",
+          "inferred_by": "vela-cross-impl-fixture/0",
+          "note": "synthetic dependency",
+          "target": "vf_d12d0027ba6a84cc",
+          "type": "supports"
+        }
+      ],
+      "previous_version": null,
+      "provenance": {
+        "authors": [
+          {
+            "name": "Cross-Impl A",
+            "orcid": null
+          }
+        ],
+        "citation_count": 0,
+        "doi": "10.0000/crossimpl.frontier0005.finding0002",
+        "extraction": {
+          "extracted_at": "",
+          "extractor_version": "",
+          "method": "",
+          "model": null,
+          "model_version": null
+        },
+        "journal": "Cross Journal",
+        "openalex_id": null,
+        "pmc": null,
+        "pmid": null,
+        "review": null,
+        "source_type": "published_paper",
+        "title": "Cross-impl paper 5-2",
+        "year": 2026
+      },
+      "updated": null,
+      "version": 1
+    },
+    {
+      "assertion": {
+        "direction": "positive",
+        "entities": [
+          {
+            "aliases": [],
+            "candidates": [],
+            "identifiers": {},
+            "name": "ProteinX3",
+            "resolution_confidence": 1.0,
+            "type": "protein"
+          }
+        ],
+        "relation": "activates",
+        "text": "Cross-impl finding 3 in frontier 5: protein-X activates pathway-Y.",
+        "type": "mechanism"
+      },
+      "conditions": {
+        "age_group": null,
+        "cell_type": "microglia",
+        "clinical_trial": false,
+        "concentration_range": null,
+        "duration": null,
+        "human_data": false,
+        "in_vitro": true,
+        "in_vivo": false,
+        "species_unverified": [],
+        "species_verified": [
+          "Mus musculus"
+        ],
+        "text": "In vitro, mouse microglia"
+      },
+      "confidence": {
+        "basis": "Cross-impl test fixture",
+        "extraction_confidence": 0.9,
+        "kind": "frontier_epistemic",
+        "method": "llm_initial",
+        "score": 0.7
+      },
+      "created": "2026-05-02T05:30:03Z",
+      "evidence": {
+        "effect_size": null,
+        "evidence_spans": [],
+        "method": "Western blot",
+        "model_system": "mouse",
+        "p_value": "p<0.05",
+        "replicated": true,
+        "replication_count": 3,
+        "sample_size": "n=30",
+        "species": "Mus musculus",
+        "type": "experimental"
+      },
+      "flags": {
+        "contested": false,
+        "declining": false,
+        "gap": false,
+        "gravity_well": false,
+        "negative_space": false,
+        "retracted": false
+      },
+      "id": "vf_d12d0027ba6a84cc",
+      "links": [
+        {
+          "created_at": "2026-05-02T00:00:00Z",
+          "inferred_by": "vela-cross-impl-fixture/0",
+          "note": "synthetic dependency",
+          "target": "vf_a50114ad702903ea",
+          "type": "supports"
+        }
+      ],
+      "previous_version": null,
+      "provenance": {
+        "authors": [
+          {
+            "name": "Cross-Impl A",
+            "orcid": null
+          }
+        ],
+        "citation_count": 0,
+        "doi": "10.0000/crossimpl.frontier0005.finding0003",
+        "extraction": {
+          "extracted_at": "",
+          "extractor_version": "",
+          "method": "",
+          "model": null,
+          "model_version": null
+        },
+        "journal": "Cross Journal",
+        "openalex_id": null,
+        "pmc": null,
+        "pmid": null,
+        "review": null,
+        "source_type": "published_paper",
+        "title": "Cross-impl paper 5-3",
+        "year": 2026
+      },
+      "updated": null,
+      "version": 1
+    },
+    {
+      "assertion": {
+        "direction": "positive",
+        "entities": [
+          {
+            "aliases": [],
+            "candidates": [],
+            "identifiers": {},
+            "name": "ProteinX4",
+            "resolution_confidence": 1.0,
+            "type": "protein"
+          }
+        ],
+        "relation": "activates",
+        "text": "Cross-impl finding 4 in frontier 5: protein-X activates pathway-Y.",
+        "type": "mechanism"
+      },
+      "conditions": {
+        "age_group": null,
+        "cell_type": "microglia",
+        "clinical_trial": false,
+        "concentration_range": null,
+        "duration": null,
+        "human_data": false,
+        "in_vitro": true,
+        "in_vivo": false,
+        "species_unverified": [],
+        "species_verified": [
+          "Mus musculus"
+        ],
+        "text": "In vitro, mouse microglia"
+      },
+      "confidence": {
+        "basis": "Cross-impl test fixture",
+        "extraction_confidence": 0.9,
+        "kind": "frontier_epistemic",
+        "method": "llm_initial",
+        "score": 0.7
+      },
+      "created": "2026-05-02T05:30:04Z",
+      "evidence": {
+        "effect_size": null,
+        "evidence_spans": [],
+        "method": "Western blot",
+        "model_system": "mouse",
+        "p_value": "p<0.05",
+        "replicated": true,
+        "replication_count": 3,
+        "sample_size": "n=30",
+        "species": "Mus musculus",
+        "type": "experimental"
+      },
+      "flags": {
+        "contested": false,
+        "declining": false,
+        "gap": false,
+        "gravity_well": false,
+        "negative_space": false,
+        "retracted": false
+      },
+      "id": "vf_a50114ad702903ea",
+      "links": [
+        {
+          "created_at": "2026-05-02T00:00:00Z",
+          "inferred_by": "vela-cross-impl-fixture/0",
+          "note": "synthetic dependency",
+          "target": "vf_7fd4bb496987ab9e",
+          "type": "supports"
+        }
+      ],
+      "previous_version": null,
+      "provenance": {
+        "authors": [
+          {
+            "name": "Cross-Impl A",
+            "orcid": null
+          }
+        ],
+        "citation_count": 0,
+        "doi": "10.0000/crossimpl.frontier0005.finding0004",
+        "extraction": {
+          "extracted_at": "",
+          "extractor_version": "",
+          "method": "",
+          "model": null,
+          "model_version": null
+        },
+        "journal": "Cross Journal",
+        "openalex_id": null,
+        "pmc": null,
+        "pmid": null,
+        "review": null,
+        "source_type": "published_paper",
+        "title": "Cross-impl paper 5-4",
+        "year": 2026
+      },
+      "updated": null,
+      "version": 1
+    },
+    {
+      "assertion": {
+        "direction": "positive",
+        "entities": [
+          {
+            "aliases": [],
+            "candidates": [],
+            "identifiers": {},
+            "name": "ProteinX5",
+            "resolution_confidence": 1.0,
+            "type": "protein"
+          }
+        ],
+        "relation": "activates",
+        "text": "Cross-impl finding 5 in frontier 5: protein-X activates pathway-Y.",
+        "type": "mechanism"
+      },
+      "conditions": {
+        "age_group": null,
+        "cell_type": "microglia",
+        "clinical_trial": false,
+        "concentration_range": null,
+        "duration": null,
+        "human_data": false,
+        "in_vitro": true,
+        "in_vivo": false,
+        "species_unverified": [],
+        "species_verified": [
+          "Mus musculus"
+        ],
+        "text": "In vitro, mouse microglia"
+      },
+      "confidence": {
+        "basis": "Cross-impl test fixture",
+        "extraction_confidence": 0.9,
+        "kind": "frontier_epistemic",
+        "method": "llm_initial",
+        "score": 0.7
+      },
+      "created": "2026-05-02T05:30:05Z",
+      "evidence": {
+        "effect_size": null,
+        "evidence_spans": [],
+        "method": "Western blot",
+        "model_system": "mouse",
+        "p_value": "p<0.05",
+        "replicated": true,
+        "replication_count": 3,
+        "sample_size": "n=30",
+        "species": "Mus musculus",
+        "type": "experimental"
+      },
+      "flags": {
+        "contested": false,
+        "declining": false,
+        "gap": false,
+        "gravity_well": false,
+        "negative_space": false,
+        "retracted": false
+      },
+      "id": "vf_7fd4bb496987ab9e",
+      "links": [
+        {
+          "created_at": "2026-05-02T00:00:00Z",
+          "inferred_by": "vela-cross-impl-fixture/0",
+          "note": "synthetic dependency",
+          "target": "vf_6195c0198ac56434",
+          "type": "supports"
+        }
+      ],
+      "previous_version": null,
+      "provenance": {
+        "authors": [
+          {
+            "name": "Cross-Impl A",
+            "orcid": null
+          }
+        ],
+        "citation_count": 0,
+        "doi": "10.0000/crossimpl.frontier0005.finding0005",
+        "extraction": {
+          "extracted_at": "",
+          "extractor_version": "",
+          "method": "",
+          "model": null,
+          "model_version": null
+        },
+        "journal": "Cross Journal",
+        "openalex_id": null,
+        "pmc": null,
+        "pmid": null,
+        "review": null,
+        "source_type": "published_paper",
+        "title": "Cross-impl paper 5-5",
+        "year": 2026
+      },
+      "updated": null,
+      "version": 1
+    },
+    {
+      "assertion": {
+        "direction": "positive",
+        "entities": [
+          {
+            "aliases": [],
+            "candidates": [],
+            "identifiers": {},
+            "name": "ProteinX6",
+            "resolution_confidence": 1.0,
+            "type": "protein"
+          }
+        ],
+        "relation": "activates",
+        "text": "Cross-impl finding 6 in frontier 5: protein-X activates pathway-Y.",
+        "type": "mechanism"
+      },
+      "conditions": {
+        "age_group": null,
+        "cell_type": "microglia",
+        "clinical_trial": false,
+        "concentration_range": null,
+        "duration": null,
+        "human_data": false,
+        "in_vitro": true,
+        "in_vivo": false,
+        "species_unverified": [],
+        "species_verified": [
+          "Mus musculus"
+        ],
+        "text": "In vitro, mouse microglia"
+      },
+      "confidence": {
+        "basis": "Cross-impl test fixture",
+        "extraction_confidence": 0.9,
+        "kind": "frontier_epistemic",
+        "method": "llm_initial",
+        "score": 0.7
+      },
+      "created": "2026-05-02T05:30:06Z",
+      "evidence": {
+        "effect_size": null,
+        "evidence_spans": [],
+        "method": "Western blot",
+        "model_system": "mouse",
+        "p_value": "p<0.05",
+        "replicated": true,
+        "replication_count": 3,
+        "sample_size": "n=30",
+        "species": "Mus musculus",
+        "type": "experimental"
+      },
+      "flags": {
+        "contested": false,
+        "declining": false,
+        "gap": false,
+        "gravity_well": false,
+        "negative_space": false,
+        "retracted": false
+      },
+      "id": "vf_6195c0198ac56434",
+      "links": [
+        {
+          "created_at": "2026-05-02T00:00:00Z",
+          "inferred_by": "vela-cross-impl-fixture/0",
+          "note": "synthetic dependency",
+          "target": "vf_5247246417b8e7d6",
+          "type": "supports"
+        }
+      ],
+      "previous_version": null,
+      "provenance": {
+        "authors": [
+          {
+            "name": "Cross-Impl A",
+            "orcid": null
+          }
+        ],
+        "citation_count": 0,
+        "doi": "10.0000/crossimpl.frontier0005.finding0006",
+        "extraction": {
+          "extracted_at": "",
+          "extractor_version": "",
+          "method": "",
+          "model": null,
+          "model_version": null
+        },
+        "journal": "Cross Journal",
+        "openalex_id": null,
+        "pmc": null,
+        "pmid": null,
+        "review": null,
+        "source_type": "published_paper",
+        "title": "Cross-impl paper 5-6",
+        "year": 2026
+      },
+      "updated": null,
+      "version": 1
+    },
+    {
+      "assertion": {
+        "direction": "positive",
+        "entities": [
+          {
+            "aliases": [],
+            "candidates": [],
+            "identifiers": {},
+            "name": "ProteinX7",
+            "resolution_confidence": 1.0,
+            "type": "protein"
+          }
+        ],
+        "relation": "activates",
+        "text": "Cross-impl finding 7 in frontier 5: protein-X activates pathway-Y.",
+        "type": "mechanism"
+      },
+      "conditions": {
+        "age_group": null,
+        "cell_type": "microglia",
+        "clinical_trial": false,
+        "concentration_range": null,
+        "duration": null,
+        "human_data": false,
+        "in_vitro": true,
+        "in_vivo": false,
+        "species_unverified": [],
+        "species_verified": [
+          "Mus musculus"
+        ],
+        "text": "In vitro, mouse microglia"
+      },
+      "confidence": {
+        "basis": "Cross-impl test fixture",
+        "extraction_confidence": 0.9,
+        "kind": "frontier_epistemic",
+        "method": "llm_initial",
+        "score": 0.7
+      },
+      "created": "2026-05-02T05:30:07Z",
+      "evidence": {
+        "effect_size": null,
+        "evidence_spans": [],
+        "method": "Western blot",
+        "model_system": "mouse",
+        "p_value": "p<0.05",
+        "replicated": true,
+        "replication_count": 3,
+        "sample_size": "n=30",
+        "species": "Mus musculus",
+        "type": "experimental"
+      },
+      "flags": {
+        "contested": false,
+        "declining": false,
+        "gap": false,
+        "gravity_well": false,
+        "negative_space": false,
+        "retracted": false
+      },
+      "id": "vf_5247246417b8e7d6",
+      "links": [],
+      "previous_version": null,
+      "provenance": {
+        "authors": [
+          {
+            "name": "Cross-Impl A",
+            "orcid": null
+          }
+        ],
+        "citation_count": 0,
+        "doi": "10.0000/crossimpl.frontier0005.finding0007",
+        "extraction": {
+          "extracted_at": "",
+          "extractor_version": "",
+          "method": "",
+          "model": null,
+          "model_version": null
+        },
+        "journal": "Cross Journal",
+        "openalex_id": null,
+        "pmc": null,
+        "pmid": null,
+        "review": null,
+        "source_type": "published_paper",
+        "title": "Cross-impl paper 5-7",
+        "year": 2026
+      },
+      "updated": null,
+      "version": 1
+    }
+  ],
+  "scenario": "negative_results",
+  "schema_url": "https://vela.science/schema/cross-impl-reducer-fixture/v4",
+  "stats": {
+    "artifacts": 0,
+    "cascade_depth": 0,
+    "events": 12,
+    "findings": 8,
+    "kinds_seen": {
+      "finding.asserted": 8,
+      "negative_result.asserted": 2,
+      "negative_result.retracted": 1,
+      "negative_result.reviewed": 1
+    },
+    "negative_results": 2,
+    "predictions": 0,
+    "replications": 0,
+    "trajectories": 0
+  }
+}

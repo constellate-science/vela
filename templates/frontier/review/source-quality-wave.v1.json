@@ -1,0 +1,21 @@
+{
+  "claim_boundary": {
+    "claims_benchmark_outperformance": false,
+    "claims_external_validation": false,
+    "claims_scientific_discovery": false,
+    "claims_source_review_complete": false,
+    "claims_target_validation": false,
+    "claims_treatment_advice": false,
+    "mutates_frontier_state": false
+  },
+  "frontier": "{{FRONTIER_ID}}",
+  "records": [],
+  "schema": "vela.source_quality_wave.template.v1",
+  "status": "bootstrap_visible_debt",
+  "summary": {
+    "frontier_sources": 0,
+    "human_verified_evidence_atoms": 0,
+    "missing_locators": 0,
+    "reviewed_findings": 0
+  }
+}

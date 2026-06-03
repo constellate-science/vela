@@ -1,0 +1,38 @@
+{
+  "claim_boundary": {
+    "claims_benchmark_outperformance": false,
+    "claims_external_validation": false,
+    "claims_scientific_discovery": false,
+    "claims_target_validation": false,
+    "claims_treatment_advice": false,
+    "mutates_frontier_state": false
+  },
+  "frontier": "{{FRONTIER_ID}}",
+  "schema": "vela.frontier_review_suite.template.v1",
+  "status": "bootstrap_hidden_answer_tasks",
+  "task_count": 1,
+  "tasks": [
+    {
+      "answer_id": "primary_decision_answer",
+      "category": "source_grounding",
+      "expected_answer_hidden": true,
+      "prompt": "{{DECISION_QUESTION}} Include support, counterweights, source ids, caveats, and review boundary.",
+      "required_output_fields": [
+        "answer",
+        "finding_ids",
+        "source_ids",
+        "counterweights",
+        "caveats"
+      ],
+      "scoring_dimensions": [
+        "correctness",
+        "source_grounding",
+        "caveat_handling",
+        "counterweight_handling",
+        "navigation_burden",
+        "reviewability"
+      ],
+      "task_id": "{{FRONTIER_ID}}_task_primary"
+    }
+  ]
+}

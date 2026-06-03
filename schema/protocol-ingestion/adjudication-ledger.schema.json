@@ -1,0 +1,47 @@
+{
+  "$id": "https://vela.science/schema/protocol-ingestion/adjudication-ledger/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": true,
+  "properties": {
+    "claim_boundary": {
+      "additionalProperties": false,
+      "properties": {
+        "claims_external_validation": { "const": false },
+        "claims_target_validation": { "const": false },
+        "claims_treatment_advice": { "const": false },
+        "ledger_is_review_material": { "const": true },
+        "mutates_frontier_state": { "const": false }
+      },
+      "required": [
+        "ledger_is_review_material",
+        "mutates_frontier_state",
+        "claims_external_validation",
+        "claims_treatment_advice",
+        "claims_target_validation"
+      ],
+      "type": "object"
+    },
+    "created_at": { "minLength": 1, "type": "string" },
+    "ledger_id": { "pattern": "^vledger_[A-Za-z0-9_:-]+$", "type": "string" },
+    "rows": {
+      "items": {
+        "additionalProperties": true,
+        "properties": {
+          "adjudication_status": {
+            "enum": ["pending", "accepted", "rejected", "needs_revision"]
+          },
+          "draft_id": { "minLength": 1, "type": "string" },
+          "reason": { "type": "string" },
+          "source_id": { "minLength": 1, "type": "string" }
+        },
+        "required": ["draft_id", "source_id", "adjudication_status"],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "schema": { "const": "vela.adjudication_ledger.v1" }
+  },
+  "required": ["schema", "ledger_id", "created_at", "rows", "claim_boundary"],
+  "title": "Vela adjudication ledger",
+  "type": "object"
+}

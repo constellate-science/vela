@@ -1,0 +1,67 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/carina/schemas/trial.schema.json",
+  "title": "Carina Trial (v0.6)",
+  "description": "A clinical-trial evidence packet riding on a Vela frontier. Captures the long-lived attributes of a single trial (phase, status, registry id, intervention, indication, primary endpoint, sponsor) so the frontier's canonical event log can carry the durable audit trail (protocol versions, dose cohorts, safety signals, interim analyses, DSMB events, regulatory amendments) as findings, evidence, and proposals. Introduced at v0.6 of the Carina kernel; aligned with examples/trial-evidence-packet shipped at v0.112.0.",
+  "type": "object",
+  "required": [
+    "schema",
+    "id",
+    "title",
+    "phase",
+    "status",
+    "indication"
+  ],
+  "properties": {
+    "schema": { "type": "string", "const": "carina.trial.v0.6" },
+    "id": { "type": "string", "pattern": "^vtri_[a-zA-Z0-9_]+$" },
+    "title": { "type": "string", "minLength": 1 },
+    "phase": {
+      "type": "string",
+      "enum": [
+        "preclinical",
+        "phase_0",
+        "phase_1",
+        "phase_2",
+        "phase_3",
+        "phase_4",
+        "observational"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "planned",
+        "recruiting",
+        "active",
+        "completed",
+        "suspended",
+        "terminated",
+        "withdrawn"
+      ]
+    },
+    "registry_id": {
+      "type": "string",
+      "description": "Trial-registry identifier such as ClinicalTrials.gov NCT number, EudraCT id, ISRCTN id, or sponsor protocol number."
+    },
+    "intervention": { "type": "string" },
+    "indication": { "type": "string", "minLength": 1 },
+    "primary_endpoint": { "type": "string" },
+    "secondary_endpoints": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "arms": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "sponsor": { "type": "string" },
+    "start_date": { "type": "string" },
+    "end_date": { "type": "string" },
+    "frontier_id": {
+      "type": "string",
+      "pattern": "^vfr_[a-zA-Z0-9_]+$",
+      "description": "Pointer to the Vela frontier carrying this trial's findings, evidence, and proposal stream."
+    }
+  }
+}

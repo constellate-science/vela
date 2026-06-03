@@ -1,0 +1,5 @@
+{
+  "status" : 400,
+  "message" : "JSON schema validation failed for query: {\"query\":{\"type\":\"full_text\",\"parameters\":{\"query\":\"kinase mutation\"}},\"return_type\":\"polymer_entity\",\"request_info\":{\"query_id\":\"ff60d90a-8df4-4a97-b7c2-f09be9447796\"},\"request_options\":{\"sort\":[{\"sort_by\":\"score\",\"direction\":\"desc\"}],\"paginate\":{\"start\":0,\"rows\":10},\"scoring_strategy\":\"combined\"}}. Errors: instance failed to match exactly one schema (matched 0 out of 2).",
+  "link" : "https://search.rcsb.org/redoc/index.html"
+}

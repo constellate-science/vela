@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/schemas/frontier_release.schema.json",
+  "title": "Vela Frontier Release (v0.1)",
+  "description": "A versioned release of a frontier at a specific epoch. Content-addressed by `vfrr_*` over (frontier_id, snapshot_hash, event_log_hash, owner_epoch, name, notes). Immutable: once written, a release record is never edited; new releases produce new vfrr_* ids. Releases are the substrate-side equivalent of a paper edition or a software version tag.",
+  "type": "object",
+  "required": [
+    "schema",
+    "release_id",
+    "frontier_id",
+    "name",
+    "owner_epoch",
+    "snapshot_hash",
+    "event_log_hash",
+    "released_at"
+  ],
+  "properties": {
+    "schema": { "type": "string", "const": "vela.frontier_release.v0.1" },
+    "release_id": { "type": "string", "pattern": "^vfrr_[a-zA-Z0-9_]+$" },
+    "frontier_id": { "type": "string", "pattern": "^vfr_[a-zA-Z0-9_]+$" },
+    "name": { "type": "string", "minLength": 1 },
+    "notes": { "type": "string" },
+    "owner_epoch": { "type": "integer", "minimum": 0 },
+    "snapshot_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "event_log_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "governance_policy_id": { "type": "string", "pattern": "^vgp_[a-zA-Z0-9_]+$" },
+    "previous_release": { "type": "string", "pattern": "^vfrr_[a-zA-Z0-9_]+$" },
+    "released_at": { "type": "string", "format": "date-time" }
+  }
+}

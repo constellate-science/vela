@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Vela notebook output source contract",
+  "type": "object",
+  "required": [
+    "schema",
+    "source_id",
+    "created_at",
+    "review_status",
+    "mutation_boundary",
+    "objective",
+    "inputs",
+    "code_hash",
+    "environment",
+    "outputs",
+    "metrics",
+    "review_boundary",
+    "notebook_id",
+    "producer",
+    "dataset_inputs",
+    "code_artifacts",
+    "result_artifacts",
+    "verifier_attachments"
+  ],
+  "properties": {
+    "schema": {
+      "const": "vela.notebook_output.v0.1"
+    },
+    "source_id": {
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "review_status": {
+      "enum": [
+        "source_material"
+      ]
+    },
+    "mutation_boundary": {
+      "type": "object",
+      "required": [
+        "writes_frontier_state",
+        "writes_review_events",
+        "requires_review_event_for_state_change"
+      ]
+    },
+    "objective": {
+      "type": "string"
+    },
+    "inputs": {
+      "type": "array"
+    },
+    "code_hash": {
+      "type": "string"
+    },
+    "environment": {
+      "type": "object"
+    },
+    "outputs": {
+      "type": "array"
+    },
+    "metrics": {
+      "type": "object"
+    },
+    "review_boundary": {
+      "type": "object"
+    },
+    "notebook_id": {
+      "type": "string"
+    },
+    "producer": {
+      "type": "object"
+    },
+    "dataset_inputs": {
+      "type": "array"
+    },
+    "code_artifacts": {
+      "type": "array"
+    },
+    "result_artifacts": {
+      "type": "array"
+    },
+    "verifier_attachments": {
+      "type": "array"
+    }
+  }
+}

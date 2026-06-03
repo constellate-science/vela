@@ -1,0 +1,67 @@
+{
+  "adapter_id": "nasa-earthdata-cmr-v1",
+  "frontier_target": "vfr_enhanced_rock_weathering_mrv",
+  "base_url": "https://cmr.earthdata.nasa.gov/search",
+  "auth": "none for search; api_key (Earthdata Login bearer token) required for data download. Obtain at: https://urs.earthdata.nasa.gov/ (create account) → https://auth.earthdata.nasa.gov/tokens (generate token)",
+  "target_query": "https://cmr.earthdata.nasa.gov/search/collections.json?keyword=soil+carbon+land+measurement+mineral+weathering&page_size=50",
+  "response_format": "JSON; top-level 'feed' object contains 'entry' array of collection records; each collection has id (concept_id), title, summary, time_start, time_end, data_center, links[]",
+  "fields_to_extract": [
+    {
+      "field": "concept_id",
+      "json_path": "/feed/entry/[*]/id",
+      "maps_to": "source_record"
+    },
+    {
+      "field": "collection_title",
+      "json_path": "/feed/entry/[*]/title",
+      "maps_to": "source_record"
+    },
+    {
+      "field": "collection_summary",
+      "json_path": "/feed/entry/[*]/summary",
+      "maps_to": "evidence_atom"
+    },
+    {
+      "field": "short_name",
+      "json_path": "/feed/entry/[*]/short_name",
+      "maps_to": "source_record"
+    },
+    {
+      "field": "data_center",
+      "json_path": "/feed/entry/[*]/data_center",
+      "maps_to": "source_record"
+    },
+    {
+      "field": "time_start",
+      "json_path": "/feed/entry/[*]/time_start",
+      "maps_to": "condition"
+    },
+    {
+      "field": "time_end",
+      "json_path": "/feed/entry/[*]/time_end",
+      "maps_to": "condition"
+    },
+    {
+      "field": "online_access_flag",
+      "json_path": "/feed/entry/[*]/online_access_flag",
+      "maps_to": "artifact"
+    },
+    {
+      "field": "data_doi_link",
+      "json_path": "/feed/entry/[*]/links[?(@.rel=~'metadata.*')]/href",
+      "maps_to": "source_record"
+    },
+    {
+      "field": "platforms",
+      "json_path": "/feed/entry/[*]/platforms",
+      "maps_to": "condition"
+    }
+  ],
+  "vela_mapping": "Each collection record becomes a source_record artifact in the artifact packet. The adapter asserts NO scientific truth about soil carbon or weathering rates. Instead, it surfaces collection metadata (title, summary, DOI, temporal coverage, access status) as reviewable proposals. Reviewers assess whether a collection is relevant for the frontier's MRV scope (Does it measure soil carbon? Land surface properties? Mineral composition?). Content hash is computed on the collection JSON to detect updates (new collections, metadata changes). The adapter emits source/artifact records only; frontier decisions about which collections feed into the weathering MRV estimates remain in the decision frontier.",
+  "rate_limits": "NASA CMR suggests ~100 requests/minute. 503 responses include Retry-After header. Backoff policy: exponential with jitter. No documented hard quota for search endpoints.",
+  "pagination": "page_num parameter (1-indexed); page_size parameter (1–2000, default 10). Total result count available in feed metadata. Implement limit-offset pagination: loop until entry[] is empty or page_num > calculated max pages.",
+  "fixture_path": "/tmp/vela-adapter-research/nasa-earthdata-cmr-v1/sample.json",
+  "implementation_risk": "low",
+  "live_probe_result": "HTTP 200 OK. Successfully fetched collection search results for keyword='soil carbon'. Response structure is stable (OpenSearch/ECHO feed format). Empty granule result for one concept_id indicates collections may not have indexed granules in CMR (data stored in external DAAC systems). Collection search is fully open; granule download requires EDL token.",
+  "notes": "1. CRITICAL: Collection search is open but granule content download requires Earthdata Login bearer token (not API key). Implement token refresh logic if building long-lived adapter. 2. CMR returns collections from multiple data centers (ORNL_CLOUD, NSIDC_CPRD, LPDAAC, etc.); each may have different access policies. Check links[] for data URIs. 3. Score field indicates relevance ranking; sort by score. 4. Platforms and cloud_hosted flags signal observation type (satellite, ground-based, model) — include in artifact metadata for reviewer context. 5. For weathering MRV specifically, prioritize SMAP L4 Carbon (soil properties), GEDI (above-ground biomass proxy for weathering rate inference), and MODIS LST. 6. Time_start/time_end define collection's temporal coverage; granule search then filters within that range. 7. online_access_flag=false means data access is restricted or requires special terms; flag for review. 8. Never inline collection summaries that exceed 2KB in the artifact packet; instead store path to external DOI/documentation link."
+}

@@ -1,0 +1,28 @@
+{
+  "claim_boundary": {
+    "claims_benchmark_outperformance": false,
+    "claims_external_validation": false,
+    "claims_scientific_discovery": false,
+    "claims_target_validation": false,
+    "claims_treatment_advice": false,
+    "mutates_frontier_state": false
+  },
+  "frontier": "{{FRONTIER_ID}}",
+  "questions": [
+    {
+      "evidence_atom_count": 0,
+      "finding_count": 0,
+      "id": "primary_decision_question",
+      "minimum_findings": 6,
+      "question": "{{DECISION_QUESTION}}",
+      "source_count": 0,
+      "status": "seed"
+    }
+  ],
+  "schema": "vela.frontier_use_map.template.v1",
+  "status": "bootstrap_source_material",
+  "summary": {
+    "covered_question_count": 0,
+    "question_count": 1
+  }
+}

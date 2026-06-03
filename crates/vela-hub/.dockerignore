@@ -1,0 +1,18 @@
+target
+**/target
+.git
+.github
+.vela
+docs
+examples
+frontiers
+projects
+schema
+scripts
+tests
+*.md
+.gitignore
+.dockerignore
+# web/ and assets/brand/ are embedded into the hub binary via include_str!
+# (web/styles/{tokens,workbench,site}.css and assets/brand/*.svg). Keep
+# them in the build context so the build doesn't fail on missing files.

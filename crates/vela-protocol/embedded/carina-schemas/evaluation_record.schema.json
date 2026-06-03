@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/carina/schemas/evaluation_record.schema.json",
+  "title": "Evaluation Record (v0.1)",
+  "description": "v0.200: a unified record for replication, benchmark, validation, and peer-review outcomes. Composes with v0.71 Replication / Prediction primitives. Lets statements like `this Diff Pack was replicated by Lab X` and `this tool benched at Y on benchmark Z` exist as first-class objects on the substrate.",
+  "type": "object",
+  "required": [
+    "schema",
+    "record_id",
+    "target_kind",
+    "target_id",
+    "evaluation_kind",
+    "outcome",
+    "evaluator_actor",
+    "evaluated_at"
+  ],
+  "properties": {
+    "schema": { "type": "string", "const": "vela.evaluation_record.v0.1" },
+    "record_id": {
+      "type": "string",
+      "pattern": "^ver_[a-f0-9]{16}$"
+    },
+    "target_kind": {
+      "type": "string",
+      "enum": ["vsd", "vtr", "vf", "vpf", "vtd", "vaa"],
+      "description": "Kind of object the evaluation targets — Diff Pack, Trail, Finding, Proof, Tool Descriptor, or Agent Attestation."
+    },
+    "target_id": { "type": "string", "minLength": 4 },
+    "evaluation_kind": {
+      "type": "string",
+      "enum": ["replication", "benchmark", "validation", "peer_review"]
+    },
+    "outcome": {
+      "type": "string",
+      "enum": ["succeeded", "failed", "partial", "inconclusive"]
+    },
+    "evaluator_actor": { "type": "string", "minLength": 1 },
+    "evaluated_at": { "type": "string", "format": "date-time" },
+    "evidence_refs": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "benchmark_id": { "type": ["string", "null"] },
+    "score": { "type": ["number", "null"] },
+    "notes": { "type": ["string", "null"] },
+    "signature": { "type": ["string", "null"] },
+    "signer_pubkey_hex": { "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}

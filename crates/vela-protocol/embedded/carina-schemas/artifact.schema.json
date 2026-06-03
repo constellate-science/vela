@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/carina/schemas/artifact.schema.json",
+  "title": "Carina Artifact (v0.3)",
+  "description": "A content-addressed object referenced by findings, evidence, or events. Source records, datasets, code blobs, proof scripts.",
+  "type": "object",
+  "required": ["schema", "id", "kind", "content_hash"],
+  "properties": {
+    "schema": { "type": "string", "const": "carina.artifact.v0.3" },
+    "id": { "type": "string", "pattern": "^va_[a-zA-Z0-9_]+$" },
+    "kind": {
+      "type": "string",
+      "description": "Artifact kind: source_record, dataset, code, notebook, packet, figure, analysis, proof_script, other."
+    },
+    "locator": { "type": "string" },
+    "content_hash": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "parents": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

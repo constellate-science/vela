@@ -1,0 +1,21 @@
+{
+  "claim_boundary": {
+    "claims_benchmark_outperformance": false,
+    "claims_external_validation": false,
+    "claims_scientific_discovery": false,
+    "claims_target_validation": false,
+    "claims_treatment_advice": false,
+    "counts_as_external_review": false,
+    "mutates_frontier_state": false
+  },
+  "frontier": "{{FRONTIER_ID}}",
+  "repair_tasks": [],
+  "schema": "vela.frontier_usability_audit.template.v1",
+  "status": "bootstrap_visible_debt",
+  "summary": {
+    "external_validation_required": true,
+    "portability_score": 0,
+    "visible_review_debt": 1
+  },
+  "usability_checks": []
+}

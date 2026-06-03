@@ -1,0 +1,18 @@
+{
+  "claim_boundary": {
+    "claims_benchmark_outperformance": false,
+    "claims_external_validation": false,
+    "claims_scientific_discovery": false,
+    "claims_target_validation": false,
+    "claims_treatment_advice": false,
+    "mutates_frontier_state": false
+  },
+  "decision_paths": [],
+  "frontier": "{{FRONTIER_ID}}",
+  "schema": "vela.decision_paths.template.v1",
+  "status": "bootstrap_source_material",
+  "summary": {
+    "path_count": 0,
+    "paths_with_full_chain": 0
+  }
+}

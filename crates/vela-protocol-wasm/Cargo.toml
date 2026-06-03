@@ -1,0 +1,28 @@
+[package]
+name = "vela-protocol-wasm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "WASM bindings for vela-protocol's Conjecture + ProofPacket primitives. Consumed by atlas-platform's Next.js app to replace its parallel TypeScript reimplementations with the canonical Rust ones."
+readme = "../../README.md"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+name = "vela_protocol_wasm"
+
+[dependencies]
+vela-protocol-core = { workspace = true }
+wasm-bindgen = "0.2"
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde-wasm-bindgen = "0.6"
+getrandom = { version = "0.2", features = ["js"] }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[lints]
+workspace = true

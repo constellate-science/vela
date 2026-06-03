@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/carina/schemas/lineage.schema.json",
+  "title": "Carina Lineage (v0.3)",
+  "description": "The provenance chain for one frontier object: parent artifacts, ancestor proposals, and event ids that compose the object's history.",
+  "type": "object",
+  "required": ["schema", "object_id", "parents", "event_ids"],
+  "properties": {
+    "schema": { "type": "string", "const": "carina.lineage.v0.3" },
+    "object_id": { "type": "string", "minLength": 1 },
+    "parents": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "event_ids": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^vev_[a-zA-Z0-9_]+$" }
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/carina/schemas/attestation.schema.json",
+  "title": "Carina Attestation (v0.3)",
+  "description": "An actor's signed certification that an event or finding meets a stated standard. The reviewer attests; the substrate replays.",
+  "type": "object",
+  "required": ["schema", "id", "actor", "target", "status"],
+  "properties": {
+    "schema": { "type": "string", "const": "carina.attestation.v0.3" },
+    "id": { "type": "string", "pattern": "^vat_[a-zA-Z0-9_]+$" },
+    "actor": {
+      "type": "object",
+      "required": ["id", "type"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["human", "agent"]
+        }
+      }
+    },
+    "target": {
+      "type": "object",
+      "required": ["type", "id"],
+      "properties": {
+        "type": { "type": "string" },
+        "id": { "type": "string" }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["attested", "withdrawn", "contested"]
+    },
+    "scope": {
+      "type": "string",
+      "description": "What the attestation covers. Free text (e.g. 'source locator and interpretation boundary')."
+    },
+    "signature": {
+      "type": "string",
+      "description": "Optional Ed25519 signature over the canonical preimage."
+    }
+  }
+}

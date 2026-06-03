@@ -1,0 +1,62 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vela-state"
+version = "0.337.0"
+description = "Python loader, reducer, and verifier for Vela scientific frontier state. Cross-impl mirror of the Rust substrate."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0 OR MIT" }
+authors = [
+    { name = "Will Blair", email = "william.blair0708@gmail.com" }
+]
+keywords = [
+    "science",
+    "version-control",
+    "frontier",
+    "carina",
+    "vela",
+    "reproducibility",
+    "provenance",
+    "ai-attribution",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Scientific/Engineering :: Information Analysis",
+]
+dependencies = [
+    "pynacl>=1.5",
+]
+
+[project.urls]
+Homepage = "https://github.com/vela-science/vela"
+Repository = "https://github.com/vela-science/vela"
+Documentation = "https://github.com/vela-science/vela/blob/main/docs/PROTOCOL.md"
+Issues = "https://github.com/vela-science/vela/issues"
+Changelog = "https://github.com/vela-science/vela/releases"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+    "ruff>=0.6",
+]
+
+[tool.setuptools]
+py-modules = ["vela_loader", "vela_reducer", "vela_verify"]
+packages = ["vela_agent", "vela_agent.examples"]
+
+[tool.setuptools.package-data]
+"*" = ["*.md"]

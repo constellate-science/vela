@@ -1,0 +1,27 @@
+[package]
+name = "vela-search"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://github.com/vela-science/vela/blob/main/docs/SEARCH.md"
+description = "Vela Search: build-time content-addressed index over registered frontiers. Indexes findings, entities, evidence, attestations, proof artifacts, actors, atlases, and Belnap status. The index is a derived view; the canonical state is always the registry + frontier event logs."
+readme = "README.md"
+keywords = ["vela", "science", "search", "index", "frontier"]
+categories = ["science"]
+publish = true
+
+[lib]
+name = "vela_search"
+path = "src/lib.rs"
+
+[dependencies]
+vela-protocol = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+hex = { workspace = true }
+
+[lints]
+workspace = true

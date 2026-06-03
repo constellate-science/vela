@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Vela score return source contract",
+  "type": "object",
+  "required": [
+    "schema",
+    "source_id",
+    "created_at",
+    "review_status",
+    "mutation_boundary",
+    "frontier",
+    "scorer",
+    "case_scores",
+    "claim_boundary"
+  ],
+  "properties": {
+    "schema": {
+      "enum": [
+        "vela.graph_benchmark_score_return.v0.2",
+        "vela.external_scorer_return_template.v0.3"
+      ]
+    },
+    "source_id": {
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "review_status": {
+      "enum": [
+        "source_material"
+      ]
+    },
+    "mutation_boundary": {
+      "type": "object",
+      "required": [
+        "writes_frontier_state",
+        "writes_review_events",
+        "requires_review_event_for_state_change"
+      ]
+    },
+    "frontier": {
+      "type": "string"
+    },
+    "scorer": {
+      "type": "object"
+    },
+    "case_scores": {
+      "type": "array"
+    },
+    "claim_boundary": {
+      "type": "object"
+    }
+  }
+}

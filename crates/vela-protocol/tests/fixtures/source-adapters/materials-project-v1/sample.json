@@ -1,0 +1,160 @@
+{
+  "materials_summary": {
+    "response_format": "list of materials",
+    "data": [
+      {
+        "material_id": "mp-12345",
+        "formula_pretty": "Na3V2(PO4)3",
+        "composition": {
+          "Na": 3.0,
+          "V": 2.0,
+          "P": 3.0,
+          "O": 12.0
+        },
+        "elements": ["Na", "V", "P", "O"],
+        "nsites": 20,
+        "nelements": 4,
+        "density": 3.24,
+        "volume": 617.45,
+        "structure": {
+          "lattice": {
+            "a": 8.701,
+            "b": 8.701,
+            "c": 10.292,
+            "alpha": 90.0,
+            "beta": 90.0,
+            "gamma": 120.0,
+            "volume": 617.45
+          },
+          "sites": [
+            {
+              "species": [{"element": "Na", "occu": 1.0}],
+              "abc": [0.333, 0.667, 0.5],
+              "xyz": [2.891, 5.026, 5.146]
+            }
+          ]
+        },
+        "energy_above_hull": 0.045,
+        "formation_energy_per_atom": -2.123,
+        "is_stable": true,
+        "is_magnetic": true,
+        "total_magnetization": 2.3,
+        "band_gap": 2.45,
+        "e_total": -425.67,
+        "e_electronic": -415.23,
+        "symmetry": {
+          "crystal_system": "trigonal",
+          "space_group_number": 160,
+          "point_group": "3m"
+        },
+        "last_updated": "2024-11-15T08:30:00Z",
+        "theoretical": false
+      },
+      {
+        "material_id": "mp-54321",
+        "formula_pretty": "NaFePO4",
+        "composition": {
+          "Na": 1.0,
+          "Fe": 1.0,
+          "P": 1.0,
+          "O": 4.0
+        },
+        "elements": ["Na", "Fe", "P", "O"],
+        "nsites": 7,
+        "nelements": 4,
+        "density": 3.61,
+        "volume": 162.33,
+        "energy_above_hull": 0.018,
+        "formation_energy_per_atom": -1.856,
+        "is_stable": true,
+        "is_magnetic": true,
+        "total_magnetization": 3.9,
+        "band_gap": 2.12,
+        "e_total": -98.42,
+        "e_electronic": -92.15,
+        "symmetry": {
+          "crystal_system": "orthorhombic",
+          "space_group_number": 62,
+          "point_group": "mmm"
+        },
+        "last_updated": "2024-11-10T12:45:00Z",
+        "theoretical": false
+      }
+    ]
+  },
+  "insertion_electrodes": {
+    "response_format": "list of insertion electrodes",
+    "data": [
+      {
+        "material_id": "mp-12345",
+        "formula": "Na3V2(PO4)3",
+        "framework": {
+          "material_id": "mp-99999",
+          "formula": "V2(PO4)3",
+          "energy": -215.34
+        },
+        "working_ion": "Na",
+        "capacity_grav": 118.2,
+        "capacity_vol": 245.6,
+        "energy_grav": 1.23,
+        "energy_vol": 2.56,
+        "average_voltage": 3.89,
+        "num_steps": 3,
+        "voltage_profile": [
+          {
+            "step": 1,
+            "voltage": 4.12,
+            "capacity": 39.4,
+            "x_min": 0.0,
+            "x_max": 0.33
+          },
+          {
+            "step": 2,
+            "voltage": 3.95,
+            "capacity": 39.4,
+            "x_min": 0.33,
+            "x_max": 0.67
+          },
+          {
+            "step": 3,
+            "voltage": 3.59,
+            "capacity": 39.4,
+            "x_min": 0.67,
+            "x_max": 1.0
+          }
+        ],
+        "inserted_ion_in_initial_structure": true,
+        "tag": ["layered", "polyanion"],
+        "doi": "10.1039/c3ee40812c"
+      },
+      {
+        "material_id": "mp-54321",
+        "formula": "NaFePO4",
+        "framework": {
+          "material_id": "mp-88888",
+          "formula": "FePO4",
+          "energy": -67.89
+        },
+        "working_ion": "Na",
+        "capacity_grav": 185.4,
+        "capacity_vol": 312.8,
+        "energy_grav": 1.56,
+        "energy_vol": 3.12,
+        "average_voltage": 3.34,
+        "num_steps": 1,
+        "voltage_profile": [
+          {
+            "step": 1,
+            "voltage": 3.34,
+            "capacity": 185.4,
+            "x_min": 0.0,
+            "x_max": 1.0
+          }
+        ],
+        "inserted_ion_in_initial_structure": true,
+        "tag": ["olivine", "polyanion"],
+        "doi": "10.1038/nmat2976"
+      }
+    ]
+  }
+}

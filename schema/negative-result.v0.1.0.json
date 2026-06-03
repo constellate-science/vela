@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://vela.science/schema/negative-result/v0.1.0",
+  "title": "Vela NegativeResult v0.1.0",
+  "description": "A first-class kernel object for null results. The substrate-level shape that lets 'absence of effect' (an informative null with adequate power and a tight CI excluding the pre-registered MCID) and 'absence of evidence' (an underpowered or wide-CI readout) round-trip distinctly through downstream confidence math. Two variants by `kind`: `registered_trial` (statistical bounds) and `exploratory` (reagent + condition + observed-outcome tuple).",
+  "type": "object",
+  "required": [
+    "id",
+    "kind",
+    "deposited_by",
+    "conditions",
+    "provenance",
+    "created"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^vnr_[a-f0-9]{16}$",
+      "description": "Content-addressed identifier. First 16 hex chars of SHA-256(kind.canonical() | deposited_by | created | normalize(conditions.text)), prefixed with 'vnr_'."
+    },
+    "kind": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "kind",
+            "endpoint",
+            "intervention",
+            "comparator",
+            "population",
+            "n_enrolled",
+            "power",
+            "effect_size_ci"
+          ],
+          "properties": {
+            "kind": { "const": "registered_trial" },
+            "endpoint": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Pre-specified primary endpoint (e.g., 'CDR-SB change at 18 months')."
+            },
+            "intervention": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Intervention arm description (drug + dose, device + protocol, etc.)."
+            },
+            "comparator": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Comparator arm description (placebo, active control, standard of care)."
+            },
+            "population": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Population scope: indication, stage, age range, biomarker eligibility."
+            },
+            "n_enrolled": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Number of participants enrolled (any arm)."
+            },
+            "power": {
+              "type": "number",
+              "minimum": 0.0,
+              "maximum": 1.0,
+              "description": "Statistical power for the primary endpoint, on [0, 1]. Below 0.8 is the 'underpowered null' that should not poison downstream confidence."
+            },
+            "effect_size_ci": {
+              "type": "array",
+              "items": { "type": "number" },
+              "minItems": 2,
+              "maxItems": 2,
+              "description": "Confidence interval for the observed primary effect size, [lower, upper], in the trial's reported units."
+            },
+            "effect_size_threshold": {
+              "type": ["number", "null"],
+              "description": "Pre-registered minimum effect size of interest (MCID), in the same units as effect_size_ci. When the CI excludes this threshold, the null is a positive epistemic claim about the absence of clinically meaningful effect."
+            },
+            "registry_id": {
+              "type": ["string", "null"],
+              "description": "Trial registry id (e.g., 'NCT04532333'). Strongly preferred — the registry id is the load-bearing audit trail."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["kind", "reagent", "observation", "attempts"],
+          "properties": {
+            "kind": { "const": "exploratory" },
+            "reagent": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Reagent, compound, vector, or perturbation tried."
+            },
+            "observation": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Free-text observed outcome (e.g., 'no measurable expression', 'yields plateau at 6%')."
+            },
+            "attempts": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Number of independent attempts whose outcome agreed."
+            }
+          }
+        }
+      ]
+    },
+    "target_findings": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^vf_[a-f0-9]{16}(@vfr_[a-f0-9]+)?$"
+      },
+      "description": "vf_* findings whose positive claim this null bears against. May be empty — exploratory dead ends don't always have a pre-existing claim to negate. Cross-frontier refs with @vfr_* suffix are accepted."
+    },
+    "deposited_by": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable actor id of the depositing lab / curator / agent."
+    },
+    "conditions": {
+      "$ref": "https://vela.science/schema/conditions/v0.1.0",
+      "description": "Conditions under which the null was observed. Reuses the Conditions shape so model relevance, scope, and translation boundaries flow through."
+    },
+    "provenance": {
+      "$ref": "https://vela.science/schema/provenance/v0.1.0",
+      "description": "Provenance of the trial readout / paper / preprint / lab notebook."
+    },
+    "created": {
+      "type": "string",
+      "format": "date-time",
+      "description": "RFC 3339 creation timestamp."
+    },
+    "notes": {
+      "type": "string",
+      "description": "Free-text reviewer note. Often the most important field — the 'why this null matters' or 'why we ran this in the first place' context."
+    },
+    "review_state": {
+      "type": ["string", "null"],
+      "enum": ["accepted", "contested", "needs_revision", "rejected", null],
+      "description": "Optional review verdict. Mirrors Flags.review_state on FindingBundle."
+    },
+    "retracted": {
+      "type": "boolean",
+      "description": "True once a `negative_result.retracted` event has been applied."
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "answers": [
+    {
+      "answer": "",
+      "counterweight_finding_ids": [],
+      "evidence_atom_ids": [],
+      "id": "primary_decision_answer",
+      "question": "{{DECISION_QUESTION}}",
+      "question_id": "primary_decision_question",
+      "remaining_caveats": [
+        "Bootstrap answer only. Review required before use."
+      ],
+      "source_ids": [],
+      "supporting_finding_ids": []
+    }
+  ],
+  "claim_boundary": {
+    "claims_benchmark_outperformance": false,
+    "claims_external_validation": false,
+    "claims_scientific_discovery": false,
+    "claims_target_validation": false,
+    "claims_treatment_advice": false,
+    "mutates_frontier_state": false
+  },
+  "frontier": "{{FRONTIER_ID}}",
+  "schema": "vela.frontier_answer_book.template.v1",
+  "status": "bootstrap_source_material",
+  "summary": {
+    "answer_count": 1,
+    "counterweight_finding_refs": 0,
+    "stable_source_refs": 0,
+    "supporting_finding_refs": 0
+  }
+}

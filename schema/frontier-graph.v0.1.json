@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Vela frontier graph v0.1",
+  "type": "object",
+  "required": ["schema", "frontier", "summary", "nodes", "edges", "claim_boundary"],
+  "properties": {
+    "schema": {
+      "const": "vela.frontier_graph.v0.1"
+    },
+    "frontier": {
+      "type": "string"
+    },
+    "frontier_id": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "object"
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "label", "path"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "claim_boundary": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "target", "relation", "evidence"],
+        "properties": {
+          "source": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "relation": {
+            "type": "string"
+          },
+          "evidence": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "claim_boundary": {
+      "type": "object",
+      "required": ["graph_is_derived", "claims_external_validation", "claims_target_validation"]
+    }
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,452 @@
+{
+  "feed": {
+    "updated": "2026-05-29T00:58:20.640Z",
+    "id": "https://cmr.earthdata.nasa.gov:443/search/collections.json?keyword=soil%20carbon&page_size=5",
+    "title": "ECHO dataset metadata",
+    "entry": [
+      {
+        "processing_level_id": "3",
+        "cloud_hosted": true,
+        "boxes": [
+          "31.2183 -111.932 45.8303 -94.4349"
+        ],
+        "has_combine": false,
+        "time_start": "2007-05-01T00:00:00.000Z",
+        "version_id": "1",
+        "updated": "2018-09-18T11:28:00.000Z",
+        "dataset_id": "Stocks of Surface Soil Organic Carbon Fractions, Great Plains Region, USA, 2007-2010",
+        "entry_id": "SOC_Stocks_Great_Plains_1603_1",
+        "has_spatial_subsetting": false,
+        "has_transforms": false,
+        "has_variables": false,
+        "data_center": "ORNL_CLOUD",
+        "short_name": "SOC_Stocks_Great_Plains_1603",
+        "organizations": [
+          "ORNL_DAAC"
+        ],
+        "title": "Stocks of Surface Soil Organic Carbon Fractions, Great Plains Region, USA, 2007-2010",
+        "coordinate_system": "CARTESIAN",
+        "summary": "This dataset provides estimates of total organic soil carbon (SOC), pyrogenic (PyC), particulate (POC), and other organic soil carbon (OOC) fractions in 473 surface layer soil samples collected from stratified-sampling locations in Colorado, Kansas, New Mexico, and Wyoming, USA. Terrain, climate, soil, fire, and land cover data used to predict and map SOC, PyC, POC, and OOC at 1 km resolution throughout the study region are also included. The estimates were derived using a best random forest regression model and cover the period 2007-05-01 to 2010-10-01.",
+        "time_end": "2010-10-01T23:59:59.999Z",
+        "service_features": {
+          "opendap": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          },
+          "esi": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          },
+          "harmony": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          }
+        },
+        "orbit_parameters": {},
+        "id": "C2517662316-ORNL_CLOUD",
+        "has_formats": false,
+        "score": 1.32,
+        "consortiums": [
+          "GEOSS",
+          "EOSDIS"
+        ],
+        "original_format": "UMM_JSON",
+        "archive_center": "ORNL_DAAC",
+        "has_temporal_subsetting": false,
+        "browse_flag": true,
+        "platforms": [
+          "LABORATORY",
+          "FIELD INVESTIGATION",
+          "MODELS"
+        ],
+        "online_access_flag": true,
+        "links": [
+          {
+            "rel": "http://esipfed.org/ns/fedsearch/1.1/data#",
+            "hreflang": "en-US",
+            "href": "https://search.earthdata.nasa.gov/search/granules?p=C2517662316-ORNL_CLOUD"
+          },
+          {
+            "rel": "http://esipfed.org/ns/fedsearch/1.1/metadata#",
+            "hreflang": "en-US",
+            "href": "https://doi.org/10.3334/ORNLDAAC/1603"
+          },
+          {
+            "rel": "http://esipfed.org/ns/fedsearch/1.1/data#",
+            "hreflang": "en-US",
+            "href": "https://data.ornldaac.earthdata.nasa.gov/protected/bundle/SOC_Stocks_Great_Plains_1603.zip"
+          },
+          {
+            "rel": "http://esipfed.org/ns/fedsearch/1.1/browse#",
+            "hreflang": "en-US",
+            "href": "https://daac.ornl.gov/NACP/guides/SOC_Stocks_Great_Plains_Fig1.png"
+          },
+          {
+            "rel": "http://esipfed.org/ns/fedsearch/1.1/documentation#",
+            "hreflang": "en-US",
+            "href": "https://data.ornldaac.earthdata.nasa.gov/public/nacp/SOC_Stocks_Great_Plains/comp/SOC_great_plains.kmz"
+          },
+          {
+            "rel": "http://esipfed.org/ns/fedsearch/1.1/documentation#",
+            "hreflang": "en-US",
+            "href": "https://data.ornldaac.earthdata.nasa.gov/public/nacp/SOC_Stocks_Great_Plains/comp/SOC_Stocks_Great_Plains.pdf"
+          },
+          {
+            "rel": "http://esipfed.org/ns/fedsearch/1.1/documentation#",
+            "hreflang": "en-US",
+            "href": "https://data.ornldaac.earthdata.nasa.gov/public/nacp/SOC_Stocks_Great_Plains/comp/SOC_Stocks_Great_Plains.pdf"
+          }
+        ]
+      },
+      {
+        "cloud_hosted": false,
+        "has_combine": false,
+        "time_start": "1970-01-01T00:00:00.000Z",
+        "version_id": "1.0",
+        "dataset_id": "Radiocarbon in CO2 and Soil Organic Matter from Laboratory Incubations, Utqiagvik (Barrow), Alaska, 2012",
+        "entry_id": "\n                  NGA149\n                _1.0",
+        "has_spatial_subsetting": false,
+        "has_transforms": false,
+        "has_variables": false,
+        "data_center": "SCIOPS",
+        "short_name": "\n                  NGA149\n                ",
+        "title": "Radiocarbon in CO2 and Soil Organic Matter from Laboratory Incubations, Utqiagvik (Barrow), Alaska, 2012",
+        "summary": "Dataset includes one CSV data file of Delta14C measurements made from soil organic matter and CO2 from laboratory soil incubations of active layer soils collected in Utqiagvik (Barrow), Alaska in 2012. In addition to Delta14CO2, the dataset includes CO2 production rates and carbon and nitrogen concentrations. Samples were collected from intensive study site 1 areas A, B, and C, and the site 0 and AB transects, from specified positions in high-centered, flat-centered, and low centered polygons. The Next-Generation Ecosystem Experiments: Arctic (NGEE Arctic), was a 10-year research effort (2012-2022) to reduce uncertainty in Earth System Models by developing a predictive understanding of carbon-rich Arctic ecosystems and feedbacks to climate. NGEE Arctic was supported by the Department of Energy’s Office of Biological and Environmental Research. The NGEE Arctic project had two field research sites: 1) located within the Arctic polygonal tundra coastal region on the Barrow Environmental Observatory (BEO) and the North Slope near Utqiagvik (Barrow), Alaska and 2) multiple areas on the discontinuous permafrost region of the Seward Peninsula north of Nome, Alaska. Through observations, experiments, and synthesis with existing datasets, NGEE Arctic provided an enhanced knowledge base for multi-scale modeling and contributed to improved process representation at global pan-Arctic scales within the Department of Energy's Earth system Model (the Energy Exascale Earth System Model, or E3SM), and specifically within the E3SM Land Model component (ELM).",
+        "service_features": {
+          "opendap": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          },
+          "esi": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          },
+          "harmony": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          }
+        },
+        "orbit_parameters": {},
+        "id": "C2108388524-SCIOPS",
+        "has_formats": false,
+        "score": 1.1,
+        "original_format": "ISO19115",
+        "has_temporal_subsetting": false,
+        "browse_flag": false,
+        "platforms": [],
+        "online_access_flag": true,
+        "links": [
+          {
+            "length": "0.0KB",
+            "rel": "http://esipfed.org/ns/fedsearch/1.1/data#",
+            "hreflang": "en-US",
+            "href": "https://ngee.ornl.gov/ngeedata/NGA149/documentation"
+          },
+          {
+            "length": "0.0KB",
+            "rel": "http://esipfed.org/ns/fedsearch/1.1/data#",
+            "hreflang": "en-US",
+            "href": "https://ngee.ornl.gov/ngeedata/NGA149/data"
+          }
+        ]
+      },
+      {
+        "cloud_hosted": false,
+        "boxes": [
+          "34 -20 79 62"
+        ],
+        "has_combine": false,
+        "time_start": "1970-01-01T00:00:00.000Z",
+        "dif_ids": [
+          "EUSOILS_OCTOP_1.2"
+        ],
+        "version_id": "1.2",
+        "dataset_id": "Organic Carbon Content In European Soils",
+        "entry_id": "EUSOILS_OCTOP_1.2",
+        "has_spatial_subsetting": false,
+        "has_transforms": false,
+        "has_variables": false,
+        "data_center": "SCIOPS",
+        "short_name": "EUSOILS_OCTOP",
+        "organizations": [
+          "EU/JRC/IES/EUSOILS"
+        ],
+        "title": "Organic Carbon Content In European Soils",
+        "coordinate_system": "CARTESIAN",
+        "summary": "The Soil Portal makes available the Maps of Organic carbon content (%) in the\nsurface horizon of soils in Europe. The data are in ESRI GRID format and are\navailable as an ASCII raster file or in native ESRI GRID format. In addition,\nan interactive application allows the user to navigate in the Organic Carbon\ndata with OCTOP Map Server and print his own customized map.\n\n[Summary provided by the European Union Joint Research Center.]",
+        "service_features": {
+          "opendap": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          },
+          "esi": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          },
+          "harmony": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          }
+        },
+        "orbit_parameters": {},
+        "id": "C1214155075-SCIOPS",
+        "has_formats": false,
+        "score": 1.1,
+        "original_format": "DIF10",
+        "archive_center": "EU/JRC/IES/EUSOILS",
+        "has_temporal_subsetting": false,
+        "browse_flag": false,
+        "platforms": [],
+        "online_access_flag": true,
+        "links": [
+          {
+            "rel": "http://esipfed.org/ns/fedsearch/1.1/data#",
+            "hreflang": "en-US",
+            "href": "https://esdac.jrc.ec.europa.eu/content/octop-topsoil-organic-carbon-content-europe"
+          }
+        ]
+      },
+      {
+        "cloud_hosted": false,
+        "boxes": [
+          "42.19 -93.19 47.38 -86.5"
+        ],
+        "has_combine": false,
+        "time_start": "1999-01-01T00:00:00.000Z",
+        "dif_ids": [
+          "SAGE_SOILDATA"
+        ],
+        "version_id": "Not provided",
+        "dataset_id": "Soil Carbon and Nitrogen Database",
+        "entry_id": "SAGE_SOILDATA",
+        "has_spatial_subsetting": false,
+        "has_transforms": false,
+        "has_variables": false,
+        "data_center": "SCIOPS",
+        "short_name": "SAGE_SOILDATA",
+        "organizations": [
+          "UWI-MAD/IES/SAGE"
+        ],
+        "title": "Soil Carbon and Nitrogen Database",
+        "coordinate_system": "CARTESIAN",
+        "summary": "The rolling landscape of Wisconsin represents a complex mosaic of agricultural land (pastures and cropping systems), forests, prairies, lakes, and urban centers. It is well documented that the conversion of pristine tallgrass prairies and oak-savannas in the mid-1800s to agriculture via European settlement led to a significant loss (up to 60%) of the soil organic matter on our land. This release of CO2 to the atmosphere was a primary cause of the observed rise in atmospheric CO2 concentrations until about 1950 when fossil fuel combustion began to outpace agricultural related carbon emissions. Today, we understand that better farm management practices (e.g., reduced tillage, crop rotation, cover crops) coupled with ecosystem preservation and rehabilitation (e.g. prairie restoration) offer a means to help control soil erosion and degradation while having the potential to sequester carbon back from the atmosphere, storing it within our soils. Carbon sequestration by terrestrial ecosystems is one means by which we may help to mitigate the greenhouse effect in the near future (i.e. next 20-50 years) by helping to curtail atmospheric CO2 levels. Moreover, the associated increase in the soil organic matter would also have significant positive feedbacks to the health and long-term sustainability of our agricultural land by enhancing the soil fertility, improving soil structure, and aiding in water holding capacity.\n\nIn order to gain a better understanding of the impacts of varied land management on soil carbon and nitrogen storage in southern Wisconsin, scientists at SAGE have initiated a long-term campaign of soil sampling and monitoring. In 1999, we began collecting soil carbon, nitrogen, bulk density and other assorted data on land-use history for agricultural land across southcentral Wisconsin. Since the initiation of this campaign, we have sampled over 125 sites that include traditional cropping systems, land enrolled in the Conservation Reserve Program (CRP), restored and remnant prairie ecosystems, and pastures. The majority of these sites are located in Sauk, Columbia, Dane, and Jefferson counties. The following searchable database allows for access to these data. This research has been supported by S.C. Johnson and Sons Inc., Madison Gas and Electric Corp (MGE), and The Barker Fund through the UW-Madison Foundation and College of Agricultural and Life Sciences.",
+        "service_features": {
+          "opendap": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          },
+          "esi": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          },
+          "harmony": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          }
+        },
+        "orbit_parameters": {},
+        "id": "C1214621693-SCIOPS",
+        "has_formats": false,
+        "score": 1.1,
+        "original_format": "DIF10",
+        "archive_center": "UWI-MAD/IES/SAGE",
+        "has_temporal_subsetting": false,
+        "browse_flag": false,
+        "platforms": [
+          "Not provided",
+          "GROUND-BASED OBSERVATIONS",
+          "DEM"
+        ],
+        "online_access_flag": false
+      },
+      {
+        "processing_level_id": "NA",
+        "cloud_hosted": true,
+        "boxes": [
+          "-86.4 -180 86.4 180"
+        ],
+        "has_combine": false,
+        "time_start": "2015-01-31T00:00:00.000Z",
+        "version_id": "1",
+        "dataset_id": "Soil Moisture Active Passive (SMAP) L4 Carbon Ancillary Biome Parameter Look Up Table V001",
+        "entry_id": "SMAP_L4_C_ANC_BPLUT_1",
+        "has_spatial_subsetting": false,
+        "has_transforms": false,
+        "associations": {
+          "services": [
+            "S2472217299-NSIDC_CPRD",
+            "S3107386427-NSIDC_CPRD"
+          ],
+          "tools": [
+            "TL4019517520-NSIDC_CPRD",
+            "TL3010466318-NSIDC_CPRD"
+          ]
+        },
+        "has_variables": false,
+        "data_center": "NSIDC_CPRD",
+        "short_name": "SMAP_L4_C_ANC_BPLUT",
+        "organizations": [
+          "NASA NSIDC DAAC",
+          "NASA/GSFC/SED/ESD/GMAO"
+        ],
+        "title": "Soil Moisture Active Passive (SMAP) L4 Carbon Ancillary Biome Parameter Look Up Table V001",
+        "coordinate_system": "CARTESIAN",
+        "summary": "This ancillary SMAP product contains biophysical characteristics (biome parameters) used to estimate carbon fluxes and soil organic carbon in the SMAP L4 Carbon algorithm. Biophysical characteristics were established from previous studies and the parameters defined for the MODIS MOD17 operation GPP algorithm. This data set was refined through regional and global comparisons and calibration of prototype SMAP L4 Carbon calculations.",
+        "service_features": {
+          "opendap": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          },
+          "esi": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          },
+          "harmony": {
+            "has_formats": false,
+            "has_variables": false,
+            "has_transforms": false,
+            "has_combine": false,
+            "has_spatial_subsetting": false,
+            "has_temporal_subsetting": false
+          }
+        },
+        "orbit_parameters": {},
+        "id": "C3252907767-NSIDC_CPRD",
+        "has_formats": false,
+        "score": 1.1,
+        "consortiums": [
+          "GEOSS",
+          "EOSDIS"
+        ],
+        "original_format": "ISO19115",
+        "archive_center": "NASA NSIDC DAAC",
+        "has_temporal_subsetting": false,
+        "browse_flag": false,
+        "platforms": [
+          "NOT APPLICABLE"
+        ],
+        "association_details": {
+          "services": [
+            {
+              "concept_id": "S2472217299-NSIDC_CPRD"
+            },
+            {
+              "concept_id": "S3107386427-NSIDC_CPRD"
+            }
+          ],
+          "tools": [
+            {
+              "concept_id": "TL4019517520-NSIDC_CPRD"
+            },
+            {
+              "concept_id": "TL3010466318-NSIDC_CPRD"
+            }
+          ]
+        },
+        "online_access_flag": true,
+        "links": [
+          {
+            "length": "0.0KB",
+            "rel": "http://esipfed.org/ns/fedsearch/1.1/data#",
+            "hreflang": "en-US",
+            "href": "https://search.earthdata.nasa.gov/search/granules?p=C3252907767-NSIDC_CPRD"
+          },
+          {
+            "length": "0.0KB",
+            "rel": "http://esipfed.org/ns/fedsearch/1.1/data#",
+            "hreflang": "en-US",
+            "href": "https://cmr.earthdata.nasa.gov/virtual-directory/collections/C3252907767-NSIDC_CPRD"
+          },
+          {
+            "length": "0.0KB",
+            "rel": "http://esipfed.org/ns/fedsearch/1.1/data#",
+            "hreflang": "en-US",
+            "href": "https://nsidc.org/data/data-access-tool/SMAP_L4_C_ANC_BPLUT/versions/1/"
+          },
+          {
+            "length": "0.0KB",
+            "rel": "http://esipfed.org/ns/fedsearch/1.1/data#",
+            "hreflang": "en-US",
+            "href": "https://earthaccess.readthedocs.io/en/stable/"
+          },
+          {
+            "rel": "http://esipfed.org/ns/fedsearch/1.1/metadata#",
+            "hreflang": "en-US",
+            "href": "https://doi.org/10.5067/9PIX233BG8Q5"
+          },
+          {
+            "rel": "http://esipfed.org/ns/fedsearch/1.1/documentation#",
+            "hreflang": "en-US",
+            "href": "https://doi.org/10.5067/9PIX233BG8Q5"
+          },
+          {
+            "rel": "http://esipfed.org/ns/fedsearch/1.1/documentation#",
+            "hreflang": "en-US",
+            "href": "https://dx.doi.org/10.5067/9PIX233BG8Q5"
+          },
+          {
+            "rel": "http://esipfed.org/ns/fedsearch/1.1/documentation#",
+            "hreflang": "en-US",
+            "href": "https://nsidc.org/sites/default/files/smap_anc_l1l3l4.pdf"
+          }
+        ]
+      }
+    ]
+  }
+}

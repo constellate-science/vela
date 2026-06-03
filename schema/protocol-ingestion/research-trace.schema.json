@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Vela research trace source contract",
+  "type": "object",
+  "required": [
+    "schema",
+    "source_id",
+    "created_at",
+    "review_status",
+    "mutation_boundary",
+    "trace_id",
+    "producer",
+    "objective",
+    "source_inputs",
+    "state_outputs",
+    "verifier_attachments"
+  ],
+  "properties": {
+    "schema": {
+      "const": "vela.research_trace.v0.1"
+    },
+    "source_id": {
+      "type": "string"
+    },
+    "created_at": {
+      "type": "string"
+    },
+    "review_status": {
+      "enum": [
+        "source_material"
+      ]
+    },
+    "mutation_boundary": {
+      "type": "object",
+      "required": [
+        "writes_frontier_state",
+        "writes_review_events",
+        "requires_review_event_for_state_change"
+      ]
+    },
+    "trace_id": {
+      "type": "string"
+    },
+    "producer": {
+      "type": "object"
+    },
+    "objective": {
+      "type": "string"
+    },
+    "source_inputs": {
+      "type": "array"
+    },
+    "state_outputs": {
+      "type": "object"
+    },
+    "verifier_attachments": {
+      "type": "array"
+    }
+  }
+}

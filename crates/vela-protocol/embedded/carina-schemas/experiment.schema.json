@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/carina/schemas/experiment.schema.json",
+  "title": "Carina Experiment (v0.3)",
+  "description": "A planned or completed experiment binding a question to a protocol with an intended frontier-state update.",
+  "type": "object",
+  "required": ["schema", "id", "question_id", "protocol_id", "intended_update"],
+  "properties": {
+    "schema": { "type": "string", "const": "carina.experiment.v0.3" },
+    "id": { "type": "string", "pattern": "^vexp_[a-zA-Z0-9_]+$" },
+    "question_id": { "type": "string", "pattern": "^vq_[a-zA-Z0-9_]+$" },
+    "protocol_id": { "type": "string", "pattern": "^vprot_[a-zA-Z0-9_]+$" },
+    "intended_update": { "type": "string", "minLength": 1 },
+    "status": {
+      "type": "string",
+      "enum": ["planned", "in_progress", "completed", "abandoned"]
+    }
+  }
+}

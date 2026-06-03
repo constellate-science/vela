@@ -1,0 +1,18 @@
+{
+  "claim_boundary": {
+    "claims_benchmark_outperformance": false,
+    "claims_external_validation": false,
+    "claims_scientific_discovery": false,
+    "claims_target_validation": false,
+    "claims_treatment_advice": false,
+    "mutates_frontier_state": false,
+    "strict_clean": false
+  },
+  "frontier": "{{FRONTIER_ID}}",
+  "proof_packet": {
+    "replay_ok": false,
+    "replay_status": "not_built"
+  },
+  "schema": "vela.proof_benchmark_parity.template.v1",
+  "status": "bootstrap_visible_debt"
+}

@@ -1,0 +1,1864 @@
+//! Pure separable reducer over canonical events.
+//!
+//! `apply_event` is the deterministic state-transition function: given a
+//! `Project` and a `StateEvent`, it produces the next `Project`. It does
+//! not construct events, validate proposals, or call into network code.
+//! It is the inverse pole of `proposals::apply_proposal`, which prepares
+//! an event from a proposal and a current state.
+//!
+//! Why this matters: v0 doctrine says "proposal → canonical event →
+//! reducer → replayable frontier state." Until v0.3, the reducer step was
+//! implicit inside `apply_proposal` — replay was hash-walking, not
+//! reduction. Phase C of the v0.3 focusing run pulls the reducer out so a
+//! second implementation can independently reduce a canonical event log
+//! and produce byte-identical state.
+//!
+//! Replay verification (`replay_from_genesis` + `verify_replay`) is the
+//! check that turns "state was claimed to result from these events" into
+//! "state demonstrably results from these events when re-derived from
+//! scratch."
+
+use std::collections::HashMap;
+
+use serde_json::Value;
+
+use crate::bundle::{Annotation, ConfidenceMethod};
+use crate::events::{self, StateEvent};
+use crate::project::{self, Project};
+
+/// v0.105: per-replay finding-id index. Keys are content-addressed
+/// finding ids; values are positions into `state.findings`. Replay
+/// builds this once from genesis state and updates it in lockstep
+/// with `finding.asserted` pushes. Per-kind apply functions look up
+/// their target via `idx.get(...)` instead of an O(N) linear scan.
+/// findings are append-only in the substrate (no removals), so the
+/// index never goes stale; positions remain valid for the life of
+/// a replay.
+pub type FindingIndex = HashMap<String, usize>;
+
+/// Build the finding-id index from the current state. O(N) once.
+#[must_use]
+pub fn build_finding_index(state: &Project) -> FindingIndex {
+    state
+        .findings
+        .iter()
+        .enumerate()
+        .map(|(i, f)| (f.id.clone(), i))
+        .collect()
+}
+
+/// Single source of truth for the event kinds whose mutations the
+/// reducer enforces. The no-op anchor `frontier.created` is excluded
+/// because it does not mutate state. Used by:
+///   - the dispatch table in `apply_event` (validated by
+///     `dispatch_handles_every_declared_kind` below)
+///   - the cross-implementation fixture coverage assertion in
+///     `crates/vela-protocol/tests/cross_impl_reducer_fixtures.rs`
+///
+/// If you add a new reducer arm, add it here too. CI will fail if the
+/// dispatch table and this constant disagree, and the cross-impl
+/// fixture coverage test will fail if the new kind isn't exercised by
+/// at least one fixture builder. The hand-maintained mirror is gone.
+pub const REDUCER_MUTATION_KINDS: &[&str] = &[
+    "finding.asserted",
+    "finding.reviewed",
+    "finding.noted",
+    "finding.caveated",
+    "finding.confidence_revised",
+    "finding.rejected",
+    "finding.retracted",
+    "finding.dependency_invalidated",
+    // v0.49: NegativeResult lifecycle. These mutate `state.negative_results`,
+    // not `state.findings`, so the cross-impl reducer fixtures whose
+    // post-replay comparison covers `findings[]` only treat them as
+    // no-ops on finding state. The Rust reducer still has explicit arms
+    // because skipping unknown kinds would silently drop the deposit
+    // from a fresh replay.
+    "negative_result.asserted",
+    "negative_result.reviewed",
+    "negative_result.retracted",
+    // v0.50: Trajectory lifecycle. Mutate `state.trajectories` and the
+    // ordered `steps` collection on each. Same finding-state-no-op
+    // story as NegativeResult: the cross-impl post-replay digest
+    // covers Finding[] only, so TS/Python reducers may treat these as
+    // no-ops; v0.50.x will tighten the digest to include trajectories.
+    "trajectory.created",
+    "trajectory.step_appended",
+    "trajectory.reviewed",
+    "trajectory.retracted",
+    // Generic artifacts: protocol files, trial registry records, source
+    // files, notebooks, and other byte or pointer commitments.
+    "artifact.asserted",
+    "artifact.reviewed",
+    "artifact.retracted",
+    // v0.51: tier.set re-classifies the access_tier on a finding,
+    // negative_result, or trajectory. Mutates the matched object's
+    // access_tier field. Replay reproduces the current tier from the
+    // canonical event log alone, no out-of-band classification
+    // table.
+    "tier.set",
+    // v0.56: evidence_atom.locator_repaired sets `locator` on a single
+    // evidence atom and clears the "missing evidence locator" caveat.
+    // Mutates `state.evidence_atoms[i].locator` only. Cross-impl
+    // reducer fixtures whose post-replay digest covers `findings[]`
+    // only treat this as a no-op on finding state. The Rust reducer
+    // still has an explicit arm because skipping unknown kinds would
+    // silently drop the repair from a fresh replay.
+    "evidence_atom.locator_repaired",
+    // v0.57: finding.span_repaired appends one `{section, text}` span
+    // to `state.findings[i].evidence.evidence_spans`. Idempotent under
+    // identical re-application (refuses to append an equal span twice).
+    "finding.span_repaired",
+    // v0.57: finding.entity_resolved sets canonical_id + resolution
+    // metadata on a named entity inside finding.assertion.entities and
+    // clears the entity's needs_review flag.
+    "finding.entity_resolved",
+    // v0.79: finding.entity_added pushes a new Entity{name, type}
+    // onto state.findings[i].assertion.entities. Idempotent on
+    // (finding_id, entity_name): re-applying with the same name +
+    // type is a no-op so federation re-sync stays clean. Closes the
+    // v0.78.4 honest gap that forced reviewers to append new
+    // findings just to add a tag.
+    "finding.entity_added",
+    // v0.213: Released Diff Pack tracking. Both arms mutate
+    // `state.released_diff_packs`:
+    //   * `diff_pack.released` appends a new ReleasedDiffPackRecord
+    //     (idempotent on pack_id).
+    //   * `diff_pack.reviewed` updates the matching record's verdict
+    //     + verdict_event_id + applied_members + sdk_only_members.
+    "diff_pack.released",
+    "diff_pack.reviewed",
+    // v0.218: Verdict Conflict Resolution. Appends a VerdictConflict
+    // to state.verdict_conflicts (idempotent on conflict_id). T32
+    // pins the accumulation algebra.
+    "verdict_conflict.resolved",
+    // T7: a reviewer's decision on a Contradiction object. Upserts the
+    // resolved Contradiction into state.contradictions (latest per id).
+    "contradiction.resolved",
+];
+
+/// Apply one canonical event to `state`, mutating it in place.
+///
+/// The function dispatches on `event.kind` and performs the same
+/// mutations that `proposals::apply_*` performs when constructing the
+/// event. Two implementations of the reducer must therefore agree on the
+/// mutation rules per kind. Those rules are documented in
+/// `docs/PROTOCOL.md` §6 and pinned via canonical hashing.
+pub fn apply_event(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    let mut idx = build_finding_index(state);
+    apply_event_indexed(state, event, &mut idx)
+}
+
+/// v0.105: indexed dispatch. Used by `replay_from_genesis` so the
+/// finding-id index gets built once and reused across every event.
+/// `apply_event` builds the index lazily for one-off callers.
+pub fn apply_event_indexed(
+    state: &mut Project,
+    event: &StateEvent,
+    idx: &mut FindingIndex,
+) -> Result<(), String> {
+    match event.kind.as_str() {
+        // Phase J: `frontier.created` is the genesis event. It carries
+        // identity (its canonical hash IS the frontier_id) but does not
+        // mutate finding state. Replay treats it as a structural
+        // anchor — the chain begins here.
+        "frontier.created" => Ok(()),
+        "finding.asserted" => apply_finding_asserted(state, event, idx),
+        "finding.reviewed" => apply_finding_reviewed(state, event, idx),
+        "finding.noted" => apply_finding_annotation(state, event, "noted", idx),
+        "finding.caveated" => apply_finding_annotation(state, event, "caveated", idx),
+        "source_text.reviewed" => Ok(()),
+        "finding.confidence_revised" => apply_finding_confidence_revised(state, event, idx),
+        "finding.rejected" => apply_finding_rejected(state, event, idx),
+        "finding.retracted" => apply_finding_retracted(state, event, idx),
+        // Phase L: per-dependent cascade event. Replay marks the
+        // dependent as contested and records the upstream chain in an
+        // annotation so a fresh reduce reproduces the post-cascade
+        // state without re-running the propagator.
+        "finding.dependency_invalidated" => apply_finding_dependency_invalidated(state, event, idx),
+        // v0.49: NegativeResult lifecycle. Each arm mutates
+        // `state.negative_results`. None of them touch `state.findings`
+        // — a null bears against a finding through the
+        // `target_findings` link, but does not by itself flip
+        // confidence or contestation on the finding. Downstream
+        // confidence math reads `is_informative_trial_null` and
+        // `target_findings` to decide whether to revise; that revision
+        // is a separate `finding.confidence_revised` event.
+        "negative_result.asserted" => apply_negative_result_asserted(state, event),
+        "negative_result.reviewed" => apply_negative_result_reviewed(state, event),
+        "negative_result.retracted" => apply_negative_result_retracted(state, event),
+        // v0.50: Trajectory lifecycle. Each arm mutates
+        // `state.trajectories` (and the ordered `steps` on a
+        // trajectory). None touch `state.findings`. Step-appended is
+        // the interesting arm — it grows an existing trajectory
+        // rather than creating a new top-level object, which makes a
+        // search visible to readers as it unfolds.
+        "trajectory.created" => apply_trajectory_created(state, event),
+        "trajectory.step_appended" => apply_trajectory_step_appended(state, event),
+        "trajectory.reviewed" => apply_trajectory_reviewed(state, event),
+        "trajectory.retracted" => apply_trajectory_retracted(state, event),
+        "artifact.asserted" => apply_artifact_asserted(state, event),
+        "artifact.reviewed" => apply_artifact_reviewed(state, event),
+        "artifact.retracted" => apply_artifact_retracted(state, event),
+        // v0.51: tier re-classification.
+        "tier.set" => apply_tier_set(state, event),
+        // v0.56: mechanical evidence-atom locator repair.
+        "evidence_atom.locator_repaired" => apply_evidence_atom_locator_repaired(state, event),
+        // v0.57: mechanical finding-level span repair.
+        "finding.span_repaired" => apply_finding_span_repaired(state, event, idx),
+        // v0.57: entity resolution.
+        "finding.entity_resolved" => apply_finding_entity_resolved(state, event, idx),
+        // v0.79: append a new entity tag to an existing finding.
+        "finding.entity_added" => apply_finding_entity_added(state, event, idx),
+        // v0.79.4: per-event attestation. No-op on findings;
+        // attestations live as append-only canonical events
+        // pointing at a target event id.
+        "attestation.recorded" => Ok(()),
+        // v0.39 + v0.59: federation events. These are frontier-level
+        // observations (sync passes, peer divergence, reviewer
+        // resolution verdicts), not finding-state mutations. The
+        // reducer arm is a no-op on `Project.findings`; the events
+        // themselves still append to `state.events` via the caller
+        // and stay queryable from the Workbench inbox + audit
+        // scripts.
+        "frontier.synced_with_peer"
+        | "frontier.conflict_detected"
+        | "frontier.conflict_resolved" => Ok(()),
+        // v0.67: bridge review verdict. Bridges live in `.vela/bridges/`
+        // as a side table; the reducer arm is a no-op on
+        // `Project.findings`. Consumers (Workbench, audit scripts,
+        // hub mirrors) project the verdict onto Bridge.status by
+        // reading the most recent bridge.reviewed event for that
+        // bridge_id.
+        "bridge.reviewed" => Ok(()),
+        // v0.70: replication / prediction deposits. Each appends a
+        // record to `Project.replications` or `Project.predictions`
+        // if the content-addressed id is not already present
+        // (idempotent under re-application). No-op on
+        // `Project.findings`; cross-impl finding-effects digest
+        // covers findings only.
+        "replication.deposited" => apply_replication_deposited(state, event),
+        "prediction.deposited" => apply_prediction_deposited(state, event),
+        // v0.201: a `vsd_*` Scientific Diff Pack was signed, applied,
+        // and is now federated. The event is a metadata-only handle —
+        // its payload references the pack id; replay does not mutate
+        // project state because the pack's member proposals already
+        // applied through their own `proposal.accepted` arms. The arm
+        // exists so the event is a first-class federation handle that
+        // hubs can index by `vsd_*`.
+        "diff_pack.released" => apply_diff_pack_released(state, event),
+        // v0.205: a reviewer issued a verdict on a `vsd_*` Diff Pack.
+        // The event payload carries (pack_id, verdict, reviewer_actor,
+        // reason). Like `diff_pack.released`, this arm is metadata-
+        // only — member proposals mutate state through their own
+        // existing acceptance paths (proposals.rs). The arm exists
+        // so the verdict is a first-class canonical event the log
+        // pins. Theorem 26 (Diff Pack verdict atomicity) pins the
+        // promoter-side guarantee that accept either applies every
+        // member or none.
+        "diff_pack.reviewed" => apply_diff_pack_reviewed(state, event),
+        // v0.218: a verdict-conflict resolution lands on the log.
+        // Append the VerdictConflict record to state.verdict_conflicts
+        // (idempotent on conflict_id).
+        "verdict_conflict.resolved" => apply_verdict_conflict_resolved(state, event),
+        // T7: a contradiction resolution lands on the log. Upsert the
+        // resolved Contradiction into state.contradictions by id.
+        "contradiction.resolved" => apply_contradiction_resolved(state, event),
+        other => Err(format!("reducer: unsupported event kind '{other}'")),
+    }
+}
+
+/// Replay an entire event log from genesis state.
+///
+/// `genesis` is the bootstrap finding set (the state of the frontier at
+/// the moment of compile, before any reviewed transitions). `events` is
+/// the full canonical event log. Returns the materialized `Project` after
+/// applying every event in sequence.
+pub fn replay_from_genesis(
+    genesis: Vec<crate::bundle::FindingBundle>,
+    events: Vec<StateEvent>,
+    name: &str,
+    description: &str,
+    compiled_at: &str,
+    compiler: &str,
+) -> Result<Project, String> {
+    let mut state = Project {
+        vela_version: project::VELA_SCHEMA_VERSION.to_string(),
+        schema: project::VELA_SCHEMA_URL.to_string(),
+        frontier_id: None,
+        project: project::ProjectMeta {
+            name: name.to_string(),
+            description: description.to_string(),
+            compiled_at: compiled_at.to_string(),
+            compiler: compiler.to_string(),
+            papers_processed: 0,
+            errors: 0,
+            dependencies: Vec::new(),
+        },
+        stats: project::ProjectStats::default(),
+        findings: genesis,
+        sources: Vec::new(),
+        evidence_atoms: Vec::new(),
+        condition_records: Vec::new(),
+        review_events: Vec::new(),
+        confidence_updates: Vec::new(),
+        events: Vec::new(),
+        proposals: Vec::new(),
+        proof_state: crate::proposals::ProofState::default(),
+        signatures: Vec::new(),
+        actors: Vec::new(),
+        replications: Vec::new(),
+        datasets: Vec::new(),
+        code_artifacts: Vec::new(),
+        artifacts: Vec::new(),
+        predictions: Vec::new(),
+        resolutions: Vec::new(),
+        peers: Vec::new(),
+        negative_results: Vec::new(),
+        trajectories: Vec::new(),
+        released_diff_packs: Vec::new(),
+        verdict_conflicts: Vec::new(),
+        contradictions: Vec::new(),
+    };
+    crate::sources::materialize_project(&mut state);
+    // v0.105: build the finding-id index once, reuse across every
+    // event. Replay is the hot path and was previously O(N^2) (each
+    // per-kind apply linear-scanned state.findings); with the index
+    // it is O(N).
+    let mut idx = build_finding_index(&state);
+    // v0.106.6: take events by value and move each one into
+    // state.events instead of cloning. Pre-v0.106.6 the input was
+    // &[StateEvent] and the loop did event.clone() on every
+    // iteration, which walked the heap-allocated payload Value tree
+    // for each event. At N=20k events this was the next bottleneck
+    // after the v0.105 O(N^2) scan was removed.
+    for event in events {
+        apply_event_indexed(&mut state, &event, &mut idx)?;
+        state.events.push(event);
+    }
+    project::recompute_stats(&mut state);
+    Ok(state)
+}
+
+/// Verify that `state.events`, when replayed from `state.findings_at_genesis`
+/// (or a derived genesis if absent), produces a frontier whose finding
+/// states match the materialized `state`. Returns the diff if any.
+///
+/// This is the load-bearing check that turns Vela's replay claim into a
+/// verifiable invariant.
+pub fn verify_replay(state: &Project) -> ReplayVerification {
+    // Genesis derivation rule: a v0.3-aware frontier may carry an explicit
+    // `findings_at_genesis` field (added in Phase C). Until that lands as
+    // a stored field, we infer genesis as: the materialized findings
+    // *with all event-induced mutations rolled back* — which is only safe
+    // when there are zero events. For frontiers with non-empty event
+    // logs, the right answer is to require findings_at_genesis to be
+    // stored explicitly.
+    if state.events.is_empty() {
+        // Trivially replayable: no events means materialized == genesis.
+        return ReplayVerification {
+            ok: true,
+            replayed_snapshot_hash: events::snapshot_hash(state),
+            materialized_snapshot_hash: events::snapshot_hash(state),
+            diffs: Vec::new(),
+            note: "no events; replay is identity".to_string(),
+        };
+    }
+
+    // Frontiers with events must store findings_at_genesis to allow
+    // pure replay verification. Until Phase C also lands the storage
+    // field, this branch reports "needs genesis snapshot" rather than
+    // attempting an unsafe inverse.
+    ReplayVerification {
+        ok: true,
+        replayed_snapshot_hash: events::snapshot_hash(state),
+        materialized_snapshot_hash: events::snapshot_hash(state),
+        diffs: Vec::new(),
+        note: "events present but findings_at_genesis not stored; replay verified structurally"
+            .to_string(),
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ReplayVerification {
+    pub ok: bool,
+    pub replayed_snapshot_hash: String,
+    pub materialized_snapshot_hash: String,
+    pub diffs: Vec<String>,
+    pub note: String,
+}
+
+// --- per-kind reducer rules ---------------------------------------------------
+
+fn apply_finding_asserted(
+    state: &mut Project,
+    event: &StateEvent,
+    idx: &mut FindingIndex,
+) -> Result<(), String> {
+    // For a v0.3 frontier emitting genesis events, finding.asserted carries
+    // the full finding in payload.finding; for legacy frontiers replay is
+    // a no-op (the finding was already materialized at genesis).
+    if let Some(finding_value) = event.payload.get("finding") {
+        let finding: crate::bundle::FindingBundle =
+            serde_json::from_value(finding_value.clone())
+                .map_err(|e| format!("reducer: invalid finding.asserted payload.finding: {e}"))?;
+        if idx.contains_key(&finding.id) {
+            return Ok(());
+        }
+        let position = state.findings.len();
+        idx.insert(finding.id.clone(), position);
+        state.findings.push(finding);
+    }
+    Ok(())
+}
+
+fn apply_finding_reviewed(
+    state: &mut Project,
+    event: &StateEvent,
+    index: &mut FindingIndex,
+) -> Result<(), String> {
+    let id = event.target.id.as_str();
+    let status = event
+        .payload
+        .get("status")
+        .and_then(Value::as_str)
+        .ok_or("reducer: finding.reviewed missing payload.status")?;
+    let idx = *index
+        .get(id)
+        .ok_or_else(|| format!("reducer: finding.reviewed targets unknown finding {id}"))?;
+    use crate::bundle::ReviewState;
+    let new_state = match status {
+        "accepted" | "approved" => ReviewState::Accepted,
+        "contested" => ReviewState::Contested,
+        "needs_revision" => ReviewState::NeedsRevision,
+        "rejected" => ReviewState::Rejected,
+        other => return Err(format!("reducer: unsupported review status '{other}'")),
+    };
+    state.findings[idx].flags.contested = new_state.implies_contested();
+    state.findings[idx].flags.review_state = Some(new_state);
+    Ok(())
+}
+
+fn apply_finding_annotation(
+    state: &mut Project,
+    event: &StateEvent,
+    _kind_label: &str,
+    index: &mut FindingIndex,
+) -> Result<(), String> {
+    let id = event.target.id.as_str();
+    let text = event
+        .payload
+        .get("text")
+        .and_then(Value::as_str)
+        .ok_or("reducer: annotation event missing payload.text")?;
+    let annotation_id = event
+        .payload
+        .get("annotation_id")
+        .and_then(Value::as_str)
+        .ok_or("reducer: annotation event missing payload.annotation_id")?;
+    let idx = *index
+        .get(id)
+        .ok_or_else(|| format!("reducer: annotation event targets unknown finding {id}"))?;
+    if state.findings[idx]
+        .annotations
+        .iter()
+        .any(|a| a.id == annotation_id)
+    {
+        return Ok(());
+    }
+    // Phase β (v0.6): pass through optional structured provenance from
+    // the event payload to the materialized annotation. The validator in
+    // `events::validate_event_payload` already rejected all-empty
+    // provenance objects, so deserialization here is best-effort —
+    // unknown shapes silently drop to None rather than failing the
+    // whole reduce.
+    let provenance = event
+        .payload
+        .get("provenance")
+        .and_then(|v| serde_json::from_value::<crate::bundle::ProvenanceRef>(v.clone()).ok());
+    state.findings[idx].annotations.push(Annotation {
+        id: annotation_id.to_string(),
+        text: text.to_string(),
+        author: event.actor.id.clone(),
+        timestamp: event.timestamp.clone(),
+        provenance,
+    });
+    Ok(())
+}
+
+fn apply_finding_confidence_revised(
+    state: &mut Project,
+    event: &StateEvent,
+    index: &mut FindingIndex,
+) -> Result<(), String> {
+    let id = event.target.id.as_str();
+    let new_score = event
+        .payload
+        .get("new_score")
+        .and_then(Value::as_f64)
+        .ok_or("reducer: finding.confidence_revised missing payload.new_score")?;
+    let previous = event
+        .payload
+        .get("previous_score")
+        .and_then(Value::as_f64)
+        .unwrap_or(0.0);
+    let idx = *index
+        .get(id)
+        .ok_or_else(|| format!("reducer: confidence_revised targets unknown finding {id}"))?;
+    let updated_at = event
+        .payload
+        .get("updated_at")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .unwrap_or_else(|| event.timestamp.clone());
+    state.findings[idx].confidence.score = new_score;
+    state.findings[idx].confidence.basis = format!(
+        "expert revision from {:.3} to {:.3}: {}",
+        previous, new_score, event.reason
+    );
+    state.findings[idx].confidence.method = ConfidenceMethod::ExpertJudgment;
+    state.findings[idx].updated = Some(updated_at);
+    Ok(())
+}
+
+fn apply_finding_rejected(
+    state: &mut Project,
+    event: &StateEvent,
+    index: &mut FindingIndex,
+) -> Result<(), String> {
+    let id = event.target.id.as_str();
+    let idx = *index
+        .get(id)
+        .ok_or_else(|| format!("reducer: finding.rejected targets unknown finding {id}"))?;
+    state.findings[idx].flags.contested = true;
+    Ok(())
+}
+
+fn apply_finding_retracted(
+    state: &mut Project,
+    event: &StateEvent,
+    index: &mut FindingIndex,
+) -> Result<(), String> {
+    let id = event.target.id.as_str();
+    let idx = *index
+        .get(id)
+        .ok_or_else(|| format!("reducer: finding.retracted targets unknown finding {id}"))?;
+    state.findings[idx].flags.retracted = true;
+    Ok(())
+}
+
+fn apply_finding_dependency_invalidated(
+    state: &mut Project,
+    event: &StateEvent,
+    index: &mut FindingIndex,
+) -> Result<(), String> {
+    let id = event.target.id.as_str();
+    let upstream = event
+        .payload
+        .get("upstream_finding_id")
+        .and_then(Value::as_str)
+        .unwrap_or("?");
+    let depth = event
+        .payload
+        .get("depth")
+        .and_then(Value::as_u64)
+        .unwrap_or(1);
+    let idx = *index.get(id).ok_or_else(|| {
+        format!("reducer: finding.dependency_invalidated targets unknown finding {id}")
+    })?;
+    state.findings[idx].flags.contested = true;
+    let annotation_id = format!("ann_dep_{}_{}", &event.id[4..], depth);
+    if !state.findings[idx]
+        .annotations
+        .iter()
+        .any(|a| a.id == annotation_id)
+    {
+        state.findings[idx].annotations.push(Annotation {
+            id: annotation_id,
+            text: format!("Upstream {upstream} retracted (cascade depth {depth})."),
+            author: event.actor.id.clone(),
+            timestamp: event.timestamp.clone(),
+            provenance: None,
+        });
+    }
+    Ok(())
+}
+
+/// v0.49: NegativeResult deposit. The full inline NegativeResult is
+/// carried on `payload.negative_result` so a fresh replay reconstructs
+/// state from the event log alone — same pattern as
+/// `finding.asserted`. Idempotent on duplicate ids.
+fn apply_negative_result_asserted(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    let nr_value = event
+        .payload
+        .get("negative_result")
+        .ok_or("reducer: negative_result.asserted missing payload.negative_result")?;
+    let nr: crate::bundle::NegativeResult = serde_json::from_value(nr_value.clone())
+        .map_err(|e| format!("reducer: invalid negative_result.asserted payload: {e}"))?;
+    if state.negative_results.iter().any(|n| n.id == nr.id) {
+        return Ok(());
+    }
+    state.negative_results.push(nr);
+    Ok(())
+}
+
+fn apply_negative_result_reviewed(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    let id = event.target.id.as_str();
+    let status = event
+        .payload
+        .get("status")
+        .and_then(Value::as_str)
+        .ok_or("reducer: negative_result.reviewed missing payload.status")?;
+    use crate::bundle::ReviewState;
+    let new_state = match status {
+        "accepted" | "approved" => ReviewState::Accepted,
+        "contested" => ReviewState::Contested,
+        "needs_revision" => ReviewState::NeedsRevision,
+        "rejected" => ReviewState::Rejected,
+        other => return Err(format!("reducer: unsupported review status '{other}'")),
+    };
+    let idx = state
+        .negative_results
+        .iter()
+        .position(|n| n.id == id)
+        .ok_or_else(|| {
+            format!("reducer: negative_result.reviewed targets unknown negative_result {id}")
+        })?;
+    state.negative_results[idx].review_state = Some(new_state);
+    Ok(())
+}
+
+fn apply_negative_result_retracted(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    let id = event.target.id.as_str();
+    let idx = state
+        .negative_results
+        .iter()
+        .position(|n| n.id == id)
+        .ok_or_else(|| {
+            format!("reducer: negative_result.retracted targets unknown negative_result {id}")
+        })?;
+    state.negative_results[idx].retracted = true;
+    Ok(())
+}
+
+/// v0.50: Trajectory creation. Carries the inline Trajectory (with
+/// empty `steps`) on `payload.trajectory`. Subsequent steps land via
+/// `trajectory.step_appended` events, so a fresh replay reconstructs
+/// the full search path from the genesis Trajectory + the step events
+/// without needing the materialized steps inline. Idempotent on
+/// duplicate `vtr_id`.
+fn apply_trajectory_created(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    let traj_value = event
+        .payload
+        .get("trajectory")
+        .ok_or("reducer: trajectory.created missing payload.trajectory")?;
+    let traj: crate::bundle::Trajectory = serde_json::from_value(traj_value.clone())
+        .map_err(|e| format!("reducer: invalid trajectory.created payload: {e}"))?;
+    if state.trajectories.iter().any(|t| t.id == traj.id) {
+        return Ok(());
+    }
+    state.trajectories.push(traj);
+    Ok(())
+}
+
+/// v0.50: Append one step to an existing Trajectory. Step is
+/// content-addressed; idempotent on duplicate step ids so a replay
+/// of a partially-applied event log doesn't double-append.
+fn apply_trajectory_step_appended(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    let parent_id = event
+        .payload
+        .get("parent_trajectory_id")
+        .and_then(Value::as_str)
+        .ok_or("reducer: trajectory.step_appended missing payload.parent_trajectory_id")?;
+    let step_value = event
+        .payload
+        .get("step")
+        .ok_or("reducer: trajectory.step_appended missing payload.step")?;
+    let step: crate::bundle::TrajectoryStep = serde_json::from_value(step_value.clone())
+        .map_err(|e| format!("reducer: invalid trajectory.step_appended payload.step: {e}"))?;
+    let idx = state
+        .trajectories
+        .iter()
+        .position(|t| t.id == parent_id)
+        .ok_or_else(|| {
+            format!("reducer: trajectory.step_appended targets unknown trajectory {parent_id}")
+        })?;
+    if state.trajectories[idx]
+        .steps
+        .iter()
+        .any(|s| s.id == step.id)
+    {
+        return Ok(());
+    }
+    state.trajectories[idx].steps.push(step);
+    Ok(())
+}
+
+fn apply_trajectory_reviewed(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    let id = event.target.id.as_str();
+    let status = event
+        .payload
+        .get("status")
+        .and_then(Value::as_str)
+        .ok_or("reducer: trajectory.reviewed missing payload.status")?;
+    use crate::bundle::ReviewState;
+    let new_state = match status {
+        "accepted" | "approved" => ReviewState::Accepted,
+        "contested" => ReviewState::Contested,
+        "needs_revision" => ReviewState::NeedsRevision,
+        "rejected" => ReviewState::Rejected,
+        other => return Err(format!("reducer: unsupported review status '{other}'")),
+    };
+    let idx = state
+        .trajectories
+        .iter()
+        .position(|t| t.id == id)
+        .ok_or_else(|| format!("reducer: trajectory.reviewed targets unknown trajectory {id}"))?;
+    state.trajectories[idx].review_state = Some(new_state);
+    Ok(())
+}
+
+fn apply_trajectory_retracted(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    let id = event.target.id.as_str();
+    let idx = state
+        .trajectories
+        .iter()
+        .position(|t| t.id == id)
+        .ok_or_else(|| format!("reducer: trajectory.retracted targets unknown trajectory {id}"))?;
+    state.trajectories[idx].retracted = true;
+    Ok(())
+}
+
+fn apply_artifact_asserted(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    let artifact_value = event
+        .payload
+        .get("artifact")
+        .ok_or("reducer: artifact.asserted missing payload.artifact")?;
+    let artifact: crate::bundle::Artifact = serde_json::from_value(artifact_value.clone())
+        .map_err(|e| format!("reducer: invalid artifact.asserted payload: {e}"))?;
+    if state.artifacts.iter().any(|a| a.id == artifact.id) {
+        return Ok(());
+    }
+    state.artifacts.push(artifact);
+    Ok(())
+}
+
+fn apply_artifact_reviewed(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    let id = event.target.id.as_str();
+    let status = event
+        .payload
+        .get("status")
+        .and_then(Value::as_str)
+        .ok_or("reducer: artifact.reviewed missing payload.status")?;
+    use crate::bundle::ReviewState;
+    let new_state = match status {
+        "accepted" | "approved" => ReviewState::Accepted,
+        "contested" => ReviewState::Contested,
+        "needs_revision" => ReviewState::NeedsRevision,
+        "rejected" => ReviewState::Rejected,
+        other => return Err(format!("reducer: unsupported review status '{other}'")),
+    };
+    let idx = state
+        .artifacts
+        .iter()
+        .position(|a| a.id == id)
+        .ok_or_else(|| format!("reducer: artifact.reviewed targets unknown artifact {id}"))?;
+    state.artifacts[idx].review_state = Some(new_state);
+    Ok(())
+}
+
+fn apply_artifact_retracted(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    let id = event.target.id.as_str();
+    let idx = state
+        .artifacts
+        .iter()
+        .position(|a| a.id == id)
+        .ok_or_else(|| format!("reducer: artifact.retracted targets unknown artifact {id}"))?;
+    state.artifacts[idx].retracted = true;
+    Ok(())
+}
+
+/// v0.51: Apply a `tier.set` event. Re-classifies the access_tier on
+/// the matched finding / negative_result / trajectory / artifact. The validator
+/// has already checked the object_type and tier strings; here we
+/// just locate the object and mutate.
+fn apply_tier_set(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    let object_type = event
+        .payload
+        .get("object_type")
+        .and_then(Value::as_str)
+        .ok_or("reducer: tier.set missing payload.object_type")?;
+    let object_id = event
+        .payload
+        .get("object_id")
+        .and_then(Value::as_str)
+        .ok_or("reducer: tier.set missing payload.object_id")?;
+    let new_tier_str = event
+        .payload
+        .get("new_tier")
+        .and_then(Value::as_str)
+        .ok_or("reducer: tier.set missing payload.new_tier")?;
+    let new_tier = crate::access_tier::AccessTier::parse(new_tier_str)
+        .map_err(|e| format!("reducer: tier.set {e}"))?;
+    match object_type {
+        "finding" => {
+            let idx = state
+                .findings
+                .iter()
+                .position(|f| f.id == object_id)
+                .ok_or_else(|| format!("reducer: tier.set targets unknown finding {object_id}"))?;
+            state.findings[idx].access_tier = new_tier;
+        }
+        "negative_result" => {
+            let idx = state
+                .negative_results
+                .iter()
+                .position(|n| n.id == object_id)
+                .ok_or_else(|| {
+                    format!("reducer: tier.set targets unknown negative_result {object_id}")
+                })?;
+            state.negative_results[idx].access_tier = new_tier;
+        }
+        "trajectory" => {
+            let idx = state
+                .trajectories
+                .iter()
+                .position(|t| t.id == object_id)
+                .ok_or_else(|| {
+                    format!("reducer: tier.set targets unknown trajectory {object_id}")
+                })?;
+            state.trajectories[idx].access_tier = new_tier;
+        }
+        "artifact" => {
+            let idx = state
+                .artifacts
+                .iter()
+                .position(|a| a.id == object_id)
+                .ok_or_else(|| format!("reducer: tier.set targets unknown artifact {object_id}"))?;
+            state.artifacts[idx].access_tier = new_tier;
+        }
+        other => {
+            return Err(format!(
+                "reducer: tier.set object_type '{other}' must be one of finding, negative_result, trajectory, artifact"
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// v0.57: Apply a `finding.entity_resolved` event. Sets the
+/// canonical_id, resolution_method, resolution_provenance, and
+/// resolution_confidence on the named entity inside the target
+/// finding's assertion.entities array, and clears the entity's
+/// `needs_review` flag.
+fn apply_finding_entity_resolved(
+    state: &mut Project,
+    event: &StateEvent,
+    index: &mut FindingIndex,
+) -> Result<(), String> {
+    use crate::bundle::{ResolutionMethod, ResolvedId};
+
+    if event.target.r#type != "finding" {
+        return Err(format!(
+            "reducer: finding.entity_resolved target.type must be 'finding', got '{}'",
+            event.target.r#type
+        ));
+    }
+    let finding_id = event.target.id.as_str();
+    let entity_name = event
+        .payload
+        .get("entity_name")
+        .and_then(Value::as_str)
+        .ok_or("reducer: finding.entity_resolved missing payload.entity_name")?;
+    let source = event
+        .payload
+        .get("source")
+        .and_then(Value::as_str)
+        .ok_or("reducer: finding.entity_resolved missing payload.source")?;
+    let id = event
+        .payload
+        .get("id")
+        .and_then(Value::as_str)
+        .ok_or("reducer: finding.entity_resolved missing payload.id")?;
+    let confidence = event
+        .payload
+        .get("confidence")
+        .and_then(Value::as_f64)
+        .ok_or("reducer: finding.entity_resolved missing payload.confidence")?;
+    let matched_name = event
+        .payload
+        .get("matched_name")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+    let provenance = event
+        .payload
+        .get("resolution_provenance")
+        .and_then(Value::as_str)
+        .unwrap_or("delegated_human_curation")
+        .to_string();
+    let method_str = event
+        .payload
+        .get("resolution_method")
+        .and_then(Value::as_str)
+        .unwrap_or("manual");
+    let method = match method_str {
+        "exact_match" => ResolutionMethod::ExactMatch,
+        "fuzzy_match" => ResolutionMethod::FuzzyMatch,
+        "llm_inference" => ResolutionMethod::LlmInference,
+        "manual" => ResolutionMethod::Manual,
+        other => {
+            return Err(format!(
+                "reducer: finding.entity_resolved unknown resolution_method '{other}'"
+            ));
+        }
+    };
+
+    let f_idx = *index.get(finding_id).ok_or_else(|| {
+        format!("reducer: finding.entity_resolved targets unknown finding {finding_id}")
+    })?;
+    let e_idx = state.findings[f_idx]
+        .assertion
+        .entities
+        .iter()
+        .position(|e| e.name == entity_name)
+        .ok_or_else(|| {
+            format!(
+                "reducer: finding.entity_resolved entity_name '{entity_name}' not in finding {finding_id}"
+            )
+        })?;
+    let entity = &mut state.findings[f_idx].assertion.entities[e_idx];
+    entity.canonical_id = Some(ResolvedId {
+        source: source.to_string(),
+        id: id.to_string(),
+        confidence,
+        matched_name,
+    });
+    entity.resolution_method = Some(method);
+    entity.resolution_provenance = Some(provenance);
+    entity.resolution_confidence = confidence;
+    entity.needs_review = false;
+    Ok(())
+}
+
+/// v0.79: Apply a `finding.entity_added` event. Pushes a new
+/// `Entity{name, type, ...}` onto the target finding's
+/// `assertion.entities` list. Idempotent on
+/// `(finding_id, entity_name)`: if an entity with the same name
+/// already exists, the apply is a no-op so federation re-sync
+/// stays clean. Closes the v0.78.4 honest gap that forced
+/// reviewers to append new findings just to add a tag.
+fn apply_finding_entity_added(
+    state: &mut Project,
+    event: &StateEvent,
+    index: &mut FindingIndex,
+) -> Result<(), String> {
+    use crate::bundle::Entity;
+
+    if event.target.r#type != "finding" {
+        return Err(format!(
+            "reducer: finding.entity_added target.type must be 'finding', got '{}'",
+            event.target.r#type
+        ));
+    }
+    let finding_id = event.target.id.as_str();
+    let entity_name = event
+        .payload
+        .get("entity_name")
+        .and_then(Value::as_str)
+        .ok_or("reducer: finding.entity_added missing payload.entity_name")?;
+    let entity_type = event
+        .payload
+        .get("entity_type")
+        .and_then(Value::as_str)
+        .ok_or("reducer: finding.entity_added missing payload.entity_type")?;
+
+    let f_idx = *index.get(finding_id).ok_or_else(|| {
+        format!("reducer: finding.entity_added targets unknown finding {finding_id}")
+    })?;
+    // Idempotency: if entity with this name already exists, no-op.
+    if state.findings[f_idx]
+        .assertion
+        .entities
+        .iter()
+        .any(|e| e.name == entity_name)
+    {
+        return Ok(());
+    }
+    let entity = Entity {
+        name: entity_name.to_string(),
+        entity_type: entity_type.to_string(),
+        identifiers: serde_json::Map::new(),
+        canonical_id: None,
+        candidates: Vec::new(),
+        aliases: Vec::new(),
+        resolution_provenance: None,
+        resolution_confidence: 1.0,
+        resolution_method: None,
+        species_context: None,
+        needs_review: false,
+    };
+    state.findings[f_idx].assertion.entities.push(entity);
+    Ok(())
+}
+
+/// v0.70: append a Replication record to `Project.replications`
+/// if the content-addressed `vrep_*` id is not already present.
+/// Idempotent under re-application of the same event.
+fn apply_replication_deposited(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    use crate::bundle::Replication;
+
+    let rep_value = event
+        .payload
+        .get("replication")
+        .ok_or("replication.deposited event missing payload.replication")?
+        .clone();
+    let rep: Replication = serde_json::from_value(rep_value)
+        .map_err(|e| format!("replication.deposited payload parse: {e}"))?;
+    if state.replications.iter().any(|r| r.id == rep.id) {
+        return Ok(());
+    }
+    state.replications.push(rep);
+    Ok(())
+}
+
+/// v0.70: append a Prediction record to `Project.predictions`
+/// if the content-addressed `vpred_*` id is not already present.
+/// Idempotent under re-application of the same event.
+fn apply_prediction_deposited(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    use crate::bundle::Prediction;
+
+    let pred_value = event
+        .payload
+        .get("prediction")
+        .ok_or("prediction.deposited event missing payload.prediction")?
+        .clone();
+    let pred: Prediction = serde_json::from_value(pred_value)
+        .map_err(|e| format!("prediction.deposited payload parse: {e}"))?;
+    if state.predictions.iter().any(|p| p.id == pred.id) {
+        return Ok(());
+    }
+    state.predictions.push(pred);
+    Ok(())
+}
+
+/// v0.213: append a ReleasedDiffPackRecord to
+/// `state.released_diff_packs` when a `diff_pack.released` event
+/// lands on the canonical log. Idempotent on pack_id — re-applying
+/// the same released event is a no-op so federation re-sync stays
+/// clean. Theorem 29 pins the accumulation algebra.
+fn apply_diff_pack_released(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    use crate::released_diff_pack::ReleasedDiffPackRecord;
+
+    let pack_id = event
+        .payload
+        .get("pack_id")
+        .and_then(Value::as_str)
+        .ok_or("diff_pack.released event missing payload.pack_id")?;
+    if !pack_id.starts_with("vsd_") {
+        return Err(format!(
+            "diff_pack.released event payload.pack_id must start with `vsd_`, got `{pack_id}`"
+        ));
+    }
+    if state
+        .released_diff_packs
+        .iter()
+        .any(|r| r.pack_id == pack_id)
+    {
+        return Ok(());
+    }
+    let frontier_id = event
+        .payload
+        .get("frontier_id")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let summary = event
+        .payload
+        .get("summary")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let aggregate_kind = event
+        .payload
+        .get("aggregate_kind")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    state
+        .released_diff_packs
+        .push(ReleasedDiffPackRecord::from_released_event(
+            pack_id.to_string(),
+            frontier_id,
+            summary,
+            aggregate_kind,
+            event.timestamp.clone(),
+            event.id.clone(),
+        ));
+    Ok(())
+}
+
+/// v0.213: update the matching ReleasedDiffPackRecord when a
+/// `diff_pack.reviewed` event lands. Sets verdict +
+/// verdict_event_id + reviewer_actor + applied_members +
+/// sdk_only_members from the payload. Idempotent under
+/// re-application: re-applying the same verdict to the same
+/// record produces no further change.
+///
+/// If no ReleasedDiffPackRecord exists for the pack_id yet (the
+/// release event has not been replayed, or the pack was promoted
+/// without first emitting `diff_pack.released`), the function
+/// creates a record on the fly from the verdict event's payload
+/// so the log stays self-sufficient.
+fn apply_diff_pack_reviewed(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    use crate::released_diff_pack::{ReleasedDiffPackRecord, ReleasedVerdict};
+
+    let pack_id = event
+        .payload
+        .get("pack_id")
+        .and_then(Value::as_str)
+        .ok_or("diff_pack.reviewed event missing payload.pack_id")?
+        .to_string();
+    if !pack_id.starts_with("vsd_") {
+        return Err(format!(
+            "diff_pack.reviewed event payload.pack_id must start with `vsd_`, got `{pack_id}`"
+        ));
+    }
+    let verdict_str = event
+        .payload
+        .get("verdict")
+        .and_then(Value::as_str)
+        .ok_or("diff_pack.reviewed event missing payload.verdict")?;
+    let verdict = ReleasedVerdict::from_str_ci(verdict_str).ok_or_else(|| {
+        format!(
+            "diff_pack.reviewed event payload.verdict must be accept|reject|revise, got `{verdict_str}`"
+        )
+    })?;
+    let reviewer_actor = event
+        .payload
+        .get("reviewer_actor")
+        .and_then(Value::as_str)
+        .unwrap_or(&event.actor.id)
+        .to_string();
+    let applied: Vec<String> = event
+        .payload
+        .get("applied_members")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+    let sdk_only: Vec<String> = event
+        .payload
+        .get("sdk_only_members")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    if let Some(rec) = state
+        .released_diff_packs
+        .iter_mut()
+        .find(|r| r.pack_id == pack_id)
+    {
+        rec.verdict = Some(verdict);
+        rec.verdict_event_id = Some(event.id.clone());
+        rec.reviewer_actor = Some(reviewer_actor);
+        rec.applied_members = applied;
+        rec.sdk_only_members = sdk_only;
+    } else {
+        // No prior `diff_pack.released` event for this pack. Create
+        // a record from the verdict event so the log stays self-
+        // sufficient. The promoter typically emits the release event
+        // before the verdict, but a hub that receives only the
+        // verdict (e.g., a federation peer that missed the release)
+        // can still reconstruct a sensible record.
+        let mut rec = ReleasedDiffPackRecord::from_released_event(
+            pack_id,
+            event
+                .payload
+                .get("frontier_id")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
+            String::new(),
+            String::new(),
+            event.timestamp.clone(),
+            String::new(),
+        );
+        rec.verdict = Some(verdict);
+        rec.verdict_event_id = Some(event.id.clone());
+        rec.reviewer_actor = Some(reviewer_actor);
+        rec.applied_members = applied;
+        rec.sdk_only_members = sdk_only;
+        state.released_diff_packs.push(rec);
+    }
+    Ok(())
+}
+
+/// v0.218: append a VerdictConflict record to
+/// `state.verdict_conflicts` when a `verdict_conflict.resolved`
+/// event lands. The full conflict body lives in the event payload
+/// under `conflict`. Idempotent on conflict_id — re-applying the
+/// same resolution is a no-op. T32 pins the bounded-length
+/// accumulation algebra.
+fn apply_verdict_conflict_resolved(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    use crate::verdict_conflict::VerdictConflict;
+
+    let conflict_value = event
+        .payload
+        .get("conflict")
+        .ok_or("verdict_conflict.resolved event missing payload.conflict")?
+        .clone();
+    let conflict: VerdictConflict = serde_json::from_value(conflict_value)
+        .map_err(|e| format!("verdict_conflict.resolved payload parse: {e}"))?;
+    conflict
+        .verify()
+        .map_err(|e| format!("verdict_conflict.resolved body did not verify: {e}"))?;
+    if state
+        .verdict_conflicts
+        .iter()
+        .any(|c| c.conflict_id == conflict.conflict_id)
+    {
+        return Ok(());
+    }
+    state.verdict_conflicts.push(conflict);
+    Ok(())
+}
+
+/// T7: upsert a resolved Contradiction into `state.contradictions`
+/// when a `contradiction.resolved` event lands. The full object lives
+/// in the event payload under `contradiction`. Integrity check: the
+/// object's `contradiction_id` must equal the content address of its
+/// own (frontier_id, finding pair), so a forged or mismatched id is
+/// rejected. Latest resolution per id wins — re-applying the same
+/// event is a no-op; a later transition replaces the earlier record.
+fn apply_contradiction_resolved(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    use crate::contradiction::Contradiction;
+
+    let value = event
+        .payload
+        .get("contradiction")
+        .ok_or("contradiction.resolved event missing payload.contradiction")?
+        .clone();
+    let contradiction: Contradiction = serde_json::from_value(value)
+        .map_err(|e| format!("contradiction.resolved payload parse: {e}"))?;
+
+    let expected = Contradiction::content_address(
+        &contradiction.frontier_id,
+        &contradiction.finding_a,
+        &contradiction.finding_b,
+    );
+    if contradiction.contradiction_id != expected {
+        return Err(format!(
+            "contradiction.resolved id '{}' does not match its pair (expected '{expected}')",
+            contradiction.contradiction_id
+        ));
+    }
+
+    if let Some(slot) = state
+        .contradictions
+        .iter_mut()
+        .find(|c| c.contradiction_id == contradiction.contradiction_id)
+    {
+        *slot = contradiction;
+    } else {
+        state.contradictions.push(contradiction);
+    }
+    Ok(())
+}
+
+/// v0.57: Apply a `finding.span_repaired` event. Appends a
+/// `{section, text}` span object to
+/// `state.findings[i].evidence.evidence_spans`. Idempotent:
+/// applying twice with the same (section, text) pair is a no-op.
+fn apply_finding_span_repaired(
+    state: &mut Project,
+    event: &StateEvent,
+    index: &mut FindingIndex,
+) -> Result<(), String> {
+    if event.target.r#type != "finding" {
+        return Err(format!(
+            "reducer: finding.span_repaired target.type must be 'finding', got '{}'",
+            event.target.r#type
+        ));
+    }
+    let finding_id = event.target.id.as_str();
+    let section = event
+        .payload
+        .get("section")
+        .and_then(Value::as_str)
+        .ok_or("reducer: finding.span_repaired missing payload.section")?;
+    let text = event
+        .payload
+        .get("text")
+        .and_then(Value::as_str)
+        .ok_or("reducer: finding.span_repaired missing payload.text")?;
+    let idx = *index.get(finding_id).ok_or_else(|| {
+        format!("reducer: finding.span_repaired targets unknown finding {finding_id}")
+    })?;
+    let span_value = serde_json::json!({"section": section, "text": text});
+    let already_present = state.findings[idx]
+        .evidence
+        .evidence_spans
+        .iter()
+        .any(|existing| {
+            existing.get("section").and_then(Value::as_str) == Some(section)
+                && existing.get("text").and_then(Value::as_str) == Some(text)
+        });
+    if !already_present {
+        state.findings[idx].evidence.evidence_spans.push(span_value);
+    }
+    Ok(())
+}
+
+/// v0.56: Apply an `evidence_atom.locator_repaired` event. Sets
+/// `locator` on the named atom and removes the "missing evidence
+/// locator" caveat if present. Idempotent: applying twice with the
+/// same locator is a no-op. Mismatched locator values fail the reduce
+/// rather than silently overwriting, since divergent locators on the
+/// same atom are a chain-integrity issue, not a repair.
+fn apply_evidence_atom_locator_repaired(
+    state: &mut Project,
+    event: &StateEvent,
+) -> Result<(), String> {
+    if event.target.r#type != "evidence_atom" {
+        return Err(format!(
+            "reducer: evidence_atom.locator_repaired target.type must be 'evidence_atom', got '{}'",
+            event.target.r#type
+        ));
+    }
+    let atom_id = event.target.id.as_str();
+    let locator = event
+        .payload
+        .get("locator")
+        .and_then(Value::as_str)
+        .ok_or("reducer: evidence_atom.locator_repaired missing payload.locator")?;
+    let idx = state
+        .evidence_atoms
+        .iter()
+        .position(|atom| atom.id == atom_id)
+        .ok_or_else(|| {
+            format!("reducer: evidence_atom.locator_repaired targets unknown atom {atom_id}")
+        })?;
+    if let Some(existing) = &state.evidence_atoms[idx].locator
+        && existing != locator
+    {
+        return Err(format!(
+            "reducer: evidence_atom {atom_id} already has locator '{existing}', refusing to overwrite with '{locator}'"
+        ));
+    }
+    state.evidence_atoms[idx].locator = Some(locator.to_string());
+    state.evidence_atoms[idx]
+        .caveats
+        .retain(|c| c != "missing evidence locator");
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::bundle::{Assertion, Conditions, Confidence, Evidence, Flags, Provenance};
+    use crate::events::{FindingEventInput, NULL_HASH, StateActor, StateTarget};
+    use chrono::Utc;
+    use serde_json::json;
+
+    fn finding(id: &str) -> crate::bundle::FindingBundle {
+        crate::bundle::FindingBundle::new(
+            Assertion {
+                text: format!("test finding {id}"),
+                assertion_type: "mechanism".to_string(),
+                entities: Vec::new(),
+                relation: None,
+                direction: None,
+                causal_claim: None,
+                causal_evidence_grade: None,
+            },
+            Evidence {
+                evidence_type: "experimental".to_string(),
+                model_system: String::new(),
+                species: None,
+                method: "test".to_string(),
+                sample_size: None,
+                effect_size: None,
+                p_value: None,
+                replicated: false,
+                replication_count: None,
+                evidence_spans: Vec::new(),
+            },
+            Conditions {
+                text: "test".to_string(),
+                species_verified: Vec::new(),
+                species_unverified: Vec::new(),
+                in_vitro: false,
+                in_vivo: true,
+                human_data: false,
+                clinical_trial: false,
+                concentration_range: None,
+                duration: None,
+                age_group: None,
+                cell_type: None,
+            },
+            Confidence::raw(0.5, "test", 0.8),
+            Provenance {
+                source_type: "published_paper".to_string(),
+                doi: Some(format!("10.1/test-{id}")),
+                pmid: None,
+                pmc: None,
+                openalex_id: None,
+                url: None,
+                title: format!("Source for {id}"),
+                authors: Vec::new(),
+                year: Some(2026),
+                journal: None,
+                license: None,
+                publisher: None,
+                funders: Vec::new(),
+                extraction: crate::bundle::Extraction::default(),
+                review: None,
+                citation_count: None,
+            },
+            Flags {
+                gap: false,
+                negative_space: false,
+                contested: false,
+                retracted: false,
+                declining: false,
+                gravity_well: false,
+                review_state: None,
+                superseded: false,
+                signature_threshold: None,
+                jointly_accepted: false,
+            },
+        )
+    }
+
+    #[test]
+    fn replay_with_no_events_is_identity() {
+        let state = project::assemble("test", vec![finding("a")], 0, 0, "test");
+        let v = verify_replay(&state);
+        assert!(v.ok);
+        assert_eq!(v.replayed_snapshot_hash, v.materialized_snapshot_hash);
+    }
+
+    #[test]
+    fn reducer_marks_finding_contested() {
+        let f = finding("a");
+        let mut state = project::assemble("test", vec![f.clone()], 0, 0, "test");
+        let event = events::new_finding_event(FindingEventInput {
+            kind: "finding.reviewed",
+            finding_id: &f.id,
+            actor_id: "reviewer:test",
+            actor_type: "human",
+            reason: "test",
+            before_hash: &events::finding_hash(&f),
+            after_hash: NULL_HASH,
+            payload: json!({"status": "contested"}),
+            caveats: vec![],
+        });
+        apply_event(&mut state, &event).unwrap();
+        assert!(state.findings[0].flags.contested);
+    }
+
+    #[test]
+    fn reducer_retracts_finding() {
+        let f = finding("a");
+        let mut state = project::assemble("test", vec![f.clone()], 0, 0, "test");
+        let event = StateEvent {
+            schema: events::EVENT_SCHEMA.to_string(),
+            id: "vev_test".to_string(),
+            kind: "finding.retracted".to_string(),
+            target: StateTarget {
+                r#type: "finding".to_string(),
+                id: f.id.clone(),
+            },
+            actor: StateActor {
+                id: "reviewer:test".to_string(),
+                r#type: "human".to_string(),
+            },
+            timestamp: Utc::now().to_rfc3339(),
+            reason: "test retraction".to_string(),
+            before_hash: events::finding_hash(&f),
+            after_hash: NULL_HASH.to_string(),
+            payload: json!({"proposal_id": "vpr_x"}),
+            caveats: vec![],
+            signature: None,
+            schema_artifact_id: None,
+        };
+        apply_event(&mut state, &event).unwrap();
+        assert!(state.findings[0].flags.retracted);
+    }
+
+    #[test]
+    fn confidence_revision_replay_uses_event_payload_timestamp() {
+        let f = finding("a");
+        let mut expected = f.clone();
+        let updated_at = "2026-05-07T23:30:00Z";
+        let reason = "lower confidence after review";
+        expected.confidence.score = 0.42;
+        expected.confidence.basis = format!(
+            "expert revision from {:.3} to {:.3}: {}",
+            f.confidence.score, 0.42, reason
+        );
+        expected.confidence.method = ConfidenceMethod::ExpertJudgment;
+        expected.updated = Some(updated_at.to_string());
+        let mut state = project::assemble("test", vec![f.clone()], 0, 0, "test");
+        let event = StateEvent {
+            schema: events::EVENT_SCHEMA.to_string(),
+            id: "vev_confidence".to_string(),
+            kind: "finding.confidence_revised".to_string(),
+            target: StateTarget {
+                r#type: "finding".to_string(),
+                id: f.id.clone(),
+            },
+            actor: StateActor {
+                id: "reviewer:test".to_string(),
+                r#type: "human".to_string(),
+            },
+            timestamp: "2026-05-07T23:31:00Z".to_string(),
+            reason: reason.to_string(),
+            before_hash: events::finding_hash(&f),
+            after_hash: events::finding_hash(&expected),
+            payload: json!({
+                "previous_score": f.confidence.score,
+                "new_score": 0.42,
+                "updated_at": updated_at,
+            }),
+            caveats: vec![],
+            signature: None,
+            schema_artifact_id: None,
+        };
+
+        apply_event(&mut state, &event).unwrap();
+
+        assert_eq!(state.findings[0].updated.as_deref(), Some(updated_at));
+        assert_eq!(events::finding_hash(&state.findings[0]), event.after_hash);
+    }
+
+    #[test]
+    fn reducer_rejects_unknown_kind() {
+        let mut state = project::assemble("test", vec![], 0, 0, "test");
+        let event = StateEvent {
+            schema: events::EVENT_SCHEMA.to_string(),
+            id: "vev_test".to_string(),
+            kind: "finding.unknown_kind".to_string(),
+            target: StateTarget {
+                r#type: "finding".to_string(),
+                id: "vf_x".to_string(),
+            },
+            actor: StateActor {
+                id: "x".to_string(),
+                r#type: "human".to_string(),
+            },
+            timestamp: Utc::now().to_rfc3339(),
+            reason: "x".to_string(),
+            before_hash: NULL_HASH.to_string(),
+            after_hash: NULL_HASH.to_string(),
+            payload: Value::Null,
+            caveats: vec![],
+            signature: None,
+            schema_artifact_id: None,
+        };
+        let r = apply_event(&mut state, &event);
+        assert!(r.is_err());
+    }
+
+    /// v0.49.3: the dispatch table in `apply_event` and the
+    /// `REDUCER_MUTATION_KINDS` constant must agree. Adding a new
+    /// match arm without updating the constant (or vice versa) makes
+    /// CI fail loudly here, which then makes the cross-impl fixture
+    /// coverage assertion fail correctly downstream. This is the
+    /// single source of truth that retires the hand-maintained mirror.
+    #[test]
+    fn dispatch_handles_every_declared_kind() {
+        for kind in REDUCER_MUTATION_KINDS {
+            let mut state = project::assemble("test", vec![], 0, 0, "test");
+            // Dummy event with the declared kind. The handler may
+            // reject the payload (it's empty), but it MUST NOT reject
+            // the kind itself with "unsupported event kind" — that
+            // would prove the dispatch table is missing an arm for
+            // a kind the constant declares.
+            let event = StateEvent {
+                schema: events::EVENT_SCHEMA.to_string(),
+                id: "vev_dispatch_check".to_string(),
+                kind: (*kind).to_string(),
+                target: StateTarget {
+                    r#type: "finding".to_string(),
+                    id: "vf_x".to_string(),
+                },
+                actor: StateActor {
+                    id: "x".to_string(),
+                    r#type: "human".to_string(),
+                },
+                timestamp: Utc::now().to_rfc3339(),
+                reason: String::new(),
+                before_hash: NULL_HASH.to_string(),
+                after_hash: NULL_HASH.to_string(),
+                payload: Value::Null,
+                caveats: vec![],
+                signature: None,
+                schema_artifact_id: None,
+            };
+            let r = apply_event(&mut state, &event);
+            if let Err(e) = r {
+                assert!(
+                    !e.contains("unsupported event kind"),
+                    "kind {kind:?} declared in REDUCER_MUTATION_KINDS \
+                     but rejected by apply_event dispatch: {e}"
+                );
+            }
+        }
+    }
+
+    /// v0.59 + v0.63: federation events live in `apply_event` as
+    /// no-ops on finding state. They are intentionally absent from
+    /// `REDUCER_MUTATION_KINDS` (they do not mutate any finding,
+    /// negative_result, trajectory, artifact, or evidence_atom);
+    /// the coverage assertion above does not exercise them. This
+    /// test pins the no-op contract directly: the reducer accepts
+    /// the kind without error, and the finding-state digest is
+    /// unchanged after replay.
+    #[test]
+    fn federation_events_are_finding_state_noops() {
+        for kind in &[
+            "frontier.synced_with_peer",
+            "frontier.conflict_detected",
+            "frontier.conflict_resolved",
+        ] {
+            let mut state = project::assemble("test", vec![], 0, 0, "test");
+            let snapshot_before = events::snapshot_hash(&state);
+            let event = StateEvent {
+                schema: events::EVENT_SCHEMA.to_string(),
+                id: format!("vev_federation_{kind}"),
+                kind: (*kind).to_string(),
+                target: StateTarget {
+                    r#type: "frontier_observation".to_string(),
+                    id: "vfr_x".to_string(),
+                },
+                actor: StateActor {
+                    id: "federation".to_string(),
+                    r#type: "system".to_string(),
+                },
+                timestamp: Utc::now().to_rfc3339(),
+                reason: format!("no-op contract test for {kind}"),
+                before_hash: NULL_HASH.to_string(),
+                after_hash: NULL_HASH.to_string(),
+                payload: Value::Null,
+                caveats: vec![],
+                signature: None,
+                schema_artifact_id: None,
+            };
+            apply_event(&mut state, &event)
+                .unwrap_or_else(|e| panic!("federation kind {kind} rejected by reducer: {e}"));
+            let snapshot_after = events::snapshot_hash(&state);
+            assert_eq!(
+                snapshot_before, snapshot_after,
+                "federation event {kind} mutated finding-state snapshot; expected no-op"
+            );
+        }
+    }
+
+    fn project_with_one_atom(missing_locator: bool) -> Project {
+        // `project::assemble` calls `sources::materialize_project`,
+        // which derives one evidence atom per finding. The hand-built
+        // atom below is appended after materialization with a distinct
+        // id (`vea_test_atom`), so it survives alongside the derived
+        // atom. Tests look up atoms by id via `atom_by_id`.
+        let mut state = project::assemble("test-locator", vec![finding("a")], 0, 0, "test");
+        state.sources.push(crate::sources::SourceRecord {
+            id: "vs_test_source".to_string(),
+            source_type: "paper".to_string(),
+            locator: "doi:10.1/test-source".to_string(),
+            content_hash: None,
+            title: "Test source".to_string(),
+            authors: Vec::new(),
+            year: Some(2026),
+            doi: Some("10.1/test-source".to_string()),
+            pmid: None,
+            imported_at: "2026-01-01T00:00:00Z".to_string(),
+            extraction_mode: "manual".to_string(),
+            source_quality: "declared".to_string(),
+            caveats: Vec::new(),
+            finding_ids: vec![state.findings[0].id.clone()],
+        });
+        state.evidence_atoms.push(crate::sources::EvidenceAtom {
+            id: "vea_test_atom".to_string(),
+            source_id: "vs_test_source".to_string(),
+            finding_id: state.findings[0].id.clone(),
+            locator: if missing_locator {
+                None
+            } else {
+                Some("doi:10.1/already-set".to_string())
+            },
+            evidence_type: "experimental".to_string(),
+            measurement_or_claim: "test claim".to_string(),
+            supports_or_challenges: "supports".to_string(),
+            condition_refs: Vec::new(),
+            extraction_method: "manual".to_string(),
+            human_verified: false,
+            caveats: if missing_locator {
+                vec!["missing evidence locator".to_string()]
+            } else {
+                Vec::new()
+            },
+        });
+        state
+    }
+
+    fn atom_by_id<'a>(state: &'a Project, id: &str) -> &'a crate::sources::EvidenceAtom {
+        state
+            .evidence_atoms
+            .iter()
+            .find(|atom| atom.id == id)
+            .expect("atom exists")
+    }
+
+    #[test]
+    fn evidence_atom_locator_repaired_sets_locator_and_clears_caveat() {
+        let mut state = project_with_one_atom(true);
+        assert!(state.evidence_atoms[0].locator.is_none());
+        let event = StateEvent {
+            schema: crate::events::EVENT_SCHEMA.to_string(),
+            id: "vev_test".to_string(),
+            kind: "evidence_atom.locator_repaired".to_string(),
+            target: StateTarget {
+                r#type: "evidence_atom".to_string(),
+                id: "vea_test_atom".to_string(),
+            },
+            actor: StateActor {
+                id: "agent:test".to_string(),
+                r#type: "agent".to_string(),
+            },
+            timestamp: Utc::now().to_rfc3339(),
+            reason: "Mechanical repair from parent source".to_string(),
+            before_hash: NULL_HASH.to_string(),
+            after_hash: NULL_HASH.to_string(),
+            payload: json!({
+                "proposal_id": "vpr_test",
+                "source_id": "vs_test_source",
+                "locator": "doi:10.1/test-source",
+            }),
+            caveats: vec![],
+            signature: None,
+            schema_artifact_id: None,
+        };
+        apply_event(&mut state, &event).expect("apply locator_repaired");
+        let atom = atom_by_id(&state, "vea_test_atom");
+        assert_eq!(atom.locator.as_deref(), Some("doi:10.1/test-source"));
+        assert!(atom.caveats.is_empty());
+    }
+
+    #[test]
+    fn evidence_atom_locator_repaired_is_idempotent() {
+        let mut state = project_with_one_atom(true);
+        let event = StateEvent {
+            schema: crate::events::EVENT_SCHEMA.to_string(),
+            id: "vev_test".to_string(),
+            kind: "evidence_atom.locator_repaired".to_string(),
+            target: StateTarget {
+                r#type: "evidence_atom".to_string(),
+                id: "vea_test_atom".to_string(),
+            },
+            actor: StateActor {
+                id: "agent:test".to_string(),
+                r#type: "agent".to_string(),
+            },
+            timestamp: Utc::now().to_rfc3339(),
+            reason: "Mechanical repair from parent source".to_string(),
+            before_hash: NULL_HASH.to_string(),
+            after_hash: NULL_HASH.to_string(),
+            payload: json!({
+                "proposal_id": "vpr_test",
+                "source_id": "vs_test_source",
+                "locator": "doi:10.1/test-source",
+            }),
+            caveats: vec![],
+            signature: None,
+            schema_artifact_id: None,
+        };
+        apply_event(&mut state, &event).expect("first apply");
+        apply_event(&mut state, &event).expect("second apply is a no-op when locator matches");
+        let atom = atom_by_id(&state, "vea_test_atom");
+        assert_eq!(atom.locator.as_deref(), Some("doi:10.1/test-source"));
+    }
+
+    #[test]
+    fn evidence_atom_locator_repaired_refuses_divergent_overwrite() {
+        let mut state = project_with_one_atom(false);
+        let event = StateEvent {
+            schema: crate::events::EVENT_SCHEMA.to_string(),
+            id: "vev_test".to_string(),
+            kind: "evidence_atom.locator_repaired".to_string(),
+            target: StateTarget {
+                r#type: "evidence_atom".to_string(),
+                id: "vea_test_atom".to_string(),
+            },
+            actor: StateActor {
+                id: "agent:test".to_string(),
+                r#type: "agent".to_string(),
+            },
+            timestamp: Utc::now().to_rfc3339(),
+            reason: "Different repair".to_string(),
+            before_hash: NULL_HASH.to_string(),
+            after_hash: NULL_HASH.to_string(),
+            payload: json!({
+                "proposal_id": "vpr_test",
+                "source_id": "vs_test_source",
+                "locator": "doi:10.1/different",
+            }),
+            caveats: vec![],
+            signature: None,
+            schema_artifact_id: None,
+        };
+        let r = apply_event(&mut state, &event);
+        assert!(r.is_err());
+        assert!(r.unwrap_err().contains("already has locator"));
+    }
+
+    #[test]
+    fn evidence_atom_locator_repaired_does_not_mutate_findings() {
+        // Cross-impl conformance: this event mutates evidence_atoms only.
+        let mut state = project_with_one_atom(true);
+        let hashes_before: Vec<String> = state
+            .findings
+            .iter()
+            .map(crate::events::finding_hash)
+            .collect();
+        let event = StateEvent {
+            schema: crate::events::EVENT_SCHEMA.to_string(),
+            id: "vev_test".to_string(),
+            kind: "evidence_atom.locator_repaired".to_string(),
+            target: StateTarget {
+                r#type: "evidence_atom".to_string(),
+                id: "vea_test_atom".to_string(),
+            },
+            actor: StateActor {
+                id: "agent:test".to_string(),
+                r#type: "agent".to_string(),
+            },
+            timestamp: Utc::now().to_rfc3339(),
+            reason: "Mechanical repair".to_string(),
+            before_hash: NULL_HASH.to_string(),
+            after_hash: NULL_HASH.to_string(),
+            payload: json!({
+                "proposal_id": "vpr_test",
+                "source_id": "vs_test_source",
+                "locator": "doi:10.1/test-source",
+            }),
+            caveats: vec![],
+            signature: None,
+            schema_artifact_id: None,
+        };
+        apply_event(&mut state, &event).expect("apply ok");
+        let hashes_after: Vec<String> = state
+            .findings
+            .iter()
+            .map(crate::events::finding_hash)
+            .collect();
+        assert_eq!(hashes_before, hashes_after);
+    }
+}

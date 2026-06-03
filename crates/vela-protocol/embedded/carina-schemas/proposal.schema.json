@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/carina/schemas/proposal.schema.json",
+  "title": "Carina Proposal (v0.3)",
+  "description": "A proposed change to frontier state. Becomes a canonical event when a reviewer signs an accept.",
+  "type": "object",
+  "required": ["schema", "id", "kind", "target", "actor", "status"],
+  "properties": {
+    "schema": { "type": "string", "const": "carina.proposal.v0.3" },
+    "id": { "type": "string", "pattern": "^vpr_[a-zA-Z0-9_]+$" },
+    "kind": {
+      "type": "string",
+      "description": "Proposal kind: finding.add, finding.review, finding.note, finding.caveat, finding.revise, finding.reject, finding.retract, span_repair, locator_repair, entity_resolve, replication.deposit, prediction.deposit, frontier.conflict_resolve, ..."
+    },
+    "target": {
+      "type": "object",
+      "required": ["type", "id"],
+      "properties": {
+        "type": { "type": "string" },
+        "id": { "type": "string" }
+      }
+    },
+    "actor": {
+      "type": "object",
+      "required": ["id", "type"],
+      "properties": {
+        "id": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["human", "agent"]
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "packet_id": { "type": "string" },
+        "artifact_ids": { "type": "array", "items": { "type": "string" } },
+        "external_object_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "drafted_at": {
+      "type": "string",
+      "description": "Optional RFC3339 timestamp; v0.67 addition."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "pending_review", "accepted", "rejected", "withdrawn", "applied"]
+    }
+  }
+}

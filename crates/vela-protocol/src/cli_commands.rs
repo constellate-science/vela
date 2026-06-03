@@ -1,0 +1,5142 @@
+//! CLI command surface — the clap `Commands` enum and its `*Action`
+//! subcommand enums, split out of `cli.rs` so the ~5k lines of command
+//! definitions live apart from the handler functions and dispatch. Pure
+//! data: the handlers and `run_command` dispatch stay in `cli.rs`.
+
+use clap::Subcommand;
+use std::path::PathBuf;
+
+#[derive(Subcommand)]
+pub(crate) enum Commands {
+    /// v0.22 Agent Inbox: run Literature Scout against a folder of
+    /// PDFs. Each candidate finding becomes a `finding.add`
+    /// `StateProposal` tagged with the scout's `AgentRun`, written
+    /// to the frontier's `proposals` array. Reviewers accept or
+    /// reject in the Workbench Inbox; nothing becomes a canonical
+    /// finding without a signed accept.
+    Scout {
+        /// Folder of PDFs to read.
+        folder: PathBuf,
+        /// Frontier file the proposals are appended to.
+        #[arg(long)]
+        frontier: PathBuf,
+        /// LLM backend override (matches `vela ingest --backend`).
+        #[arg(short, long)]
+        backend: Option<String>,
+        /// Preview without writing to the frontier file.
+        #[arg(long)]
+        dry_run: bool,
+        /// Output stable JSON for programmatic callers.
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.23 Agent Inbox: run Notes Compiler against a folder of
+    /// Markdown / Obsidian notes. Each open question, hypothesis,
+    /// candidate finding, or tension becomes a `finding.add`
+    /// `StateProposal` tagged with the compiler's `AgentRun`,
+    /// written to the frontier's `proposals` array. Same review
+    /// loop as Literature Scout.
+    CompileNotes {
+        /// Vault or folder of Markdown notes to read.
+        vault: PathBuf,
+        /// Frontier file the proposals are appended to.
+        #[arg(long)]
+        frontier: PathBuf,
+        /// Optional model alias (`sonnet`, `opus`, …).
+        #[arg(short, long)]
+        backend: Option<String>,
+        /// Cap on files processed (default 50).
+        #[arg(long)]
+        max_files: Option<usize>,
+        /// Per-note cap on items emitted in *each* category
+        /// (open_questions / hypotheses / candidate_findings /
+        /// tensions). Default 4. Trims the strongest items the model
+        /// returns so dense notes don't drown the Inbox.
+        #[arg(long)]
+        max_items_per_category: Option<usize>,
+        /// Preview without writing to the frontier file.
+        #[arg(long)]
+        dry_run: bool,
+        /// Output stable JSON for programmatic callers.
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.24 Agent Inbox: run Code & Notebook Analyst against a
+    /// research repo (Jupyter `.ipynb`, Python / R / Julia / Quarto
+    /// / Rmd scripts). Each analysis, code-derived finding, or
+    /// experiment intent becomes a `finding.add` `StateProposal`
+    /// tagged with the analyst's `AgentRun`. Same review loop.
+    CompileCode {
+        /// Repo / folder root to walk.
+        root: PathBuf,
+        /// Frontier file the proposals are appended to.
+        #[arg(long)]
+        frontier: PathBuf,
+        /// Optional model alias (`sonnet`, `opus`, …).
+        #[arg(short, long)]
+        backend: Option<String>,
+        /// Cap on files processed (default 30).
+        #[arg(long)]
+        max_files: Option<usize>,
+        /// Preview without writing to the frontier file.
+        #[arg(long)]
+        dry_run: bool,
+        /// Output stable JSON for programmatic callers.
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.28 Agent Inbox: run Reviewer Agent against a frontier's
+    /// pending proposals. Each scored proposal gets a
+    /// `finding.note` proposal attached with plausibility +
+    /// evidence + scope + duplicate-risk scores so reviewers can
+    /// triage faster.
+    ReviewPending {
+        #[arg(long)]
+        frontier: PathBuf,
+        #[arg(short, long)]
+        backend: Option<String>,
+        #[arg(long)]
+        max_proposals: Option<usize>,
+        /// Number of proposals scored per `claude -p` call.
+        /// 1 = per-proposal mode (full transcript). 5–10 = ~5×
+        /// faster wall-clock, single response covers the batch.
+        /// Capped at 12 internally.
+        #[arg(long, default_value = "1")]
+        batch_size: usize,
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.28 Agent Inbox: run Contradiction Finder against a
+    /// frontier's findings. Pairs that contradict get emitted as
+    /// `tension`-typed `finding.add` proposals.
+    FindTensions {
+        #[arg(long)]
+        frontier: PathBuf,
+        #[arg(short, long)]
+        backend: Option<String>,
+        #[arg(long)]
+        max_findings: Option<usize>,
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.28 Agent Inbox: run Experiment Planner against a
+    /// frontier's open questions and hypotheses. Each gets 1–3
+    /// `experiment_intent`-typed `finding.add` proposals.
+    PlanExperiments {
+        #[arg(long)]
+        frontier: PathBuf,
+        #[arg(short, long)]
+        backend: Option<String>,
+        #[arg(long)]
+        max_findings: Option<usize>,
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.25 Agent Inbox: run Datasets agent against a folder of
+    /// CSV / TSV files. Each dataset gets a summary
+    /// proposal + optional supported-claim proposals tagged with
+    /// the agent's `AgentRun`. Same review loop.
+    CompileData {
+        /// Folder root to walk (top level only in v0.25).
+        root: PathBuf,
+        /// Frontier file the proposals are appended to.
+        #[arg(long)]
+        frontier: PathBuf,
+        /// Optional model alias (`sonnet`, `opus`, …).
+        #[arg(short, long)]
+        backend: Option<String>,
+        /// Sample rows sent to the model per dataset (default 50).
+        #[arg(long)]
+        sample_rows: Option<usize>,
+        /// Preview without writing to the frontier file.
+        #[arg(long)]
+        dry_run: bool,
+        /// Output stable JSON for programmatic callers.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Check frontier quality and proof readiness
+    Check {
+        /// Frontier JSON file, Vela repo, or proof packet
+        source: Option<PathBuf>,
+        /// Run schema validation
+        #[arg(long)]
+        schema: bool,
+        /// Run frontier lint checks
+        #[arg(long)]
+        stats: bool,
+        /// Run conformance vectors
+        #[arg(long)]
+        conformance: bool,
+        /// Conformance test directory
+        #[arg(long, default_value = "tests/conformance")]
+        conformance_dir: PathBuf,
+        /// Run all checks
+        #[arg(long)]
+        all: bool,
+        /// Run only structural schema validation
+        #[arg(long)]
+        schema_only: bool,
+        /// Treat warnings and blocking signals as failures
+        #[arg(long)]
+        strict: bool,
+        /// Show fix suggestions
+        #[arg(long)]
+        fix: bool,
+        /// Output stable JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Check structural integrity of accepted frontier state
+    Integrity {
+        /// Frontier JSON file or Vela repo
+        frontier: PathBuf,
+        /// Output stable JSON
+        #[arg(long)]
+        json: bool,
+        /// CI gate: treat warnings (unreviewed AI-authored findings,
+        /// unattributed sources, stale proof) as failures and exit non-zero.
+        #[arg(long)]
+        strict: bool,
+    },
+    /// Report downstream impact for one finding without mutating state
+    Impact {
+        /// Frontier JSON file or Vela repo
+        frontier: PathBuf,
+        /// Finding id to inspect
+        finding_id: String,
+        /// Maximum dependency depth
+        #[arg(long)]
+        depth: Option<usize>,
+        /// Output stable JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.95: Aggregate discord report across every finding in the
+    /// frontier. Runs the v0.83 detectors (`evidence_gap`,
+    /// `provenance_fragile`, `status_divergent`) over the live event
+    /// log and reports the support set. Useful for surfacing
+    /// retraction-fragile claims, missing-evidence findings, and
+    /// drift between on-disk flags and substrate-derived BelnapStatus.
+    Discord {
+        /// Frontier JSON file or Vela repo
+        frontier: PathBuf,
+        /// Output stable JSON
+        #[arg(long)]
+        json: bool,
+        /// Filter to a single discord kind (e.g.
+        /// `provenance_fragile`, `evidence_gap`, `status_divergent`).
+        /// When omitted, all kinds are included.
+        #[arg(long)]
+        kind: Option<String>,
+    },
+    /// v0.262: run Evidence CI as a review-readiness gate.
+    EvidenceCi {
+        /// Frontier JSON file or Vela repo.
+        frontier: PathBuf,
+        /// Output stable JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Diagnose first-user checkout, frontier, proof, and Workbench readiness.
+    Doctor {
+        /// Frontier JSON file or Vela repo. Defaults to the release frontier
+        /// when run from the repository root.
+        frontier: Option<PathBuf>,
+        /// Local Workbench port to check.
+        #[arg(long, default_value_t = 3741)]
+        port: u16,
+        /// Output stable JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Normalize deterministic frontier state without changing claims
+    Normalize {
+        /// Frontier JSON file or Vela repo
+        source: PathBuf,
+        /// Output normalized frontier copy
+        #[arg(short, long)]
+        out: Option<PathBuf>,
+        /// Write changes back to the input
+        #[arg(long)]
+        write: bool,
+        /// Force dry-run
+        #[arg(long)]
+        dry_run: bool,
+        /// Rewrite finding IDs to content addresses and update links
+        #[arg(long)]
+        rewrite_ids: bool,
+        /// Write old-to-new ID map when rewriting IDs
+        #[arg(long)]
+        id_map: Option<PathBuf>,
+        /// Phase N: regenerate finding.provenance fields (title, year,
+        /// journal, authors, license, publisher, funders) from the
+        /// canonical SourceRecord matched by DOI / PMID / title.
+        #[arg(long)]
+        resync_provenance: bool,
+        /// Output stable JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Export and validate a proof packet
+    Proof {
+        /// Frontier JSON file or Vela repo
+        frontier: PathBuf,
+        /// Output proof packet directory
+        #[arg(long, short = 'o', default_value = "proof-packet")]
+        out: PathBuf,
+        /// Proof packet template
+        #[arg(long, default_value = "bbb-alzheimer")]
+        template: String,
+        /// Optional benchmark suite to include
+        #[arg(long)]
+        gold: Option<PathBuf>,
+        /// Record latest proof packet state back into the input frontier
+        #[arg(long)]
+        record_proof_state: bool,
+        /// Output stable JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Inspect a split frontier repository as a state machine
+    Repo {
+        #[command(subcommand)]
+        action: RepoAction,
+    },
+    /// Serve a read-only frontier over MCP stdio or HTTP
+    Serve {
+        /// Frontier JSON file or Vela repo
+        #[arg(required_unless_present_any = ["frontiers", "setup"])]
+        frontier: Option<PathBuf>,
+        /// Directory of frontier files
+        #[arg(long)]
+        frontiers: Option<PathBuf>,
+        /// LLM backend reserved for future optional tools
+        #[arg(short, long)]
+        backend: Option<String>,
+        /// Run an HTTP server on this port instead of MCP stdio
+        #[arg(long)]
+        http: Option<u16>,
+        /// Print MCP setup instructions
+        #[arg(long)]
+        setup: bool,
+        /// Validate public tool contracts and exit
+        #[arg(long)]
+        check_tools: bool,
+        /// Include first external frontier adoption guidance in --check-tools output
+        #[arg(long)]
+        adoption: bool,
+        /// Output stable JSON for --check-tools
+        #[arg(long)]
+        json: bool,
+        /// Serve the local Workbench web UI (`web/`) alongside the
+        /// HTTP API. Implies `--http` if no port is specified
+        /// (default 3848). Phase R, v0.5.
+        #[arg(long)]
+        workbench: bool,
+    },
+    /// v0.42: Show what's pending right now — the daily-driver
+    /// equivalent of `git status`. One screen: counts, the inbox,
+    /// the audit, the federation health. Read in two seconds.
+    Status {
+        frontier: PathBuf,
+        /// Output stable JSON for programmatic callers.
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.42: Recent canonical events in human-readable form. The
+    /// `git log` analogue. Default newest-first; cap on count.
+    Log {
+        frontier: PathBuf,
+        /// How many recent events to show.
+        #[arg(long, default_value = "20")]
+        limit: usize,
+        /// Filter to events matching this kind (substring match).
+        #[arg(long)]
+        kind: Option<String>,
+        /// Output stable JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.42: Triage list of pending proposals. What you sit down to
+    /// review. Reviewer-agent scores surface where present; flagged
+    /// items rise to the top.
+    Inbox {
+        frontier: PathBuf,
+        /// Show only proposals matching this kind (substring match).
+        #[arg(long)]
+        kind: Option<String>,
+        /// Cap on entries shown.
+        #[arg(long, default_value = "30")]
+        limit: usize,
+        /// Output stable JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.42: Conversational substrate access. Type a natural-language
+    /// question; the substrate routes it to a structured query and
+    /// renders the answer. No agent in the loop — kernel queries only.
+    /// Codex-flavored REPL that doesn't pretend to be an agent.
+    Ask {
+        frontier: PathBuf,
+        /// The question. If omitted, drops into a REPL.
+        #[arg(trailing_var_arg = true)]
+        question: Vec<String>,
+        /// Output stable JSON when the answer has structure.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show frontier statistics
+    Stats {
+        /// Frontier JSON file, Vela repo, or packet
+        frontier: PathBuf,
+        /// Output stable JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Search findings
+    Search {
+        /// Search query
+        query: String,
+        /// Frontier JSON file, Vela repo, or packet
+        #[arg(long)]
+        source: Option<PathBuf>,
+        /// Filter by entity
+        #[arg(long)]
+        entity: Option<String>,
+        /// Filter by assertion type
+        #[arg(long)]
+        r#type: Option<String>,
+        /// Search every frontier in a directory
+        #[arg(long)]
+        all: Option<PathBuf>,
+        /// Maximum results
+        #[arg(long, default_value = "20")]
+        limit: usize,
+        /// Output stable JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// List candidate contradictions and tensions
+    Tensions {
+        source: PathBuf,
+        #[arg(long)]
+        both_high: bool,
+        #[arg(long)]
+        cross_domain: bool,
+        #[arg(long, default_value = "20")]
+        top: usize,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Inspect and rank candidate gap review leads
+    Gaps {
+        #[command(subcommand)]
+        action: GapsAction,
+    },
+    /// Find candidate cross-domain connections
+    Bridge {
+        /// Input frontier JSON files or Vela repos
+        #[arg(required = true)]
+        inputs: Vec<PathBuf>,
+        /// Run rough PubMed prior-art checks for top bridges
+        #[arg(long, default_value = "true", action = clap::ArgAction::Set)]
+        novelty: bool,
+        /// Max bridges to check
+        #[arg(long, default_value = "30")]
+        top: usize,
+    },
+    /// Export frontier artifacts
+    Export {
+        frontier: PathBuf,
+        #[arg(short, long, default_value = "csv")]
+        format: String,
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+    /// Inspect or validate proof packets
+    Packet {
+        #[command(subcommand)]
+        action: PacketAction,
+    },
+    /// Validate research traces and draft review proposals
+    Trace {
+        #[command(subcommand)]
+        action: TraceAction,
+    },
+    /// Validate returned corrections and draft review proposals
+    CorrectionReturn {
+        #[command(subcommand)]
+        action: CorrectionReturnAction,
+    },
+    /// Recompute SHA-256 over every file in a proof packet, compare to
+    /// the manifest, and validate the proof-trace chain. Friendlier
+    /// alias for `vela packet validate <path>` — same code path, same
+    /// guarantee. Use this when you've pulled a packet from someone
+    /// else and want one command that says "yes, this is what they
+    /// signed, byte for byte."
+    Verify {
+        /// Path to the proof packet directory (the one with manifest.json)
+        path: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Run deterministic benchmark gates.
+    ///
+    /// Two modes:
+    ///   - **legacy** (extraction quality): `--gold <gold.json>`
+    ///     against an extracted-findings frontier. Pre-v0.26
+    ///     behaviour, unchanged.
+    ///   - **v0.26 VelaBench** (agent state-update scoring): pass
+    ///     `--candidate <frontier.json>` together with `--gold`
+    ///     to compare a candidate frontier (typically agent-
+    ///     generated) against a curator-validated gold. Composite
+    ///     score with optional `--threshold` for CI gating.
+    Bench {
+        /// Frontier file for single-task benchmark (legacy mode).
+        frontier: Option<PathBuf>,
+        /// Gold frontier (used by both modes).
+        #[arg(long)]
+        gold: Option<PathBuf>,
+        /// v0.26: Candidate frontier to score against `--gold`.
+        /// Presence of this flag selects VelaBench (agent state-
+        /// update scoring) instead of the legacy extraction harness.
+        #[arg(long)]
+        candidate: Option<PathBuf>,
+        /// v0.26: Optional source-files directory for
+        /// `evidence_fidelity` checks. Without it, that metric is
+        /// dropped from the composite (weights rebalanced).
+        #[arg(long)]
+        sources: Option<PathBuf>,
+        /// v0.26: Composite-score threshold; non-zero exit if
+        /// composite < threshold. Default 0.0 (report only).
+        #[arg(long)]
+        threshold: Option<f64>,
+        /// v0.26: Write the JSON report to this path in addition
+        /// to printing.
+        #[arg(long)]
+        report: Option<PathBuf>,
+        #[arg(long)]
+        entity_gold: Option<PathBuf>,
+        #[arg(long)]
+        link_gold: Option<PathBuf>,
+        #[arg(long)]
+        suite: Option<PathBuf>,
+        #[arg(long)]
+        suite_ready: bool,
+        #[arg(long)]
+        min_f1: Option<f64>,
+        #[arg(long)]
+        min_precision: Option<f64>,
+        #[arg(long)]
+        min_recall: Option<f64>,
+        #[arg(long)]
+        no_thresholds: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Run protocol conformance vectors
+    Conformance {
+        #[arg(default_value = "tests/conformance")]
+        dir: PathBuf,
+    },
+    /// Show version information
+    Version,
+    /// Optional signing and signature verification
+    Sign {
+        #[command(subcommand)]
+        action: SignAction,
+    },
+    /// Manage the frontier's registered actor identities (Phase M, v0.4)
+    Actor {
+        #[command(subcommand)]
+        action: ActorAction,
+    },
+    /// v0.39: Manage the frontier's federation peer registry. A peer
+    /// is another hub this frontier knows about — id, HTTPS URL, and
+    /// the Ed25519 pubkey they sign manifests with. Adding a peer
+    /// declares awareness; the actual sync runtime ships in v0.39.1+.
+    Federation {
+        #[command(subcommand)]
+        action: FederationAction,
+    },
+    /// v0.40: Causal reasoning over the schema landed in v0.38. Audits
+    /// every finding for identifiability: does the declared
+    /// study-design grade actually support the causal claim being
+    /// made? Surfaces underidentified findings (intervention from
+    /// observational) and conditional ones (intervention from
+    /// quasi-experimental designs that need explicit assumptions).
+    Causal {
+        #[command(subcommand)]
+        action: CausalAction,
+    },
+    /// Manage frontier-level metadata: cross-frontier dependencies (v0.8).
+    /// Use `vela frontier add-dep` to declare a remote frontier this
+    /// frontier links into via `vf_…@vfr_…` references.
+    Frontier {
+        #[command(subcommand)]
+        action: FrontierAction,
+    },
+    /// Walk the local Workbench draft queue (Phase R, v0.5):
+    /// list, sign-and-apply, or clear queued review actions
+    Queue {
+        #[command(subcommand)]
+        action: QueueAction,
+    },
+    /// Publish, list, or pull frontiers through a registry
+    /// (Phase S, v0.5: verifiable distribution)
+    Registry {
+        #[command(subcommand)]
+        action: RegistryAction,
+    },
+    /// Initialize a .vela frontier repo
+    Init {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[arg(long, default_value = "unnamed")]
+        name: String,
+        #[arg(long, default_value = "default")]
+        template: String,
+        #[arg(long)]
+        no_git: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.103: scaffold a fresh frontier end-to-end in one command.
+    /// Composes init + sign generate-keypair + actor add + finding add
+    /// + a print-ready next-steps banner. Designed for the
+    /// fresh-from-`cargo install` user who wants to feel the substrate
+    /// in 30 seconds without memorizing the demo sequence.
+    /// v0.131: scaffold an AI-agent identity kit. Generates an
+    /// Ed25519 keypair, writes an `actor.json` with the canonical
+    /// `actor:<slug>-<date>` id and `actor.type: "agent"`, plus a
+    /// minimal `agent.yaml` config file documenting which
+    /// frameworks the agent supports. The output is portable: a
+    /// human reviewer can register the agent into any frontier
+    /// with `vela actor add <frontier> <agent_id> --pubkey
+    /// <hex>`, after which the agent can draft proposals that
+    /// flow through the reviewer-gated truth-claim discipline.
+    /// See docs/AI_ATTRIBUTION.md for the full doctrine and
+    /// docs/AGENT_QUICKSTART.md for the workflow.
+    Agent {
+        #[command(subcommand)]
+        action: AgentAction,
+    },
+    Quickstart {
+        /// Frontier directory to create. Defaults to ./demo
+        #[arg(default_value = "demo")]
+        path: PathBuf,
+        /// Frontier display name. Defaults to "Quickstart frontier".
+        #[arg(long, default_value = "Quickstart frontier")]
+        name: String,
+        /// Reviewer / actor id under which the first finding lands.
+        /// Defaults to `reviewer:you`. Override with e.g.
+        /// `--reviewer reviewer:will-blair`.
+        #[arg(long, default_value = "reviewer:you")]
+        reviewer: String,
+        /// First-finding assertion text. Defaults to a generic placeholder.
+        /// Override with `--assertion "your real claim"`.
+        #[arg(long)]
+        assertion: Option<String>,
+        /// Where to drop the generated keypair. Defaults to
+        /// `<path>/keys/`.
+        #[arg(long)]
+        keys_out: Option<PathBuf>,
+        /// Output stable JSON instead of the human-readable banner.
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.109: regenerate or verify the frontier's `vela.lock`
+    /// pinning every cross-frontier dependency by snapshot hash.
+    /// The lockfile is the substrate's "I used this exact
+    /// scientific state" artifact. Default mode regenerates the
+    /// lock from current state; `--check` verifies on-disk state
+    /// matches the recorded lock and exits non-zero on drift.
+    Lock {
+        /// Frontier path (the .vela/ repo root)
+        path: PathBuf,
+        /// Verify the existing lock against current on-disk
+        /// state instead of regenerating.
+        #[arg(long)]
+        check: bool,
+        /// Emit JSON to stdout instead of the human banner.
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.110: generate a static HTML site documenting the
+    /// frontier. Self-contained: no JS framework, no external
+    /// dependencies, browseable from disk in any browser.
+    /// Cargo's docs.rs analog for scientific state. Renders
+    /// index, findings table, events table, and per-finding
+    /// detail pages.
+    Doc {
+        /// Frontier path (the .vela/ repo root)
+        path: PathBuf,
+        /// Output directory. Defaults to `<path>/doc/`.
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Emit a JSON report to stdout instead of the human
+        /// banner. The HTML files are written either way.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Import frontier JSON into a .vela repo
+    Import {
+        frontier: PathBuf,
+        #[arg(long)]
+        into: Option<PathBuf>,
+    },
+    /// Compare two frontiers, or preview one pending proposal
+    /// against the current frontier.
+    ///
+    /// v0.74: when the first positional arg starts with `vpr_`,
+    /// route to the existing `proposals preview` path so a single
+    /// `vela diff <proposal_id>` shows the proposal-vs-frontier
+    /// delta the README quotes. The two-arg form
+    /// (`vela diff <frontier_a> <frontier_b>`) keeps its existing
+    /// behavior.
+    Diff {
+        /// Frontier path A, a `vpr_*` proposal id for preview
+        /// mode, or a `vfr_*` registry id (v0.140) resolved via
+        /// the registry into a pulled snapshot before diffing.
+        target: String,
+        /// Frontier path B for two-frontier compare. Accepts a
+        /// filesystem path or a `vfr_*` registry id (v0.140). Omit
+        /// when `target` is a proposal id.
+        frontier_b: Option<String>,
+        /// Frontier root for proposal-preview mode. Defaults to
+        /// `.` if the first positional is a proposal id and no
+        /// `--frontier` flag is provided.
+        #[arg(long)]
+        frontier: Option<PathBuf>,
+        /// Reviewer attribution for the proposal-preview mode.
+        #[arg(long, default_value = "reviewer:preview")]
+        reviewer: String,
+        /// v0.140: registry locator to resolve `vfr_*` ids
+        /// against. Accepts a hub URL (`https://...`) or a local
+        /// registry path. Defaults to `~/.vela/registry/entries.json`.
+        /// Only consulted when `target` or `frontier_b` starts
+        /// with `vfr_`.
+        #[arg(long)]
+        from: Option<String>,
+        #[arg(long)]
+        json: bool,
+        #[arg(long)]
+        quiet: bool,
+    },
+    /// Inspect or apply proposal-first frontier writes
+    Proposals {
+        #[command(subcommand)]
+        action: ProposalAction,
+    },
+    /// v0.149: build or query the cross-frontier search index.
+    /// `build` walks a set of frontier paths and writes a
+    /// content-addressed `vsi_*` index JSON. `query` reads the
+    /// index and returns matching entries.
+    SearchIndex {
+        #[command(subcommand)]
+        action: SearchAction,
+    },
+    /// Build and query the local rebuildable frontier index database.
+    Index {
+        #[command(subcommand)]
+        action: IndexAction,
+    },
+    /// v0.157: render a CRediT-style contributor ledger for a
+    /// frontier. Walks the canonical event log, maps each event
+    /// kind to one or more CRediT roles (CASRAI 2014), and
+    /// aggregates per actor.
+    Credit {
+        frontier: PathBuf,
+        #[arg(long)]
+        out: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.156: render a Vela frontier or finding as a citation
+    /// in BibTeX, RIS, or CSL-JSON. Downstream-tooling-ready:
+    /// BibTeX into LaTeX, RIS into Zotero/EndNote/Mendeley,
+    /// CSL-JSON into Pandoc + most reference managers.
+    Citation {
+        /// Frontier path (renders the whole frontier) or
+        /// `vf_*` finding id (renders that finding; requires
+        /// `--frontier <path>`).
+        target: String,
+        /// Frontier path when `target` is a `vf_*` id.
+        #[arg(long)]
+        frontier: Option<PathBuf>,
+        /// Citation format: bibtex (alias bib) | ris |
+        /// csl-json (alias csl, json).
+        #[arg(long, default_value = "bibtex")]
+        format: String,
+        /// Optional network locator to include in the citation
+        /// URL field; defaults to a substrate-internal
+        /// `vela://...` URI.
+        #[arg(long)]
+        locator: Option<String>,
+        /// Output path (default: stdout).
+        #[arg(long)]
+        out: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.164: anchor Lean theorems to their content-addressed
+    /// source bytes. Walks the substrate's theorem registry
+    /// (T1-T19 by v0.166) and emits a `vla_*` anchor per
+    /// theorem pinning (id, module path, decl, module sha256).
+    /// Structural — does not run lake build.
+    Lean {
+        #[command(subcommand)]
+        action: LeanAction,
+    },
+    /// v0.193: Scientific Diff Pack (`vsd_*`). Bundle N proposals
+    /// into one reviewable change-set. The per-proposal Carina
+    /// Diff (v0.3) stays for atomic event diffs; this primitive
+    /// sits one level up and is what a reviewer reads.
+    DiffPack {
+        #[command(subcommand)]
+        action: DiffPackAction,
+    },
+    /// Frontier-owned policy files. Policy guides local review and validation;
+    /// it is not evidence and it does not mutate frontier state.
+    Policy {
+        #[command(subcommand)]
+        action: PolicyAction,
+    },
+    /// Local frontier tasks. Tasks organize scientific work before any
+    /// accepted event changes frontier truth state.
+    Task {
+        #[command(subcommand)]
+        action: TaskAction,
+    },
+    /// Build local task review packets from task workspaces and Diff Packs.
+    ReviewPacket {
+        #[command(subcommand)]
+        action: ReviewPacketAction,
+    },
+    /// Local reviewer sessions over frontier objects.
+    ReviewSession {
+        #[command(subcommand)]
+        action: ReviewSessionAction,
+    },
+    /// Local source inbox. Source records are review work before evidence atoms.
+    SourceInbox {
+        #[command(subcommand)]
+        action: SourceInboxAction,
+    },
+    /// First external adoption commands and reports.
+    Adoption {
+        #[command(subcommand)]
+        action: AdoptionAction,
+    },
+    /// Build and inspect read-only frontier share packages.
+    Share {
+        #[command(subcommand)]
+        action: ShareAction,
+    },
+    /// Local reconciliation controllers. Controllers create review tasks,
+    /// not accepted frontier state.
+    Controller {
+        #[command(subcommand)]
+        action: ControllerAction,
+    },
+    /// Local frontier incidents. Incidents create review work; they do not
+    /// retract or rewrite accepted frontier state.
+    Incident {
+        #[command(subcommand)]
+        action: IncidentAction,
+    },
+    /// v0.199: Tool Descriptor (`vtd_*`). Declare "this frontier
+    /// consumes outputs from this tool" as a first-class Carina
+    /// primitive. ToolUniverse-compatible. The descriptor pins
+    /// tool name + version + provider + calling convention +
+    /// input/output schemas; the id is content-addressed.
+    Tool {
+        #[command(subcommand)]
+        action: ToolCliAction,
+    },
+    /// v0.200: Evaluation Record (`ver_*`). A unified signed
+    /// record for replication, benchmark, validation, and
+    /// peer-review outcomes against any substrate object
+    /// (vsd_*, vtr_*, vf_*, vpf_*, vtd_*, vaa_*).
+    Eval {
+        #[command(subcommand)]
+        action: EvalCliAction,
+    },
+    /// v0.218: Verdict Conflict (`vdc_*`). Detect contradicting
+    /// pending verdicts on overlapping Diff Pack members, and
+    /// resolve them as signed canonical events. Reviewer
+    /// disagreement is recorded as an audit trail, not silenced.
+    Conflict {
+        #[command(subcommand)]
+        action: ConflictCliAction,
+    },
+    /// v0.167: declare a federated-hub spec primitive (`vhs_*`).
+    /// Pure data; content-addressed over (hub_id, base_url,
+    /// operator_pubkey_hex, substrate_version, declared_at).
+    /// No network calls.
+    Hub {
+        #[command(subcommand)]
+        action: HubSpecCli,
+    },
+    /// v0.168: review-comment thread primitive (`vrt_*` + signed
+    /// `vrm_*` messages). Append-only chain of signed messages
+    /// attached to a proposal (`vpr_*`) or finding (`vf_*`).
+    /// Substrate-honest: documents deliberation; does not gate
+    /// proposal acceptance (that path stays on the canonical
+    /// event-log).
+    ReviewThread {
+        #[command(subcommand)]
+        action: ReviewThreadCli,
+    },
+    /// v0.163: render a frontier as a Markdown preprint
+    /// (abstract, contributors with CRediT roles, findings as
+    /// evidence sections, BibTeX citation block). Pure derived
+    /// view from the canonical substrate state.
+    Preprint {
+        /// Frontier path.
+        frontier: PathBuf,
+        /// Optional release timestamp to pin in the footer.
+        /// Defaults to now (UTC).
+        #[arg(long)]
+        released_at: Option<String>,
+        /// Output path (default: stdout).
+        #[arg(long)]
+        out: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.163: resolve a persistent identifier (vfr_*, vfrr_*,
+    /// vf_*, DOI, arXiv, ORCID, etc.) to a structured reference
+    /// plus a canonical site URL. Pure derivation from the
+    /// handle's shape; no network calls.
+    Handle {
+        /// The identifier to classify (e.g. `vfr_5076e7b3ff8e6b0f`,
+        /// `10.1234/abc`, `2403.01234`, `0000-0001-2345-6789`).
+        handle: String,
+        /// Override the live-site base URL. Defaults to the
+        /// public Vela site.
+        #[arg(long, default_value = "https://vela-site.fly.dev")]
+        site: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.162: render a Crossref deposit manifest for a frontier
+    /// release. Substrate generates the deposit body the operator
+    /// then submits to Crossref under their own member account.
+    /// Substrate does not call the Crossref API itself.
+    Crossref {
+        /// Frontier path (the source the release was cut from).
+        frontier: PathBuf,
+        /// Release id (`vfrr_*`) to deposit. Defaults to latest
+        /// release in the frontier.
+        #[arg(long)]
+        release: Option<String>,
+        /// Crossref member id.
+        #[arg(long)]
+        member: String,
+        /// DOI prefix you are authorized to mint under
+        /// (e.g. `10.5555`).
+        #[arg(long)]
+        prefix: String,
+        /// Depositor display name.
+        #[arg(long)]
+        depositor_name: String,
+        /// Depositor contact email.
+        #[arg(long)]
+        depositor_email: String,
+        /// Resource URL the DOI should resolve to.
+        #[arg(long)]
+        resource_url: String,
+        /// Optional display title (defaults to project.name).
+        #[arg(long)]
+        title: Option<String>,
+        /// Optional abstract / description.
+        #[arg(long)]
+        description: Option<String>,
+        /// Optional SPDX license id.
+        #[arg(long)]
+        license: Option<String>,
+        /// Emit Crossref deposit XML (subset of schema 5.3.1)
+        /// instead of JSON.
+        #[arg(long)]
+        xml: bool,
+        /// Output path (default: stdout).
+        #[arg(long)]
+        out: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Import a Carina artifact packet as reviewable frontier proposals
+    ArtifactToState {
+        /// Frontier JSON file or Vela repo
+        frontier: PathBuf,
+        /// Artifact packet JSON
+        packet: PathBuf,
+        /// Actor importing the packet
+        #[arg(long)]
+        actor: String,
+        /// Apply artifact proposals immediately while leaving truth changes pending
+        #[arg(long)]
+        apply_artifacts: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Validate Carina artifact packets before importing runtime output
+    BridgeKit {
+        #[command(subcommand)]
+        action: BridgeKitAction,
+    },
+    /// Run reviewed source adapters into artifact-to-state proposals
+    SourceAdapter {
+        #[command(subcommand)]
+        action: SourceAdapterAction,
+    },
+    /// Run external runtime adapters into artifact-to-state proposals
+    RuntimeAdapter {
+        #[command(subcommand)]
+        action: RuntimeAdapterAction,
+    },
+    /// Manage finding bundles as the core frontier primitive
+    Finding {
+        #[command(subcommand)]
+        command: FindingCommands,
+    },
+    /// Add typed links between findings — including cross-frontier
+    /// references of the form `vf_<id>@vfr_<id>` (v0.8). Until v0.9
+    /// link state lived only in JSON; `vela link add` is the CLI on-ramp.
+    Link {
+        #[command(subcommand)]
+        action: LinkAction,
+    },
+    /// v0.48: launch the local workbench web app — a localhost UI
+    /// rendering the substrate against the cwd's `.vela/` repo.
+    /// Read+write: confirm/refute bridges, browse findings, audit.
+    /// Pure Rust, no node/bun dependency, single binary.
+    Workbench {
+        /// Path to a Vela repo. Defaults to cwd.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Port to bind on localhost. Default 3850.
+        #[arg(long, default_value_t = 3850)]
+        port: u16,
+        /// Skip auto-opening the default browser.
+        #[arg(long)]
+        no_open: bool,
+    },
+    /// v0.46: derive, list, and review cross-frontier bridges.
+    /// A bridge is a content-addressed `vbr_<id>` record asserting
+    /// "this entity links findings in two frontiers." Bridges are
+    /// derived deterministically; reviewer judgment promotes them
+    /// from `derived` to `confirmed` or `refuted`.
+    Bridges {
+        #[command(subcommand)]
+        action: BridgesAction,
+    },
+    /// v0.19: resolve unresolved entities against a bundled common-entity
+    /// table (UniProt for proteins, MeSH for diseases, ChEBI/DrugBank for
+    /// compounds, etc.). Lowers `needs_review` for matched entities and
+    /// populates `canonical_id`. Idempotent unless `--force` is passed.
+    Entity {
+        #[command(subcommand)]
+        action: EntityAction,
+    },
+    /// Create or apply one proposal-backed finding review
+    Review {
+        /// Frontier JSON file or Vela repo
+        frontier: PathBuf,
+        /// Finding ID to review
+        finding_id: String,
+        /// accepted, contested, needs_revision, or rejected
+        #[arg(long)]
+        status: Option<String>,
+        /// Reason for the review
+        #[arg(long)]
+        reason: Option<String>,
+        /// Reviewer identifier
+        #[arg(long)]
+        reviewer: String,
+        /// Immediately accept and apply the proposal locally
+        #[arg(long)]
+        apply: bool,
+        /// Output stable JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Add a lightweight note to a finding
+    Note {
+        frontier: PathBuf,
+        finding_id: String,
+        #[arg(long)]
+        text: String,
+        #[arg(long)]
+        author: String,
+        /// Immediately accept and apply the proposal locally
+        #[arg(long)]
+        apply: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Add an explicit caveat to a finding
+    Caveat {
+        frontier: PathBuf,
+        finding_id: String,
+        #[arg(long)]
+        text: String,
+        #[arg(long)]
+        author: String,
+        #[arg(long)]
+        apply: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Revise an interpretation field while preserving history
+    Revise {
+        frontier: PathBuf,
+        finding_id: String,
+        /// New confidence score from 0.0 to 1.0
+        #[arg(long)]
+        confidence: f64,
+        /// Reason for the revision
+        #[arg(long)]
+        reason: String,
+        /// Reviewer identifier
+        #[arg(long)]
+        reviewer: String,
+        #[arg(long)]
+        apply: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Mark a finding as rejected without deleting it
+    Reject {
+        frontier: PathBuf,
+        finding_id: String,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        reviewer: String,
+        #[arg(long)]
+        apply: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show state-transition history for one finding
+    History {
+        frontier: PathBuf,
+        finding_id: String,
+        #[arg(long)]
+        json: bool,
+        /// v0.55: time-travel replay — show only events at-or-before
+        /// this RFC3339 timestamp, and report the confidence score
+        /// the finding had at that moment (last revision <= cutoff).
+        #[arg(long, value_name = "RFC3339_TIMESTAMP")]
+        as_of: Option<String>,
+    },
+    /// Import review/state events from a packet or JSON file into a frontier
+    ImportEvents {
+        source: PathBuf,
+        #[arg(long)]
+        into: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Retract a finding
+    Retract {
+        source: PathBuf,
+        finding_id: String,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        reviewer: String,
+        #[arg(long)]
+        apply: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.117: Register a machine-checked Proof primitive (`vpf_*`)
+    /// against an existing finding. The proof script is hashed with
+    /// sha256 to produce a content-addressed locator; the artifact
+    /// rides as a `kind: source_file` artifact carrying
+    /// `metadata.carina_kind: proof_script` plus tool + tool-version
+    /// (matching the v0.75.6 sidon-sets pattern). Routes to
+    /// `state::add_artifact`; the artifact event is signed under the
+    /// reviewer's actor id. Closes the v0.75.6 Carina Proof primitive
+    /// loop end-to-end: every proof script lives in the frontier's
+    /// canonical event log with a content-addressed locator the
+    /// substrate's verifier can pin against.
+    ProofAdd {
+        frontier: PathBuf,
+        /// Finding the proof targets (`vf_*`).
+        #[arg(long = "target-finding")]
+        target_finding: String,
+        /// Proof-assistant identifier. One of: lean4 (default), coq,
+        /// isabelle, agda, metamath, rocq, other.
+        #[arg(long, default_value = "lean4")]
+        tool: String,
+        /// Tool version pin (e.g. `4.29.1` for Lean 4).
+        #[arg(long = "tool-version", default_value = "4.29.1")]
+        tool_version: String,
+        /// Path to the proof script on disk.
+        #[arg(long = "script-path")]
+        script_path: PathBuf,
+        /// Human-readable label for the proof artifact.
+        #[arg(long, default_value = "Proof script")]
+        name: String,
+        /// Reviewer actor id (e.g. `reviewer:will-blair`).
+        #[arg(long)]
+        reviewer: String,
+        /// Reason for registering the proof artifact.
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.151: attest that an external verifier ran a Carina
+    /// Proof artifact and produced a specific output hash. Writes
+    /// a signed `vpv_*` record next to the proof; consumers
+    /// verify the attestation via `proof-verify-attestation`.
+    /// The verifier itself (Lean kernel, Coq, etc.) runs
+    /// outside the substrate; this command records the
+    /// verifier's signed output and pubkey.
+    ProofAttestVerification {
+        /// Proof artifact id (`vpf_*`) the verification covers.
+        #[arg(long)]
+        proof_id: String,
+        /// Verifier tool: lean4|coq|isabelle|agda|metamath|rocq|other.
+        #[arg(long, default_value = "lean4")]
+        tool: String,
+        #[arg(long = "tool-version", default_value = "4.29.1")]
+        tool_version: String,
+        /// Content-addressed locator (sha256:HEX) of the proof
+        /// script the verifier ran.
+        #[arg(long)]
+        script_locator: String,
+        /// Optional sha256 over the Lake manifest (or equivalent).
+        #[arg(long = "lake-manifest-hash")]
+        lake_manifest_hash: Option<String>,
+        /// sha256:HEX over the verifier's standard output.
+        #[arg(long = "verifier-output-hash")]
+        verifier_output_hash: String,
+        /// `verified` | `failed` | `toolchain_mismatch`.
+        #[arg(long, default_value = "verified")]
+        status: String,
+        /// Verifier actor identifier (GitHub Action url, Vela
+        /// actor id, institutional steward id).
+        #[arg(long = "verifier-actor")]
+        verifier_actor: String,
+        /// Verifier's Ed25519 signing key.
+        #[arg(long)]
+        key: PathBuf,
+        /// Output path for the verification record JSON.
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.151: verify a `vpv_*` proof-verification record:
+    /// re-derive the id, verify the Ed25519 signature against
+    /// `verifier_pubkey`. Exits non-zero on any mismatch.
+    ProofVerifyAttestation {
+        /// Path to the `vpv_*` verification record JSON.
+        record: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.79: Add a new entity tag to an existing finding.
+    /// Append-only: re-applying with the same name is a no-op.
+    /// Closes the v0.78.4 honest gap that forced reviewers to
+    /// append new findings just to add a tag.
+    EntityAdd {
+        frontier: PathBuf,
+        finding_id: String,
+        #[arg(long)]
+        entity: String,
+        /// Entity type. One of: gene, protein, compound, disease,
+        /// cell_type, organism, pathway, assay, anatomical_structure,
+        /// particle, instrument, dataset, quantity, other.
+        #[arg(long)]
+        entity_type: String,
+        #[arg(long)]
+        reviewer: String,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        apply: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.57: Resolve a named entity inside a finding's
+    /// assertion.entities to a canonical id. Clears the entity's
+    /// needs_review flag.
+    EntityResolve {
+        frontier: PathBuf,
+        finding_id: String,
+        #[arg(long)]
+        entity: String,
+        #[arg(long)]
+        source: String,
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        confidence: f64,
+        #[arg(long)]
+        matched_name: Option<String>,
+        #[arg(long, default_value = "manual")]
+        resolution_method: String,
+        #[arg(long)]
+        reviewer: String,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        apply: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.57: Mechanically repair a missing evidence-span on a
+    /// finding by appending a `{section, text}` span. Emits a signed
+    /// v0.57: Fetch metadata + abstract for an external source by
+    /// stable identifier (doi:, pmid:, nct:). Cached locally so a
+    /// rerun doesn't hit the network. Used by the BBB span-repair
+    /// curation wave to propose evidence_spans from fetched
+    /// abstract text.
+    SourceFetch {
+        /// Source identifier. Accepts `doi:<doi>`, `pmid:<id>`,
+        /// `nct:<id>`, or a bare DOI / PMID / NCT id.
+        identifier: String,
+        /// Frontier to use as the cache root. If set, fetched
+        /// records are cached under
+        /// `<frontier>/sources/cache/<sha256>.json` and reused.
+        #[arg(long)]
+        cache: Option<PathBuf>,
+        /// Where to write the JSON output. Defaults to stdout.
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Force a network fetch even if a cache hit exists.
+        #[arg(long)]
+        refresh: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// `finding.span_repaired` canonical event when `--apply` is
+    /// passed.
+    SpanRepair {
+        frontier: PathBuf,
+        finding_id: String,
+        #[arg(long)]
+        section: String,
+        #[arg(long)]
+        text: String,
+        #[arg(long)]
+        reviewer: String,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        apply: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.56: Mechanically repair a missing evidence-atom locator by
+    /// copying the locator from the parent source record. Emits a
+    /// signed `evidence_atom.locator_repaired` canonical event when
+    /// `--apply` is passed.
+    LocatorRepair {
+        frontier: PathBuf,
+        atom_id: String,
+        /// Resolved locator string (e.g. doi:10.1038/s41586-020-2247-3).
+        /// If omitted, the CLI looks up the parent source's locator.
+        #[arg(long)]
+        locator: Option<String>,
+        /// Reviewer identifier (e.g. agent:vela-curation-bot or
+        /// reviewer:will-blair).
+        #[arg(long)]
+        reviewer: String,
+        /// Reason for the repair, recorded on the canonical event.
+        #[arg(long)]
+        reason: String,
+        /// Immediately accept and apply the proposal locally.
+        #[arg(long)]
+        apply: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Simulate correction impact over declared dependency links
+    Propagate {
+        frontier: PathBuf,
+        #[arg(long)]
+        retract: Option<String>,
+        #[arg(long)]
+        reduce_confidence: Option<String>,
+        #[arg(long)]
+        to: Option<f64>,
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+    /// v0.32: Record an independent replication attempt against a
+    /// canonical finding. Each attempt becomes a `vrep_<hash>` object
+    /// in `.vela/replications/`, content-addressed by target +
+    /// attempting actor + canonical conditions + outcome. Replication
+    /// is the empirical bedrock of science; making it kernel-level
+    /// means downstream tools (site, bench, agents) can reason about
+    /// "this lab tried in human iPSC, that lab failed in mouse OPCs"
+    /// as distinct epistemic facts.
+    Replicate {
+        /// Path to the frontier (project dir, `.vela/` repo, or `.json`).
+        frontier: PathBuf,
+        /// Target finding id (`vf_<hash>`) being replicated.
+        target: String,
+        /// Outcome label: `replicated` | `failed` | `partial` | `inconclusive`.
+        #[arg(long)]
+        outcome: String,
+        /// Stable actor id of the lab/curator/agent attempting.
+        #[arg(long)]
+        by: String,
+        /// One-paragraph description of conditions (model system,
+        /// species, sample size, in_vivo / in_vitro / human_data).
+        /// Goes into the content-address preimage.
+        #[arg(long)]
+        conditions: String,
+        /// Source paper title for the replicating work.
+        #[arg(long)]
+        source_title: String,
+        /// Optional DOI for the replicating paper.
+        #[arg(long)]
+        doi: Option<String>,
+        /// Optional PMID for the replicating paper.
+        #[arg(long)]
+        pmid: Option<String>,
+        /// Sample size description (e.g. "n=42").
+        #[arg(long)]
+        sample_size: Option<String>,
+        /// Free-text reviewer note. Especially important for
+        /// `partial` and `inconclusive` outcomes.
+        #[arg(long, default_value = "")]
+        note: String,
+        /// `vrep_<id>` of a previous attempt this one extends/refines.
+        #[arg(long)]
+        previous_attempt: Option<String>,
+        /// v0.36.2: skip the propagation cascade. By default,
+        /// recording a replication recomputes the target finding's
+        /// confidence from the live `Project.replications` collection
+        /// and flags downstream dependents linked via `supports` /
+        /// `depends`. Use this flag to stage replications without
+        /// immediate review-queue churn.
+        #[arg(long, default_value_t = false)]
+        no_cascade: bool,
+        /// Emit JSON to stdout.
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.32: List replication attempts in a frontier, optionally
+    /// filtered by target finding id.
+    Replications {
+        /// Path to the frontier (project dir, `.vela/` repo, or `.json`).
+        frontier: PathBuf,
+        /// Optional target finding id to filter by.
+        #[arg(long)]
+        target: Option<String>,
+        /// Emit JSON to stdout.
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.33: Register a Dataset as a first-class kernel object
+    /// (`vd_<hash>`). Datasets anchor empirical claims that rest on
+    /// data — the canonical Alzheimer's frontier should know that
+    /// "ATV:TREM2 reduces plaque density" rests on a specific cohort
+    /// of n=24 iPSC-derived microglia, not on "the iPSC dataset" in
+    /// the abstract.
+    DatasetAdd {
+        /// Path to the frontier (project dir, `.vela/` repo, or `.json`).
+        frontier: PathBuf,
+        /// Human-readable dataset name (e.g. `ADNI`, `TRAILBLAZER-ALZ`).
+        #[arg(long)]
+        name: String,
+        /// Semantic version or release tag (e.g. `ADNI-3`, `v2.2`).
+        #[arg(long)]
+        version: Option<String>,
+        /// SHA-256 of canonical contents. For remote datasets, the
+        /// publisher's declared content hash; integrity verification
+        /// is the puller's responsibility.
+        #[arg(long)]
+        content_hash: String,
+        /// Where the dataset is reachable (https / file / s3 URL).
+        #[arg(long)]
+        url: Option<String>,
+        /// License identifier or URL.
+        #[arg(long)]
+        license: Option<String>,
+        /// Source paper title or release name (for provenance).
+        #[arg(long)]
+        source_title: String,
+        /// Optional DOI for the source publication.
+        #[arg(long)]
+        doi: Option<String>,
+        /// Optional row count.
+        #[arg(long)]
+        row_count: Option<u64>,
+        /// Emit JSON to stdout.
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.33: List datasets in a frontier.
+    Datasets {
+        frontier: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.33: Register a CodeArtifact as a first-class kernel object
+    /// (`vc_<hash>`). Claims can reference the code that produced
+    /// them, pinned to a specific git commit and path.
+    CodeAdd {
+        /// Path to the frontier.
+        frontier: PathBuf,
+        /// Source language: `python`, `r`, `julia`, `rust`, `bash`, etc.
+        #[arg(long)]
+        language: String,
+        /// Repository URL (e.g. `https://github.com/vela-science/vela`).
+        #[arg(long)]
+        repo_url: Option<String>,
+        /// Specific git commit SHA. Required for reproducibility;
+        /// `None` means "unpinned" and weakens the substrate claim.
+        #[arg(long)]
+        commit: Option<String>,
+        /// Path within the repository.
+        #[arg(long)]
+        path: String,
+        /// SHA-256 of the snippet body.
+        #[arg(long)]
+        content_hash: String,
+        /// Optional starting line.
+        #[arg(long)]
+        line_start: Option<u32>,
+        /// Optional ending line.
+        #[arg(long)]
+        line_end: Option<u32>,
+        /// Optional entry point: function name, notebook cell id.
+        #[arg(long)]
+        entry_point: Option<String>,
+        /// Emit JSON to stdout.
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.33: List code artifacts in a frontier.
+    CodeArtifacts {
+        frontier: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Register a generic content-addressed artifact. Use this for
+    /// protocols, trial records, supplements, notebooks, source files,
+    /// tables, and dataset manifests that need durable byte or pointer
+    /// provenance.
+    ArtifactAdd {
+        /// Path to the frontier.
+        frontier: PathBuf,
+        /// Artifact kind. Examples: clinical_trial_record, protocol,
+        /// supplement, notebook, source_file, dataset.
+        #[arg(long)]
+        kind: String,
+        /// Human-readable artifact name.
+        #[arg(long)]
+        name: String,
+        /// Local file to hash and, for .vela repos, mirror under
+        /// `.vela/artifact-blobs/sha256/`.
+        #[arg(long)]
+        file: Option<PathBuf>,
+        /// Remote URL or accession locator.
+        #[arg(long)]
+        url: Option<String>,
+        /// SHA-256 commitment. Required unless `--file` is provided.
+        #[arg(long)]
+        content_hash: Option<String>,
+        /// MIME type or close equivalent.
+        #[arg(long)]
+        media_type: Option<String>,
+        /// License identifier, URL, or access terms note.
+        #[arg(long)]
+        license: Option<String>,
+        /// Source title for artifact provenance. Defaults to `--name`.
+        #[arg(long)]
+        source_title: Option<String>,
+        /// Source URL when distinct from `--url`.
+        #[arg(long)]
+        source_url: Option<String>,
+        /// Optional DOI for the source publication.
+        #[arg(long)]
+        doi: Option<String>,
+        /// Target finding ids this artifact bears on.
+        #[arg(long)]
+        target: Vec<String>,
+        /// Structured metadata as key=value. Repeatable.
+        #[arg(long)]
+        metadata: Vec<String>,
+        /// Access tier: public, restricted, or classified.
+        #[arg(long, default_value = "public")]
+        access_tier: String,
+        /// Stable actor id of the depositor.
+        #[arg(long, default_value = "reviewer:manual")]
+        deposited_by: String,
+        /// Reason recorded on the canonical event.
+        #[arg(long, default_value = "artifact deposit")]
+        reason: String,
+        /// Emit JSON to stdout.
+        #[arg(long)]
+        json: bool,
+    },
+    /// List generic artifacts in a frontier.
+    Artifacts {
+        frontier: PathBuf,
+        /// Optional target finding id to filter by.
+        #[arg(long)]
+        target: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Audit artifact locators, hashes, references, and profile fields.
+    ArtifactAudit {
+        frontier: PathBuf,
+        /// Emit JSON to stdout.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show the validated decision brief projection for a frontier.
+    DecisionBrief {
+        frontier: PathBuf,
+        /// Emit JSON to stdout.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show read-only review-work queues for a frontier.
+    ReviewWork {
+        frontier: PathBuf,
+        /// Emit JSON to stdout.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show the validated trial outcome projection for a frontier.
+    TrialSummary {
+        frontier: PathBuf,
+        /// Emit JSON to stdout.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show the validated source verification projection for a frontier.
+    SourceVerification {
+        frontier: PathBuf,
+        /// Emit JSON to stdout.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show the validated source ingest plan for a frontier.
+    SourceIngestPlan {
+        frontier: PathBuf,
+        /// Emit JSON to stdout.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Import a ClinicalTrials.gov v2 study record as a content-addressed
+    /// `clinical_trial_record` artifact.
+    ClinicalTrialImport {
+        /// Path to the frontier.
+        frontier: PathBuf,
+        /// ClinicalTrials.gov NCT identifier.
+        nct_id: String,
+        /// Read a saved ClinicalTrials.gov v2 JSON record instead of
+        /// fetching from the network.
+        #[arg(long)]
+        input_json: Option<PathBuf>,
+        /// Target finding ids this trial record bears on.
+        #[arg(long)]
+        target: Vec<String>,
+        /// Stable actor id of the depositor.
+        #[arg(long, default_value = "reviewer:manual")]
+        deposited_by: String,
+        /// Reason recorded on the canonical event.
+        #[arg(long, default_value = "clinical trial record import")]
+        reason: String,
+        /// License or access terms note.
+        #[arg(long, default_value = "ClinicalTrials.gov public record")]
+        license: String,
+        /// Emit JSON to stdout.
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.49: Deposit a NegativeResult (`vnr_<hash>`). Two flavors:
+    /// `--kind registered_trial` for pre-registered trial readouts
+    /// (carries `power`, `effect_size_ci`, and pre-registered MCID
+    /// so an underpowered null does not poison downstream confidence);
+    /// `--kind exploratory` for wet-lab dead ends (the
+    /// (reagent, observation, attempts) tuple where most failures
+    /// cannot be statistically bounded).
+    NegativeResultAdd {
+        /// Path to the frontier (project dir, `.vela/` repo, or `.json`).
+        frontier: PathBuf,
+        /// `registered_trial` or `exploratory`.
+        #[arg(long)]
+        kind: String,
+        /// Stable actor id of the depositor.
+        #[arg(long)]
+        deposited_by: String,
+        /// Free-text reason recorded on the canonical event.
+        #[arg(long)]
+        reason: String,
+        /// Conditions narrative (free text). Reuses the standard
+        /// `Conditions` shape; structured flags are optional.
+        #[arg(long)]
+        conditions_text: String,
+        /// Free-text reviewer note attached to the deposit.
+        #[arg(long, default_value = "")]
+        notes: String,
+        /// Optional `vf_*` finding ids the null bears against.
+        /// Repeatable.
+        #[arg(long)]
+        target: Vec<String>,
+        // ── registered_trial fields ──────────────────────────────
+        /// Pre-specified primary endpoint
+        /// (e.g. "CDR-SB change at 18 months").
+        #[arg(long)]
+        endpoint: Option<String>,
+        /// Intervention arm description (drug + dose, etc.).
+        #[arg(long)]
+        intervention: Option<String>,
+        /// Comparator arm description (placebo, active, SoC).
+        #[arg(long)]
+        comparator: Option<String>,
+        /// Population scope (indication, stage, biomarker eligibility).
+        #[arg(long)]
+        population: Option<String>,
+        /// Total participants enrolled (any arm).
+        #[arg(long)]
+        n_enrolled: Option<u32>,
+        /// Statistical power for primary endpoint, on [0, 1].
+        #[arg(long)]
+        power: Option<f64>,
+        /// CI lower bound for the observed primary effect size.
+        #[arg(long)]
+        ci_lower: Option<f64>,
+        /// CI upper bound for the observed primary effect size.
+        #[arg(long)]
+        ci_upper: Option<f64>,
+        /// Pre-registered minimum effect size of interest (MCID).
+        #[arg(long)]
+        effect_size_threshold: Option<f64>,
+        /// Trial registry id (e.g. "NCT04532333").
+        #[arg(long)]
+        registry_id: Option<String>,
+        // ── exploratory fields ───────────────────────────────────
+        /// Reagent / compound / vector / perturbation tried.
+        #[arg(long)]
+        reagent: Option<String>,
+        /// Free-text observed outcome.
+        #[arg(long)]
+        observation: Option<String>,
+        /// Number of independent attempts that agreed.
+        #[arg(long)]
+        attempts: Option<u32>,
+        // ── provenance ───────────────────────────────────────────
+        /// Provenance source title (paper title, trial readout, etc.).
+        #[arg(long)]
+        source_title: String,
+        /// Optional DOI for the source.
+        #[arg(long)]
+        doi: Option<String>,
+        /// Optional URL for the source (registry page, preprint).
+        #[arg(long)]
+        url: Option<String>,
+        /// Optional source year.
+        #[arg(long)]
+        year: Option<i32>,
+        /// Emit JSON to stdout.
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.49: List NegativeResults in a frontier.
+    NegativeResults {
+        frontier: PathBuf,
+        /// Filter to deposits bearing on a specific `vf_*` finding.
+        #[arg(long)]
+        target: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.50: Open a Trajectory (`vtr_<hash>`) — the search path that
+    /// produced (or did not produce) a finding. Steps are appended
+    /// via `vela trajectory-step` so the search becomes visible as
+    /// it unfolds rather than only after the fact.
+    TrajectoryCreate {
+        /// Path to the frontier.
+        frontier: PathBuf,
+        /// Stable actor id of the depositor.
+        #[arg(long)]
+        deposited_by: String,
+        /// Free-text reason recorded on the canonical event.
+        #[arg(long)]
+        reason: String,
+        /// Optional `vf_*` finding ids the trajectory targets.
+        /// Repeatable. May be empty when the trajectory leads
+        /// nowhere yet — the search can be opened before its target
+        /// finding exists.
+        #[arg(long)]
+        target: Vec<String>,
+        /// Free-text reviewer note on the trajectory as a whole.
+        #[arg(long, default_value = "")]
+        notes: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.50: Append one step to an existing Trajectory. Steps are
+    /// content-addressed and idempotent on duplicate content.
+    TrajectoryStep {
+        /// Path to the frontier.
+        frontier: PathBuf,
+        /// Trajectory `vtr_<hash>` to append to.
+        trajectory_id: String,
+        /// Step kind: `hypothesis | tried | ruled_out | observed | refined`.
+        #[arg(long)]
+        kind: String,
+        /// Free-text description. For `ruled_out`, prose should name
+        /// the reason for exclusion — that's the load-bearing field
+        /// for the next agent reading the search.
+        #[arg(long)]
+        description: String,
+        /// Stable actor id of who took the step.
+        #[arg(long)]
+        actor: String,
+        /// Free-text reason recorded on the canonical event.
+        #[arg(long)]
+        reason: String,
+        /// Optional referenced kernel objects (`vf_*`, `vnr_*`,
+        /// `vrep_*`, `vpred_*`, `vd_*`, `vc_*`). Repeatable.
+        #[arg(long)]
+        reference: Vec<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.50: List trajectories in a frontier.
+    Trajectories {
+        frontier: PathBuf,
+        /// Filter to trajectories bearing on a specific `vf_*` finding.
+        #[arg(long)]
+        target: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.51: Re-classify the read-side access tier of a finding,
+    /// negative_result, or trajectory. Emits a `tier.set` canonical
+    /// event so the reclassification is replay-deterministic and
+    /// auditable. Higher tiers are gated in MCP/HTTP read paths
+    /// against the requesting actor's `access_clearance`.
+    TierSet {
+        /// Path to the frontier.
+        frontier: PathBuf,
+        /// One of `finding`, `negative_result`, `trajectory`.
+        #[arg(long)]
+        object_type: String,
+        /// `vf_*`, `vnr_*`, or `vtr_*` id.
+        #[arg(long)]
+        object_id: String,
+        /// New tier: `public`, `restricted`, or `classified`.
+        #[arg(long)]
+        tier: String,
+        /// Stable actor id of the classifier (must already be
+        /// registered if signed events are required by the frontier).
+        #[arg(long)]
+        actor: String,
+        /// Free-text reason recorded on the canonical event. Often
+        /// the load-bearing audit field — "why was this classified."
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.34: Make a falsifiable Prediction (`vpred_<hash>`) about a
+    /// future observation. Predictions are scoped to one or more
+    /// existing findings, carry an explicit resolution criterion,
+    /// and live in the kernel's epistemic accountability ledger.
+    /// When a Resolution arrives later, the prediction's confidence
+    /// flows into the predictor's Brier score and log score.
+    Predict {
+        /// Path to the frontier (project dir, `.vela/` repo, or `.json`).
+        frontier: PathBuf,
+        /// Stable actor id of the predictor.
+        #[arg(long)]
+        by: String,
+        /// Plain-prose prediction (e.g. "lecanemab Phase 4 will show
+        /// >0.4 SD CDR-SB effect").
+        #[arg(long)]
+        claim: String,
+        /// Unambiguous criterion describing how to recognize resolution.
+        #[arg(long)]
+        criterion: String,
+        /// RFC 3339 deadline for resolution.
+        #[arg(long)]
+        resolves_by: Option<String>,
+        /// Confidence on [0, 1] in the expected outcome.
+        #[arg(long)]
+        confidence: f64,
+        /// Comma-separated `vf_*` finding ids this prediction depends on.
+        #[arg(long, default_value = "")]
+        target: String,
+        /// Outcome shape: `affirmed` | `falsified` | `quant:V±T units` | `cat:value`.
+        #[arg(long, default_value = "affirmed")]
+        outcome: String,
+        /// Free-text scope/conditions of the prediction.
+        #[arg(long, default_value = "")]
+        conditions: String,
+        /// Emit JSON to stdout.
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.34: Resolve an open Prediction. Records what actually
+    /// happened, who observed it, and whether it matched the
+    /// prediction. Drives Brier / log-score / hit-rate calibration
+    /// over the resolved subset.
+    Resolve {
+        /// Path to the frontier.
+        frontier: PathBuf,
+        /// `vpred_<id>` of the prediction being resolved.
+        prediction: String,
+        /// Free-text description of what actually happened.
+        #[arg(long)]
+        outcome: String,
+        /// Whether the actual outcome matched the predicted one.
+        #[arg(long)]
+        matched: bool,
+        /// Stable actor id of the resolver. Independent resolvers
+        /// (different from the predictor) produce stronger signal.
+        #[arg(long)]
+        by: String,
+        /// Resolver's confidence in the match judgment, on [0, 1].
+        #[arg(long, default_value = "1.0")]
+        confidence: f64,
+        /// Source paper / trial readout title for the resolution.
+        #[arg(long, default_value = "")]
+        source_title: String,
+        /// Optional DOI for the resolving source.
+        #[arg(long)]
+        doi: Option<String>,
+        /// Emit JSON to stdout.
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.34: List predictions in a frontier with their resolution state.
+    Predictions {
+        frontier: PathBuf,
+        /// Optional actor filter.
+        #[arg(long)]
+        by: Option<String>,
+        /// Show only unresolved predictions.
+        #[arg(long)]
+        open: bool,
+        /// Emit JSON to stdout.
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.34: Compute calibration scores (Brier, log score, hit rate)
+    /// for one or all actors with predictions in the frontier.
+    Calibration {
+        frontier: PathBuf,
+        /// Optional actor filter (e.g. `reviewer:will-blair`).
+        #[arg(long)]
+        actor: Option<String>,
+        /// Emit JSON to stdout.
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.40.1: Walk every prediction and mark as `expired_unresolved`
+    /// any whose deadline has passed without an explicit Resolution.
+    /// Emits one `prediction.expired_unresolved` event per newly-
+    /// expired prediction. Idempotent. Calibration counts expired
+    /// predictions separately from resolved ones — the predictor is
+    /// answering for the missing commitment without their Brier or
+    /// log score being moved by it.
+    PredictionsExpire {
+        frontier: PathBuf,
+        /// Override the system clock (RFC 3339). Useful for tests
+        /// and reproducibility; defaults to `now`.
+        #[arg(long)]
+        now: Option<String>,
+        /// Run the check but don't write any events or flag any
+        /// predictions. Reports what *would* expire.
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.35: Compute consensus over claim-similar findings, weighted
+    /// by evidence quality. Takes a target `vf_<id>` and finds other
+    /// findings making a similar assertion (shared entities + text
+    /// overlap), weighs them by replication count + citation count
+    /// + review state, and returns a consensus confidence with a
+    /// credible interval. The substrate move that turns "what does
+    /// the field hold about X?" from a manual graph walk into a
+    /// queryable result.
+    Consensus {
+        /// Path to the frontier (project dir, `.vela/` repo, or `.json`).
+        frontier: PathBuf,
+        /// Target finding id (`vf_<hash>`).
+        target: String,
+        /// Weighting scheme: `unweighted` | `replication` | `citation` |
+        /// `composite`. Default is `composite`.
+        #[arg(long, default_value = "composite")]
+        weighting: String,
+        /// v0.38.2: restrict neighbor findings to a specific causal
+        /// claim type: `correlation` | `mediation` | `intervention`.
+        /// Useful for asking "what does the field hold *as
+        /// causation*?" — distinct from the global blend.
+        #[arg(long)]
+        causal_claim: Option<String>,
+        /// v0.38.2: restrict neighbor findings to study designs at or
+        /// above the given grade: `theoretical` | `observational` |
+        /// `quasi_experimental` | `rct`. Findings with no grade are
+        /// excluded when this is set.
+        #[arg(long)]
+        causal_grade_min: Option<String>,
+        /// Emit JSON to stdout.
+        #[arg(long)]
+        json: bool,
+    },
+
+    // v0.74: top-level alias verbs. Each variant is a thin wrapper
+    // routing to an existing canonical-event emission path. No new
+    // substrate logic. The aliases exist so the daily flow reads
+    // `init / ingest / propose / diff / accept / attest / log /
+    // lineage / serve` rather than burying the verbs under
+    // `proposals accept`, `sign apply`, `history`. See plan
+    // v0.74.1.
+    /// v0.74: ingest a single file or folder, dispatching by
+    /// extension to the right backing path. Aliases:
+    ///   `.pdf` or folder of pdfs -> `scout`
+    ///   `.md` or folder of notes -> `compile-notes`
+    ///   `.csv` / `.tsv`          -> `compile-data`
+    ///   `.json` (Carina packet)  -> `artifact-to-state`
+    ///   `doi:` / `pmid:` / `nct:` URI -> `source-fetch`
+    ///   repo dir                 -> `compile-code`
+    Ingest {
+        /// File path or folder to ingest. Also accepts a stable
+        /// identifier URI (`doi:<doi>`, `pmid:<id>`, `nct:<id>`).
+        path: String,
+        /// Frontier file or `.vela/` repo the proposals or sources
+        /// land in.
+        #[arg(long)]
+        frontier: PathBuf,
+        /// LLM backend override for agent-driven paths
+        /// (scout/compile-*). Ignored for source-fetch and
+        /// artifact-to-state.
+        #[arg(short, long)]
+        backend: Option<String>,
+        /// Actor recording the ingest. Required for
+        /// artifact-to-state; defaults to
+        /// `agent:vela-ingest-bot` for agent paths.
+        #[arg(long)]
+        actor: Option<String>,
+        /// Preview without writing.
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// v0.74: shortcut for the most common reviewer proposal, a
+    /// `finding.review` verdict. Mirrors `vela review`. Other
+    /// proposal kinds (note, caveat, revise, reject, retract)
+    /// keep their existing top-level verbs and stay reachable via
+    /// `vela help advanced`.
+    Propose {
+        frontier: PathBuf,
+        finding_id: String,
+        /// One of: accepted | needs_revision | contested | rejected.
+        #[arg(long)]
+        status: String,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        reviewer: String,
+        /// Apply the proposal immediately under reviewer authority
+        /// (writes a signed canonical event).
+        #[arg(long)]
+        apply: bool,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// v0.74: alias for `proposals accept`. Apply a pending
+    /// proposal under the configured reviewer id, emitting the
+    /// signed canonical event.
+    Accept {
+        frontier: PathBuf,
+        proposal_id: String,
+        #[arg(long)]
+        reviewer: String,
+        #[arg(long)]
+        reason: String,
+        /// Engine strict mode: also block when the acceptance introduces
+        /// new review warnings, not only release-blocking regressions.
+        #[arg(long)]
+        strict: bool,
+        /// Override the Engine gate. The override is recorded in the
+        /// proposal's decision reason so it stays auditable.
+        #[arg(long)]
+        force: bool,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Accept a batch of proposals in one load → apply-all → save pass.
+    ///
+    /// The scale-capable accept path: the single `accept` reloads, re-runs
+    /// Evidence CI, and re-serializes the whole frontier per proposal —
+    /// O(N²) for N accepts. This loads once, runs CI once before and once
+    /// after, applies every selected proposal in memory, gates on the
+    /// *aggregate* delta, and saves once. The batch is all-or-nothing at
+    /// the Engine gate (use `--force` to override), and `--dry-run`
+    /// previews the verdict with zero on-disk effect.
+    AcceptBatch {
+        frontier: PathBuf,
+        /// Accept every `pending_review` proposal in the frontier.
+        #[arg(long)]
+        all_pending: bool,
+        /// Explicit proposal id to accept (repeatable). Combined with
+        /// `--all-pending` if both are given.
+        #[arg(long = "id")]
+        ids: Vec<String>,
+        /// Restrict the selection to proposals of this kind (repeatable),
+        /// e.g. `--kind finding.add`. Applies to `--all-pending`.
+        #[arg(long = "kind")]
+        kinds: Vec<String>,
+        /// Cap the number accepted (0 = no cap). Useful for staged rollout.
+        #[arg(long, default_value_t = 0)]
+        limit: usize,
+        #[arg(long)]
+        reviewer: String,
+        #[arg(long)]
+        reason: String,
+        /// Engine strict mode: also block on new review warnings.
+        #[arg(long)]
+        strict: bool,
+        /// Override the Engine gate for the whole batch (audited per
+        /// proposal).
+        #[arg(long)]
+        force: bool,
+        /// Preview only: run the gate and report, persist nothing.
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// v0.74: alias for `sign apply`. Sign every unsigned finding
+    /// in the frontier under the supplied private key.
+    ///
+    /// v0.80: extended with `--event <vev_id>` for per-event
+    /// attestation. When `--event` is supplied, instead of signing
+    /// findings frontier-wide, the substrate emits an
+    /// `attestation.recorded` canonical event pointing at the
+    /// target event id. Useful for layered attestation
+    /// (e.g. a second reviewer countersigning a finding.reviewed
+    /// event, or a Lean run attesting a Stupp-protocol claim by
+    /// pointing at its accept event).
+    Attest {
+        /// Frontier path. Required.
+        frontier: PathBuf,
+        /// Role-scoped target id (`vev_*`, `vsd_*`, `vrp_*`, or `vpf_*`).
+        /// When present, writes a local scientific attestation record.
+        target_id: Option<String>,
+        /// Role-scoped attestation scope. Repeatable.
+        #[arg(long = "scope")]
+        scopes: Vec<String>,
+        /// Local reviewer id, for example `reviewer:will-blair`.
+        #[arg(long)]
+        reviewer: Option<String>,
+        /// Reviewer role for this attestation, such as `domain_reviewer`.
+        #[arg(long)]
+        role: Option<String>,
+        /// Bounded reason for the attestation.
+        #[arg(long)]
+        reason: Option<String>,
+        /// Optional ORCID for the reviewer.
+        #[arg(long)]
+        orcid: Option<String>,
+        /// Optional ROR affiliation.
+        #[arg(long)]
+        ror: Option<String>,
+        /// Per-event mode: target event id (`vev_*`).
+        /// When omitted, runs the v0.74 frontier-wide
+        /// `sign apply` path.
+        #[arg(long)]
+        event: Option<String>,
+        /// Reviewer attester id (`reviewer:<name>` or
+        /// `agent:<name>`). Required for per-event mode.
+        #[arg(long)]
+        attester: Option<String>,
+        /// Scope note explaining what this attestation covers.
+        /// Required for per-event mode.
+        #[arg(long)]
+        scope_note: Option<String>,
+        /// Optional Carina Proof primitive id (`vpf_*`) the
+        /// attestation is backed by.
+        #[arg(long)]
+        proof_id: Option<String>,
+        /// Optional Ed25519 signature over the target event's
+        /// canonical preimage. Future-cycle work to verify; today
+        /// the substrate stores the signature and trusts the
+        /// emitter's keypair.
+        #[arg(long)]
+        signature: Option<String>,
+        /// v0.74 frontier-wide path: private key for `sign apply`.
+        /// Ignored in per-event mode.
+        #[arg(long)]
+        key: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// v0.74: alias for `history`. Show the state-transition replay
+    /// for one finding, optionally as-of an RFC3339 timestamp.
+    Lineage {
+        frontier: PathBuf,
+        finding_id: String,
+        #[arg(long, value_name = "RFC3339_TIMESTAMP")]
+        as_of: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// v0.75: validate Carina-shaped JSON against the bundled
+    /// schemas, list bundled primitives, or print one schema.
+    Carina {
+        #[command(subcommand)]
+        action: CarinaAction,
+    },
+
+    /// v0.78: Atlas-level surface. Compose multiple Vela
+    /// frontiers into a domain-level living map (`vat_*`).
+    /// Read-only over per-frontier event logs. See
+    /// `docs/MISSION_ATLAS.md`.
+    Atlas {
+        #[command(subcommand)]
+        action: AtlasAction,
+    },
+
+    /// v0.82: Constellation-level surface. Compose multiple
+    /// Atlases into a cross-domain network (`vco_*`). The
+    /// fifteenth Carina primitive's CLI surface. Read-only
+    /// over per-Atlas snapshots. See `docs/MISSION_ATLAS.md`
+    /// and `docs/CONSTELLATE.md`.
+    Constellation {
+        #[command(subcommand)]
+        action: ConstellationAction,
+    },
+}
+
+/// v0.78: actions on the Atlas-level surface. Each routes through
+/// a handler registered by the binary at startup, calling into the
+/// `vela-atlas` crate. Doctrine: read-only over per-frontier event
+/// logs; never mutates frontier state.
+#[derive(Subcommand)]
+pub(crate) enum AtlasAction {
+    /// Scaffold a new Atlas at `<atlases-root>/<name>/manifest.yaml`
+    /// pointing at one or more existing frontier paths. Computes a
+    /// content-addressed `vat_*` id from the composing frontier
+    /// vfr_ids.
+    Init {
+        /// Atlas name (also used for the directory under
+        /// `<atlases-root>/`).
+        name: String,
+        /// Frontier paths to compose. At least one required.
+        #[arg(long, value_delimiter = ',', num_args = 1..)]
+        frontiers: Vec<PathBuf>,
+        /// Scientific domain (e.g. `oncology`,
+        /// `additive combinatorics`).
+        #[arg(long, default_value = "general")]
+        domain: String,
+        /// Optional bounded-question scope text.
+        #[arg(long)]
+        scope_note: Option<String>,
+        /// Atlases root directory. Defaults to `./atlases/`.
+        #[arg(long, default_value = "atlases")]
+        atlases_root: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Materialize an Atlas: read each composing frontier, union
+    /// accepted-core findings, compute composition hash, write
+    /// `<atlases-root>/<name>/snapshot.json`.
+    Materialize {
+        /// Atlas name (directory under `<atlases-root>/`).
+        name: String,
+        #[arg(long, default_value = "atlases")]
+        atlases_root: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Open the local Workbench against the Atlas-level snapshot.
+    /// At v0.78 this delegates to the per-frontier Workbench for
+    /// the first composing frontier; the dedicated Atlas-level
+    /// Workbench page lands in v0.79+.
+    Serve {
+        name: String,
+        #[arg(long, default_value = "atlases")]
+        atlases_root: PathBuf,
+        #[arg(long, default_value_t = 3848)]
+        port: u16,
+        #[arg(long)]
+        no_open: bool,
+    },
+    /// v0.81.2: Update an existing Atlas by adding or removing
+    /// composing frontiers. Re-computes the Atlas's `vat_*` id
+    /// from the new composing-frontier list (content-addressing
+    /// is honest about composition changes). Avoids the
+    /// `rm -rf atlases/<name> && atlas init` workflow that the
+    /// v0.78 substrate forced.
+    Update {
+        name: String,
+        /// Frontier paths to add (idempotent: already-composed
+        /// frontiers are skipped).
+        #[arg(long, value_delimiter = ',')]
+        add_frontier: Vec<PathBuf>,
+        /// `vfr_*` ids to remove from the Atlas. Errors if any
+        /// id isn't currently composed.
+        #[arg(long, value_delimiter = ',')]
+        remove_vfr_id: Vec<String>,
+        #[arg(long, default_value = "atlases")]
+        atlases_root: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+/// v0.82: actions on the Constellation-level surface.
+/// Mirrors AtlasAction one layer up: Atlases compose into a
+/// Constellation just as frontiers compose into an Atlas.
+#[derive(Subcommand)]
+pub(crate) enum ConstellationAction {
+    /// Scaffold a new Constellation pointing at one or more
+    /// Atlas dirs. Computes a content-addressed `vco_*` id
+    /// from the composing-atlas vat_id list.
+    Init {
+        name: String,
+        /// Atlas directories to compose. At least one required.
+        #[arg(long, value_delimiter = ',', num_args = 1..)]
+        atlases: Vec<PathBuf>,
+        #[arg(long)]
+        scope_note: Option<String>,
+        #[arg(long, default_value = "constellations")]
+        constellations_root: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Materialize a Constellation: re-materialize each
+    /// composing Atlas on demand, sum findings + events +
+    /// bridges across, compute composition hash, write
+    /// `snapshot.json` and a static `index.html`.
+    Materialize {
+        name: String,
+        #[arg(long, default_value = "constellations")]
+        constellations_root: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Serve the Constellation snapshot over HTTP. Static-file
+    /// only at v0.82; interactive cross-Atlas surfaces are
+    /// future cycles.
+    Serve {
+        name: String,
+        #[arg(long, default_value = "constellations")]
+        constellations_root: PathBuf,
+        #[arg(long, default_value_t = 3849)]
+        port: u16,
+        #[arg(long)]
+        no_open: bool,
+    },
+}
+
+/// v0.75: actions on the Carina spec deliverable. Each one talks
+/// to the schemas embedded under
+/// `crates/vela-protocol/embedded/carina-schemas/`.
+#[derive(Subcommand)]
+pub(crate) enum CarinaAction {
+    /// Validate a JSON file against the matching Carina schema.
+    /// Detects the primitive automatically from the input's
+    /// `schema: "carina.<name>.v0.X"` field, or accepts an
+    /// explicit `--primitive <name>`.
+    Validate {
+        /// Path to a JSON file containing one Carina primitive,
+        /// or a `primitives.v0.X.json`-style aggregate object
+        /// with a `primitives` map.
+        path: PathBuf,
+        /// Override auto-detection: validate as a specific
+        /// primitive (`finding`, `evidence`, `proof`, ...).
+        #[arg(long)]
+        primitive: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// List the 14 bundled Carina primitives.
+    List {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Print one bundled Carina schema to stdout.
+    Schema { primitive: String },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum PacketAction {
+    /// Inspect a proof packet manifest
+    Inspect {
+        path: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Validate a proof packet
+    Validate {
+        path: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum TraceAction {
+    /// Validate a bounded research trace source artifact
+    Validate {
+        path: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Draft pending review proposals from a trace
+    Propose {
+        path: PathBuf,
+        #[arg(long)]
+        frontier: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum CorrectionReturnAction {
+    /// Validate a correction return object
+    Validate {
+        path: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Draft pending review proposals from a correction return
+    Propose {
+        path: PathBuf,
+        #[arg(long)]
+        frontier: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum SignAction {
+    /// Generate an Ed25519 keypair
+    GenerateKeypair {
+        #[arg(long, default_value = ".vela/keys")]
+        out: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Sign unsigned findings in a frontier
+    Apply {
+        frontier: PathBuf,
+        #[arg(long)]
+        private_key: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Verify frontier signatures
+    Verify {
+        frontier: PathBuf,
+        #[arg(long)]
+        public_key: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.37: Attach a multi-signature threshold to a finding. Once
+    /// `k` distinct registered actors have each signed the finding, it
+    /// is marked `jointly_accepted`. Setting `--to 1` is equivalent to
+    /// the default single-sig regime.
+    ThresholdSet {
+        frontier: PathBuf,
+        /// Target finding id (`vf_<hash>`).
+        finding_id: String,
+        /// Number of unique valid signatures required (>= 1).
+        #[arg(long)]
+        to: u32,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum ActorAction {
+    /// Register an Ed25519 public key for a stable actor identity
+    Add {
+        frontier: PathBuf,
+        /// Stable actor id (e.g. "reviewer:will-blair")
+        id: String,
+        /// Hex-encoded Ed25519 public key (64 hex chars)
+        #[arg(long)]
+        pubkey: String,
+        /// Optional trust tier (Phase α, v0.6). Currently recognized:
+        /// "auto-notes" — permits one-call propose_and_apply_note.
+        /// Unknown tier strings load fine but never grant auto-apply.
+        #[arg(long)]
+        tier: Option<String>,
+        /// v0.43: Optional ORCID identifier for cross-system identity.
+        /// Format `0000-0000-0000-000X`. Accepts bare form, URL form
+        /// (`https://orcid.org/0000-...`), or `orcid:` prefix.
+        #[arg(long)]
+        orcid: Option<String>,
+        /// v0.51: Optional read-side access clearance.
+        /// `public` (default), `restricted`, or `classified`. Higher
+        /// clearance permits reading lower-tier objects through
+        /// `vela serve`'s actor-aware MCP/HTTP read paths.
+        #[arg(long)]
+        clearance: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// List registered actors in a frontier
+    List {
+        frontier: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.127: Rotate an actor's signing key. Registers a new actor
+    /// record under a versioned id, marks the prior actor as revoked
+    /// at the current timestamp, and pins a free-form reason. Closes
+    /// THREAT_MODEL.md A7 (compromised reviewer key) by giving
+    /// reviewers a primitive for retiring a key without inventing
+    /// per-frontier ceremony. Historical signatures under the
+    /// retired key remain valid (the substrate does not retroactively
+    /// invalidate canonical history); new signatures with the retired
+    /// key are flagged as `post_revocation_signature` errors by the
+    /// signals layer.
+    Rotate {
+        frontier: PathBuf,
+        /// Existing actor id to retire (e.g. `reviewer:will-blair`).
+        /// Must be currently registered and not already revoked.
+        #[arg(long)]
+        id: String,
+        /// New actor id to register (e.g.
+        /// `reviewer:will-blair-v2-2026-05-10`). Must not collide
+        /// with an existing actor id. Convention: append `-v<N>` or
+        /// `-v<N>-<date>` to the prior id.
+        #[arg(long = "new-id")]
+        new_id: String,
+        /// New Ed25519 public key (64 hex chars).
+        #[arg(long = "new-pubkey")]
+        new_pubkey: String,
+        /// Free-form reason recorded against the retired actor's
+        /// `revoked_reason` field.
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.155: Look up an ORCID identifier via the public ORCID
+    /// API and emit the resolved name + affiliation. Optionally
+    /// auto-register an actor record on a frontier with the
+    /// resolved name. Skip-graceful when offline.
+    LookupOrcid {
+        /// Bare ORCID (`0000-0000-0000-000X`), `orcid:` prefix,
+        /// or full URL form.
+        orcid: String,
+        /// When set, auto-register an actor record on this
+        /// frontier with the resolved ORCID + the supplied
+        /// `--id` + `--pubkey`. Without this flag, the command
+        /// just prints the lookup result.
+        #[arg(long)]
+        register_on: Option<PathBuf>,
+        /// Stable actor id (required when `--register-on` is
+        /// set; e.g. `reviewer:will-blair`).
+        #[arg(long)]
+        id: Option<String>,
+        /// Hex-encoded Ed25519 pubkey (required when
+        /// `--register-on` is set).
+        #[arg(long)]
+        pubkey: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+/// v0.131: AI-agent scaffolding subcommands. The agent layer is
+/// purely substrate-side: an agent gets an Ed25519 keypair and an
+/// `agent:<slug>-<date>` actor id; the agent then drafts proposals
+/// against frontiers it has been registered in. The substrate
+/// makes the agent-draft / human-verdict distinction load-bearing
+/// (see docs/AI_ATTRIBUTION.md).
+#[derive(Subcommand)]
+pub(crate) enum AgentAction {
+    /// Scaffold an agent identity kit at `agents/<slug>/`. Creates
+    /// `agent.yaml` (config), `actor.json` (the substrate-side
+    /// actor record for `actor add`), `keys/` (Ed25519 keypair).
+    Init {
+        /// Short agent name (slug). The canonical actor id becomes
+        /// `agent:<slug>-<rfc3339-date>`.
+        name: String,
+        /// Framework hint stored in `agent.yaml`. One of:
+        /// `claude-code`, `claude-api`, `langchain`, `openai`,
+        /// `agent4science`, `scienceclaw`, `custom`.
+        #[arg(long, default_value = "custom")]
+        framework: String,
+        /// Output directory. Defaults to `agents/<slug>/`.
+        #[arg(long)]
+        out: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// List every scaffolded agent under `agents/`.
+    List {
+        /// Agents root directory. Defaults to `./agents/`.
+        #[arg(long, default_value = "agents")]
+        root: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum CausalAction {
+    /// v0.40: Audit every finding's (causal_claim, causal_evidence_grade)
+    /// for identifiability. Reports underidentified, conditional,
+    /// and underdetermined findings with rationale + remediation.
+    Audit {
+        frontier: PathBuf,
+        /// Restrict the report to entries needing reviewer attention
+        /// (Underidentified or Conditional). Useful for triage.
+        #[arg(long)]
+        problems_only: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.44 (Pearl level 2): Identify the causal effect of a source
+    /// finding on a target finding by searching for a back-door
+    /// adjustment set in the frontier's directed link graph. Reports
+    /// either the adjustment set Z that identifies P(target | do(source))
+    /// from observational data alone, or surfaces the open back-door
+    /// paths that prevent identification.
+    ///
+    /// The link graph used: `depends` and `supports` edges. Every
+    /// finding's parents are the findings it relies on as evidence;
+    /// every finding's children are the findings that build on it.
+    /// `contradicts` and other link types are excluded from the
+    /// causal DAG.
+    Effect {
+        frontier: PathBuf,
+        /// Source finding id (`vf_<hash>`).
+        source: String,
+        /// Target finding id, given via `--on`.
+        #[arg(long)]
+        on: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.44: Print the causal-graph topology over the frontier.
+    /// Lists each node's parents and children for inspection.
+    Graph {
+        frontier: PathBuf,
+        /// Limit output to a single node's neighborhood.
+        #[arg(long)]
+        node: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.45 (Pearl level 3): answer a counterfactual query of the form
+    /// "if we had observed `intervene_on` at `value`, what would
+    /// `target`'s confidence have been?" Twin-network propagation
+    /// requires every edge on the source→target paths to declare a
+    /// `mechanism`; edges without one block propagation honestly with
+    /// a `mechanism_unspecified` verdict.
+    Counterfactual {
+        frontier: PathBuf,
+        /// The finding to intervene on (`vf_<hash>`).
+        intervene_on: String,
+        /// The confidence value to set on the intervened finding (in [0,1]).
+        #[arg(long)]
+        set_to: f64,
+        /// The target finding whose counterfactual confidence we want (`vf_<hash>`).
+        #[arg(long)]
+        target: String,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum BridgesAction {
+    /// Derive bridges between two frontiers and persist the resulting
+    /// `vbr_<id>` records under the *first* frontier's `.vela/bridges/`
+    /// directory. Idempotent on (entity, sorted-frontier-pair).
+    Derive {
+        /// First frontier (Vela repo or frontier JSON file).
+        /// Bridges are persisted under this frontier.
+        frontier_a: PathBuf,
+        /// Human label for the first frontier in bridge records.
+        #[arg(long, default_value = "a")]
+        label_a: String,
+        /// Second frontier (Vela repo or frontier JSON file).
+        frontier_b: PathBuf,
+        /// Human label for the second frontier in bridge records.
+        #[arg(long, default_value = "b")]
+        label_b: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// List bridges persisted under a frontier's `.vela/bridges/` dir.
+    List {
+        /// Frontier (must be a Vela repo with a `.vela/` directory).
+        frontier: PathBuf,
+        /// Filter by status: derived, confirmed, refuted.
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show a single bridge by `vbr_<id>`.
+    Show {
+        frontier: PathBuf,
+        bridge_id: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Promote a bridge from `derived` to `confirmed`. Persists in
+    /// place; the content-address `vbr_<id>` is unchanged. v0.67:
+    /// emits a `bridge.reviewed` canonical event under the configured
+    /// reviewer id so federation sync can propagate the verdict.
+    Confirm {
+        frontier: PathBuf,
+        bridge_id: String,
+        /// Reviewer identity attaching the verdict. Defaults to
+        /// $VELA_REVIEWER_ID or `reviewer:will-blair`.
+        #[arg(long)]
+        reviewer: Option<String>,
+        /// Optional verdict note.
+        #[arg(long)]
+        note: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Mark a bridge `refuted`. Persists in place. v0.67: emits a
+    /// `bridge.reviewed` canonical event with `status: refuted`.
+    Refute {
+        frontier: PathBuf,
+        bridge_id: String,
+        #[arg(long)]
+        reviewer: Option<String>,
+        #[arg(long)]
+        note: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum FederationAction {
+    /// v0.39: Register a peer hub in this frontier. Adding a peer
+    /// declares awareness — it does not trust their state. Sync /
+    /// merge runtime ships in v0.39.1+.
+    PeerAdd {
+        frontier: PathBuf,
+        /// Stable peer id (e.g. `hub:vela-mirror-eu`).
+        id: String,
+        /// HTTPS URL where the peer publishes signed manifests.
+        #[arg(long)]
+        url: String,
+        /// Hex-encoded Ed25519 public key (64 hex chars).
+        #[arg(long)]
+        pubkey: String,
+        /// Optional human-readable note (e.g. "EU mirror, run by lab Z").
+        #[arg(long, default_value = "")]
+        note: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// List federation peers registered in a frontier.
+    PeerList {
+        frontier: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Remove a peer from the registry. Does not retroactively
+    /// invalidate events that referenced the peer; just stops further
+    /// sync attempts.
+    PeerRemove {
+        frontier: PathBuf,
+        id: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.39.1 / v0.41.0: Sync our frontier against a peer's
+    /// published view. Three modes:
+    ///   1. `--via-hub --vfr-id <id>`: route through the peer hub's
+    ///      `/entries/<vfr_id>` endpoint, verify the registry entry
+    ///      signature, follow the locator. The "real federation"
+    ///      path. Surfaces broken-locator and unverified-entry
+    ///      conflicts when the peer is reachable but stale.
+    ///   2. `--url <override>`: fetch directly from a manifest URL,
+    ///      bypassing the hub's registry. Useful for static-mirror
+    ///      peers (raw GitHub) or for testing.
+    ///   3. (default): tries `<peer.url>/manifest/<frontier_id>.json`.
+    /// Diffs the resulting Project against ours, appends one
+    /// `frontier.synced_with_peer` event + one
+    /// `frontier.conflict_detected` event per disagreement.
+    /// Read-only with respect to findings; conflict resolution
+    /// happens through subsequent reviewer-signed proposals.
+    Sync {
+        frontier: PathBuf,
+        /// Peer id (must already be in the registry).
+        peer_id: String,
+        /// Direct manifest URL override.
+        #[arg(long)]
+        url: Option<String>,
+        /// Route through the peer hub's `/entries/<vfr-id>` endpoint
+        /// (verify entry signature, follow locator). Requires
+        /// `--vfr-id`.
+        #[arg(long)]
+        via_hub: bool,
+        /// vfr_id to fetch when using `--via-hub`. Defaults to our
+        /// local frontier_id when omitted.
+        #[arg(long)]
+        vfr_id: Option<String>,
+        /// v0.64: opt-in flag to allow `--via-hub --vfr-id <peer_vfr>`
+        /// where `<peer_vfr>` differs from the local frontier's id.
+        /// Without this flag, cross-vfr sync is refused because every
+        /// peer-side finding gets recorded as a "missing_locally"
+        /// conflict, flooding the inbox with substrate-honest but
+        /// operationally noisy events.
+        #[arg(long)]
+        allow_cross_vfr: bool,
+        /// Run the diff but don't append events.
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.70: Push a single locally-resolved
+    /// `frontier.conflict_resolved` event back to the originating
+    /// peer hub. Reads the event from the local frontier, signs the
+    /// canonical bytes with the supplied private key (or the actor's
+    /// key under `~/.config/vela/keys/`), and POSTs to the peer's
+    /// `/entries/<vfr_id>/events` endpoint with paired
+    /// `X-Vela-Signer-Pubkey` and `X-Vela-Signature` headers.
+    /// One event at a time; the hub validates signature, actor
+    /// pubkey, pairing against an existing
+    /// `frontier.conflict_detected`, and idempotency on the
+    /// resolution. Subsequent `vela federation sync` calls against
+    /// that hub return the resolution to anyone else who pulls.
+    PushResolution {
+        frontier: PathBuf,
+        /// The id of the original `frontier.conflict_detected`
+        /// event whose paired `frontier.conflict_resolved` event
+        /// should be pushed.
+        conflict_event_id: String,
+        /// Peer id (must already be in the registry).
+        #[arg(long = "to")]
+        to: String,
+        /// Path to the actor's Ed25519 private key file (hex). If
+        /// omitted, looks up `~/.config/vela/keys/<actor_id>.key`,
+        /// then `~/.config/vela/keys/private.key`.
+        #[arg(long)]
+        key: Option<PathBuf>,
+        /// Override the vfr_id sent to the peer (defaults to the
+        /// local frontier_id).
+        #[arg(long)]
+        vfr_id: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum ReviewThreadCli {
+    /// Create a fresh review thread on a target (`vpr_*`,
+    /// `vf_*`, or `vsd_*` Scientific Diff Pack). Writes the
+    /// empty thread JSON to `--out`.
+    Create {
+        /// `vpr_*`, `vf_*`, or `vsd_*` target id.
+        target: String,
+        #[arg(long)]
+        frontier_id: String,
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Append a signed message to an existing thread. The
+    /// signing key is read from disk in raw 32-byte hex form.
+    Post {
+        /// Existing thread JSON file (will be rewritten in
+        /// place to include the new message).
+        thread: PathBuf,
+        #[arg(long)]
+        author_actor_id: String,
+        /// Path to a 32-byte hex-encoded Ed25519 signing key.
+        #[arg(long)]
+        key: PathBuf,
+        /// Message body (free-form text).
+        #[arg(long)]
+        message: String,
+        /// Optional parent `vrm_*` id (for threaded replies).
+        #[arg(long)]
+        parent: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Verify every message in a thread: signature against
+    /// declared pubkey + id matches preimage.
+    Verify {
+        thread: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum HubSpecCli {
+    /// Build a `vhs_*` spec record and write it to `--out`.
+    Declare {
+        #[arg(long)]
+        hub_id: String,
+        #[arg(long)]
+        display_name: String,
+        #[arg(long)]
+        base_url: String,
+        #[arg(long)]
+        operator_pubkey_hex: String,
+        #[arg(long)]
+        substrate_version: String,
+        #[arg(long)]
+        contact: Option<String>,
+        #[arg(long)]
+        latest_checkpoint: Option<String>,
+        #[arg(long)]
+        out: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Validate an existing `vhs_*` spec file: re-derive the id
+    /// and check it matches the record.
+    Validate {
+        spec: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum LeanAction {
+    /// Anchor every theorem in the substrate registry. Writes
+    /// one `vla_*` anchor JSON per theorem under <output>/.
+    AnchorAll {
+        /// Path to the `lean/` directory (defaults to repo root).
+        #[arg(long)]
+        lean_dir: Option<PathBuf>,
+        /// Output directory for anchor JSON files. Defaults to
+        /// `./theorems/`.
+        #[arg(long, default_value = "./theorems")]
+        out: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Anchor a single theorem by its id (1..=6 in Arc 6 wave 1).
+    Anchor {
+        /// Theorem id (e.g. 1 for T1).
+        id: u32,
+        #[arg(long)]
+        lean_dir: Option<PathBuf>,
+        /// Output path for the anchor record (default: stdout).
+        #[arg(long)]
+        out: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// List the substrate's registered theorems.
+    List {
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.170: generate a fresh Ed25519 verifier keypair. Writes
+    /// the 32-byte private key (hex) to `--key-out` and the
+    /// public-key spec JSON to `--pub-out`.
+    Keygen {
+        #[arg(long)]
+        key_out: PathBuf,
+        #[arg(long)]
+        pub_out: PathBuf,
+        /// Free-form identity to embed in the public-key spec
+        /// (e.g. "github-action:vela-science/vela:verify-lean-bundle").
+        #[arg(long)]
+        actor: String,
+    },
+    /// v0.170: sign verification records for every anchor in
+    /// `--anchors-dir`. Reads `--build-log` and computes its
+    /// sha256 as the verifier_output_hash; the lake build that
+    /// produced that log must have completed cleanly.
+    VerifyAll {
+        /// Directory containing T<N>.anchor.json files (default:
+        /// `./theorems`).
+        #[arg(long, default_value = "./theorems")]
+        anchors_dir: PathBuf,
+        /// Output directory for T<N>.vlv.json verification records
+        /// (default: same as anchors_dir).
+        #[arg(long)]
+        out_dir: Option<PathBuf>,
+        /// Path to a lake build log file. Its sha256 becomes the
+        /// verifier_output_hash; the file content is opaque to
+        /// the substrate.
+        #[arg(long)]
+        build_log: PathBuf,
+        /// Path to a 32-byte hex-encoded Ed25519 private key.
+        #[arg(long)]
+        key: PathBuf,
+        /// Free-form verifier identity (e.g. github-action URL).
+        #[arg(long)]
+        actor: String,
+        /// Lean toolchain pin (e.g. `leanprover/lean4:v4.29.1`).
+        /// Defaults to the contents of `lean/lean-toolchain` if
+        /// present.
+        #[arg(long)]
+        lean_toolchain: Option<String>,
+        /// Mathlib revision (e.g. `v4.29.1`). Defaults to the
+        /// `mathlib4.git` pin in `lean/lakefile.lean`.
+        #[arg(long)]
+        mathlib_revision: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.170: verify a single `vlv_*` record: signature against
+    /// declared pubkey + id derivation + anchor cross-check.
+    VerifyCheck {
+        record: PathBuf,
+        /// Path to the matching T<N>.anchor.json. Confirms the
+        /// record's anchor_id + module_sha256 still match.
+        #[arg(long)]
+        anchor: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum DiffPackAction {
+    /// Bundle N existing proposals into a Scientific Diff Pack.
+    /// The pack is signed (if --key is supplied), content-addressed,
+    /// and written to --out. The pack id can then be cited from a
+    /// reviewer surface or a federated event.
+    Create {
+        /// Path to the frontier (project root or frontier.json file).
+        frontier: PathBuf,
+        /// Ordered list of vpr_* ids the pack bundles. Order matters
+        /// (it's part of the canonical preimage).
+        #[arg(long, value_delimiter = ',', required = true)]
+        proposals: Vec<String>,
+        /// Reviewer-readable summary (<=280 chars).
+        #[arg(long)]
+        summary: String,
+        /// Plain-language category (e.g. finding.cluster_revision,
+        /// evidence.refresh, correction.batch, agent.proposal_set).
+        #[arg(long)]
+        aggregate_kind: String,
+        /// Optional v0.195 agent attestation envelope id.
+        #[arg(long)]
+        agent_run: Option<String>,
+        /// Optional parent pack this one amends.
+        #[arg(long)]
+        parent_pack: Option<String>,
+        /// Optional path to a 32-byte hex-encoded Ed25519 signing
+        /// key. When present, the pack is signed under it.
+        #[arg(long)]
+        key: Option<PathBuf>,
+        /// Output path for the pack JSON.
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Pretty-print the contents of a `vsd_*` pack file.
+    Show {
+        pack: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Inspect a pack in a frontier repo as a reviewable state-change unit.
+    Inspect {
+        /// Path to the frontier repo (with a `.vela/` directory).
+        frontier: PathBuf,
+        /// The `vsd_*` pack id to inspect.
+        pack_id: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Verify a pack: pack_id matches re-derivation; signature
+    /// verifies under declared pubkey if present.
+    Verify {
+        pack: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Validate a pack in a frontier repo. With --evidence-ci, run
+    /// review-readiness checks over the pack and its member proposals.
+    Validate {
+        /// Path to the frontier repo (with a `.vela/` directory).
+        frontier: PathBuf,
+        /// The `vsd_*` pack id to validate.
+        pack_id: String,
+        #[arg(long)]
+        evidence_ci: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.205: walk `.vela/pending_verdicts/` on the given
+    /// frontier and promote each pending verdict to a canonical
+    /// `diff_pack.reviewed` event. Atomic per-verdict: accept
+    /// applies every canonical member or rolls back.
+    PromoteVerdicts {
+        /// Path to the frontier repo (with a `.vela/` directory).
+        frontier: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.221: scan `.vela/diff_packs/` and emit a canonical
+    /// `diff_pack.released` event for every pack that does not
+    /// already have one. Idempotent — re-running is a no-op once
+    /// every pack has a release event. Closes the v0.213 reducer
+    /// arm for frontiers built by pre-v0.221 scaffolding scripts
+    /// that wrote packs to disk without emitting release events.
+    BackfillRelease {
+        /// Path to the frontier repo (with a `.vela/` directory).
+        frontier: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.216: witness-check a Scientific Diff Pack across N hubs.
+    /// GETs `<hub>/diff-packs/<pack_id>` from each hub in --hubs
+    /// and compares the signed body byte-for-byte. Reports verified
+    /// / split / missing. Theorem 30 pins the soundness: verified
+    /// responses imply N-way agreement on the pack body.
+    WitnessCheck {
+        /// The `vsd_*` pack id to witness-check.
+        pack_id: String,
+        /// Comma-separated list of hub base URLs.
+        #[arg(long, value_delimiter = ',', required = true)]
+        hubs: Vec<String>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum PolicyAction {
+    /// Check frontier-owned policy files and print the canonical policy view.
+    Check {
+        /// Frontier repo directory or frontier file.
+        frontier: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum TaskAction {
+    /// Create a local frontier task under `.vela/tasks/`.
+    Create {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// Task type, such as source_ingestion or contradiction_resolution.
+        #[arg(long = "type")]
+        task_type: String,
+        /// Bounded objective for the work unit.
+        #[arg(long)]
+        objective: String,
+        /// Source, finding, proposal, or artifact input id. Repeatable.
+        #[arg(long = "input")]
+        inputs: Vec<String>,
+        /// Review risk class used by local policy.
+        #[arg(long, default_value = "low_risk")]
+        risk_class: String,
+        /// Blocking task id or condition. Repeatable.
+        #[arg(long = "blocker")]
+        blockers: Vec<String>,
+        /// Acceptance criterion. Repeatable.
+        #[arg(long = "acceptance")]
+        acceptance_criteria: Vec<String>,
+        /// Initial task state.
+        #[arg(long, default_value = "backlog")]
+        status: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// List local frontier tasks.
+    List {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// Filter by task status.
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show one local frontier task.
+    Show {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// `vtask_*` task id.
+        task_id: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Claim a task for local review or execution.
+    Claim {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// `vtask_*` task id.
+        task_id: String,
+        /// Typed reviewer or operator id, for example `reviewer:you`.
+        #[arg(long)]
+        reviewer: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Run a task's reproduction entrypoint (run.sh) in its isolated workspace
+    /// and import the captured result as pending proposals (reviewer-gated).
+    Execute {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// `vtask_*` task id.
+        task_id: String,
+        /// Actor recording the run.
+        #[arg(long, default_value = "agent:repro-executor")]
+        actor: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Close a task with a terminal status.
+    Close {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// `vtask_*` task id.
+        task_id: String,
+        /// Terminal status: accepted, rejected, superseded, or archived.
+        #[arg(long)]
+        status: String,
+        /// Reason for the terminal decision.
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Move a task to a non-terminal operational state.
+    SetStatus {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// `vtask_*` task id.
+        task_id: String,
+        /// New task status.
+        #[arg(long)]
+        status: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Initialize or inspect a durable task workspace.
+    Workspace {
+        #[command(subcommand)]
+        action: TaskWorkspaceAction,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum TaskWorkspaceAction {
+    /// Create `.vela/workspaces/<task-id>/` and preserve the task artifacts.
+    Init {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// `vtask_*` task id.
+        task_id: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show workspace layout, source copies, and snapshot hash.
+    Status {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// `vtask_*` task id.
+        task_id: String,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum ReviewPacketAction {
+    /// Build a review packet from a task workspace and linked Diff Pack.
+    Build {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// `vtask_*` task id.
+        task_id: String,
+        /// Output Markdown path. JSON is also written into the task workspace.
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum ReviewSessionAction {
+    /// Start a local reviewer session.
+    Start {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// Typed reviewer id, for example `reviewer:external`.
+        #[arg(long)]
+        reviewer: String,
+        /// Review scope, such as `diff_pack:vsd_...`.
+        #[arg(long)]
+        scope: String,
+        /// Optional transcript path connected to this session.
+        #[arg(long)]
+        transcript: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Add a note to an open reviewer session.
+    Note {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// `vrs_*` review session id.
+        session_id: String,
+        /// Object id under review, such as `vsd_*`, `vtask_*`, or `vf_*`.
+        #[arg(long)]
+        object: String,
+        /// Reviewer note.
+        #[arg(long)]
+        note: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Close a reviewer session with a bounded decision.
+    Close {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// `vrs_*` review session id.
+        session_id: String,
+        /// accepted, rejected, needs_revision, or closed.
+        #[arg(long)]
+        decision: String,
+        /// Bounded close reason.
+        #[arg(long)]
+        reason: String,
+        /// Optional follow-up task ids.
+        #[arg(long = "follow-up-task")]
+        follow_up_tasks: Vec<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// List local reviewer sessions.
+    List {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show one local reviewer session.
+    Show {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// `vrs_*` review session id.
+        session_id: String,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum SourceInboxAction {
+    /// Add a source-material record under `.vela/source-inbox/`.
+    Add {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// Optional stable source id from the frontier source registry.
+        #[arg(long)]
+        source_id: Option<String>,
+        /// Human-readable source title.
+        #[arg(long)]
+        title: String,
+        /// DOI, PMID, URL, registry id, path, or other locator.
+        #[arg(long)]
+        locator: String,
+        /// Source type, such as paper, registry_record, dataset, or note.
+        #[arg(long, default_value = "source_material")]
+        source_type: String,
+        /// Initial source-inbox state.
+        #[arg(long, default_value = "discovered")]
+        state: String,
+        /// Review risk class used by local policy.
+        #[arg(long, default_value = "source_repair")]
+        risk_class: String,
+        /// Optional content hash for fetched bytes or normalized metadata.
+        #[arg(long)]
+        content_hash: Option<String>,
+        /// Source-inbox note. Repeatable.
+        #[arg(long = "note")]
+        notes: Vec<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// List local source-inbox records.
+    List {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// Filter by state, or use task-linked / stale.
+        #[arg(long)]
+        state: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Mark one source-inbox record verified by a typed reviewer.
+    Verify {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// `vsrcin_*` source-inbox id.
+        record_id: String,
+        /// Typed reviewer id, for example `reviewer:you`.
+        #[arg(long)]
+        reviewer: String,
+        /// Verification reason.
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Create a local frontier task from one source-inbox record.
+    CreateTask {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// `vsrcin_*` source-inbox id.
+        record_id: String,
+        /// Optional task objective. Defaults to a source-review objective.
+        #[arg(long)]
+        objective: Option<String>,
+        /// Initial task state.
+        #[arg(long, default_value = "eligible")]
+        status: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Resolve a DOI, PMID, PMCID, NCT id, URL, GitHub repo, or local file into source-inbox work.
+    Resolve {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// DOI, with or without doi: / https://doi.org/ prefix.
+        #[arg(long)]
+        doi: Option<String>,
+        /// PubMed PMID.
+        #[arg(long)]
+        pmid: Option<String>,
+        /// PubMed Central PMCID.
+        #[arg(long)]
+        pmcid: Option<String>,
+        /// ClinicalTrials.gov NCT id.
+        #[arg(long)]
+        nct: Option<String>,
+        /// URL or GitHub repository URL.
+        #[arg(long)]
+        url: Option<String>,
+        /// Local source file path.
+        #[arg(long = "path")]
+        local_path: Option<PathBuf>,
+        /// Fetch public metadata. Offline normalization is the default.
+        #[arg(long)]
+        fetch_metadata: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Import a text, CSV, BibTeX, or RIS source list into source-inbox work.
+    Import {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// Source list file.
+        #[arg(long = "from")]
+        from: PathBuf,
+        /// Input format: text, csv, bibtex, or ris. Defaults from extension.
+        #[arg(long)]
+        format: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum AdoptionAction {
+    /// Build a first-review transcript for the current frontier state.
+    Transcript {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// Write Markdown transcript to this path.
+        #[arg(long)]
+        out: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Append one local adoption friction record.
+    Log {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// Adoption step, such as source-inbox, proof, or share.
+        #[arg(long)]
+        step: String,
+        /// Friction category. Derived from --step when omitted.
+        #[arg(long)]
+        category: Option<String>,
+        /// One of confusing, missing_doc, command_failed, slow_step, trust_blocker, useful_object.
+        #[arg(long)]
+        kind: String,
+        /// Short reviewer note.
+        #[arg(long)]
+        note: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Reclassify one local adoption friction record.
+    LogClassify {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// `vaf_*` friction record id.
+        record_id: String,
+        /// Category such as source-intake, proof, share, or docs.
+        #[arg(long)]
+        category: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Link one local adoption friction record to an existing task.
+    LogLinkTask {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// `vaf_*` friction record id.
+        record_id: String,
+        /// `vtask_*` task id.
+        task_id: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Create a local follow-up task for one friction record.
+    LogFollowUpTask {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// `vaf_*` friction record id.
+        record_id: String,
+        /// Optional task objective. Defaults to the friction note.
+        #[arg(long)]
+        objective: Option<String>,
+        /// Initial task status.
+        #[arg(long, default_value = "eligible")]
+        status: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Close one local adoption friction record.
+    LogClose {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// `vaf_*` friction record id.
+        record_id: String,
+        /// Closure reason.
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// List local adoption friction records.
+    LogList {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum ShareAction {
+    /// Build a read-only frontier package for external review.
+    Build {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// Output directory for the share package.
+        #[arg(long)]
+        out: PathBuf,
+        /// Include local adoption friction records in the package.
+        #[arg(long)]
+        include_friction_log: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Inspect a share package manifest and proof-packet presence.
+    Inspect {
+        /// Share package directory.
+        package: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Render a share package into static HTML pages.
+    Render {
+        /// Share package directory.
+        package: PathBuf,
+        /// Output directory for the static pages.
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum ControllerAction {
+    /// Run one local frontier controller and reconcile issues into tasks.
+    Run {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// Controller kind: stale-evidence, source-freshness, contradiction-debt,
+        /// proof-freshness, or missing-attestation.
+        #[arg(long)]
+        kind: String,
+        /// Preview the proposed task records without writing them.
+        #[arg(long)]
+        dry_run: bool,
+        /// Output stable JSON.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum IncidentAction {
+    /// Open a local frontier incident and create affected review tasks.
+    Open {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// Incident type: source_retracted, source_corrected, extraction_error,
+        /// trial_registry_mismatch, high_impact_contradiction, or translation_risk.
+        #[arg(long)]
+        kind: String,
+        /// Severity label, such as high, medium, low, or critical.
+        #[arg(long, default_value = "medium")]
+        severity: String,
+        /// Short incident title.
+        #[arg(long)]
+        title: String,
+        /// Reason this incident is being opened.
+        #[arg(long)]
+        reason: String,
+        /// Typed reviewer or operator id, for example reviewer:you.
+        #[arg(long)]
+        reviewer: String,
+        /// Optional source id, source-inbox id, DOI, PMID, or locator.
+        #[arg(long)]
+        source_id: Option<String>,
+        /// Optional finding id directly affected by the incident.
+        #[arg(long)]
+        finding_id: Option<String>,
+        /// Output stable JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// List local frontier incidents.
+    List {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// Filter by status: open or closed.
+        #[arg(long)]
+        status: Option<String>,
+        /// Output stable JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Close a local frontier incident after review.
+    Close {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// `vinc_*` incident id.
+        incident_id: String,
+        /// Typed reviewer or operator id, for example reviewer:you.
+        #[arg(long)]
+        reviewer: String,
+        /// Close reason.
+        #[arg(long)]
+        reason: String,
+        /// Output stable JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Report source retraction impact over findings and evidence atoms.
+    Impact {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// Source id, source-inbox id, DOI, PMID, locator, or finding id.
+        source_id: String,
+        /// Output stable JSON.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum ToolCliAction {
+    /// Register a tool descriptor (`vtd_*`). The descriptor is
+    /// content-addressed over (tool_name, tool_version, provider,
+    /// calling_convention, input_schema, output_schema) and written
+    /// to --out. Input/output schemas are JSON files on disk.
+    Register {
+        #[arg(long)]
+        tool_name: String,
+        #[arg(long)]
+        tool_version: String,
+        /// Free-form provider identifier
+        /// (e.g. tooluniverse:protein-fold:2024.10).
+        #[arg(long)]
+        provider: String,
+        /// One of: http_json, python_callable, cli_subprocess,
+        /// mcp_server.
+        #[arg(long)]
+        calling_convention: String,
+        /// Path to a JSON file containing the tool's input schema.
+        #[arg(long)]
+        input_schema: PathBuf,
+        /// Path to a JSON file containing the tool's output schema.
+        #[arg(long)]
+        output_schema: PathBuf,
+        /// Optional URL evidencing the tool (paper, doc, release).
+        #[arg(long)]
+        evidence_url: Option<String>,
+        /// Optional comma-separated list of vf_* finding ids that
+        /// cite outputs from this tool.
+        #[arg(long, value_delimiter = ',')]
+        cited_in_findings: Vec<String>,
+        /// Output path for the descriptor JSON.
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Pretty-print the contents of a `vtd_*` descriptor file.
+    Show {
+        descriptor: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Verify a descriptor: descriptor_id matches re-derivation.
+    Verify {
+        descriptor: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum EvalCliAction {
+    /// Record an evaluation outcome against a substrate object.
+    /// The record is content-addressed over its body and optionally
+    /// signed under --key.
+    Record {
+        /// One of: vsd, vtr, vf, vpf, vtd, vaa.
+        #[arg(long)]
+        target_kind: String,
+        /// Id of the targeted object (must match target_kind prefix).
+        #[arg(long)]
+        target_id: String,
+        /// One of: replication, benchmark, validation, peer_review.
+        #[arg(long)]
+        evaluation_kind: String,
+        /// One of: succeeded, failed, partial, inconclusive.
+        #[arg(long)]
+        outcome: String,
+        /// Stable actor id (e.g. lab:replication_site_42).
+        #[arg(long)]
+        evaluator: String,
+        /// Comma-separated evidence references (any kernel-object ids).
+        #[arg(long, value_delimiter = ',')]
+        evidence_refs: Vec<String>,
+        /// Optional benchmark id (e.g. astabench:protein-fold:v1).
+        #[arg(long)]
+        benchmark_id: Option<String>,
+        /// Optional numeric score.
+        #[arg(long)]
+        score: Option<f64>,
+        /// Optional free-text notes.
+        #[arg(long)]
+        notes: Option<String>,
+        /// Optional path to a 32-byte hex Ed25519 signing key.
+        #[arg(long)]
+        key: Option<PathBuf>,
+        /// Output path for the record JSON.
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Pretty-print the contents of a `ver_*` record file.
+    Show {
+        record: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Verify a record: record_id matches re-derivation; signature
+    /// verifies under declared pubkey if present.
+    Verify {
+        record: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum ConflictCliAction {
+    /// Scan `.vela/pending_verdicts/` for contradicting verdicts
+    /// on overlapping Diff Pack members. Returns a list of
+    /// candidate-conflict records — pairs of vpv_* ids that
+    /// disagree on at least one shared vpr_*.
+    Detect {
+        /// Path to the frontier repo (with a `.vela/` directory).
+        frontier: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Resolve a candidate conflict by recording a signed `vdc_*`
+    /// and emitting a canonical `verdict_conflict.resolved` event.
+    /// The losing verdicts stay on the log; this record cites them
+    /// explicitly and pins why one won.
+    Resolve {
+        /// Path to the frontier repo (with a `.vela/` directory).
+        frontier: PathBuf,
+        /// Comma-separated list of vpv_* ids that contradict.
+        #[arg(long, value_delimiter = ',', required = true)]
+        verdicts: Vec<String>,
+        /// Comma-separated list of shared vpr_* member ids.
+        #[arg(long, value_delimiter = ',', required = true)]
+        shared_members: Vec<String>,
+        /// One of: majority | owner_override | escalation.
+        #[arg(long)]
+        mode: String,
+        /// Stable actor id authorizing the resolution.
+        #[arg(long)]
+        resolver: String,
+        /// Optional: the winning vpv_* (must be in --verdicts).
+        #[arg(long)]
+        winning: Option<String>,
+        /// Free-text rationale for the resolution.
+        #[arg(long)]
+        rationale: Option<String>,
+        /// Optional path to a 32-byte hex Ed25519 signing key.
+        #[arg(long)]
+        key: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// List every resolved `vdc_*` on the frontier.
+    List {
+        frontier: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum FrontierAction {
+    /// Scaffold a fresh, publishable `frontier.json` stub. The result
+    /// passes `vela check --strict` immediately and is ready to accept
+    /// findings via `vela finding add` and a publish via `vela registry
+    /// publish`. Use this instead of `vela init` when you intend to
+    /// publish to a hub — `init` creates a `.vela/` repo, which is not
+    /// directly publishable in v0.
+    New {
+        /// Path to write the new frontier file (e.g. `./frontier.json`).
+        path: PathBuf,
+        /// Human-readable frontier name.
+        #[arg(long)]
+        name: String,
+        /// Optional one-paragraph description of the bounded question.
+        #[arg(long, default_value = "")]
+        description: String,
+        /// Overwrite if the file already exists.
+        #[arg(long)]
+        force: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Replay a split frontier repository into frontier.json and vela.lock.
+    Materialize {
+        /// Frontier repository directory.
+        frontier: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Declare a cross-frontier dependency. Subsequent links of the
+    /// form `vf_<id>@vfr_<id>` resolve through this entry; strict
+    /// validation refuses cross-frontier targets without one.
+    AddDep {
+        /// Path to the frontier file
+        frontier: PathBuf,
+        /// The remote frontier's content-addressed id (`vfr_…`)
+        vfr_id: String,
+        /// Where to fetch the remote frontier file from. Typically
+        /// an `https://…` URL pointing at raw JSON.
+        #[arg(long)]
+        locator: String,
+        /// SHA-256 of the remote's canonical snapshot. Strict pull
+        /// verifies the fetched dependency's snapshot matches this.
+        #[arg(long)]
+        snapshot: String,
+        /// Optional human-readable name for the dependency.
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// List the frontier's declared dependencies.
+    ListDeps {
+        frontier: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Remove a previously-declared cross-frontier dependency by `vfr_id`.
+    /// Refuses if any link target still references it.
+    RemoveDep {
+        frontier: PathBuf,
+        vfr_id: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.11: re-pin every declared cross-frontier dependency to the
+    /// hub's current snapshot for that `vfr_id`. Useful when a dep
+    /// (e.g. BBB) republishes weekly and your local pin goes stale.
+    /// Reports per-dep status: unchanged, refreshed (with old → new
+    /// snapshot), missing (vfr_id not on hub), or unreachable. Does
+    /// nothing destructive if --dry-run is passed.
+    RefreshDeps {
+        frontier: PathBuf,
+        /// Hub URL to query. Defaults to https://vela-hub.fly.dev.
+        #[arg(long, default_value = "https://vela-hub.fly.dev")]
+        from: String,
+        /// Show what would change without writing.
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.32: emit a structured diff of findings added, updated, and
+    /// contradicted in a time window. The canonical replacement for the
+    /// `scripts/weekly-diff.sh` Python fallback shipped in v0.31.
+    ///
+    /// Default window is the current ISO week (Monday 00:00 UTC →
+    /// next Monday 00:00 UTC). Use `--since <RFC3339>` for an arbitrary
+    /// start, or `--week YYYY-Www` for a specific ISO week.
+    ///
+    /// Output is JSON if `--json` is set; otherwise a human summary.
+    /// The diff is read-only over the canonical state — it does not
+    /// modify the frontier and does not require a signing key.
+    Diff {
+        /// Path to the frontier (project dir, `.vela/` repo, or `.json` file).
+        frontier: PathBuf,
+        /// Compute diff since this RFC 3339 timestamp.
+        /// Mutually exclusive with `--week`.
+        #[arg(long)]
+        since: Option<String>,
+        /// Compute diff for a specific ISO week (e.g. `2026-W18`).
+        /// If absent and no `--since`, defaults to the current ISO week.
+        #[arg(long)]
+        week: Option<String>,
+        /// Emit JSON to stdout.
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.158: tag the current frontier state as a versioned
+    /// release. Writes a content-addressed `vfrr_*` record to
+    /// `<frontier-dir>/.vela/releases/<vfrr_*>.json`. Releases
+    /// are immutable; the substrate-side equivalent of a paper
+    /// edition or software version tag.
+    Release {
+        /// Frontier path.
+        frontier: PathBuf,
+        /// Human-readable release name (e.g. `v1.0`, `2026-Q2`,
+        /// `pre-print`). Required, non-empty.
+        #[arg(long)]
+        name: String,
+        /// Optional release notes (changelog, scope, attribution).
+        #[arg(long)]
+        notes: Option<String>,
+        /// Optional previous release id to chain. When omitted,
+        /// the substrate looks up the latest release in
+        /// `<frontier-dir>/.vela/releases/` and chains there.
+        #[arg(long)]
+        previous: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.158: list every release recorded for a frontier.
+    Releases {
+        /// Frontier path.
+        frontier: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Audit readiness across strict check, proof, Evidence CI,
+    /// health, stats, and review-work queues.
+    Audit {
+        /// Frontier repo directory or frontier JSON file.
+        frontier: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show local operating health for one frontier.
+    Health {
+        /// Frontier repo directory or frontier JSON file.
+        frontier: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Inspect sharded frontier state without loading frontier.json.
+    Shards {
+        /// Frontier repo, frontier JSON file, or shard manifest.
+        frontier: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum RepoAction {
+    /// Show materialization, proof, proposal, and hash status.
+    Status {
+        /// Frontier repository directory.
+        frontier: PathBuf,
+        /// Output stable JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Check folder shape, manifest paths, stale proof, and root clutter.
+    Doctor {
+        /// Frontier repository directory.
+        frontier: PathBuf,
+        /// Output stable JSON.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum QueueAction {
+    /// List queued draft actions (no signing)
+    List {
+        #[arg(long)]
+        queue_file: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Sign each queued draft with the actor's Ed25519 key and apply
+    /// it locally. Removes signed entries from the queue on success.
+    Sign {
+        /// Stable actor id matching a registered entry in the frontier
+        #[arg(long)]
+        actor: String,
+        /// Path to the actor's Ed25519 private key (hex-encoded)
+        #[arg(long)]
+        key: PathBuf,
+        /// Override the queue file location
+        #[arg(long)]
+        queue_file: Option<PathBuf>,
+        /// Skip per-action confirmation prompts and sign every queued
+        /// draft. Required in non-interactive contexts. The `--all`
+        /// alias is accepted for muscle-memory convenience (the v0.28
+        /// sim-user docs and an early friction report both wrote it
+        /// that way; cheaper to accept the alias than to retrain).
+        #[arg(long, alias = "all")]
+        yes_to_all: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Drop all queued draft actions
+    Clear {
+        #[arg(long)]
+        queue_file: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum RegistryAction {
+    /// List all entries in a local registry
+    List {
+        /// Path or file:// URL of the registry; defaults to ~/.vela/registry/entries.json
+        #[arg(long)]
+        from: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Publish a frontier's current snapshot+event_log hashes to a registry
+    Publish {
+        /// Path to the frontier file
+        frontier: PathBuf,
+        /// Stable owner actor id (must be registered in the frontier)
+        #[arg(long)]
+        owner: String,
+        /// Path to the owner's Ed25519 private key (hex-encoded)
+        #[arg(long)]
+        key: PathBuf,
+        /// Network locator under which the frontier is reachable
+        /// (file:// path or HTTP URL the publisher serves). Optional
+        /// since v0.55: when publishing to an HTTP hub, the hub's own
+        /// `/entries/<vfr>/snapshot` URL is auto-filled if omitted, and
+        /// the substrate is uploaded inline so locator divergence is
+        /// no longer a failure mode.
+        #[arg(long)]
+        locator: Option<String>,
+        /// Registry to publish to (path/URL); default ~/.vela/registry/entries.json
+        #[arg(long)]
+        to: Option<String>,
+        /// v0.154: optional SPDX license identifier
+        /// (e.g. `CC-BY-4.0`, `CC0-1.0`, `MIT`, `Apache-2.0`). The
+        /// license rides on the registry entry so consumers can
+        /// audit reuse rights without re-fetching the frontier.
+        #[arg(long)]
+        license: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Incrementally deposit a frontier's new events to a hub via the
+    /// owner-authenticated append endpoint (`POST /entries/{vfr}/append`),
+    /// instead of re-publishing the whole snapshot. Computes the delta vs the
+    /// hub's current event-log tail, signs the batch under the owner key, and
+    /// posts only the new records. Owner-deposit path: it does not run the
+    /// Evidence-CI accept gate (a reviewer accept still does).
+    Append {
+        /// Path to the local frontier (`.vela/` repo or frontier.json).
+        frontier: PathBuf,
+        /// Hub base URL (e.g. https://vela-hub.fly.dev).
+        #[arg(long)]
+        to: String,
+        /// Path to the owner's Ed25519 private key (hex-encoded).
+        #[arg(long)]
+        key: PathBuf,
+        /// Cap the number of new records pushed this run (0 = all).
+        #[arg(long, default_value_t = 0)]
+        limit: usize,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Hub-native proposal — the frictionless second-signer on-ramp.
+    ///
+    /// A contributor with only a keypair and the hub URL submits a
+    /// signed `StateProposal` to a frontier's OPEN submission endpoint
+    /// (`POST /entries/{vfr}/proposals`). No local `.vela/` workspace,
+    /// no pre-registration: any valid Ed25519 self-signature is accepted
+    /// and enqueued to `pending_review` (actor.id is provenance, not
+    /// authority). This is the sibling of `registry append` (owner
+    /// deposits events directly) for everyone who is NOT the owner.
+    ///
+    /// The proposal id is content-addressed and the signature is taken
+    /// over the exact canonical preimage the hub re-derives, so a beat
+    /// here is the genuine "someone other than the maintainer wrote a
+    /// signed transition into the registry" event.
+    Propose {
+        /// Frontier address (`vfr_…`) to propose into.
+        vfr_id: String,
+        /// Hub base URL.
+        #[arg(long, default_value = "https://vela-hub.fly.dev")]
+        to: String,
+        /// Path to the proposer's Ed25519 private key (hex-encoded).
+        #[arg(long)]
+        key: PathBuf,
+        /// Proposer actor id (e.g. `reviewer:alice` or `agent:my-bot`).
+        #[arg(long)]
+        actor: String,
+        /// Actor type: `human` or `agent`.
+        #[arg(long, default_value = "human")]
+        actor_type: String,
+        /// Proposal kind (e.g. `finding.add`, `finding.review`).
+        #[arg(long, default_value = "finding.add")]
+        kind: String,
+        /// Human-readable reason for the proposal.
+        #[arg(long)]
+        reason: String,
+        /// Path to a JSON file holding the proposal payload (a finding
+        /// bundle or other change body). Use `-` to read from stdin.
+        #[arg(long)]
+        payload: PathBuf,
+        /// Source reference (repeatable), e.g. a DOI or URL.
+        #[arg(long = "source-ref")]
+        source_refs: Vec<String>,
+        /// Caveat to attach (repeatable).
+        #[arg(long = "caveat")]
+        caveats: Vec<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.15: list registry entries whose frontier declares a
+    /// cross-frontier dependency on the given `vfr_id`. Surfaces
+    /// "who is referencing my frontier" — the bidirectional view
+    /// of cross-frontier composition. Hub-only (no local-registry
+    /// equivalent yet); requires the hub to support
+    /// `GET /entries/{vfr_id}/depends-on`.
+    DependsOn {
+        /// Frontier address (`vfr_…`) to look up dependents of.
+        vfr_id: String,
+        /// Hub URL. Required for v0.15 (no local file walk yet).
+        #[arg(long, default_value = "https://vela-hub.fly.dev")]
+        from: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.20: federation primitive. Pull a signed manifest from one hub
+    /// (`--from`) and POST it verbatim to another (`--to`). Both hubs
+    /// validate the signature against the manifest's embedded
+    /// `owner_pubkey`; mirroring is a no-op for authenticity. Use this
+    /// to replicate a frontier across hubs (resilience), seed a fresh
+    /// hub from an established one, or test a hub deployment with real
+    /// signed bytes.
+    Mirror {
+        /// Frontier address (`vfr_…`) to mirror.
+        vfr_id: String,
+        /// Source hub URL.
+        #[arg(long)]
+        from: String,
+        /// Destination hub URL.
+        #[arg(long)]
+        to: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.129: fetch the same registry entry from multiple hubs and
+    /// assert byte-identical agreement. Closes part of
+    /// THREAT_MODEL.md A11 (compromised hub) by giving operators a
+    /// substrate-side cross-hub divergence detector. The
+    /// substrate-honest claim: if two or more trustworthy mirrors
+    /// agree on the entry's canonical bytes, a third hub's diverging
+    /// copy is identifiable.
+    WitnessCheck {
+        /// Frontier address (`vfr_…`) to fetch from every hub.
+        vfr_id: String,
+        /// Comma-separated list of hub URLs to query. Requires
+        /// at least two; three or more makes the consensus
+        /// substrate-honest (a majority can outvote a single
+        /// divergent hub).
+        #[arg(long, value_delimiter = ',')]
+        hubs: Vec<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.144: Registry governance policy primitive. Declare per-
+    /// frontier governance: who can authorize owner rotation, what
+    /// threshold of distinct attestations is required, and (during
+    /// bootstrap only) whether the current owner alone can satisfy
+    /// quorum. This cycle ships construction + validation; v0.145
+    /// binds the policy to `owner-rotate`.
+    Governance {
+        #[command(subcommand)]
+        action: GovernanceAction,
+    },
+    /// v0.148: hub federation status. Fetch the latest signed
+    /// checkpoint from each named source (HTTPS URL pointing at
+    /// a hub endpoint that serves the checkpoint JSON, or a
+    /// `file://` URL pointing at a local checkpoint file).
+    /// Compute consensus on the `(registry_root, sequence)`
+    /// pair across the resolved set. Surfaces hub-operator
+    /// divergence at the registry-state level, not just the
+    /// per-entry level that witness-check covers.
+    HubFederation {
+        #[command(subcommand)]
+        action: HubFederationAction,
+    },
+    /// v0.147: signed registry checkpoint flow.
+    ///   create:  read a local registry, compute the
+    ///            content-addressed registry root, sign the
+    ///            checkpoint body, write the resulting `vrc_*`
+    ///            checkpoint to `--out`.
+    ///   verify:  given a checkpoint file + the registry it
+    ///            claims to summarize, re-derive the id,
+    ///            re-compute the root, verify the Ed25519
+    ///            signature.
+    Checkpoint {
+        #[command(subcommand)]
+        action: CheckpointAction,
+    },
+    /// v0.153: registry-wide verification. Reads a local
+    /// registry, walks every entry, runs entry-signature
+    /// verification per row, and surfaces a pass/fail summary.
+    /// Used by operators + dashboards to attest the registry is
+    /// internally consistent.
+    VerifyAll {
+        /// Local registry path. Defaults to
+        /// `~/.vela/registry/entries.json`.
+        #[arg(long)]
+        from: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.146: verify a frontier's owner-epoch chain transcript.
+    /// Walks each transition, loads the corresponding policy,
+    /// proposal, and attestation bundle, and re-runs the v0.145
+    /// quorum verification. Surfaces `bootstrap` (chain empty),
+    /// `verified` (every transition checks out), `legacy` (no
+    /// chain file present; the entry pre-dates v0.144), or
+    /// `broken` (at least one transition fails verification).
+    VerifyChain {
+        /// Frontier path. The chain is read from
+        /// `<frontier-dir>/.vela/governance/chain.json`.
+        frontier: PathBuf,
+        /// Directory holding the `vgp_*.json`, `vop_*.json`,
+        /// `vab_*.json` artifacts referenced by the chain. Files
+        /// must be named `<id>.json` (e.g. `vop_abc123.json`).
+        #[arg(long)]
+        artifacts: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.145: governed owner-rotate flow.
+    ///   propose: emit a `vop_*` proposal bound to a frontier +
+    ///            governance policy + previous registry entry hash.
+    ///   attest:  a single governance attester signs the proposal
+    ///            preimage and writes the signature into a bundle.
+    ///   apply:   verify the bundle satisfies the policy's
+    ///            rotate_quorum, then execute the v0.138
+    ///            owner-rotate mutation (revoke old owner, register
+    ///            new owner, re-publish under new key).
+    /// The v0.138 flat `owner-rotate` form is kept for the
+    /// bootstrap epoch case (`vela registry owner-rotate ...` with
+    /// no proposal); for non-bootstrap rotations, this subcommand
+    /// is the only authorized path.
+    OwnerRotateGoverned {
+        #[command(subcommand)]
+        action: OwnerRotateGovernedAction,
+    },
+    /// v0.138: A8 graduation primitive. Rotate the owner key of a
+    /// published frontier. Revokes the current owner actor record
+    /// (sets `revoked_at` / `revoked_reason`), registers (or
+    /// promotes) the new owner actor record, and re-publishes the
+    /// frontier under the new owner key. Consumers who re-pull
+    /// after rotation receive the new entry signed under the new
+    /// `owner_pubkey`; the in-frontier actor record retains the
+    /// rotation timeline so the audit chain is reconstructable
+    /// from the frontier itself.
+    OwnerRotate {
+        /// Path to the frontier file
+        frontier: PathBuf,
+        /// Current owner actor id (must be registered and not revoked).
+        #[arg(long)]
+        current_owner: String,
+        /// New owner actor id (auto-registered if not already present).
+        #[arg(long)]
+        new_owner: String,
+        /// Path to the new owner's Ed25519 private key (hex-encoded).
+        #[arg(long)]
+        new_key: PathBuf,
+        /// Required reason (non-empty); recorded on the retired
+        /// owner's `revoked_reason` for the audit chain.
+        #[arg(long)]
+        reason: String,
+        /// Network locator under which the rotated frontier is
+        /// reachable. Same shape as `registry publish`: optional
+        /// when `--to` is an HTTP hub (auto-filled), required for
+        /// local registries.
+        #[arg(long)]
+        locator: Option<String>,
+        /// Registry to publish the rotated entry to. Same shape as
+        /// `registry publish --to`.
+        #[arg(long)]
+        to: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Pull and verify a frontier from a registry by `vfr_id`
+    Pull {
+        /// Frontier address (`vfr_…`)
+        vfr_id: String,
+        /// Registry to pull from
+        #[arg(long)]
+        from: Option<String>,
+        /// Output path for the pulled frontier. With --transitive, this
+        /// is the directory dependencies are also written into; without
+        /// it, this is the file path the primary lands at.
+        #[arg(long)]
+        out: PathBuf,
+        /// v0.8: also pull every cross-frontier dependency the primary
+        /// declares, recursively, verifying each pinned snapshot.
+        #[arg(long)]
+        transitive: bool,
+        /// v0.8: maximum recursion depth when --transitive is set.
+        /// Primary is depth 0; its direct deps are depth 1.
+        #[arg(long, default_value = "4")]
+        depth: usize,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum GovernanceAction {
+    /// Construct a new governance policy from CLI flags and write it
+    /// to `--out`. The policy id (`vgp_*`) is derived from the
+    /// canonical bytes of the policy body.
+    Init {
+        /// Frontier path the policy will govern.
+        frontier: PathBuf,
+        /// Threshold for the standard rotate quorum.
+        #[arg(long)]
+        threshold: u32,
+        /// Comma-separated list of eligible actor ids.
+        #[arg(long, value_delimiter = ',')]
+        eligible: Vec<String>,
+        /// Whether this is a bootstrap policy (owner_epoch = 0,
+        /// bootstrap_epoch = 0). When set, `current_owner_counts`
+        /// is permitted to be `true`; this is the only way a
+        /// freshly published frontier can authorize its first
+        /// rotation.
+        #[arg(long)]
+        bootstrap: bool,
+        /// Owner epoch this policy applies to. Defaults to 0 when
+        /// `--bootstrap` is set, otherwise required to be >= 1.
+        #[arg(long)]
+        owner_epoch: Option<u64>,
+        /// Whether the current owner counts toward the rotate
+        /// quorum. Only permitted (and only sensible) for bootstrap
+        /// policies; the v0.144 validator rejects otherwise.
+        #[arg(long)]
+        current_owner_counts: bool,
+        /// Attestation TTL in hours (default 168).
+        #[arg(long, default_value = "168")]
+        attestation_ttl_hours: u32,
+        /// Output path for the policy JSON. When omitted, the
+        /// policy is printed to stdout.
+        #[arg(long)]
+        out: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Read a policy JSON file and pretty-print its core fields.
+    Show {
+        /// Path to a policy JSON file.
+        policy: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Validate a policy JSON file against the v0.144 rules and
+    /// re-derive its content address. Exits non-zero on violation.
+    Validate {
+        /// Path to a policy JSON file.
+        policy: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum SearchAction {
+    /// Build a search index over one or more frontier paths.
+    Build {
+        /// One or more frontier paths to index (positional).
+        #[arg(required = true)]
+        frontiers: Vec<PathBuf>,
+        /// Output index JSON path.
+        #[arg(long)]
+        out: PathBuf,
+        /// Include bootstrap (no governed rotations) + legacy
+        /// (pre-v0.144) frontiers in the index. Off by default;
+        /// strict consumers want only `verified` chains.
+        #[arg(long)]
+        include_bootstrap: bool,
+        /// Include `broken` chains too. Useful for ops
+        /// dashboards that want failure visibility.
+        #[arg(long)]
+        include_broken: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Query an existing index.
+    Query {
+        /// Query string. Empty matches every entry (subject to
+        /// filters).
+        #[arg(default_value = "")]
+        query: String,
+        /// Path to the index JSON file. Defaults to
+        /// `~/.vela/search-index.json` when omitted.
+        #[arg(long)]
+        index: Option<PathBuf>,
+        /// Filter by entry kind (`finding` | `actor`).
+        #[arg(long)]
+        kind: Option<String>,
+        /// Filter by entity tag.
+        #[arg(long)]
+        entity: Option<String>,
+        /// Filter by Belnap status (`accepted` | `accepted_core`
+        /// | `pending` | `retracted` | ...).
+        #[arg(long)]
+        status: Option<String>,
+        /// Filter by frontier id.
+        #[arg(long)]
+        frontier_id: Option<String>,
+        /// Filter by source identifier (DOI or PMID).
+        #[arg(long)]
+        source_id: Option<String>,
+        /// Restrict to entries whose owner-epoch chain status
+        /// equals the given value (e.g. `verified` for strict
+        /// mode).
+        #[arg(long)]
+        chain_status: Option<String>,
+        /// Cap result count.
+        #[arg(long)]
+        limit: Option<usize>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum IndexAction {
+    /// Rebuild `.vela/index/frontier-index.sqlite` from canonical frontier files.
+    Build {
+        /// Frontier repo or `frontier.json` path.
+        frontier: PathBuf,
+        /// Output stable JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show database presence, metadata, and indexed counts.
+    Status {
+        /// Frontier repo or `frontier.json` path.
+        frontier: PathBuf,
+        /// Output stable JSON.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Query indexed findings or sources.
+    Query {
+        /// Frontier repo or `frontier.json` path.
+        frontier: PathBuf,
+        /// Indexed kind: finding or source.
+        #[arg(long, default_value = "finding")]
+        kind: String,
+        /// Search text.
+        #[arg(long, default_value = "")]
+        q: String,
+        /// Cap result count.
+        #[arg(long, default_value = "20")]
+        limit: usize,
+        /// Output stable JSON.
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum HubFederationAction {
+    /// Fetch + verify the latest checkpoint from each source and
+    /// compute cross-source consensus on `(registry_root,
+    /// sequence)`.
+    ///
+    /// Sources are `--source <id>=<url>` pairs. The `<id>` is a
+    /// free-form label (typically the hub id); the `<url>` is
+    /// either `https://...` pointing at the checkpoint JSON or
+    /// `file://...` pointing at a local file. At least two
+    /// sources are required.
+    Status {
+        #[arg(long = "source", value_delimiter = ',')]
+        sources: Vec<String>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum CheckpointAction {
+    /// Build and sign a new registry checkpoint.
+    Create {
+        /// Local registry file path (e.g. `~/.vela/registry/entries.json`).
+        #[arg(long)]
+        from: PathBuf,
+        /// Hub operator identifier (free-form).
+        #[arg(long)]
+        hub_id: String,
+        /// Sequence number. Use 0 for the first checkpoint.
+        #[arg(long)]
+        sequence: u64,
+        /// Optional `vrc_*` id of the predecessor checkpoint.
+        #[arg(long)]
+        previous: Option<String>,
+        /// Hub operator's Ed25519 private key.
+        #[arg(long)]
+        key: PathBuf,
+        /// Output path.
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Verify a checkpoint against a registry: re-derive id,
+    /// re-compute root, verify signature.
+    Verify {
+        /// Checkpoint JSON file.
+        checkpoint: PathBuf,
+        /// Registry file the checkpoint claims to summarize.
+        #[arg(long)]
+        registry: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum OwnerRotateGovernedAction {
+    /// Construct a `vop_*` proposal for a specific rotation and
+    /// write it to `--out`. The proposal binds frontier id, old
+    /// owner id+pubkey, new owner id+pubkey, target owner epoch,
+    /// previous registry entry hash, governance policy id,
+    /// reason, expiry, and nonce. Governance attesters sign the
+    /// canonical preimage of this object.
+    Propose {
+        frontier: PathBuf,
+        #[arg(long)]
+        old_owner: String,
+        #[arg(long)]
+        new_owner: String,
+        /// Path to the new owner's public key (used to derive the
+        /// pubkey hex; the corresponding private key is supplied
+        /// at `apply` time).
+        #[arg(long)]
+        new_pubkey_hex: String,
+        #[arg(long)]
+        target_epoch: u64,
+        #[arg(long)]
+        previous_entry_hash: String,
+        #[arg(long)]
+        policy: PathBuf,
+        #[arg(long)]
+        reason: String,
+        #[arg(long, default_value = "168")]
+        ttl_hours: u32,
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Sign a proposal's preimage with the attester's key. Writes
+    /// or extends an attestation bundle at `--bundle`. Idempotent
+    /// on `(attester_id, proposal_id)` pairs: re-signing replaces
+    /// the previous entry under the same id.
+    Attest {
+        #[arg(long)]
+        proposal: PathBuf,
+        #[arg(long)]
+        attester_id: String,
+        #[arg(long)]
+        key: PathBuf,
+        #[arg(long)]
+        bundle: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Verify the bundle satisfies the policy's rotate_quorum
+    /// (signatures valid, attesters eligible + unrevoked, distinct
+    /// signers >= threshold, proposal not expired), then execute
+    /// the v0.138 owner-rotate mutation under the new owner key.
+    Apply {
+        frontier: PathBuf,
+        #[arg(long)]
+        proposal: PathBuf,
+        #[arg(long)]
+        bundle: PathBuf,
+        #[arg(long)]
+        policy: PathBuf,
+        /// New owner's private key. Must derive to the pubkey
+        /// declared in the proposal's `new_owner_pubkey`.
+        #[arg(long)]
+        new_key: PathBuf,
+        #[arg(long)]
+        locator: Option<String>,
+        #[arg(long)]
+        to: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum GapsAction {
+    /// Rank candidate gap review leads
+    Rank {
+        frontier: PathBuf,
+        #[arg(long, default_value = "10")]
+        top: usize,
+        #[arg(long)]
+        domain: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum LinkAction {
+    /// Append a typed link from one finding to another. The target
+    /// may be a local `vf_<hex>` or a cross-frontier `vf_<hex>@vfr_<hex>`
+    /// (v0.8). Cross-frontier targets require a matching declared dep —
+    /// run `vela frontier add-dep` first or strict validation will refuse.
+    Add {
+        /// Frontier JSON file or Vela repo
+        frontier: PathBuf,
+        /// Source finding id (`vf_<hex>`)
+        #[arg(long)]
+        from: String,
+        /// Target. Either `vf_<hex>` (local) or `vf_<hex>@vfr_<hex>` (cross).
+        #[arg(long)]
+        to: String,
+        /// Link type. One of: supports, contradicts, extends, depends, replicates, supersedes, synthesized_from
+        #[arg(long, default_value = "supports")]
+        r#type: String,
+        /// Optional human-readable note
+        #[arg(long, default_value = "")]
+        note: String,
+        /// Who inferred the link. One of: compiler, reviewer, author
+        #[arg(long, default_value = "reviewer")]
+        inferred_by: String,
+        /// v0.16: skip the cross-frontier target-status check. By
+        /// default, when adding a cross-frontier link, the substrate
+        /// fetches the dep's frontier from its declared locator and
+        /// warns if the target finding has `flags.superseded = true`
+        /// (you'd be linking to an outdated wording). The link is
+        /// still recorded — this is a best-effort review hint, not a
+        /// hard refusal. Set this flag to skip the network fetch
+        /// (useful in CI or when offline).
+        #[arg(long)]
+        no_check_target: bool,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum EntityAction {
+    /// Walk every finding's entities and try to resolve each against
+    /// the bundled common-entity table. Matched entities get
+    /// `canonical_id` populated, `resolution_method = manual`,
+    /// `resolution_confidence = 0.95`, `needs_review = false`. Already-
+    /// resolved entities are skipped unless `--force` is passed. The
+    /// frontier file is written back atomically.
+    Resolve {
+        frontier: PathBuf,
+        /// Re-resolve entities that already have a canonical_id.
+        #[arg(long)]
+        force: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// List the bundled lookup table.
+    List {
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum FindingCommands {
+    /// Add a manual finding bundle with an assertion field
+    Add {
+        /// Frontier JSON file or Vela repo
+        frontier: PathBuf,
+        /// Assertion text inside the finding bundle
+        #[arg(long)]
+        assertion: String,
+        /// Assertion type. One of: mechanism, therapeutic, diagnostic, epidemiological, observational, review, methodological, computational, theoretical, negative
+        #[arg(long, default_value = "mechanism")]
+        r#type: String,
+        /// Source label for the finding
+        #[arg(long, default_value = "manual finding")]
+        source: String,
+        /// Source type. One of: published_paper, preprint, clinical_trial, lab_notebook, model_output, expert_assertion, database_record
+        #[arg(long, default_value = "expert_assertion")]
+        source_type: String,
+        /// Author/reviewer identifier
+        #[arg(long)]
+        author: String,
+        /// Initial confidence score from 0.0 to 1.0
+        #[arg(long, default_value = "0.3")]
+        confidence: f64,
+        /// Evidence type. One of: experimental, observational, computational, theoretical, meta_analysis, systematic_review, case_report
+        #[arg(long, default_value = "theoretical")]
+        evidence_type: String,
+        /// Entities as comma-separated name:type pairs. Entity types: gene, protein, compound, disease, cell_type, organism, pathway, assay, anatomical_structure, particle, instrument, dataset, quantity, other
+        #[arg(long, default_value = "")]
+        entities: String,
+        /// Mark manually supplied entities as curator-reviewed
+        #[arg(long)]
+        entities_reviewed: bool,
+        /// Evidence span text or JSON. Repeat to attach multiple source spans
+        #[arg(long)]
+        evidence_span: Vec<String>,
+        /// Mark this finding as a candidate gap
+        #[arg(long)]
+        gap: bool,
+        /// Mark this finding as negative-space evidence
+        #[arg(long)]
+        negative_space: bool,
+        /// v0.11: DOI of the source artifact (e.g. "10.1038/s41586-024-...")
+        #[arg(long)]
+        doi: Option<String>,
+        /// v0.11: PubMed ID
+        #[arg(long)]
+        pmid: Option<String>,
+        /// v0.11: Publication year
+        #[arg(long)]
+        year: Option<i32>,
+        /// v0.11: Journal name
+        #[arg(long)]
+        journal: Option<String>,
+        /// v0.11: Generic source URL when none of the structured identifiers fit
+        #[arg(long)]
+        url: Option<String>,
+        /// v0.11: Source-paper authors as semicolon-separated list (distinct from --author which is the curating Vela actor)
+        #[arg(long)]
+        source_authors: Option<String>,
+        /// v0.11: Conditions/scope text. Replaces the placeholder otherwise written. Should describe scope boundaries (species, dosing, age range, model, etc.)
+        #[arg(long)]
+        conditions_text: Option<String>,
+        /// v0.11: Verified species as semicolon-separated list (e.g. "Mus musculus;Homo sapiens")
+        #[arg(long)]
+        species: Option<String>,
+        /// v0.11: Mark the finding as in vivo
+        #[arg(long)]
+        in_vivo: bool,
+        /// v0.11: Mark the finding as in vitro
+        #[arg(long)]
+        in_vitro: bool,
+        /// v0.11: Mark the finding as having human data
+        #[arg(long)]
+        human_data: bool,
+        /// v0.11: Mark the finding as a clinical trial
+        #[arg(long)]
+        clinical_trial: bool,
+        /// Output stable JSON
+        #[arg(long)]
+        json: bool,
+        /// Immediately accept and apply the proposal locally
+        #[arg(long)]
+        apply: bool,
+        /// v0.339: path to a replication_attestation JSON (e.g. emitted by
+        /// the mechinterp harness for a verified circuit claim). When set,
+        /// it rides in the finding.add payload as a sibling of `finding`;
+        /// with `--author agent:replicator --apply` the accept gate
+        /// auto-accepts the finding iff the attestation passes.
+        #[arg(long)]
+        replication_attestation: Option<PathBuf>,
+    },
+    /// v0.327: Read-only projection of one finding: assertion,
+    /// evidence atoms, conditions, confidence with basis and
+    /// actor-classified reviewed-state, typed links, and provenance.
+    /// Deep inspection without raw-JSON spelunking.
+    Show {
+        /// Frontier JSON file or Vela repo
+        frontier: PathBuf,
+        /// Finding id (`vf_<hex>`)
+        finding_id: String,
+        /// Emit stable JSON instead of the human view
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.14: Supersede an existing finding with a new content-addressed
+    /// claim. The new finding gets its own `vf_…` id; an auto-injected
+    /// `supersedes` link points back at the old id; the old finding is
+    /// flagged `superseded`. Both remain queryable. Real corrections
+    /// (Phase 4 follow-up data, retraction, refined wording) belong here
+    /// rather than as caveats stacked on top of an immutable claim.
+    Supersede {
+        /// Frontier JSON file or Vela repo
+        frontier: PathBuf,
+        /// `vf_…` id of the finding to supersede
+        old_id: String,
+        /// New assertion text (drives the new finding's content address)
+        #[arg(long)]
+        assertion: String,
+        /// New assertion type
+        #[arg(long, default_value = "mechanism")]
+        r#type: String,
+        /// Source label
+        #[arg(long, default_value = "manual finding")]
+        source: String,
+        /// Source type
+        #[arg(long, default_value = "expert_assertion")]
+        source_type: String,
+        /// Curating Vela actor id
+        #[arg(long)]
+        author: String,
+        /// Reason for the supersede (becomes the proposal/event reason)
+        #[arg(long)]
+        reason: String,
+        /// New confidence score 0.0..=1.0
+        #[arg(long, default_value = "0.5")]
+        confidence: f64,
+        /// New evidence type
+        #[arg(long, default_value = "experimental")]
+        evidence_type: String,
+        /// New entities (`name:type` pairs, comma-separated)
+        #[arg(long, default_value = "")]
+        entities: String,
+        /// DOI of the source artifact
+        #[arg(long)]
+        doi: Option<String>,
+        /// PubMed ID
+        #[arg(long)]
+        pmid: Option<String>,
+        /// Publication year
+        #[arg(long)]
+        year: Option<i32>,
+        /// Journal name
+        #[arg(long)]
+        journal: Option<String>,
+        /// Generic source URL
+        #[arg(long)]
+        url: Option<String>,
+        /// Source-paper authors (semicolon-separated)
+        #[arg(long)]
+        source_authors: Option<String>,
+        /// Conditions/scope text
+        #[arg(long)]
+        conditions_text: Option<String>,
+        /// Verified species (semicolon-separated)
+        #[arg(long)]
+        species: Option<String>,
+        #[arg(long)]
+        in_vivo: bool,
+        #[arg(long)]
+        in_vitro: bool,
+        #[arg(long)]
+        human_data: bool,
+        #[arg(long)]
+        clinical_trial: bool,
+        #[arg(long)]
+        json: bool,
+        /// Immediately accept and apply the proposal locally
+        #[arg(long)]
+        apply: bool,
+    },
+    /// v0.38: Set or revise the Pearlian causal type and study-design
+    /// grade for a finding. Appends an `assertion.reinterpreted_causal`
+    /// event capturing the prior reading, the new reading, and the
+    /// reviewer who re-graded. Pre-v0.38 findings carry no causal
+    /// metadata; the first call materializes both fields.
+    CausalSet {
+        /// Frontier JSON file or Vela repo
+        frontier: PathBuf,
+        /// `vf_<id>` of the finding to re-grade.
+        finding_id: String,
+        /// Causal claim kind: correlation | mediation | intervention.
+        #[arg(long)]
+        claim: String,
+        /// Optional study-design grade: rct | quasi_experimental |
+        /// observational | theoretical.
+        #[arg(long)]
+        grade: Option<String>,
+        /// Reviewer/curator id (must match a registered actor under
+        /// `--strict`). Recorded on the appended event.
+        #[arg(long)]
+        actor: String,
+        /// One-paragraph reason. Becomes the event's `reason` field
+        /// and ships with the proposal.
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum ProposalAction {
+    /// List proposals in a frontier
+    List {
+        frontier: PathBuf,
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show one proposal
+    Show {
+        frontier: PathBuf,
+        proposal_id: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Preview applying one proposal without mutating the frontier
+    Preview {
+        frontier: PathBuf,
+        proposal_id: String,
+        #[arg(long, default_value = "reviewer:preview")]
+        reviewer: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Import proposal files into a frontier
+    Import {
+        frontier: PathBuf,
+        source: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Validate standalone proposal files or directories
+    Validate {
+        source: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Export proposal records from a frontier
+    Export {
+        frontier: PathBuf,
+        output: PathBuf,
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Accept and apply one proposal
+    Accept {
+        frontier: PathBuf,
+        proposal_id: String,
+        #[arg(long)]
+        reviewer: String,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Reject one proposal
+    Reject {
+        frontier: PathBuf,
+        proposal_id: String,
+        #[arg(long)]
+        reviewer: String,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum SourceAdapterAction {
+    /// Run a source adapter over a frontier-owned ingest plan
+    Run {
+        /// Frontier JSON file or Vela repo
+        frontier: PathBuf,
+        /// Adapter id. Currently: clinicaltrials-gov-v2 or regulatory-documents-v1
+        adapter: String,
+        /// Stable actor id recorded on generated proposals
+        #[arg(long)]
+        actor: String,
+        /// Restrict to source ingest entry ids
+        #[arg(long = "entry")]
+        entries: Vec<String>,
+        /// Restrict to P0, P1, or P2 entries
+        #[arg(long)]
+        priority: Option<String>,
+        /// Include entries marked excluded
+        #[arg(long)]
+        include_excluded: bool,
+        /// Continue when one source record fails
+        #[arg(long)]
+        allow_partial: bool,
+        /// Report planned work without writing packets, proposals, or run files
+        #[arg(long)]
+        dry_run: bool,
+        /// Read saved source fixtures from this directory
+        #[arg(long)]
+        input_dir: Option<PathBuf>,
+        /// Apply artifact proposals while leaving truth changes pending
+        #[arg(long)]
+        apply_artifacts: bool,
+        /// Also write fetched source records into the local source inbox.
+        #[arg(long)]
+        write_inbox: bool,
+        /// Emit JSON to stdout
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum RuntimeAdapterAction {
+    /// Normalize an external runtime export into reviewable frontier proposals
+    Run {
+        /// Frontier JSON file or Vela repo
+        frontier: PathBuf,
+        /// Adapter id. Currently: scienceclaw-artifact-v1 or agent-discourse-v1
+        adapter: String,
+        /// External runtime export JSON file or directory
+        #[arg(long)]
+        input: PathBuf,
+        /// Stable actor id recorded on generated proposals
+        #[arg(long)]
+        actor: String,
+        /// Report planned work without writing packets, proposals, or run files
+        #[arg(long)]
+        dry_run: bool,
+        /// Apply artifact proposals while leaving truth changes pending
+        #[arg(long)]
+        apply_artifacts: bool,
+        /// Also write runtime artifacts into the local source inbox.
+        #[arg(long)]
+        write_inbox: bool,
+        /// Emit JSON to stdout
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum BridgeKitAction {
+    /// Validate one packet JSON file or a directory of packet JSON files
+    Validate {
+        /// Packet JSON file or directory
+        source: PathBuf,
+        /// Emit JSON to stdout
+        #[arg(long)]
+        json: bool,
+    },
+    /// v0.108.3: Verify that DOIs and PMIDs claimed in a Carina
+    /// packet's artifact locators and candidate-claim source_refs
+    /// actually resolve through Crossref / PubMed eutils. Closes
+    /// part of THREAT_MODEL.md A6 (citation poisoning: a fabricated
+    /// DOI passes structural validation today). Network call;
+    /// skips identifiers if the upstream is unreachable.
+    VerifyProvenance {
+        /// Packet JSON file
+        packet: PathBuf,
+        /// Emit JSON to stdout
+        #[arg(long)]
+        json: bool,
+        /// v0.126: cross-source agreement pass. For each artifact /
+        /// candidate-claim that resolves through more than one
+        /// upstream source (Crossref + PubMed + S2 + ArXiv), compare
+        /// the title and first-author last-name. Disagreement
+        /// surfaces as a `disagreement` consensus signal. Closes
+        /// more of THREAT_MODEL.md A6 (citation poisoning).
+        #[arg(long = "cross-check")]
+        cross_check: bool,
+    },
+}
