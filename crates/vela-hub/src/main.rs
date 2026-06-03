@@ -553,6 +553,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/entries/{vfr_id}/snapshot", get(get_entry_snapshot))
         .route("/entries/{vfr_id}/summary", get(get_entry_summary))
         .route("/entries/{vfr_id}/manifest", get(get_entry_manifest))
+        .route("/search", get(search_endpoint))
         .route(
             "/entries/{vfr_id}/events",
             get(get_entry_events).post(post_entry_event),
@@ -1094,6 +1095,46 @@ async fn get_entry_manifest(
         Json(manifest),
     )
         .into_response()
+}
+
+/// Cross-frontier object text search (the public /search page's backend). One
+/// hub query over frontier_objects instead of downloading every frontier's
+/// snapshot. Params: `q` (text), `type` (finding|source|evidence_atom|…,
+/// default finding), `limit` (default 24, max 200).
+async fn search_endpoint(
+    State(state): State<AppState>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Response {
+    let q = params.get("q").map(|s| s.trim().to_string()).unwrap_or_default();
+    let object_type = params
+        .get("type")
+        .cloned()
+        .unwrap_or_else(|| "finding".to_string());
+    let limit: i64 = params
+        .get("limit")
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(24)
+        .clamp(1, 200);
+    if q.is_empty() {
+        return (
+            StatusCode::OK,
+            Json(json!({"results": [], "q": q, "type": object_type})),
+        )
+            .into_response();
+    }
+    match state.db.search_objects(&q, &object_type, limit).await {
+        Ok(results) => (
+            StatusCode::OK,
+            [(axum::http::header::CACHE_CONTROL, "public, max-age=60")],
+            Json(json!({"results": results, "q": q, "type": object_type})),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("search: {e}")})),
+        )
+            .into_response(),
+    }
 }
 
 /// v0.201: federation handle for a Scientific Diff Pack (`vsd_*`).

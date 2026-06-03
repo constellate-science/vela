@@ -368,6 +368,60 @@ impl HubDb {
             .collect())
     }
 
+    /// Cross-frontier object text search for the public site's /search page —
+    /// one query over `frontier_objects` instead of downloading every frontier's
+    /// multi-MB snapshot and scanning client-side. Matches `q` anywhere in the
+    /// object's raw_json (id, assertion text, doi, …), restricted to one
+    /// `object_type`, across live frontiers only. Returns `{vfr_id, object}`.
+    pub async fn search_objects(
+        &self,
+        q: &str,
+        object_type: &str,
+        limit: i64,
+    ) -> Result<Vec<Value>, String> {
+        let pattern = format!(
+            "%{}%",
+            q.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
+        );
+        type Row = (String, String);
+        let rows: Vec<Row> = match self {
+            Self::Postgres(p) => sqlx::query_as(
+                "SELECT f.vfr_id, o.raw_json::text \
+                 FROM frontier_objects o \
+                 JOIN frontiers f ON f.vfr_id = o.vfr_id AND f.status = 'live' \
+                 WHERE o.object_type = $1 AND o.raw_json::text ILIKE $2 ESCAPE '\\' \
+                 ORDER BY o.vfr_id, o.seq LIMIT $3",
+            )
+            .bind(object_type)
+            .bind(&pattern)
+            .bind(limit)
+            .fetch_all(p)
+            .await
+            .map_err(|e| e.to_string())?,
+            Self::Sqlite(p) => sqlx::query_as(
+                "SELECT f.vfr_id, o.raw_json \
+                 FROM frontier_objects o \
+                 JOIN frontiers f ON f.vfr_id = o.vfr_id AND f.status = 'live' \
+                 WHERE o.object_type = ? AND o.raw_json LIKE ? ESCAPE '\\' \
+                 ORDER BY o.vfr_id, o.seq LIMIT ?",
+            )
+            .bind(object_type)
+            .bind(&pattern)
+            .bind(limit)
+            .fetch_all(p)
+            .await
+            .map_err(|e| e.to_string())?,
+        };
+        Ok(rows
+            .into_iter()
+            .filter_map(|(vfr, raw)| {
+                serde_json::from_str::<Value>(&raw)
+                    .ok()
+                    .map(|obj| json!({"vfr_id": vfr, "object": obj}))
+            })
+            .collect())
+    }
+
     /// v0.201: look up a Scientific Diff Pack by its `vsd_*` id.
     /// Returns the raw signed pack JSON if the pack has been
     /// registered with this hub via a `diff_pack.released` federation
