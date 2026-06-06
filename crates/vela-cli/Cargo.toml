@@ -19,6 +19,10 @@ publish = true
 # The lib stays a pure substrate library; agent behaviour is wired
 # in here at startup via `register_scout_handler`.
 
+[lib]
+name = "vela_cli"
+path = "src/lib.rs"
+
 [[bin]]
 name = "vela"
 path = "src/main.rs"
