@@ -28,6 +28,10 @@ members = [
     # the canonical state stays in registry + frontier event
     # logs. See docs/SEARCH.md.
     "crates/vela-search",
+    # vela-verify: frozen, dependency-light exact verifiers for
+    # combinatorial / coding-theory witnesses. The reference verifier
+    # registry the gate and `vela reproduce` build on.
+    "crates/vela-verify",
 ]
 # Reserved crates.io namespace names for the ten-year ecosystem ontology
 # (kept here for the record now that the placeholder namespace-stubs/ dirs
@@ -92,6 +96,7 @@ vela-atlas = { path = "crates/vela-atlas", version = "0.691.0" }
 vela-constellation = { path = "crates/vela-constellation", version = "0.691.0" }
 vela-relay = { path = "crates/vela-relay", version = "0.691.0" }
 vela-search = { path = "crates/vela-search", version = "0.691.0" }
+vela-verify = { path = "crates/vela-verify", version = "0.691.0" }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

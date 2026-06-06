@@ -57,6 +57,7 @@ improvement may not call itself a resolution.
 vela gate vocab                      # the grade / method / probe vocabularies
 vela gate grade --claim "..." --grade improved_published_bound
 vela gate check --claim "..." --attachments attachments.json
+vela reproduce examples/sidon-a309370   # re-verify every stored witness from scratch
 ```
 
 Verification status is orthogonal to the human review verdict and to Bayesian
@@ -69,12 +70,14 @@ confidence. A finding can be reviewer-accepted and still gate
 |------|------------|
 | `crates/vela-protocol` | The reference reducer — the normative state-transition function. |
 | `crates/vela-cli` | The `vela` command-line tool. |
+| `crates/vela-verify` | Frozen, independent exact verifiers (Sidon, Golomb, cap, B_h, covering, constant-weight, Costas, linear codes) — the reference verifier registry behind the gate and `vela reproduce`. |
 | `crates/vela-hub` | The federation hub: registry plus signed propose / accept. |
 | `crates/vela-atlas` `-constellation` `-relay` `-scientist` `-search` | Composition, federation, ingest adapters, and query. |
 | `clients/` | Standalone Python + TypeScript reducers — the second and third conformance implementations of the reference reducer. |
 | `bindings/` | Python HTTP SDK: a client for `vela serve --http` (read endpoints + signed write tools). Not a reducer. |
-| `conformance/` | The cross-implementation test-vector suite. |
-| `lean/` | Machine-checked proofs of the governance-soundness theorems. |
+| `conformance/` | The cross-implementation test-vector suite (reducer fixtures + gate reject-vectors). |
+| `examples/sidon-a309370` | A worked, re-verifiable reference: the OEIS A309370 Sidon records you can re-check with `vela reproduce`. |
+| `lean/` | Machine-checked proofs of the governance-soundness theorems, plus `SidonCertificate.lean` (a kernel-checked vcert). |
 | `schema/`, `schemas/` | Carina kernel schemas. |
 
 ## Build

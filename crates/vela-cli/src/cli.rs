@@ -393,6 +393,7 @@ pub async fn run_command() {
             let _ = conformance::run(&dir);
         }
         Commands::Gate { action } => cmd_gate(action),
+        Commands::Reproduce { path, json } => cmd_reproduce(&path, json),
         Commands::Version => println!("vela {}", env!("CARGO_PKG_VERSION")),
         Commands::Sign { action } => cmd_sign(action),
         Commands::Actor { action } => cmd_actor(action),
@@ -14546,6 +14547,143 @@ fn cmd_gate(action: GateAction) {
     }
 }
 
+/// `vela reproduce` — re-verify stored witnesses from scratch with the
+/// frozen exact verifiers. Trust is never self-reported.
+fn cmd_reproduce(path: &Path, json_output: bool) {
+    let files = collect_witness_files(path);
+    if files.is_empty() {
+        fail(&format!(
+            "no witnesses found at {} (expected a `*.witness.json` file, or a directory containing them / a `witnesses/` subdir)",
+            path.display()
+        ));
+    }
+    let mut results: Vec<Value> = Vec::new();
+    let mut passed = 0usize;
+    let mut failed = 0usize;
+    for file in &files {
+        let raw = match std::fs::read_to_string(file) {
+            Ok(r) => r,
+            Err(e) => {
+                failed += 1;
+                if !json_output {
+                    println!("  FAIL  {}  ·  read error: {e}", file.display());
+                }
+                results.push(json!({"path": file.display().to_string(), "ok": false, "message": format!("read error: {e}")}));
+                continue;
+            }
+        };
+        let witness = match parse_witness(&raw) {
+            Ok(w) => w,
+            Err(e) => {
+                failed += 1;
+                if !json_output {
+                    println!("  FAIL  {}  ·  parse error: {e}", file.display());
+                }
+                results.push(json!({"path": file.display().to_string(), "ok": false, "message": format!("parse error: {e}")}));
+                continue;
+            }
+        };
+        let outcome = vela_verify::verify_witness(&witness);
+        if outcome.ok {
+            passed += 1;
+        } else {
+            failed += 1;
+        }
+        if !json_output {
+            let status = if outcome.ok { "ok  " } else { "FAIL" };
+            println!(
+                "  {status}  {} [{}]  ·  {}",
+                file.display(),
+                witness.kind(),
+                outcome.message
+            );
+        }
+        results.push(json!({
+            "path": file.display().to_string(),
+            "kind": witness.kind(),
+            "ok": outcome.ok,
+            "message": outcome.message,
+        }));
+    }
+    if json_output {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "command": "reproduce",
+                "witnesses": files.len(),
+                "passed": passed,
+                "failed": failed,
+                "results": results,
+            }))
+            .expect("serialize reproduce response")
+        );
+    } else {
+        println!();
+        if failed == 0 {
+            println!(
+                "  reproduce: ok ({passed}/{}) — every witness re-verified from scratch by the frozen verifiers.",
+                files.len()
+            );
+        } else {
+            println!(
+                "  reproduce: FAIL ({failed}/{} did not re-verify). Investigate before trusting.",
+                files.len()
+            );
+        }
+    }
+    if failed > 0 {
+        std::process::exit(1);
+    }
+}
+
+/// Parse a witness file: either a bare `vela_verify::Witness`, or an
+/// object with a `witness` field wrapping one (a record that ships its
+/// construction).
+fn parse_witness(raw: &str) -> Result<vela_verify::Witness, String> {
+    if let Ok(w) = serde_json::from_str::<vela_verify::Witness>(raw) {
+        return Ok(w);
+    }
+    let value: Value = serde_json::from_str(raw).map_err(|e| e.to_string())?;
+    if let Some(inner) = value.get("witness") {
+        return serde_json::from_value(inner.clone()).map_err(|e| e.to_string());
+    }
+    Err("not a witness (missing recognized `kind`, and no `witness` field)".to_string())
+}
+
+/// Collect witness files for `vela reproduce`: a single file, or every
+/// `*.witness.json` under a directory (preferring a `witnesses/` subdir).
+fn collect_witness_files(path: &Path) -> Vec<PathBuf> {
+    if path.is_file() {
+        return vec![path.to_path_buf()];
+    }
+    let root = {
+        let sub = path.join("witnesses");
+        if sub.is_dir() { sub } else { path.to_path_buf() }
+    };
+    let mut out = Vec::new();
+    collect_witness_files_into(&root, &mut out);
+    out.sort();
+    out
+}
+
+fn collect_witness_files_into(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let p = entry.path();
+        if p.is_dir() {
+            collect_witness_files_into(&p, out);
+        } else if p
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.ends_with(".witness.json"))
+        {
+            out.push(p);
+        }
+    }
+}
+
 fn cmd_init(path: &Path, name: &str, template: &str, initialize_git: bool, json_output: bool) {
     if path.join(".vela").exists() {
         fail(&format!(
@@ -16048,6 +16186,7 @@ const SCIENCE_SUBCOMMANDS: &[&str] = &[
     "bench",
     "conformance",
     "gate",
+    "reproduce",
     "version",
     "sign",
     "actor",
@@ -16220,6 +16359,7 @@ Advanced (proposal-creation, agent inboxes, federation):
   bench         Run deterministic benchmark gates
   conformance   Run protocol conformance vectors
   gate          Verification gate: deliverable-grade + verifier-attachment checks
+  reproduce     Re-verify stored witnesses from scratch (frozen exact verifiers)
   sign          Optional signing and signature verification
   runtime-adapter
                 Normalize external runtime exports into reviewable proposals

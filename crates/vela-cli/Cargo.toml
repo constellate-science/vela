@@ -29,6 +29,7 @@ vela-scientist = { workspace = true }
 vela-atlas = { workspace = true }
 vela-constellation = { workspace = true }
 vela-search = { workspace = true }
+vela-verify = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

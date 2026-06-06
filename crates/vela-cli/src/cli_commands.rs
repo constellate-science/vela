@@ -556,6 +556,20 @@ pub(crate) enum Commands {
         #[command(subcommand)]
         action: GateAction,
     },
+    /// Re-verify stored witnesses from scratch with the frozen exact
+    /// verifiers (`vela-verify`). Trust is never self-reported: a stranger
+    /// runs `vela reproduce <example>` and confirms every claimed
+    /// construction re-checks (Sidon, Golomb, cap, B_h, covering,
+    /// constant-weight, Costas, linear codes). Exits non-zero if any
+    /// witness fails to re-verify.
+    Reproduce {
+        /// A witness JSON file, or a directory (reproduces every
+        /// `*.witness.json` under it, or a `witnesses/` subdir).
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
     /// Show version information
     Version,
     /// Optional signing and signature verification

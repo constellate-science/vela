@@ -1,0 +1,24 @@
+[package]
+name = "vela-verify"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+documentation = "https://constellate.science/specification"
+description = "Vela Verify: frozen, independent exact verifiers for combinatorial and coding-theory witnesses (Sidon, Golomb, cap sets, B_h, covering designs, constant-weight, Costas, linear codes). An untrusted proposer's construction is re-checked deterministically here before any claim is recorded; corrupting a witness must fail the verifier. The reference verifier registry the gate (vela-protocol::verifier_attachment) and `vela reproduce` build on."
+readme = "README.md"
+keywords = ["vela", "science", "verifier", "combinatorics", "coding-theory"]
+categories = ["science", "mathematics"]
+publish = true
+
+[lib]
+name = "vela_verify"
+path = "src/lib.rs"
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

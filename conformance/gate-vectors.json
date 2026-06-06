@@ -1,0 +1,73 @@
+{
+  "schema": "vela.gate-conformance.v1",
+  "doctrine": "The verification gate is fail-closed: a claim derives `verified` ONLY from >=2 independent matched verifier attachments (different method/solver, mutually declaring independent_of) plus a surviving adversarial probe; a refuted probe forces `refuted`; everything else is `needs_verification`. A self-reported `accepted` with no attachments is needs_verification, never verified. These vectors pin that contract for any implementation of derive_gate_status. attachments[].independent_of lists EARLIER indices in this vector's array.",
+  "gate_status_vectors": [
+    {
+      "name": "zero attachments fails closed",
+      "claim": "a Sidon set of size 33 in {0,1}^8",
+      "attachments": [],
+      "expected": "needs_verification"
+    },
+    {
+      "name": "single attachment is not independence",
+      "claim": "a Sidon set of size 33 in {0,1}^8",
+      "attachments": [
+        {"method": "exact_arithmetic_recompute", "solver": "vela-verify", "matched": true, "outcome": "passed", "probe": "survived", "independent_of": []}
+      ],
+      "expected": "needs_verification"
+    },
+    {
+      "name": "two independent matched attachments with a surviving probe verify",
+      "claim": "a Sidon set of size 33 in {0,1}^8",
+      "attachments": [
+        {"method": "exact_arithmetic_recompute", "solver": "vela-verify", "matched": true, "outcome": "passed", "probe": "survived", "independent_of": []},
+        {"method": "computational_search", "solver": "independent-reimpl", "matched": true, "outcome": "passed", "probe": "survived", "independent_of": [0]}
+      ],
+      "expected": "verified"
+    },
+    {
+      "name": "two attachments same method/solver are not independent",
+      "claim": "a Sidon set of size 33 in {0,1}^8",
+      "attachments": [
+        {"method": "exact_arithmetic_recompute", "solver": "vela-verify", "matched": true, "outcome": "passed", "probe": "survived", "independent_of": []},
+        {"method": "exact_arithmetic_recompute", "solver": "vela-verify", "matched": true, "outcome": "passed", "probe": "survived", "independent_of": [0]}
+      ],
+      "expected": "needs_verification"
+    },
+    {
+      "name": "passed but unmatched to the claim counts for nothing",
+      "claim": "a Sidon set of size 33 in {0,1}^8",
+      "attachments": [
+        {"method": "exact_arithmetic_recompute", "solver": "vela-verify", "matched": false, "outcome": "passed", "probe": "survived", "independent_of": []},
+        {"method": "computational_search", "solver": "independent-reimpl", "matched": false, "outcome": "passed", "probe": "survived", "independent_of": [0]}
+      ],
+      "expected": "needs_verification"
+    },
+    {
+      "name": "a refuting adversarial probe forces refuted",
+      "claim": "a Sidon set of size 33 in {0,1}^8",
+      "attachments": [
+        {"method": "exact_arithmetic_recompute", "solver": "vela-verify", "matched": true, "outcome": "passed", "probe": "survived", "independent_of": []},
+        {"method": "computational_search", "solver": "independent-reimpl", "matched": true, "outcome": "passed", "probe": "refuted", "independent_of": [0]}
+      ],
+      "expected": "refuted"
+    },
+    {
+      "name": "independent + matched but no probe is not enough",
+      "claim": "a Sidon set of size 33 in {0,1}^8",
+      "attachments": [
+        {"method": "exact_arithmetic_recompute", "solver": "vela-verify", "matched": true, "outcome": "passed", "probe": "none", "independent_of": []},
+        {"method": "computational_search", "solver": "independent-reimpl", "matched": true, "outcome": "passed", "probe": "none", "independent_of": [0]}
+      ],
+      "expected": "needs_verification"
+    }
+  ],
+  "grade_gate_vectors": [
+    {"name": "missing grade is rejected", "claim": "extends the construction", "grade": null, "expected_pass": false},
+    {"name": "unknown grade is rejected", "claim": "extends the construction", "grade": "totally_solved_it", "expected_pass": false},
+    {"name": "solve-language on a non-solve grade is blocked", "claim": "this resolves #647 with an improved bound", "grade": "improved_published_bound", "expected_pass": false},
+    {"name": "solve-language on a solve grade is allowed", "claim": "we solve the problem unconditionally", "grade": "unconditional_solve", "expected_pass": true},
+    {"name": "honest grade without solve-language passes", "claim": "a new term for the sequence at n=24", "grade": "new_oeis_term", "expected_pass": true},
+    {"name": "bare solve does not fire inside dissolves", "claim": "the compound dissolves in water", "grade": "extends_prior_work", "expected_pass": true}
+  ]
+}

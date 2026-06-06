@@ -3416,6 +3416,7 @@ dependencies = [
  "vela-protocol",
  "vela-scientist",
  "vela-search",
+ "vela-verify",
 ]
 
 [[package]]
@@ -3549,6 +3550,14 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "vela-protocol",
+]
+
+[[package]]
+name = "vela-verify"
+version = "0.691.0"
+dependencies = [
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

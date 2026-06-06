@@ -8,6 +8,16 @@ reducer on per-kind mutation rules across findings, negative results,
 trajectories, and artifacts. The fixtures here are the test vectors that
 prove that agreement.
 
+It must also agree with the **verification gate** — the rule that decides
+when a claim is `verified`. `gate-vectors.json` is the portable spec: a set
+of `(claim, attachments) → gate_status` cases (and grade-gate cases),
+including the fail-closed reject-vectors (zero attachments →
+`needs_verification`; passed-but-unmatched → `needs_verification`; a refuted
+adversarial probe → `refuted`). The canonical Rust implementation
+(`vela_protocol::verifier_attachment::derive_gate_status`) is gated against
+every vector by `crates/vela-protocol/tests/gate_conformance.rs`; any
+implementation of the gate must reproduce the same verdicts.
+
 ## Contract
 
 Given any fixture file `cascade-fixture-NN.json`:
