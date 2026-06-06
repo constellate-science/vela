@@ -1782,6 +1782,54 @@ fn build_verdict_conflict_resolved_log(
     }]
 }
 
+/// contradiction.resolved fixture builder. The reducer arm
+/// (`reducer.rs::apply_contradiction_resolved`) upserts a
+/// `Contradiction` into `Project.contradictions`, a side table that is
+/// not part of the cross-impl finding-effects digest. The payload
+/// carries a content-addressed, adjudicated `Contradiction` so the
+/// reducer's id-match check passes. No-op on findings.
+fn build_contradiction_resolved_log(
+    frontier_idx: usize,
+    findings: &[FindingBundle],
+) -> Vec<events::StateEvent> {
+    use vela_protocol::contradiction::Contradiction;
+
+    let a = findings[0].id.clone();
+    let b = findings[1].id.clone();
+    let frontier_id = format!("vfr_fixture_contradiction_{frontier_idx:04x}");
+    let resolved = Contradiction::candidate(&frontier_id, &a, &b, "shared-axis disagreement")
+        .resolve(
+            &format!("reviewer:fixture-{frontier_idx}"),
+            &fixture_timestamp(frontier_idx, 0),
+            "finding_a superseded by a corrected measurement",
+        );
+    let contradiction_id = resolved.contradiction_id.clone();
+    let contradiction_value = serde_json::to_value(&resolved).expect("serialize contradiction");
+    vec![StateEvent {
+        schema: events::EVENT_SCHEMA.to_string(),
+        id: format!("vev_contradiction_fixture_{frontier_idx:04x}"),
+        kind: "contradiction.resolved".to_string(),
+        target: StateTarget {
+            r#type: "contradiction".to_string(),
+            id: contradiction_id,
+        },
+        actor: StateActor {
+            id: format!("reviewer:fixture-{frontier_idx}"),
+            r#type: "human".to_string(),
+        },
+        timestamp: fixture_timestamp(frontier_idx, 0),
+        reason: "Fixture contradiction.resolved for cross-impl coverage".to_string(),
+        before_hash: NULL_HASH.to_string(),
+        after_hash: NULL_HASH.to_string(),
+        payload: json!({
+            "contradiction": contradiction_value,
+        }),
+        caveats: vec![],
+        signature: None,
+        schema_artifact_id: None,
+    }]
+}
+
 /// v0.70: replication.deposited fixture builder. The reducer arm
 /// appends a `Replication` to `Project.replications`. It does NOT
 /// touch `Project.findings`, so the cross-impl finding-effects digest
@@ -2387,6 +2435,37 @@ fn export_cross_impl_reducer_fixtures() {
         export_one(&out_dir, frontier_idx, "entity_added", findings, event_log);
     }
 
+    // Fixture 12 — side-table / federation events. Pins the reducer
+    // arms that mutate side tables outside the finding-effects digest
+    // (released_diff_packs, verdict_conflicts, contradictions) plus the
+    // federation observation trio into the public conformance set, so
+    // all three reducers are exercised on `diff_pack.released`,
+    // `diff_pack.reviewed`, `verdict_conflict.resolved`,
+    // `contradiction.resolved`, `frontier.synced_with_peer`,
+    // `frontier.conflict_detected`, and `frontier.conflict_resolved`.
+    // Every one is a no-op on the seven digested collections, so the
+    // expected_* arrays are the untouched genesis findings; a reducer
+    // that ERRORS on any of these kinds (rather than implementing or
+    // no-oping them) fails this fixture.
+    {
+        let frontier_idx = FIXTURE_FRONTIER_COUNT + 9;
+        let findings: Vec<FindingBundle> = (0..FINDINGS_PER_FRONTIER)
+            .map(|i| make_finding(frontier_idx, i))
+            .collect();
+        let mut event_log = build_diff_pack_released_log(frontier_idx, &findings);
+        event_log.extend(build_diff_pack_reviewed_log(frontier_idx, &findings));
+        event_log.extend(build_verdict_conflict_resolved_log(frontier_idx, &findings));
+        event_log.extend(build_contradiction_resolved_log(frontier_idx, &findings));
+        event_log.extend(build_federation_events_log(frontier_idx, &findings));
+        export_one(
+            &out_dir,
+            frontier_idx,
+            "side_table_events",
+            findings,
+            event_log,
+        );
+    }
+
     // v0.107.4: write fixtures.manifest.json with SHA-256 of every
     // exported fixture. THREAT_MODEL.md A12 names tampered fixtures
     // as a real attack surface; the manifest closes the integrity
@@ -2501,6 +2580,9 @@ fn fixture_coverage_includes_every_reducer_arm() {
         all_kinds.insert(ev.kind);
     }
     for ev in build_verdict_conflict_resolved_log(frontier_idx, &findings) {
+        all_kinds.insert(ev.kind);
+    }
+    for ev in build_contradiction_resolved_log(frontier_idx, &findings) {
         all_kinds.insert(ev.kind);
     }
 

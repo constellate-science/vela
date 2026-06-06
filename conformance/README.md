@@ -83,8 +83,18 @@ Three reducers run these fixtures green today:
 
 - `crates/vela-protocol/src/reducer.rs` (Rust, canonical).
 - `clients/python/vela_reducer.py` (Python, second implementation).
-- `clients/typescript/vela_reducer.ts` (TypeScript, third implementation
-  with v0.82 no-op handlers for newer event kinds).
+- `clients/typescript/vela_reducer.ts` (TypeScript, third implementation).
+  It handles every kind in `REDUCER_MUTATION_KINDS`, treating the
+  side-table arms (`diff_pack.*`, `verdict_conflict.resolved`,
+  `contradiction.resolved`, `evidence_atom.locator_repaired`, and the
+  `frontier.*` federation trio) as no-ops on the seven digested
+  collections, exactly as the Rust and Python reducers do.
+
+`verify.py` runs **both** the Python and the TypeScript reducer and gates
+on both. An unrun reducer drifts — a retired `vela_reducer.mjs` fell three
+fixture_versions behind precisely because nothing exercised it, so it was
+removed. The TS run requires Node 23+ (native TypeScript) and is skipped
+with a warning if `node` is absent.
 
 To verify a fourth implementation, walk the fixtures with your reducer
 and run the four-step contract above.
@@ -97,13 +107,13 @@ The Rust regression runs as part of the workspace test suite:
 cargo test -p vela-protocol --test cross_impl_reducer_fixtures
 ```
 
-The Python regression runs from `release-check.sh`:
+The Python **and** TypeScript regressions run from `verify.py`:
 
 ```bash
-./scripts/release-check.sh
+python3 conformance/verify.py
 ```
 
-Both compare against the same fixtures shipped here.
+All three compare against the same fixtures shipped here.
 
 ## Extending the conformance set
 
@@ -129,10 +139,14 @@ same terms as the rest of the repository (Apache 2.0 or MIT, dual).
 
 ## Status
 
-This conformance contract is at v0.94. The fixture set will grow as the
-substrate grows; the contract shape (parse, replay, compare effect
-rows) is stable and is the point at which an external implementation
-declares Vela-compatibility.
+The fixtures are at `fixture_version` 4 (seven digested collections:
+findings, negative_results, trajectories, artifacts, replications,
+predictions — plus `access_tier` on each). 13 fixtures cover every arm in
+`REDUCER_MUTATION_KINDS`, including the side-table and federation kinds
+pinned by `cascade-fixture-12.json`. Rust, Python, and TypeScript agree on
+all of them. The fixture set will grow as the substrate grows; the contract
+shape (parse, replay, compare effect rows) is stable and is the point at
+which an external implementation declares Vela-compatibility.
 
 For the formal substrate properties these fixtures empirically test,
 see `docs/THEORY.md` and the machine-checked theorems in `lean/`.

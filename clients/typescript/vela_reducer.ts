@@ -667,6 +667,23 @@ function applyEvent(state: ReducerState, event: Event): void {
     applyReplicationDeposited(state.replications, event);
   else if (kind === "prediction.deposited")
     applyPredictionDeposited(state.predictions, event);
+  // Side-table / federation arms. Each mutates a collection the Rust +
+  // Python reducers keep outside the seven digested collections
+  // (released_diff_packs, verdict_conflicts, contradictions,
+  // evidence_atoms, and the frontier-observation log). The cross-impl
+  // effect-digest covers findings / negative_results / trajectories /
+  // artifacts / replications / predictions only, so these are no-ops
+  // here. Mirrors reducer.rs::apply_diff_pack_released /
+  // apply_diff_pack_reviewed / apply_verdict_conflict_resolved /
+  // apply_contradiction_resolved and the v0.39+ federation no-ops.
+  else if (kind === "diff_pack.released") return;
+  else if (kind === "diff_pack.reviewed") return;
+  else if (kind === "verdict_conflict.resolved") return;
+  else if (kind === "contradiction.resolved") return;
+  else if (kind === "evidence_atom.locator_repaired") return;
+  else if (kind === "frontier.synced_with_peer") return;
+  else if (kind === "frontier.conflict_detected") return;
+  else if (kind === "frontier.conflict_resolved") return;
   else
     throw new Error(`reducer: unsupported event kind ${JSON.stringify(kind)}`);
 }

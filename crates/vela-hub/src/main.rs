@@ -759,7 +759,7 @@ async fn well_known_vela(State(state): State<AppState>) -> Json<Value> {
         "second_implementations": {
             "packet_verifier": "https://vela.science/vela_verify.py",
             "reducer":         "https://vela.science/vela_reducer.py",
-            "reducer_typescript": "https://vela.science/vela_reducer.mjs"
+            "reducer_typescript": "https://vela.science/vela_reducer.ts"
         },
     });
 

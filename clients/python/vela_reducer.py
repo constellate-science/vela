@@ -718,6 +718,14 @@ def apply_event(state: dict, event: dict) -> None:
     # conflict_id.
     elif kind == "verdict_conflict.resolved":
         apply_verdict_conflict_resolved(state, event)
+    # Contradiction adjudication. The Rust mirror
+    # (reducer.rs::apply_contradiction_resolved) upserts a Contradiction
+    # into state["contradictions"], a side table outside the cross-impl
+    # finding-effects digest. No-op on state["findings"], so a digest
+    # no-op keeps the Python reducer byte-identical with Rust + the TS
+    # reducer.
+    elif kind == "contradiction.resolved":
+        return
     else:
         raise ValueError(f"reducer: unsupported event kind {kind!r}")
 

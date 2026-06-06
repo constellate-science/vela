@@ -172,10 +172,55 @@ def main() -> int:
 
     print()
     if failed == 0:
-        print(f"vela conformance: ok ({len(fixtures)}/{len(fixtures)})")
+        print(f"vela conformance: ok ({len(fixtures)}/{len(fixtures)})  [python]")
+    else:
+        print(f"vela conformance: FAIL ({failed}/{len(fixtures)} failed)  [python]")
+        return 1
+
+    # Second implementation: the TypeScript reducer. Gating it here is
+    # what keeps it from silently drifting — an unrun reducer rots (the
+    # retired `vela_reducer.mjs` fell three fixture_versions behind
+    # precisely because nothing exercised it). Requires Node 23+ (native
+    # TypeScript). If `node` is absent we warn and skip rather than fail,
+    # so the suite still runs in Python-only environments.
+    ts_rc = _run_ts_reducer(repo_root, fixtures_dir)
+    if ts_rc == 2:
+        print("  note: typescript reducer skipped (node not found); python-only run")
         return 0
-    print(f"vela conformance: FAIL ({failed}/{len(fixtures)} failed)")
-    return 1
+    if ts_rc != 0:
+        print("vela conformance: FAIL  [typescript]")
+        return 1
+    print("vela conformance: ok  [typescript]")
+    print("\nvela conformance: ok — python + typescript agree with the rust reference")
+    return 0
+
+
+def _run_ts_reducer(repo_root: Path, fixtures_dir: Path) -> int:
+    """Run the TypeScript reducer over the fixtures. Returns 0 (ok),
+    1 (mismatch/error), or 2 (node unavailable → skip)."""
+    ts_reducer = repo_root / "clients" / "typescript" / "vela_reducer.ts"
+    if not ts_reducer.exists():
+        print(f"  note: typescript reducer not found at {ts_reducer}")
+        return 2
+    try:
+        result = subprocess.run(
+            ["node", str(ts_reducer), str(fixtures_dir)],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except FileNotFoundError:
+        return 2
+    except Exception as e:  # noqa: BLE001
+        print(f"  typescript reducer invocation failed: {e}", file=sys.stderr)
+        return 1
+    if result.returncode != 0:
+        if result.stdout.strip():
+            print(result.stdout)
+        if result.stderr.strip():
+            print(result.stderr, file=sys.stderr)
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
