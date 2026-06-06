@@ -5,8 +5,8 @@ use crate::cli::{
     cmd_verify_chain, fail, fail_return, parse_signing_key, print_json,
 };
 use crate::cli_commands::*;
-use crate::cli_style as style;
-use crate::{bundle, events, incremental_ingest, repo, sign};
+use vela_protocol::cli_style as style;
+use vela_protocol::{bundle, events, incremental_ingest, repo, sign};
 use colored::Colorize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -17,7 +17,7 @@ use std::path::PathBuf;
 /// and confirm the snapshot and event-log hashes match what the owner
 /// signed.
 pub(crate) fn cmd_registry(action: RegistryAction) {
-    use crate::registry;
+    use vela_protocol::registry;
     let default_registry = || -> PathBuf {
         let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
         PathBuf::from(home)
@@ -79,7 +79,7 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
                 r#type: "frontier".to_string(),
                 id: vfr_id.clone(),
             };
-            let proposal = crate::proposals::new_proposal(
+            let proposal = vela_protocol::proposals::new_proposal(
                 kind,
                 target,
                 actor.clone(),
@@ -312,7 +312,7 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
                                 // canonical-bytes helper so hub-side
                                 // key ordering or whitespace
                                 // differences do not falsely split.
-                                let canonical = crate::canonical::to_canonical_bytes(&entry)
+                                let canonical = vela_protocol::canonical::to_canonical_bytes(&entry)
                                     .unwrap_or_else(|e| fail_return(&format!("canonicalize: {e}")));
                                 let hash =
                                     format!("sha256:{}", hex::encode(Sha256::digest(&canonical)));

@@ -2,7 +2,7 @@
 //!
 //! Wires the agent handlers from `vela-scientist` into the
 //! substrate's CLI dispatch table, then hands off to
-//! `vela_protocol::cli::run_from_args`.
+//! `crate::cli::run_from_args`.
 //!
 //! Doctrine: the substrate library doesn't know about agents. This
 //! binary does the marriage.
@@ -12,6 +12,27 @@ use std::path::PathBuf;
 use std::pin::Pin;
 
 use colored::Colorize;
+
+// The CLI / serve / workbench surface, relocated out of the
+// `vela-protocol` library so the substrate crate stays a pure protocol
+// library. These were `vela_protocol::{cli, serve, workbench, cli_*}`
+// before; they now live here and reach into the substrate via
+// `vela_protocol::*`.
+pub mod cli;
+mod cli_bridge_kit;
+mod cli_causal;
+mod cli_check;
+mod cli_commands;
+mod cli_diff_pack;
+mod cli_federation;
+mod cli_finding;
+mod cli_frontier;
+mod cli_lean;
+mod cli_owner_rotate;
+mod cli_registry;
+mod cli_source_fetch;
+mod serve;
+mod workbench;
 
 fn main() {
     // Atlas R.2 intercept: read-only verifier subcommands for the
@@ -26,31 +47,31 @@ fn main() {
     // Agent handlers (Scout, Notes Compiler, Code Analyst, Datasets,
     // Reviewer, Contradiction Finder, Experiment Planner). These wire
     // the v0.22+ agent inbox into the substrate CLI dispatch.
-    vela_protocol::cli::register_scout_handler(scout_handler);
-    vela_protocol::cli::register_notes_handler(notes_handler);
-    vela_protocol::cli::register_code_handler(code_handler);
-    vela_protocol::cli::register_datasets_handler(datasets_handler);
-    vela_protocol::cli::register_reviewer_handler(reviewer_handler);
-    vela_protocol::cli::register_tensions_handler(tensions_handler);
-    vela_protocol::cli::register_experiments_handler(experiments_handler);
+    crate::cli::register_scout_handler(scout_handler);
+    crate::cli::register_notes_handler(notes_handler);
+    crate::cli::register_code_handler(code_handler);
+    crate::cli::register_datasets_handler(datasets_handler);
+    crate::cli::register_reviewer_handler(reviewer_handler);
+    crate::cli::register_tensions_handler(tensions_handler);
+    crate::cli::register_experiments_handler(experiments_handler);
     // v0.78: Atlas-level handlers (init / materialize / serve).
     // Route through the `vela-atlas` crate.
-    vela_protocol::cli::register_atlas_init_handler(atlas_init_handler);
-    vela_protocol::cli::register_atlas_materialize_handler(atlas_materialize_handler);
-    vela_protocol::cli::register_atlas_serve_handler(atlas_serve_handler);
+    crate::cli::register_atlas_init_handler(atlas_init_handler);
+    crate::cli::register_atlas_materialize_handler(atlas_materialize_handler);
+    crate::cli::register_atlas_serve_handler(atlas_serve_handler);
     // v0.81.2: Atlas update (add/remove composing frontiers).
-    vela_protocol::cli::register_atlas_update_handler(atlas_update_handler);
+    crate::cli::register_atlas_update_handler(atlas_update_handler);
     // v0.82.4: Constellation-level handlers (init / materialize / serve).
-    vela_protocol::cli::register_constellation_init_handler(constellation_init_handler);
-    vela_protocol::cli::register_constellation_materialize_handler(
+    crate::cli::register_constellation_init_handler(constellation_init_handler);
+    crate::cli::register_constellation_materialize_handler(
         constellation_materialize_handler,
     );
-    vela_protocol::cli::register_constellation_serve_handler(constellation_serve_handler);
+    crate::cli::register_constellation_serve_handler(constellation_serve_handler);
     // v0.149: search handlers wire the vela-search crate into the
     // CLI dispatch table.
-    vela_protocol::cli::register_search_build_handler(search_build_handler);
-    vela_protocol::cli::register_search_query_handler(search_query_handler);
-    vela_protocol::cli::run_from_args();
+    crate::cli::register_search_build_handler(search_build_handler);
+    crate::cli::register_search_query_handler(search_query_handler);
+    crate::cli::run_from_args();
 }
 
 /// v0.149: `vela search build <frontiers...> --out <path>`.

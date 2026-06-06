@@ -19,32 +19,13 @@
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ReleasedVerdict {
-    Accept,
-    Reject,
-    Revise,
-}
-
-impl ReleasedVerdict {
-    pub fn canonical(&self) -> &'static str {
-        match self {
-            ReleasedVerdict::Accept => "accept",
-            ReleasedVerdict::Reject => "reject",
-            ReleasedVerdict::Revise => "revise",
-        }
-    }
-
-    pub fn from_str_ci(s: &str) -> Option<Self> {
-        match s.trim().to_ascii_lowercase().as_str() {
-            "accept" | "accepted" => Some(ReleasedVerdict::Accept),
-            "reject" | "rejected" => Some(ReleasedVerdict::Reject),
-            "revise" | "revision" | "needs_revision" => Some(ReleasedVerdict::Revise),
-            _ => None,
-        }
-    }
-}
+/// A released diff pack's verdict is the same three-valued enum as a
+/// pending review verdict ([`crate::diff_pack_review::DiffPackVerdict`]) —
+/// identical variants, identical `snake_case` wire form, identical
+/// `canonical()` / `from_str_ci()`. It was previously duplicated here as
+/// a separate `ReleasedVerdict`; this alias collapses the two to one
+/// definition without changing the on-disk replay format.
+pub type ReleasedVerdict = crate::diff_pack_review::DiffPackVerdict;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReleasedDiffPackRecord {

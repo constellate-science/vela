@@ -1,16 +1,67 @@
 # Vela
 
-Version control for scientific state. An open protocol and reference
-implementation.
+Version control for scientific state, with a gate on what counts as verified.
+An open protocol and reference implementation.
 
 Vela compiles research artifacts (papers, notes, runs, proofs) into a versioned
 *frontier*: a signed, content-addressed, replayable record of what a field
 currently holds to be true. The unit it tracks is the *change* to that state,
 not the document that triggered it.
 
+Two things are separate here, and the separation is the point:
+
+- **The log is trustworthy by construction.** Every change is signed over
+  content-addressed bytes and replays to the same state on any machine. This is
+  necessary, and it is not sufficient.
+- **A claim only becomes *verified* by passing the gate.** Not by a proposer's
+  say-so, not by an LLM judge, not by a single confirming run. The gate wants at
+  least two independent matched verifier attachments — by different method and
+  solver, each bound to the exact claim — plus one surviving adversarial probe.
+  With zero attachments a claim sits at `needs_verification`, even after a
+  reviewer accepts it.
+
+The gate is what kept the Erdős dogfooding from banking 47 "verified" records
+that carried an empty verification field. Nine Sidon-set records that did pass
+it were later approved into [OEIS A309370](https://oeis.org/A309370) by an
+outside editor: the first external adoption of frontier state from this
+substrate.
+
 This repository is the open core of the [Constellate](https://constellate.science)
 ecosystem: the protocol, the reference reducer, the CLI, the hub, and the
 conformance suite. Dual-licensed under Apache-2.0 OR MIT.
+
+## The verification gate
+
+A claim is `draft` by default and reaches `verified` only through
+`verifier_attachment::derive_gate_status`, a pure function of the attachments
+with no setter. The status cannot drift out of sync with the evidence because it
+is never stored, only derived — the discipline `status_provenance` already
+applies to Belnap polarity. Four conditions, each tied to a real failure it
+would have caught:
+
+- **G1 independence** — ≥2 matched attachments by *different* method/solver,
+  mutually declaring `independent_of`. One self-confirmed run never suffices.
+- **G2 claim-match** — every passing attachment is bound to the current claim
+  digest. A proof of a *different* statement is `passed_but_unmatched` and counts
+  for nothing.
+- **G3 adversarial** — at least one probe present and none refuted. A refuted
+  probe drives the status to `refuted`.
+- **G4 well-formed** — attachments are structurally valid and content-addressed
+  (`vva_…`).
+
+Alongside it, `deliverable_grade` blocks solve-language ("resolves #647", "first
+to solve") in a claim's text unless the grade is an actual solve. A bound
+improvement may not call itself a resolution.
+
+```sh
+vela gate vocab                      # the grade / method / probe vocabularies
+vela gate grade --claim "..." --grade improved_published_bound
+vela gate check --claim "..." --attachments attachments.json
+```
+
+Verification status is orthogonal to the human review verdict and to Bayesian
+confidence. A finding can be reviewer-accepted and still gate
+`needs_verification`; that gap is information the substrate used to hide.
 
 ## What is here
 
@@ -20,7 +71,8 @@ conformance suite. Dual-licensed under Apache-2.0 OR MIT.
 | `crates/vela-cli` | The `vela` command-line tool. |
 | `crates/vela-hub` | The federation hub: registry plus signed propose / accept. |
 | `crates/vela-atlas` `-constellation` `-relay` `-scientist` `-search` | Composition, federation, ingest adapters, and query. |
-| `bindings/`, `clients/` | Python and TypeScript reducers. |
+| `clients/` | Standalone Python + TypeScript reducers — the second and third conformance implementations of the reference reducer. |
+| `bindings/` | Python HTTP SDK: a client for `vela serve --http` (read endpoints + signed write tools). Not a reducer. |
 | `conformance/` | The cross-implementation test-vector suite. |
 | `lean/` | Machine-checked proofs of the governance-soundness theorems. |
 | `schema/`, `schemas/` | Carina kernel schemas. |
@@ -47,8 +99,10 @@ vela registry propose <vfr_id> --to https://hub.constellate.science \
   --reason "..." --payload finding.json
 ```
 
-A proposal is admitted on the strength of its signature over content-addressed
-bytes, never on claimed identity.
+A proposal is admitted to the *log* on the strength of its signature over
+content-addressed bytes, never on claimed identity. Admission to the log is not
+verification: the claim still has to earn `verified` at the gate above before it
+counts as state a field holds to be true.
 
 ## Live
 

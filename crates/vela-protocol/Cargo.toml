@@ -22,10 +22,6 @@ path = "src/lib.rs"
 
 [dependencies]
 vela-protocol-core = { workspace = true }
-dotenvy.workspace = true
-clap.workspace = true
-ctrlc.workspace = true
-libc.workspace = true
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -38,16 +34,10 @@ hex.workspace = true
 regex.workspace = true
 urlencoding.workspace = true
 colored.workspace = true
-axum.workspace = true
-async-stream.workspace = true
-tower-http.workspace = true
 sqlx.workspace = true
 ed25519-dalek.workspace = true
 rand.workspace = true
 toml.workspace = true
-quick-xml.workspace = true
-tokio-stream.workspace = true
-futures.workspace = true
 tempfile.workspace = true
 
 [dev-dependencies]

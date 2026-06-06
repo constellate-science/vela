@@ -36,27 +36,27 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use tower_http::cors::CorsLayer;
 
-use crate::adoption_log;
-use crate::bridge::{Bridge, BridgeStatus};
-use crate::bundle::{FindingBundle, Replication};
-use crate::causal_reasoning::{Identifiability, audit_frontier, summarize_audit};
-use crate::decision;
-use crate::diff_pack_review::{self, DiffPackVerdict};
-use crate::evidence_ci;
-use crate::frontier_health;
-use crate::frontier_incident;
-use crate::frontier_task;
-use crate::index_db_schema;
-use crate::project::Project;
-use crate::proposals::{self, StateProposal};
-use crate::repo;
-use crate::review_packet;
-use crate::review_session;
-use crate::reviewer_identity;
-use crate::scientific_diff::ScientificDiffPack;
-use crate::source_inbox;
-use crate::state::{self, ReviseOptions};
-use crate::task_workspace;
+use vela_protocol::adoption_log;
+use vela_protocol::bridge::{Bridge, BridgeStatus};
+use vela_protocol::bundle::{FindingBundle, Replication};
+use vela_protocol::causal_reasoning::{Identifiability, audit_frontier, summarize_audit};
+use vela_protocol::decision;
+use vela_protocol::diff_pack_review::{self, DiffPackVerdict};
+use vela_protocol::evidence_ci;
+use vela_protocol::frontier_health;
+use vela_protocol::frontier_incident;
+use vela_protocol::frontier_task;
+use vela_protocol::index_db_schema;
+use vela_protocol::project::Project;
+use vela_protocol::proposals::{self, StateProposal};
+use vela_protocol::repo;
+use vela_protocol::review_packet;
+use vela_protocol::review_session;
+use vela_protocol::reviewer_identity;
+use vela_protocol::scientific_diff::ScientificDiffPack;
+use vela_protocol::source_inbox;
+use vela_protocol::state::{self, ReviseOptions};
+use vela_protocol::task_workspace;
 
 const TOKENS_CSS: &str = include_str!("../embedded/web/styles/tokens.css");
 const WORKBENCH_CSS: &str = include_str!("../embedded/web/styles/workbench.css");
@@ -977,32 +977,32 @@ async fn page_dashboard(
         project
             .findings
             .iter()
-            .filter(|f| matches!(f.access_tier, crate::access_tier::AccessTier::Restricted))
+            .filter(|f| matches!(f.access_tier, vela_protocol::access_tier::AccessTier::Restricted))
             .count()
             + project
                 .negative_results
                 .iter()
-                .filter(|n| matches!(n.access_tier, crate::access_tier::AccessTier::Restricted))
+                .filter(|n| matches!(n.access_tier, vela_protocol::access_tier::AccessTier::Restricted))
                 .count()
             + project
                 .trajectories
                 .iter()
-                .filter(|t| matches!(t.access_tier, crate::access_tier::AccessTier::Restricted))
+                .filter(|t| matches!(t.access_tier, vela_protocol::access_tier::AccessTier::Restricted))
                 .count(),
         project
             .findings
             .iter()
-            .filter(|f| matches!(f.access_tier, crate::access_tier::AccessTier::Classified))
+            .filter(|f| matches!(f.access_tier, vela_protocol::access_tier::AccessTier::Classified))
             .count()
             + project
                 .negative_results
                 .iter()
-                .filter(|n| matches!(n.access_tier, crate::access_tier::AccessTier::Classified))
+                .filter(|n| matches!(n.access_tier, vela_protocol::access_tier::AccessTier::Classified))
                 .count()
             + project
                 .trajectories
                 .iter()
-                .filter(|t| matches!(t.access_tier, crate::access_tier::AccessTier::Classified))
+                .filter(|t| matches!(t.access_tier, vela_protocol::access_tier::AccessTier::Classified))
                 .count(),
     );
 
@@ -1577,7 +1577,7 @@ async fn page_ask(State(state): State<AppState>) -> Response {
 }
 
 async fn page_transcript(State(state): State<AppState>) -> Response {
-    let transcript = match crate::adoption_transcript::build(&state.repo_path) {
+    let transcript = match vela_protocol::adoption_transcript::build(&state.repo_path) {
         Ok(transcript) => transcript,
         Err(e) => return error_page("transcript", "Could not build adoption transcript", &e),
     };
@@ -3281,9 +3281,9 @@ async fn page_findings(State(state): State<AppState>) -> Response {
     for f in project.findings.iter().take(500) {
         let conf_pct = (f.confidence.score * 100.0).round() as i64;
         let claim = f.assertion.causal_claim.map_or("n/a", |c| match c {
-            crate::bundle::CausalClaim::Correlation => "correlation",
-            crate::bundle::CausalClaim::Mediation => "mediation",
-            crate::bundle::CausalClaim::Intervention => "intervention",
+            vela_protocol::bundle::CausalClaim::Correlation => "correlation",
+            vela_protocol::bundle::CausalClaim::Mediation => "mediation",
+            vela_protocol::bundle::CausalClaim::Intervention => "intervention",
         });
         let assertion_short: String = f.assertion.text.chars().take(110).collect();
         rows.push_str(&format!(
@@ -3356,7 +3356,7 @@ async fn page_finding_detail(
     };
 
     let conf_pct = (f.confidence.score * 100.0).round() as i64;
-    let finding_atoms: Vec<&crate::sources::EvidenceAtom> = project
+    let finding_atoms: Vec<&vela_protocol::sources::EvidenceAtom> = project
         .evidence_atoms
         .iter()
         .filter(|atom| atom.finding_id == f.id)
@@ -3383,7 +3383,7 @@ async fn page_finding_detail(
         links_html.push_str(r#"<table class="wb-table"><thead><tr><th>type</th><th>target</th><th>mechanism</th></tr></thead><tbody>"#);
         for l in &f.links {
             let mech = l.mechanism.map_or("n/a".to_string(), |m| {
-                use crate::bundle::Mechanism;
+                use vela_protocol::bundle::Mechanism;
                 match m {
                     Mechanism::Linear { sign, slope } => {
                         format!("linear {sign:?} slope {slope:.2}")
@@ -3566,13 +3566,13 @@ async fn page_finding_detail(
     // equals this finding's id. Render in chronological order with the
     // event's reason + actor + timestamp.
     let review_state_label = match &f.flags.review_state {
-        Some(crate::bundle::ReviewState::Accepted) => "<code>accepted</code>",
-        Some(crate::bundle::ReviewState::Contested) => "<code>contested</code>",
-        Some(crate::bundle::ReviewState::NeedsRevision) => "<code>needs_revision</code>",
-        Some(crate::bundle::ReviewState::Rejected) => "<code>rejected</code>",
+        Some(vela_protocol::bundle::ReviewState::Accepted) => "<code>accepted</code>",
+        Some(vela_protocol::bundle::ReviewState::Contested) => "<code>contested</code>",
+        Some(vela_protocol::bundle::ReviewState::NeedsRevision) => "<code>needs_revision</code>",
+        Some(vela_protocol::bundle::ReviewState::Rejected) => "<code>rejected</code>",
         None => "<span style=\"color:var(--ink-3);\">(unset)</span>",
     };
-    let mut events_for_finding: Vec<&crate::events::StateEvent> = project
+    let mut events_for_finding: Vec<&vela_protocol::events::StateEvent> = project
         .events
         .iter()
         .filter(|e| e.target.id == f.id)
@@ -4111,13 +4111,13 @@ async fn page_proof_center(State(state): State<AppState>) -> Response {
         Err(e) => return error_page("proof", "Could not load frontier", &e),
     };
 
-    let integrity = crate::state_integrity::analyze(&project);
-    let signals = crate::signals::analyze(&project, &[]);
+    let integrity = vela_protocol::state_integrity::analyze(&project);
+    let signals = vela_protocol::signals::analyze(&project, &[]);
     let packet = &project.proof_state.latest_packet;
     let recorded_snapshot = packet.snapshot_hash.as_deref().unwrap_or("not recorded");
     let recorded_event_log = packet.event_log_hash.as_deref().unwrap_or("not recorded");
-    let current_snapshot = crate::events::snapshot_hash(&project);
-    let current_event_log = crate::events::event_log_hash(&project.events);
+    let current_snapshot = vela_protocol::events::snapshot_hash(&project);
+    let current_event_log = vela_protocol::events::event_log_hash(&project.events);
     let generated_at = packet.generated_at.as_deref().unwrap_or("not generated");
     let manifest_hash = packet
         .packet_manifest_hash
@@ -4559,9 +4559,9 @@ async fn page_sources(State(state): State<AppState>) -> Response {
         Ok(p) => p,
         Err(e) => return error_page("sources", "Could not load frontier", &e),
     };
-    let source_summary = crate::sources::source_summary(&project);
-    let evidence_summary = crate::sources::evidence_summary(&project);
-    let signals = crate::signals::analyze(&project, &[]);
+    let source_summary = vela_protocol::sources::source_summary(&project);
+    let evidence_summary = vela_protocol::sources::evidence_summary(&project);
+    let signals = vela_protocol::signals::analyze(&project, &[]);
     let source_issue_count = signals
         .signals
         .iter()
@@ -4653,7 +4653,7 @@ async fn page_source_detail(
     let Some(source) = project.sources.iter().find(|source| source.id == source_id) else {
         return error_page("sources", "Source not found", &source_id);
     };
-    let atoms: Vec<&crate::sources::EvidenceAtom> = project
+    let atoms: Vec<&vela_protocol::sources::EvidenceAtom> = project
         .evidence_atoms
         .iter()
         .filter(|atom| atom.source_id == source.id)
@@ -5250,8 +5250,8 @@ async fn page_negative_results(State(state): State<AppState>) -> Response {
     let mut informative_count = 0usize;
     for nr in &project.negative_results {
         match &nr.kind {
-            crate::bundle::NegativeResultKind::RegisteredTrial { .. } => trial_count += 1,
-            crate::bundle::NegativeResultKind::Exploratory { .. } => exploratory_count += 1,
+            vela_protocol::bundle::NegativeResultKind::RegisteredTrial { .. } => trial_count += 1,
+            vela_protocol::bundle::NegativeResultKind::Exploratory { .. } => exploratory_count += 1,
         }
         if nr.is_informative_trial_null() == Some(true) {
             informative_count += 1;
@@ -5274,7 +5274,7 @@ async fn page_negative_results(State(state): State<AppState>) -> Response {
     let mut cards = String::new();
     for nr in &project.negative_results {
         let (chip_kind, chip_label, kind_body) = match &nr.kind {
-            crate::bundle::NegativeResultKind::RegisteredTrial {
+            vela_protocol::bundle::NegativeResultKind::RegisteredTrial {
                 endpoint,
                 intervention,
                 comparator,
@@ -5317,7 +5317,7 @@ async fn page_negative_results(State(state): State<AppState>) -> Response {
                     ),
                 )
             }
-            crate::bundle::NegativeResultKind::Exploratory {
+            vela_protocol::bundle::NegativeResultKind::Exploratory {
                 reagent,
                 observation,
                 attempts,
@@ -5345,15 +5345,15 @@ async fn page_negative_results(State(state): State<AppState>) -> Response {
             .as_ref()
             .map(|s| {
                 let (c, label) = match s {
-                    crate::bundle::ReviewState::Accepted => ("ok", "accepted"),
-                    crate::bundle::ReviewState::Contested => ("warn", "contested"),
-                    crate::bundle::ReviewState::NeedsRevision => ("warn", "needs revision"),
-                    crate::bundle::ReviewState::Rejected => ("lost", "rejected"),
+                    vela_protocol::bundle::ReviewState::Accepted => ("ok", "accepted"),
+                    vela_protocol::bundle::ReviewState::Contested => ("warn", "contested"),
+                    vela_protocol::bundle::ReviewState::NeedsRevision => ("warn", "needs revision"),
+                    vela_protocol::bundle::ReviewState::Rejected => ("lost", "rejected"),
                 };
                 format!(r#"<span class="wb-chip wb-chip--{c}">{label}</span>"#)
             })
             .unwrap_or_default();
-        let tier_chip = if !matches!(nr.access_tier, crate::access_tier::AccessTier::Public) {
+        let tier_chip = if !matches!(nr.access_tier, vela_protocol::access_tier::AccessTier::Public) {
             format!(
                 r#"<span class="wb-chip wb-chip--lost">{}</span>"#,
                 nr.access_tier.canonical()
@@ -5473,15 +5473,15 @@ async fn page_trajectories(State(state): State<AppState>) -> Response {
             .as_ref()
             .map(|s| {
                 let (c, label) = match s {
-                    crate::bundle::ReviewState::Accepted => ("ok", "accepted"),
-                    crate::bundle::ReviewState::Contested => ("warn", "contested"),
-                    crate::bundle::ReviewState::NeedsRevision => ("warn", "needs revision"),
-                    crate::bundle::ReviewState::Rejected => ("lost", "rejected"),
+                    vela_protocol::bundle::ReviewState::Accepted => ("ok", "accepted"),
+                    vela_protocol::bundle::ReviewState::Contested => ("warn", "contested"),
+                    vela_protocol::bundle::ReviewState::NeedsRevision => ("warn", "needs revision"),
+                    vela_protocol::bundle::ReviewState::Rejected => ("lost", "rejected"),
                 };
                 format!(r#"<span class="wb-chip wb-chip--{c}">{label}</span>"#)
             })
             .unwrap_or_default();
-        let tier_chip = if !matches!(t.access_tier, crate::access_tier::AccessTier::Public) {
+        let tier_chip = if !matches!(t.access_tier, vela_protocol::access_tier::AccessTier::Public) {
             format!(
                 r#"<span class="wb-chip wb-chip--lost">{}</span>"#,
                 t.access_tier.canonical()
@@ -5513,24 +5513,24 @@ async fn page_trajectories(State(state): State<AppState>) -> Response {
             // open/in-flight steps, "ok" for confirmations.
             let (chip_kind, kind_label) = match step.kind {
                 // v0.50 legacy
-                crate::bundle::TrajectoryStepKind::Hypothesis => ("warn", "hypothesis"),
-                crate::bundle::TrajectoryStepKind::Tried => ("warn", "tried"),
-                crate::bundle::TrajectoryStepKind::RuledOut => ("lost", "ruled out"),
-                crate::bundle::TrajectoryStepKind::Observed => ("ok", "observed"),
-                crate::bundle::TrajectoryStepKind::Refined => ("ok", "refined"),
+                vela_protocol::bundle::TrajectoryStepKind::Hypothesis => ("warn", "hypothesis"),
+                vela_protocol::bundle::TrajectoryStepKind::Tried => ("warn", "tried"),
+                vela_protocol::bundle::TrajectoryStepKind::RuledOut => ("lost", "ruled out"),
+                vela_protocol::bundle::TrajectoryStepKind::Observed => ("ok", "observed"),
+                vela_protocol::bundle::TrajectoryStepKind::Refined => ("ok", "refined"),
                 // v0.194 vision-taxonomy
-                crate::bundle::TrajectoryStepKind::Question => ("warn", "question"),
-                crate::bundle::TrajectoryStepKind::Context => ("ok", "context"),
-                crate::bundle::TrajectoryStepKind::Data => ("ok", "data"),
-                crate::bundle::TrajectoryStepKind::Tool => ("ok", "tool"),
-                crate::bundle::TrajectoryStepKind::Model => ("ok", "model"),
-                crate::bundle::TrajectoryStepKind::Expert => ("ok", "expert"),
-                crate::bundle::TrajectoryStepKind::Decision => ("ok", "decision"),
-                crate::bundle::TrajectoryStepKind::Protocol => ("ok", "protocol"),
-                crate::bundle::TrajectoryStepKind::Output => ("ok", "output"),
-                crate::bundle::TrajectoryStepKind::Review => ("ok", "review"),
-                crate::bundle::TrajectoryStepKind::Risk => ("lost", "risk"),
-                crate::bundle::TrajectoryStepKind::Outcome => ("ok", "outcome"),
+                vela_protocol::bundle::TrajectoryStepKind::Question => ("warn", "question"),
+                vela_protocol::bundle::TrajectoryStepKind::Context => ("ok", "context"),
+                vela_protocol::bundle::TrajectoryStepKind::Data => ("ok", "data"),
+                vela_protocol::bundle::TrajectoryStepKind::Tool => ("ok", "tool"),
+                vela_protocol::bundle::TrajectoryStepKind::Model => ("ok", "model"),
+                vela_protocol::bundle::TrajectoryStepKind::Expert => ("ok", "expert"),
+                vela_protocol::bundle::TrajectoryStepKind::Decision => ("ok", "decision"),
+                vela_protocol::bundle::TrajectoryStepKind::Protocol => ("ok", "protocol"),
+                vela_protocol::bundle::TrajectoryStepKind::Output => ("ok", "output"),
+                vela_protocol::bundle::TrajectoryStepKind::Review => ("ok", "review"),
+                vela_protocol::bundle::TrajectoryStepKind::Risk => ("lost", "risk"),
+                vela_protocol::bundle::TrajectoryStepKind::Outcome => ("ok", "outcome"),
             };
             steps_html.push_str(&format!(
                 r#"<div style="border-left:2px solid var(--rule-2,#d8d4cc);padding:0.4rem 0.7rem;margin:0.3rem 0;">
@@ -5593,36 +5593,36 @@ async fn page_tiers(State(state): State<AppState>) -> Response {
         Err(e) => return error_page("tiers", "Could not load frontier", &e),
     };
 
-    let count_findings = |tier: crate::access_tier::AccessTier| {
+    let count_findings = |tier: vela_protocol::access_tier::AccessTier| {
         project
             .findings
             .iter()
             .filter(|f| f.access_tier == tier)
             .count()
     };
-    let count_nrs = |tier: crate::access_tier::AccessTier| {
+    let count_nrs = |tier: vela_protocol::access_tier::AccessTier| {
         project
             .negative_results
             .iter()
             .filter(|n| n.access_tier == tier)
             .count()
     };
-    let count_trajs = |tier: crate::access_tier::AccessTier| {
+    let count_trajs = |tier: vela_protocol::access_tier::AccessTier| {
         project
             .trajectories
             .iter()
             .filter(|t| t.access_tier == tier)
             .count()
     };
-    let public_total = count_findings(crate::access_tier::AccessTier::Public)
-        + count_nrs(crate::access_tier::AccessTier::Public)
-        + count_trajs(crate::access_tier::AccessTier::Public);
-    let restricted_total = count_findings(crate::access_tier::AccessTier::Restricted)
-        + count_nrs(crate::access_tier::AccessTier::Restricted)
-        + count_trajs(crate::access_tier::AccessTier::Restricted);
-    let classified_total = count_findings(crate::access_tier::AccessTier::Classified)
-        + count_nrs(crate::access_tier::AccessTier::Classified)
-        + count_trajs(crate::access_tier::AccessTier::Classified);
+    let public_total = count_findings(vela_protocol::access_tier::AccessTier::Public)
+        + count_nrs(vela_protocol::access_tier::AccessTier::Public)
+        + count_trajs(vela_protocol::access_tier::AccessTier::Public);
+    let restricted_total = count_findings(vela_protocol::access_tier::AccessTier::Restricted)
+        + count_nrs(vela_protocol::access_tier::AccessTier::Restricted)
+        + count_trajs(vela_protocol::access_tier::AccessTier::Restricted);
+    let classified_total = count_findings(vela_protocol::access_tier::AccessTier::Classified)
+        + count_nrs(vela_protocol::access_tier::AccessTier::Classified)
+        + count_trajs(vela_protocol::access_tier::AccessTier::Classified);
 
     let stats_html = format!(
         r#"<div class="wb-stats">
@@ -5638,7 +5638,7 @@ async fn page_tiers(State(state): State<AppState>) -> Response {
             .count(),
     );
 
-    let mut tier_events: Vec<&crate::events::StateEvent> = project
+    let mut tier_events: Vec<&vela_protocol::events::StateEvent> = project
         .events
         .iter()
         .filter(|e| e.kind == "tier.set")
@@ -5707,15 +5707,15 @@ async fn page_tiers(State(state): State<AppState>) -> Response {
     </tbody>
   </table>
 </div>"#,
-        fp = count_findings(crate::access_tier::AccessTier::Public),
-        fr = count_findings(crate::access_tier::AccessTier::Restricted),
-        fc = count_findings(crate::access_tier::AccessTier::Classified),
-        np = count_nrs(crate::access_tier::AccessTier::Public),
-        nr = count_nrs(crate::access_tier::AccessTier::Restricted),
-        nc = count_nrs(crate::access_tier::AccessTier::Classified),
-        tp = count_trajs(crate::access_tier::AccessTier::Public),
-        tr = count_trajs(crate::access_tier::AccessTier::Restricted),
-        tc = count_trajs(crate::access_tier::AccessTier::Classified),
+        fp = count_findings(vela_protocol::access_tier::AccessTier::Public),
+        fr = count_findings(vela_protocol::access_tier::AccessTier::Restricted),
+        fc = count_findings(vela_protocol::access_tier::AccessTier::Classified),
+        np = count_nrs(vela_protocol::access_tier::AccessTier::Public),
+        nr = count_nrs(vela_protocol::access_tier::AccessTier::Restricted),
+        nc = count_nrs(vela_protocol::access_tier::AccessTier::Classified),
+        tp = count_trajs(vela_protocol::access_tier::AccessTier::Public),
+        tr = count_trajs(vela_protocol::access_tier::AccessTier::Restricted),
+        tc = count_trajs(vela_protocol::access_tier::AccessTier::Classified),
     );
 
     let body = format!("{stats_html}{breakdown_html}{events_html}");
@@ -5908,7 +5908,7 @@ async fn post_api_propagate_confidence(
                 .into_response();
         }
     };
-    let cascade_events: Vec<&crate::events::StateEvent> = project_after
+    let cascade_events: Vec<&vela_protocol::events::StateEvent> = project_after
         .events
         .iter()
         .filter(|e| e.kind == "finding.dependency_invalidated")
@@ -5951,7 +5951,7 @@ fn finding_state_classes(
     b: &FindingBundle,
     replications: &[Replication],
 ) -> (&'static str, &'static str) {
-    use crate::bundle::ReviewState;
+    use vela_protocol::bundle::ReviewState;
     if b.flags.retracted {
         return ("retracted", "lost");
     }
@@ -12656,7 +12656,7 @@ async fn page_review_inbox(
         Err(e) => return error_page("review", "Could not load frontier", &e),
     };
 
-    let locator_gaps: Vec<&crate::sources::EvidenceAtom> = project
+    let locator_gaps: Vec<&vela_protocol::sources::EvidenceAtom> = project
         .evidence_atoms
         .iter()
         .filter(|a| a.locator.is_none())
@@ -12720,7 +12720,7 @@ async fn page_review_inbox(
         .filter(|f| {
             matches!(
                 f.flags.review_state,
-                None | Some(crate::bundle::ReviewState::NeedsRevision)
+                None | Some(vela_protocol::bundle::ReviewState::NeedsRevision)
             )
         })
         .filter(|f| matches_source_filter(f))
@@ -12732,7 +12732,7 @@ async fn page_review_inbox(
         .filter(|f| {
             matches!(
                 f.flags.review_state,
-                None | Some(crate::bundle::ReviewState::NeedsRevision)
+                None | Some(vela_protocol::bundle::ReviewState::NeedsRevision)
             )
         })
         .count();
@@ -12741,7 +12741,7 @@ async fn page_review_inbox(
     // listing; resolution happens through subsequent reviewer
     // actions on the affected finding (revise / caveat / reject /
     // finding.reviewed contested).
-    let federation_conflicts: Vec<&crate::events::StateEvent> = project
+    let federation_conflicts: Vec<&vela_protocol::events::StateEvent> = project
         .events
         .iter()
         .filter(|e| e.kind == "frontier.conflict_detected")
@@ -12903,9 +12903,9 @@ async fn page_review_inbox(
         .first()
         .map(|finding| finding.id.as_str())
         .unwrap_or("none");
-    let policy_summary = crate::frontier_policy::load_policy_summary(&state.repo_path).ok();
+    let policy_summary = vela_protocol::frontier_policy::load_policy_summary(&state.repo_path).ok();
     let policy_requirement_label = |operation_class: &str, kind: &str, downstream: bool| {
-        let req = crate::frontier_policy::review_requirement_for_operation(
+        let req = vela_protocol::frontier_policy::review_requirement_for_operation(
             policy_summary.as_ref(),
             operation_class,
             kind,
@@ -12995,7 +12995,7 @@ async fn page_review_inbox(
     // kinds. Empty-frontier safe (an empty event list yields zeros,
     // not panics).
     let cutoff_seven_days = chrono::Utc::now() - chrono::Duration::days(7);
-    let events_last_7d: Vec<&crate::events::StateEvent> = project
+    let events_last_7d: Vec<&vela_protocol::events::StateEvent> = project
         .events
         .iter()
         .filter(|e| {
@@ -13017,7 +13017,7 @@ async fn page_review_inbox(
     // Median proposal-to-event latency. For each proposal that has
     // an applied_event_id, look up the corresponding event's
     // timestamp and compare against the proposal's created_at.
-    let event_by_id: std::collections::HashMap<&str, &crate::events::StateEvent> =
+    let event_by_id: std::collections::HashMap<&str, &vela_protocol::events::StateEvent> =
         project.events.iter().map(|e| (e.id.as_str(), e)).collect();
     let mut latencies_sec: Vec<i64> = Vec::new();
     let mut applied_count: usize = 0;
@@ -13088,7 +13088,7 @@ async fn page_review_inbox(
     }
     body.push_str("</div>");
 
-    let render_atom = |a: &crate::sources::EvidenceAtom| {
+    let render_atom = |a: &vela_protocol::sources::EvidenceAtom| {
         format!(
             r#"<tr><td><code>{aid}</code></td><td><code>{fid}</code></td><td><a href="/review/locator-repair/{aid}">repair →</a></td></tr>"#,
             aid = escape_html(&a.id),
@@ -13145,7 +13145,7 @@ async fn page_review_inbox(
         body.push_str(r#"<table class="wb-table"><thead><tr><th>finding</th><th>assertion</th><th>source</th><th>state</th><th></th></tr></thead><tbody>"#);
         for f in &promote_pending {
             let state_label = match &f.flags.review_state {
-                Some(crate::bundle::ReviewState::NeedsRevision) => "needs_revision",
+                Some(vela_protocol::bundle::ReviewState::NeedsRevision) => "needs_revision",
                 None => "(unset)",
                 _ => "(other)",
             };
@@ -13928,10 +13928,10 @@ async fn page_review_promote(
         return error_page("review", "Finding not found", &finding_id);
     };
     let current_state = match &f.flags.review_state {
-        Some(crate::bundle::ReviewState::Accepted) => "accepted",
-        Some(crate::bundle::ReviewState::Contested) => "contested",
-        Some(crate::bundle::ReviewState::NeedsRevision) => "needs_revision",
-        Some(crate::bundle::ReviewState::Rejected) => "rejected",
+        Some(vela_protocol::bundle::ReviewState::Accepted) => "accepted",
+        Some(vela_protocol::bundle::ReviewState::Contested) => "contested",
+        Some(vela_protocol::bundle::ReviewState::NeedsRevision) => "needs_revision",
+        Some(vela_protocol::bundle::ReviewState::Rejected) => "rejected",
         None => "(unset)",
     };
     let assertion = escape_html(&f.assertion.text);
@@ -14399,7 +14399,7 @@ async fn post_review_replication_add(
     State(state): State<AppState>,
     Form(form): Form<ReplicationAddForm>,
 ) -> Response {
-    use crate::bundle::{Conditions, Evidence, Extraction, Provenance, Replication};
+    use vela_protocol::bundle::{Conditions, Evidence, Extraction, Provenance, Replication};
 
     let evidence = Evidence {
         evidence_type: "experimental".to_string(),
@@ -14623,7 +14623,7 @@ async fn post_review_prediction_add(
     State(state): State<AppState>,
     Form(form): Form<PredictionAddForm>,
 ) -> Response {
-    use crate::bundle::{Conditions, ExpectedOutcome, Prediction};
+    use vela_protocol::bundle::{Conditions, ExpectedOutcome, Prediction};
     use chrono::Utc;
 
     let lower = form.conditions_text.to_lowercase();
@@ -14744,7 +14744,7 @@ async fn page_threads_list(State(state): State<AppState>) -> Response {
         Err(e) => return error_page("threads", "Could not load frontier", &e),
     };
     let label = frontier_label(&project);
-    let threads = crate::review_thread_storage::load_all_threads(&state.repo_path);
+    let threads = vela_protocol::review_thread::load_all_threads(&state.repo_path);
 
     let stats = format!(
         r#"<div class="wb-stats">
@@ -14759,14 +14759,14 @@ async fn page_threads_list(State(state): State<AppState>) -> Response {
             .iter()
             .filter(|t| matches!(
                 t.target_kind,
-                crate::review_thread::ThreadTargetKind::Proposal
+                vela_protocol::review_thread::ThreadTargetKind::Proposal
             ))
             .count(),
         vf = threads
             .iter()
             .filter(|t| matches!(
                 t.target_kind,
-                crate::review_thread::ThreadTargetKind::Finding
+                vela_protocol::review_thread::ThreadTargetKind::Finding
             ))
             .count(),
     );
@@ -14779,9 +14779,9 @@ async fn page_threads_list(State(state): State<AppState>) -> Response {
             .iter()
             .map(|t| {
                 let target_kind = match t.target_kind {
-                    crate::review_thread::ThreadTargetKind::Proposal => "proposal",
-                    crate::review_thread::ThreadTargetKind::Finding => "finding",
-                    crate::review_thread::ThreadTargetKind::DiffPack => "diff_pack",
+                    vela_protocol::review_thread::ThreadTargetKind::Proposal => "proposal",
+                    vela_protocol::review_thread::ThreadTargetKind::Finding => "finding",
+                    vela_protocol::review_thread::ThreadTargetKind::DiffPack => "diff_pack",
                 };
                 let last_activity = t
                     .messages
@@ -14844,15 +14844,15 @@ async fn page_thread_detail(
         Err(e) => return error_page("threads", "Could not load frontier", &e),
     };
     let label = frontier_label(&project);
-    let thread = match crate::review_thread_storage::load_thread(&state.repo_path, &thread_id) {
+    let thread = match vela_protocol::review_thread::load_thread(&state.repo_path, &thread_id) {
         Some(t) => t,
         None => return error_page("threads", "Thread not found", &thread_id),
     };
 
     let target_kind = match thread.target_kind {
-        crate::review_thread::ThreadTargetKind::Proposal => "proposal",
-        crate::review_thread::ThreadTargetKind::Finding => "finding",
-        crate::review_thread::ThreadTargetKind::DiffPack => "diff_pack",
+        vela_protocol::review_thread::ThreadTargetKind::Proposal => "proposal",
+        vela_protocol::review_thread::ThreadTargetKind::Finding => "finding",
+        vela_protocol::review_thread::ThreadTargetKind::DiffPack => "diff_pack",
     };
 
     let messages_html: String = if thread.messages.is_empty() {
@@ -15740,7 +15740,7 @@ async fn post_diff_pack_attest(
 /// member sets and opposing outcomes. Pure read; mirrors the
 /// `vela conflict detect` CLI helper.
 fn detect_candidate_conflicts(repo_path: &Path) -> Vec<serde_json::Value> {
-    use crate::diff_pack_review;
+    use vela_protocol::diff_pack_review;
     let pending = diff_pack_review::list_at_path(repo_path);
     let mut pack_members: std::collections::HashMap<String, Vec<String>> =
         std::collections::HashMap::new();
@@ -15799,8 +15799,8 @@ fn detect_candidate_conflicts(repo_path: &Path) -> Vec<serde_json::Value> {
 
 /// Walk .vela/verdict_conflicts/<vdc_id>.json. Returns parsed
 /// VerdictConflict bodies sorted newest-first by resolved_at.
-fn list_resolved_conflicts(repo_path: &Path) -> Vec<crate::verdict_conflict::VerdictConflict> {
-    use crate::verdict_conflict::VerdictConflict;
+fn list_resolved_conflicts(repo_path: &Path) -> Vec<vela_protocol::verdict_conflict::VerdictConflict> {
+    use vela_protocol::verdict_conflict::VerdictConflict;
     let dir = repo_path.join(".vela").join("verdict_conflicts");
     let Ok(entries) = std::fs::read_dir(&dir) else {
         return Vec::new();
@@ -15943,9 +15943,9 @@ async fn page_conflicts_list(State(state): State<AppState>) -> Response {
             .iter()
             .map(|c| {
                 let chip_class = match c.resolution_mode {
-                    crate::verdict_conflict::ResolutionMode::Majority => "wb-chip--ok",
-                    crate::verdict_conflict::ResolutionMode::OwnerOverride => "wb-chip--ok",
-                    crate::verdict_conflict::ResolutionMode::Escalation => "wb-chip--warn",
+                    vela_protocol::verdict_conflict::ResolutionMode::Majority => "wb-chip--ok",
+                    vela_protocol::verdict_conflict::ResolutionMode::OwnerOverride => "wb-chip--ok",
+                    vela_protocol::verdict_conflict::ResolutionMode::Escalation => "wb-chip--warn",
                 };
                 let winner_html = match &c.winning_verdict_id {
                     Some(w) => format!(
@@ -16094,7 +16094,7 @@ async fn page_verdicts_timeline(State(state): State<AppState>) -> Response {
     // scaffolders that wrote vdc_* directly without emitting a
     // canonical event.
     let mut seen_conflicts: std::collections::HashSet<String> = std::collections::HashSet::new();
-    let mut all_conflicts: Vec<crate::verdict_conflict::VerdictConflict> =
+    let mut all_conflicts: Vec<vela_protocol::verdict_conflict::VerdictConflict> =
         project.verdict_conflicts.clone();
     for c in list_resolved_conflicts(&state.repo_path) {
         if !all_conflicts.iter().any(|x| x.conflict_id == c.conflict_id) {

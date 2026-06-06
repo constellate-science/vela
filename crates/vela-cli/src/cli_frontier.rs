@@ -5,15 +5,15 @@ use crate::cli::{
     cmd_frontier_releases, cmd_frontier_shards, fail, fail_return, print_json,
 };
 use crate::cli_commands::FrontierAction;
-use crate::cli_style as style;
-use crate::{frontier_repo, project, proposals};
+use vela_protocol::cli_style as style;
+use vela_protocol::{frontier_repo, project, proposals};
 
 use colored::Colorize;
 use serde_json::json;
 
 pub(crate) fn cmd_frontier(action: FrontierAction) {
-    use crate::project::ProjectDependency;
-    use crate::repo;
+    use vela_protocol::project::ProjectDependency;
+    use vela_protocol::repo;
     match action {
         FrontierAction::New {
             path,
@@ -220,8 +220,8 @@ pub(crate) fn cmd_frontier(action: FrontierAction) {
             // Refuse if any link still references this vfr_id.
             for f in &p.findings {
                 for l in &f.links {
-                    if let Ok(crate::bundle::LinkRef::Cross { vfr_id: ref v, .. }) =
-                        crate::bundle::LinkRef::parse(&l.target)
+                    if let Ok(vela_protocol::bundle::LinkRef::Cross { vfr_id: ref v, .. }) =
+                        vela_protocol::bundle::LinkRef::parse(&l.target)
                         && v == &vfr_id
                     {
                         fail(&format!(

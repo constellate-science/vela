@@ -2,15 +2,15 @@
 
 use crate::cli::{cmd_federation_push_resolution, fail, fail_return};
 use crate::cli_commands::*;
-use crate::cli_style as style;
-use crate::repo;
+use vela_protocol::cli_style as style;
+use vela_protocol::repo;
 
 use colored::Colorize;
 use serde_json::json;
 
 /// v0.39: Manage the federation peer registry.
 pub(crate) fn cmd_federation(action: FederationAction) {
-    use crate::federation::PeerHub;
+    use vela_protocol::federation::PeerHub;
 
     match action {
         FederationAction::PeerAdd {
@@ -110,7 +110,7 @@ pub(crate) fn cmd_federation(action: FederationAction) {
             dry_run,
             json,
         } => {
-            use crate::federation::{self, DiscoveryResult};
+            use vela_protocol::federation::{self, DiscoveryResult};
 
             let mut project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
             let Some(peer) = project.peers.iter().find(|p| p.id == peer_id).cloned() else {
@@ -141,7 +141,7 @@ pub(crate) fn cmd_federation(action: FederationAction) {
             // v0.41.0: three sync modes (via-hub / direct-url / default-manifest-path).
             #[derive(Debug)]
             enum SyncOutcome {
-                Resolved(crate::project::Project, String), // (peer state, source description)
+                Resolved(vela_protocol::project::Project, String), // (peer state, source description)
                 BrokenLocator(String, String, u16),        // (vfr_id, locator, status)
                 UnverifiedEntry(String, String),           // (vfr_id, reason)
                 EntryNotFound(String, u16),

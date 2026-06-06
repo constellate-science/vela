@@ -19,9 +19,9 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
 
-use crate::bundle::FindingBundle;
-use crate::project::{self, ConfidenceDistribution, Project, ProjectStats};
-use crate::{bridge, decision, events, observer, repo, signals, sources, state, tool_registry};
+use vela_protocol::bundle::FindingBundle;
+use vela_protocol::project::{self, ConfidenceDistribution, Project, ProjectStats};
+use vela_protocol::{bridge, decision, events, observer, repo, signals, sources, state, tool_registry};
 
 pub enum ProjectSource {
     Single(PathBuf),
@@ -37,7 +37,7 @@ impl ProjectSource {
         } else {
             eprintln!(
                 "{} provide either a frontier file or --frontiers <dir>",
-                crate::cli_style::err_prefix()
+                vela_protocol::cli_style::err_prefix()
             );
             std::process::exit(1);
         }
@@ -59,7 +59,7 @@ pub fn load_projects(source: &ProjectSource) -> (Project, Vec<ProjectInfo>) {
             let mut frontier = repo::load_from_path(path).unwrap_or_else(|e| {
                 eprintln!(
                     "{} failed to load frontier: {e}",
-                    crate::cli_style::err_prefix()
+                    vela_protocol::cli_style::err_prefix()
                 );
                 std::process::exit(1);
             });
@@ -78,7 +78,7 @@ pub fn load_projects(source: &ProjectSource) -> (Project, Vec<ProjectInfo>) {
                 .unwrap_or_else(|e| {
                     eprintln!(
                         "{} failed to read directory: {e}",
-                        crate::cli_style::err_prefix()
+                        vela_protocol::cli_style::err_prefix()
                     );
                     std::process::exit(1);
                 })
@@ -100,7 +100,7 @@ pub fn load_projects(source: &ProjectSource) -> (Project, Vec<ProjectInfo>) {
                 let mut frontier = repo::load_from_path(path).unwrap_or_else(|e| {
                     eprintln!(
                         "{} failed to load {}: {e}",
-                        crate::cli_style::err_prefix(),
+                        vela_protocol::cli_style::err_prefix(),
                         path.display()
                     );
                     std::process::exit(1);
@@ -238,7 +238,7 @@ fn merge_projects(frontiers: Vec<(String, Project)>) -> Project {
                         && review
                             .reviewer
                             .as_deref()
-                            .map(crate::events::actor_kind)
+                            .map(vela_protocol::events::actor_kind)
                             .unwrap_or("human")
                             == "human"
                 })
@@ -252,7 +252,7 @@ fn merge_projects(frontiers: Vec<(String, Project)>) -> Project {
                         && review
                             .reviewer
                             .as_deref()
-                            .map(crate::events::actor_kind)
+                            .map(vela_protocol::events::actor_kind)
                             .unwrap_or("human")
                             != "human"
                 })
@@ -454,7 +454,7 @@ pub async fn run_http(source: ProjectSource, backend: Option<&str>, port: u16, w
         } else {
             eprintln!(
                 "{} --workbench: web/ directory not found at expected location; serving API only",
-                crate::cli_style::err_prefix()
+                vela_protocol::cli_style::err_prefix()
             );
         }
     }
@@ -483,7 +483,7 @@ pub async fn run_http(source: ProjectSource, backend: Option<&str>, port: u16, w
         }
         .as_str()
     );
-    eprintln!("  {}", crate::cli_style::tick_row(60));
+    eprintln!("  {}", vela_protocol::cli_style::tick_row(60));
     eprintln!("  listening on http://{addr}");
     if workbench {
         // v0.29: print the deep link the researcher actually opens.
@@ -525,7 +525,7 @@ pub async fn run_http(source: ProjectSource, backend: Option<&str>, port: u16, w
         .unwrap_or_else(|e| {
             eprintln!(
                 "{} failed to bind to {addr}: {e}",
-                crate::cli_style::err_prefix()
+                vela_protocol::cli_style::err_prefix()
             );
             std::process::exit(1);
         });
@@ -1051,22 +1051,22 @@ async fn execute_tool(
         // require VELA_AGENT_KEY_HEX (or skip-as-error). Stateless
         // one-shot calls — the agent does its own session bookkeeping
         // and only invokes Vela when ready to submit.
-        "vela_agent_submit_diff_pack" => (crate::vela_agent_mcp::submit_diff_pack(args), None),
-        "vela_agent_open_trajectory" => (crate::vela_agent_mcp::open_trajectory(args), None),
+        "vela_agent_submit_diff_pack" => (vela_protocol::vela_agent_mcp::submit_diff_pack(args), None),
+        "vela_agent_open_trajectory" => (vela_protocol::vela_agent_mcp::open_trajectory(args), None),
         // v0.214: read-side tools. None require VELA_AGENT_KEY_HEX.
-        "vela_agent_get_pack" => (crate::vela_agent_mcp::get_pack(args), None),
-        "vela_agent_list_packs" => (crate::vela_agent_mcp::list_packs(args), None),
-        "vela_agent_get_attestation" => (crate::vela_agent_mcp::get_attestation(args), None),
-        "vela_agent_list_trajectories" => (crate::vela_agent_mcp::list_trajectories(args), None),
-        "vela_agent_frontier_summary" => (crate::vela_agent_mcp::frontier_summary(args), None),
+        "vela_agent_get_pack" => (vela_protocol::vela_agent_mcp::get_pack(args), None),
+        "vela_agent_list_packs" => (vela_protocol::vela_agent_mcp::list_packs(args), None),
+        "vela_agent_get_attestation" => (vela_protocol::vela_agent_mcp::get_attestation(args), None),
+        "vela_agent_list_trajectories" => (vela_protocol::vela_agent_mcp::list_trajectories(args), None),
+        "vela_agent_frontier_summary" => (vela_protocol::vela_agent_mcp::frontier_summary(args), None),
         // v0.220: parity read tools.
         "vela_agent_get_tool_descriptor" => {
-            (crate::vela_agent_mcp::get_tool_descriptor(args), None)
+            (vela_protocol::vela_agent_mcp::get_tool_descriptor(args), None)
         }
-        "vela_agent_get_evaluation" => (crate::vela_agent_mcp::get_evaluation(args), None),
-        "vela_agent_list_evaluations" => (crate::vela_agent_mcp::list_evaluations(args), None),
-        "vela_agent_get_conflict" => (crate::vela_agent_mcp::get_conflict(args), None),
-        "vela_agent_list_conflicts" => (crate::vela_agent_mcp::list_conflicts(args), None),
+        "vela_agent_get_evaluation" => (vela_protocol::vela_agent_mcp::get_evaluation(args), None),
+        "vela_agent_list_evaluations" => (vela_protocol::vela_agent_mcp::list_evaluations(args), None),
+        "vela_agent_get_conflict" => (vela_protocol::vela_agent_mcp::get_conflict(args), None),
+        "vela_agent_list_conflicts" => (vela_protocol::vela_agent_mcp::list_conflicts(args), None),
         _ => (Err(format!("Unknown tool: {name}")), None),
     }
 }
@@ -1159,7 +1159,7 @@ where
                     "actor '{actor_id}' is not registered in this frontier; register via `vela actor add` before writing"
                 )
             })?;
-        let tier_permits = crate::sign::actor_can_auto_apply(actor, kind);
+        let tier_permits = vela_protocol::sign::actor_can_auto_apply(actor, kind);
         // If the caller asked to auto-apply but the actor's tier doesn't
         // permit this kind, reject before signature verification — the
         // capability gate is independent of signing correctness.
@@ -1174,9 +1174,9 @@ where
 
     // Build the proposal exactly as the CLI would, then verify the signature
     // against the registered pubkey before persisting.
-    let mut proposal = crate::proposals::new_proposal(
+    let mut proposal = vela_protocol::proposals::new_proposal(
         kind,
-        crate::events::StateTarget {
+        vela_protocol::events::StateTarget {
             r#type: "finding".to_string(),
             id: target_finding_id.to_string(),
         },
@@ -1188,9 +1188,9 @@ where
         Vec::new(),
     );
     proposal.created_at = created_at;
-    proposal.id = crate::proposals::proposal_id(&proposal);
+    proposal.id = vela_protocol::proposals::proposal_id(&proposal);
 
-    let valid = crate::sign::verify_proposal_signature(&proposal, signature_hex, &pubkey)?;
+    let valid = vela_protocol::sign::verify_proposal_signature(&proposal, signature_hex, &pubkey)?;
     if !valid {
         return Err(format!(
             "Signature does not verify for actor '{actor_id}' on this proposal"
@@ -1201,12 +1201,12 @@ where
     // enforced above). Phase P guarantees `create_or_apply` is idempotent
     // either way.
     let apply = apply_if_tier_permits && tier_permits_apply;
-    let result = crate::proposals::create_or_apply(path, proposal, apply)
+    let result = vela_protocol::proposals::create_or_apply(path, proposal, apply)
         .map_err(|e| format!("create_or_apply failed: {e}"))?;
 
     // Refresh the in-memory state from disk so subsequent reads see the write.
     let fresh =
-        crate::repo::load_from_path(path).map_err(|e| format!("reload after write failed: {e}"))?;
+        vela_protocol::repo::load_from_path(path).map_err(|e| format!("reload after write failed: {e}"))?;
     let mut project = frontier.lock().await;
     *project = fresh;
 
@@ -1261,7 +1261,7 @@ async fn write_tool_decision(
         "reason": reason,
         "timestamp": timestamp,
     });
-    let signing_bytes = crate::canonical::to_canonical_bytes(&preimage)?;
+    let signing_bytes = vela_protocol::canonical::to_canonical_bytes(&preimage)?;
 
     // Look up the reviewer's registered pubkey.
     let pubkey = {
@@ -1274,7 +1274,7 @@ async fn write_tool_decision(
             .ok_or_else(|| format!("reviewer '{reviewer_id}' is not registered"))?
     };
 
-    let valid = crate::sign::verify_action_signature(&signing_bytes, signature_hex, &pubkey)?;
+    let valid = vela_protocol::sign::verify_action_signature(&signing_bytes, signature_hex, &pubkey)?;
     if !valid {
         return Err(format!(
             "Signature does not verify for reviewer '{reviewer_id}' on {action} of {proposal_id}"
@@ -1283,7 +1283,7 @@ async fn write_tool_decision(
 
     let outcome = match action {
         "accept" => {
-            let event_id = crate::proposals::accept_at_path(path, proposal_id, reviewer_id, reason)
+            let event_id = vela_protocol::proposals::accept_at_path(path, proposal_id, reviewer_id, reason)
                 .map_err(|e| format!("accept failed: {e}"))?;
             json!({
                 "proposal_id": proposal_id,
@@ -1292,7 +1292,7 @@ async fn write_tool_decision(
             })
         }
         "reject" => {
-            crate::proposals::reject_at_path(path, proposal_id, reviewer_id, reason)
+            vela_protocol::proposals::reject_at_path(path, proposal_id, reviewer_id, reason)
                 .map_err(|e| format!("reject failed: {e}"))?;
             json!({
                 "proposal_id": proposal_id,
@@ -1305,7 +1305,7 @@ async fn write_tool_decision(
 
     // Refresh in-memory state.
     let fresh =
-        crate::repo::load_from_path(path).map_err(|e| format!("reload after write failed: {e}"))?;
+        vela_protocol::repo::load_from_path(path).map_err(|e| format!("reload after write failed: {e}"))?;
     let mut project = frontier.lock().await;
     *project = fresh;
 
@@ -1425,7 +1425,7 @@ async fn http_events(
     // filtered view.
     let kind_filter = params.get("kind").map(String::as_str);
     let target_filter = params.get("target").map(String::as_str);
-    let filtered: Vec<&crate::events::StateEvent> = project
+    let filtered: Vec<&vela_protocol::events::StateEvent> = project
         .events
         .iter()
         .skip(start_idx)
@@ -1434,7 +1434,7 @@ async fn http_events(
         .collect();
     let total_filtered = filtered.len();
     let take_n = limit.min(total_filtered);
-    let slice: Vec<&crate::events::StateEvent> = filtered.into_iter().take(take_n).collect();
+    let slice: Vec<&vela_protocol::events::StateEvent> = filtered.into_iter().take(take_n).collect();
     let next_cursor = if take_n < total_filtered {
         slice.last().map(|event| event.id.clone())
     } else {
@@ -1502,14 +1502,14 @@ async fn http_queue_append(
     }
     let args = body.get("args").cloned().unwrap_or(Value::Null);
     let queued_at = chrono::Utc::now().to_rfc3339();
-    let action = crate::queue::QueuedAction {
+    let action = vela_protocol::queue::QueuedAction {
         kind,
         frontier: path,
         args,
         queued_at: queued_at.clone(),
     };
-    let queue_path = crate::queue::default_queue_path();
-    if let Err(error) = crate::queue::append(&queue_path, action) {
+    let queue_path = vela_protocol::queue::default_queue_path();
+    if let Err(error) = vela_protocol::queue::append(&queue_path, action) {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": format!("append to queue: {error}")})),
@@ -1566,7 +1566,7 @@ async fn http_from_carina(
     // Validate the body against the ArtifactPacket schema before
     // touching disk. Decoupling validation from filesystem write
     // means a malformed packet returns 400 cheaply.
-    let packet: crate::artifact_to_state::ArtifactPacket =
+    let packet: vela_protocol::artifact_to_state::ArtifactPacket =
         match serde_json::from_value(body.clone()) {
             Ok(p) => p,
             Err(e) => {
@@ -1617,7 +1617,7 @@ async fn http_from_carina(
     // Drop the project lock around the import call so the import's
     // own loads/writes don't deadlock against ongoing reads.
     drop(state.project.lock().await);
-    let report = match crate::artifact_to_state::import_packet_at_path(
+    let report = match vela_protocol::artifact_to_state::import_packet_at_path(
         &path,
         tmp.path(),
         &actor,
@@ -1634,7 +1634,7 @@ async fn http_from_carina(
 
     // Reload the project so later GET /api/findings, GET /api/findings/{id},
     // etc. see the new proposals.
-    let mut reloaded = match crate::repo::load_from_path(&path) {
+    let mut reloaded = match vela_protocol::repo::load_from_path(&path) {
         Ok(p) => p,
         Err(e) => {
             return (
@@ -1643,7 +1643,7 @@ async fn http_from_carina(
             );
         }
     };
-    crate::sources::materialize_project(&mut reloaded);
+    vela_protocol::sources::materialize_project(&mut reloaded);
     {
         let mut guard = state.project.lock().await;
         *guard = reloaded;
@@ -1697,7 +1697,7 @@ fn workbench_web_dir() -> PathBuf {
 fn requesting_clearance(
     headers: &HeaderMap,
     project: &Project,
-) -> Option<crate::access_tier::AccessTier> {
+) -> Option<vela_protocol::access_tier::AccessTier> {
     let actor_id = headers
         .get("x-vela-actor")
         .and_then(|v| v.to_str().ok())?
@@ -1712,7 +1712,7 @@ fn requesting_clearance(
 async fn http_frontier(State(state): State<AppState>, headers: HeaderMap) -> Json<Value> {
     let project = state.project.lock().await;
     let clearance = requesting_clearance(&headers, &project);
-    let view = crate::access_tier::redact_for_actor(&project, clearance);
+    let view = vela_protocol::access_tier::redact_for_actor(&project, clearance);
     Json(serde_json::to_value(&view).unwrap_or_else(|_| json!({"error": "serialization failed"})))
 }
 
@@ -1723,7 +1723,7 @@ async fn http_findings(
 ) -> Json<Value> {
     let project = state.project.lock().await;
     let clearance = requesting_clearance(&headers, &project);
-    let view = crate::access_tier::redact_for_actor(&project, clearance);
+    let view = vela_protocol::access_tier::redact_for_actor(&project, clearance);
 
     // v0.91: When no search-style filter is supplied, return a
     // structured `{findings, count}` list rather than the search
@@ -1780,7 +1780,7 @@ async fn http_finding_by_id(
         .find(|finding| finding.id == id || finding.id.starts_with(&id))
     {
         Some(finding) => {
-            if !crate::access_tier::actor_may_read(finding.access_tier, clearance) {
+            if !vela_protocol::access_tier::actor_may_read(finding.access_tier, clearance) {
                 // v0.51: above-clearance findings 404 — the existence
                 // of the object is itself part of the tiered content.
                 return (
@@ -1794,13 +1794,13 @@ async fn http_finding_by_id(
             // existing finding fields remain authoritative; this
             // is a derived view per docs/THEORY.md Section 7.
             let sp =
-                crate::provenance_compute::status_provenance_for_finding(&project, &finding.id);
+                vela_protocol::provenance_compute::status_provenance_for_finding(&project, &finding.id);
             let belnap = sp.derive_status();
             // v0.87: surface the substrate-derived discord set per
             // docs/THEORY.md Section 4. Detectors run read-only
             // against the live Project state; results are advisory.
             let discord =
-                crate::discord_compute::compute_discord_for_finding(&project, &finding.id);
+                vela_protocol::discord_compute::compute_discord_for_finding(&project, &finding.id);
             let discord_kinds: Vec<String> =
                 discord.iter().map(|k| k.as_str().to_string()).collect();
             let mut value = serde_json::to_value(finding).unwrap_or_default();
@@ -1878,8 +1878,8 @@ async fn http_discord(
     State(state): State<AppState>,
     axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
 ) -> Json<Value> {
-    use crate::discord::DiscordKind;
-    use crate::discord_compute::compute_discord_assignment;
+    use vela_protocol::discord::DiscordKind;
+    use vela_protocol::discord_compute::compute_discord_assignment;
 
     let project = state.project.lock().await;
     let assignment = compute_discord_assignment(&project);
@@ -1961,14 +1961,14 @@ async fn http_artifact_audit(State(state): State<AppState>) -> Json<Value> {
         }));
     };
     Json(
-        serde_json::to_value(crate::artifact_audit::audit_artifacts(&path, &project))
+        serde_json::to_value(vela_protocol::artifact_audit::audit_artifacts(&path, &project))
             .unwrap_or_else(|_| json!({"ok": false, "error": "serialization failed"})),
     )
 }
 
 async fn http_proof(State(state): State<AppState>) -> Json<Value> {
     let project = state.project.lock().await;
-    let integrity = crate::state_integrity::analyze(&project);
+    let integrity = vela_protocol::state_integrity::analyze(&project);
     let signal_report = signals::analyze(&project, &[]);
     let latest = &project.proof_state.latest_packet;
     Json(json!({
@@ -2101,7 +2101,7 @@ async fn http_tensions(State(state): State<AppState>) -> Json<Value> {
             // Cross-frontier resolution, consistent with the graph
             // tools: resolve `vf_X@vfr_Y` to the bare `vf_X` node when
             // present (as under `serve --frontiers`).
-            let bare = crate::bundle::bare_finding_id(&link.target);
+            let bare = vela_protocol::bundle::bare_finding_id(&link.target);
             let target = lookup
                 .get(link.target.as_str())
                 .or_else(|| lookup.get(bare));
@@ -2365,7 +2365,7 @@ fn tool_get_finding(args: &Value, frontier: &Project) -> Result<String, String> 
 /// chain or auditing corrections.
 fn tool_get_finding_history(args: &Value, frontier: &Project) -> Result<String, String> {
     let id = args["id"].as_str().ok_or("Missing 'id' argument")?;
-    let mut events: Vec<&crate::events::StateEvent> = frontier
+    let mut events: Vec<&vela_protocol::events::StateEvent> = frontier
         .events
         .iter()
         .filter(|e| {
@@ -2458,7 +2458,7 @@ fn tool_frontier_stats(frontier: &Project) -> Result<String, String> {
         "source_registry": sources::source_summary(frontier),
         "evidence_atoms": sources::evidence_summary(frontier),
         "conditions": sources::condition_summary(frontier),
-        "proposals": crate::proposals::summary(frontier),
+        "proposals": vela_protocol::proposals::summary(frontier),
         "proof_state": frontier.proof_state,
         "events": {
             "count": frontier.events.len(),
@@ -2528,7 +2528,7 @@ fn tool_propagate_retraction(args: &Value, frontier: &Project) -> Result<String,
     // "depends" semantics are preserved.
     let reverse_idx = frontier.build_reverse_dep_index();
     let dependent_ids = reverse_idx.dependents_of(&target.id);
-    let id_to_finding: std::collections::HashMap<&str, &crate::bundle::FindingBundle> = frontier
+    let id_to_finding: std::collections::HashMap<&str, &vela_protocol::bundle::FindingBundle> = frontier
         .findings
         .iter()
         .map(|f| (f.id.as_str(), f))
@@ -2584,7 +2584,7 @@ fn tool_list_dependents(args: &Value, frontier: &Project) -> Result<String, Stri
     // regardless of link type, so we re-read each dependent's links to
     // report which relation points at the target.
     let reverse_idx = frontier.build_reverse_dep_index();
-    let id_to_finding: std::collections::HashMap<&str, &crate::bundle::FindingBundle> = frontier
+    let id_to_finding: std::collections::HashMap<&str, &vela_protocol::bundle::FindingBundle> = frontier
         .findings
         .iter()
         .map(|f| (f.id.as_str(), f))
@@ -2626,7 +2626,7 @@ fn tool_list_dependents(args: &Value, frontier: &Project) -> Result<String, Stri
         // CausalGraph excludes contradicts/extends), so transitive
         // dependents are the findings that ultimately rest on the
         // target through its evidence chain.
-        let graph = crate::causal_graph::CausalGraph::from_project(frontier);
+        let graph = vela_protocol::causal_graph::CausalGraph::from_project(frontier);
         let mut closure: Vec<String> = graph.descendants(&target.id).into_iter().collect();
         closure.sort();
         let transitive_total = closure.len();
@@ -2660,7 +2660,7 @@ fn tool_frontier_context(args: &Value, frontier: &Project) -> Result<String, Str
         .find(|finding| finding.id == id || finding.id.starts_with(id))
         .ok_or_else(|| format!("Finding '{id}' not found"))?;
 
-    let id_to_finding: std::collections::HashMap<&str, &crate::bundle::FindingBundle> = frontier
+    let id_to_finding: std::collections::HashMap<&str, &vela_protocol::bundle::FindingBundle> = frontier
         .findings
         .iter()
         .map(|f| (f.id.as_str(), f))
@@ -2677,7 +2677,7 @@ fn tool_frontier_context(args: &Value, frontier: &Project) -> Result<String, Str
     let mut related = Vec::new();
     let mut contradictions = Vec::new();
     for link in &target.links {
-        use crate::frontier_graph::EdgeKind;
+        use vela_protocol::frontier_graph::EdgeKind;
         match EdgeKind::from_link_type(&link.link_type) {
             Some(EdgeKind::Supports | EdgeKind::DependsOn | EdgeKind::DerivedFrom) => {
                 rests_on.push(json!({
@@ -2760,9 +2760,9 @@ fn tool_frontier_context(args: &Value, frontier: &Project) -> Result<String, Str
 /// T7: typed claim-level graph summary. Returns node/edge counts and
 /// the per-kind edge breakdown by default; with a `kind` argument it
 /// also returns up to `limit` edges of that relation. Derived view
-/// over the declared link graph (see [`crate::frontier_graph`]).
+/// over the declared link graph (see [`vela_protocol::frontier_graph`]).
 fn tool_frontier_graph(args: &Value, frontier: &Project) -> Result<String, String> {
-    let graph = crate::frontier_graph::FrontierGraph::from_project(frontier);
+    let graph = vela_protocol::frontier_graph::FrontierGraph::from_project(frontier);
     let mut summary = json!({
         "schema": "vela.frontier_graph.claims.v0.1",
         "nodes": graph.node_count(),
@@ -2776,7 +2776,7 @@ fn tool_frontier_graph(args: &Value, frontier: &Project) -> Result<String, Strin
     });
 
     if let Some(kind_str) = args["kind"].as_str() {
-        let kind = crate::frontier_graph::EdgeKind::parse(kind_str)
+        let kind = vela_protocol::frontier_graph::EdgeKind::parse(kind_str)
             .ok_or_else(|| format!("Unknown edge kind '{kind_str}'"))?;
         let limit = args["limit"].as_u64().unwrap_or(100) as usize;
         let edges: Vec<Value> = graph
@@ -2806,7 +2806,7 @@ fn tool_frontier_graph(args: &Value, frontier: &Project) -> Result<String, Strin
 /// resolution status that defaults to `candidate` — auto-detected
 /// signals pending expert review, never adjudicated truth.
 fn tool_contradictions(args: &Value, frontier: &Project) -> Result<String, String> {
-    let graph = crate::frontier_graph::FrontierGraph::from_project(frontier);
+    let graph = vela_protocol::frontier_graph::FrontierGraph::from_project(frontier);
     let frontier_id = frontier.frontier_id();
     let limit = args["limit"].as_u64().unwrap_or(100) as usize;
 
@@ -2814,8 +2814,8 @@ fn tool_contradictions(args: &Value, frontier: &Project) -> Result<String, Strin
     // review state from the event log (persisted wins). Persisted
     // contradictions whose pair no longer derives are still surfaced —
     // a reviewer's judgment outlives the edge that prompted it.
-    let mut by_id: std::collections::BTreeMap<String, crate::contradiction::Contradiction> =
-        crate::contradiction::derive_candidates(&graph, &frontier_id)
+    let mut by_id: std::collections::BTreeMap<String, vela_protocol::contradiction::Contradiction> =
+        vela_protocol::contradiction::derive_candidates(&graph, &frontier_id)
             .into_iter()
             .map(|c| (c.contradiction_id.clone(), c))
             .collect();
@@ -2828,7 +2828,7 @@ fn tool_contradictions(args: &Value, frontier: &Project) -> Result<String, Strin
     // Bi-temporal `as_of` query: restrict to contradictions open at a
     // given world-time (valid time), not the order events landed.
     let as_of = args["as_of"].as_str();
-    let mut all: Vec<crate::contradiction::Contradiction> = by_id.into_values().collect();
+    let mut all: Vec<vela_protocol::contradiction::Contradiction> = by_id.into_values().collect();
     if let Some(at) = as_of {
         all.retain(|c| c.is_open_at(at));
     }
@@ -2850,7 +2850,7 @@ fn tool_contradictions(args: &Value, frontier: &Project) -> Result<String, Strin
 
 /// Export a finding as a nanopublication (TriG/RDF) for interchange
 /// with the FAIR / semantic-web science ecosystem. See
-/// [`crate::nanopub`].
+/// [`vela_protocol::nanopub`].
 fn tool_nanopublication(args: &Value, frontier: &Project) -> Result<String, String> {
     let id = args["finding_id"]
         .as_str()
@@ -2861,7 +2861,7 @@ fn tool_nanopublication(args: &Value, frontier: &Project) -> Result<String, Stri
         .iter()
         .find(|f| f.id == id || f.id.starts_with(id))
         .ok_or_else(|| format!("Finding '{id}' not found"))?;
-    let trig = crate::nanopub::finding_to_nanopub_trig(finding, &frontier.frontier_id());
+    let trig = vela_protocol::nanopub::finding_to_nanopub_trig(finding, &frontier.frontier_id());
     serde_json::to_string_pretty(&json!({
         "finding_id": finding.id,
         "format": "trig",
@@ -2887,7 +2887,7 @@ fn tool_frontier_compare(args: &Value, frontier: &Project) -> Result<String, Str
         .unwrap_or_default();
     let limit = args["limit"].as_u64().unwrap_or(50) as usize;
 
-    let selected: Vec<&crate::bundle::FindingBundle> = frontier
+    let selected: Vec<&vela_protocol::bundle::FindingBundle> = frontier
         .findings
         .iter()
         .filter(|f| {
@@ -2953,7 +2953,7 @@ fn tool_deep_trace(args: &Value, frontier: &Project) -> Result<String, String> {
     let max_hops = args["max_hops"].as_u64().unwrap_or(3).min(8) as usize;
     let limit_per_hop = args["limit_per_hop"].as_u64().unwrap_or(25) as usize;
 
-    let graph = crate::frontier_graph::FrontierGraph::from_project(frontier);
+    let graph = vela_protocol::frontier_graph::FrontierGraph::from_project(frontier);
     let start = frontier
         .findings
         .iter()
@@ -2981,7 +2981,7 @@ fn tool_deep_trace(args: &Value, frontier: &Project) -> Result<String, String> {
     let contradictions: Vec<Value> = exploration
         .edges
         .iter()
-        .filter(|e| e.kind == crate::frontier_graph::EdgeKind::Contradicts)
+        .filter(|e| e.kind == vela_protocol::frontier_graph::EdgeKind::Contradicts)
         .map(|e| json!({"source": e.source, "target": e.target}))
         .collect();
 
@@ -3092,7 +3092,7 @@ fn tool_trace_evidence_chain(args: &Value, frontier: &Project) -> Result<String,
             // Cross-frontier resolution, consistent with FrontierGraph /
             // CausalGraph: a `vf_X@vfr_Y` target resolves to the bare
             // `vf_X` node when present (as under `serve --frontiers`).
-            let bare = crate::bundle::bare_finding_id(&link.target);
+            let bare = vela_protocol::bundle::bare_finding_id(&link.target);
             let target = lookup
                 .get(link.target.as_str())
                 .or_else(|| lookup.get(bare));
@@ -3128,7 +3128,7 @@ fn tool_trace_evidence_chain(args: &Value, frontier: &Project) -> Result<String,
     let linked_sources = sources::sources_for_finding(frontier, &finding.id);
     let linked_atoms = sources::evidence_atoms_for_finding(frontier, &finding.id);
     let linked_conditions = sources::condition_records_for_finding(frontier, &finding.id);
-    let linked_proposals = crate::proposals::proposals_for_finding(frontier, &finding.id);
+    let linked_proposals = vela_protocol::proposals::proposals_for_finding(frontier, &finding.id);
     serde_json::to_string_pretty(&json!({
         "finding": {"id": finding.id, "assertion": finding.assertion.text},
         "sources": linked_sources,
@@ -3189,8 +3189,100 @@ fn trunc(s: &str, max: usize) -> String {
 #[cfg(test)]
 mod list_dependents_tests {
     use super::*;
-    use crate::project::assemble;
-    use crate::project::reverse_dep_index_tests::{link_to, synth_finding};
+    use vela_protocol::project::assemble;
+
+    // Local copies of the reverse-dep-index test helpers (formerly
+    // `vela_protocol::project::reverse_dep_index_tests::{synth_finding,
+    // link_to}`). Inlined here when this test moved out of the
+    // `vela-protocol` crate, since protocol's test helpers are not part
+    // of its public, cross-crate API.
+    use vela_protocol::bundle::{
+        Assertion, Author, Conditions, Confidence, ConfidenceKind, ConfidenceMethod, Evidence,
+        Extraction, FindingBundle, Flags, Link, Provenance,
+    };
+
+    fn synth_finding(idx: usize, links: Vec<Link>) -> FindingBundle {
+        let assertion = Assertion {
+            text: format!("Synthetic finding {idx}"),
+            assertion_type: "mechanism".into(),
+            entities: vec![],
+            relation: None,
+            direction: None,
+            causal_claim: None,
+            causal_evidence_grade: None,
+        };
+        let evidence = Evidence {
+            evidence_type: "experimental".into(),
+            model_system: "test".into(),
+            species: None,
+            method: "test".into(),
+            sample_size: None,
+            effect_size: None,
+            p_value: None,
+            replicated: false,
+            replication_count: None,
+            evidence_spans: vec![],
+        };
+        let conditions = Conditions {
+            text: "test".into(),
+            species_verified: vec![],
+            species_unverified: vec![],
+            in_vitro: false,
+            in_vivo: false,
+            human_data: false,
+            clinical_trial: false,
+            concentration_range: None,
+            duration: None,
+            age_group: None,
+            cell_type: None,
+        };
+        let confidence = Confidence {
+            kind: ConfidenceKind::FrontierEpistemic,
+            score: 0.5,
+            basis: "test".into(),
+            method: ConfidenceMethod::LlmInitial,
+            components: None,
+            extraction_confidence: 0.9,
+        };
+        let provenance = Provenance {
+            source_type: "published_paper".into(),
+            doi: Some(format!("10.0000/reverse-dep-index-test.{idx:04}")),
+            pmid: None,
+            pmc: None,
+            openalex_id: None,
+            url: None,
+            title: format!("Synthetic test paper {idx}"),
+            authors: vec![Author {
+                name: "T".into(),
+                orcid: None,
+            }],
+            year: None,
+            journal: None,
+            license: None,
+            publisher: None,
+            funders: vec![],
+            extraction: Extraction::default(),
+            review: None,
+            citation_count: None,
+        };
+        let flags = Flags::default();
+        let mut bundle = FindingBundle::new(
+            assertion, evidence, conditions, confidence, provenance, flags,
+        );
+        bundle.links = links;
+        bundle
+    }
+
+    fn link_to(target: &str) -> Link {
+        Link {
+            target: target.into(),
+            link_type: "supports".into(),
+            note: "test".into(),
+            inferred_by: "test".into(),
+            created_at: "2026-05-02T00:00:00Z".into(),
+            mechanism: None,
+        }
+    }
 
     /// Chain f0 → f1 → f2 → f3, where each finding `supports` the next
     /// (so f0 rests on f1, f1 on f2, f2 on f3). The reverse graph then
@@ -3252,7 +3344,7 @@ mod list_dependents_tests {
         assert!(tool_list_dependents(&json!({"finding_id": "vf_does_not_exist"}), &project).is_err());
     }
 
-    fn contradicts_to(target: &str) -> crate::bundle::Link {
+    fn contradicts_to(target: &str) -> vela_protocol::bundle::Link {
         let mut link = link_to(target);
         link.link_type = "contradicts".into();
         link
@@ -3280,14 +3372,14 @@ mod list_dependents_tests {
 
         // Derive the candidate (correct id for this frontier), confirm
         // it, and apply the resolution event to the log.
-        let graph = crate::frontier_graph::FrontierGraph::from_project(&project);
+        let graph = vela_protocol::frontier_graph::FrontierGraph::from_project(&project);
         let fid = project.frontier_id();
-        let cand = crate::contradiction::derive_candidates(&graph, &fid)
+        let cand = vela_protocol::contradiction::derive_candidates(&graph, &fid)
             .pop()
             .unwrap();
         let confirmed = cand.expert_confirm("actor:e", "2026-05-31T00:00:00Z", "real");
         let event = confirmed.resolution_event("actor:e", "human", "confirm");
-        crate::reducer::apply_event(&mut project, &event).unwrap();
+        vela_protocol::reducer::apply_event(&mut project, &event).unwrap();
 
         // After review: still one contradiction, now counted as reviewed
         // and carrying the expert_confirmed status + honest boundary.
@@ -3321,7 +3413,7 @@ mod list_dependents_tests {
         assert!(link["target_assertion"].is_string());
     }
 
-    fn link_typed(target: &str, link_type: &str) -> crate::bundle::Link {
+    fn link_typed(target: &str, link_type: &str) -> vela_protocol::bundle::Link {
         let mut l = link_to(target);
         l.link_type = link_type.into();
         l

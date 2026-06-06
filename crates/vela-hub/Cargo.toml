@@ -19,7 +19,8 @@ tokio.workspace = true
 tower-http.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-sqlx.workspace = true
+# Re-adds the postgres driver on top of the workspace sqlite-only default.
+sqlx = { workspace = true, features = ["postgres"] }
 dotenvy.workspace = true
 reqwest.workspace = true
 vela-protocol.workspace = true

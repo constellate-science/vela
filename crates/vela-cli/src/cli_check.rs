@@ -4,8 +4,8 @@ use crate::cli::{
     check_json_payload, fail, load_frontier_or_fail, print_json, print_signal_summary,
     scan_for_sensitive_paths,
 };
-use crate::cli_style as style;
-use crate::{conformance, events, lint, sign, signals, validate};
+use vela_protocol::cli_style as style;
+use vela_protocol::{conformance, events, lint, sign, signals, validate};
 use serde_json::Value;
 use std::path::Path;
 

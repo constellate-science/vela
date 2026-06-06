@@ -1,7 +1,7 @@
 //! `cmd_lean` and its handler logic, split out of cli.rs.
 
 use crate::cli::{fail, fail_return, print_json};
-use crate::cli_style as style;
+use vela_protocol::cli_style as style;
 use std::path::PathBuf;
 
 use serde_json::json;
@@ -12,7 +12,7 @@ use crate::cli_commands::*;
 /// v0.164: handle `vela lean ...`. Anchors substrate theorems to
 /// their content-addressed source bytes.
 pub(crate) fn cmd_lean(action: LeanAction) {
-    use crate::lean_anchors::{LeanAnchor, THEOREMS, lean_dir_default};
+    use vela_protocol::lean_anchors::{LeanAnchor, THEOREMS, lean_dir_default};
 
     match action {
         LeanAction::List { json } => {
@@ -159,7 +159,7 @@ pub(crate) fn cmd_lean(action: LeanAction) {
             mathlib_revision,
             json,
         } => {
-            use crate::lean_verification::{LeanVerification, VerificationDraft};
+            use vela_protocol::lean_verification::{LeanVerification, VerificationDraft};
 
             let key_hex = std::fs::read_to_string(&key)
                 .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
@@ -223,7 +223,7 @@ pub(crate) fn cmd_lean(action: LeanAction) {
             for path in anchor_paths {
                 let body = std::fs::read_to_string(&path)
                     .unwrap_or_else(|e| fail_return(&format!("read {}: {e}", path.display())));
-                let anchor: crate::lean_anchors::LeanAnchor = serde_json::from_str(&body)
+                let anchor: vela_protocol::lean_anchors::LeanAnchor = serde_json::from_str(&body)
                     .unwrap_or_else(|e| fail_return(&format!("parse {}: {e}", path.display())));
 
                 let record = LeanVerification::build(
@@ -281,7 +281,7 @@ pub(crate) fn cmd_lean(action: LeanAction) {
             anchor,
             json,
         } => {
-            use crate::lean_verification::LeanVerification;
+            use vela_protocol::lean_verification::LeanVerification;
             let body = std::fs::read_to_string(&record)
                 .unwrap_or_else(|e| fail_return(&format!("read {}: {e}", record.display())));
             let rec: LeanVerification = serde_json::from_str(&body)
@@ -292,7 +292,7 @@ pub(crate) fn cmd_lean(action: LeanAction) {
                 let abody = std::fs::read_to_string(&anchor_path).unwrap_or_else(|e| {
                     fail_return(&format!("read {}: {e}", anchor_path.display()))
                 });
-                let a: crate::lean_anchors::LeanAnchor = serde_json::from_str(&abody)
+                let a: vela_protocol::lean_anchors::LeanAnchor = serde_json::from_str(&abody)
                     .unwrap_or_else(|e| fail_return(&format!("parse anchor: {e}")));
                 if a.anchor_id != rec.anchor_id {
                     fail(&format!(

@@ -247,7 +247,7 @@ pub struct StateEvent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub signature: Option<String>,
     /// v0.89: optional reference to a content-addressed schema /
-    /// reducer artifact in a [`crate::schema_registry::SchemaRegistry`].
+    /// reducer artifact (a content-addressed schema/reducer id).
     /// When present, replay tooling can verify the artifact exists
     /// before applying the event (per docs/THEORY.md §5.1 / §5.5).
     /// **Not** part of the canonical event-id preimage: setting

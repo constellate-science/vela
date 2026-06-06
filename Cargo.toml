@@ -54,7 +54,9 @@ dotenvy = "0.15"
 clap = { version = "4", features = ["derive"] }
 ctrlc = { version = "3", features = ["termination"] }
 libc = "0.2"
-reqwest = { version = "0.12", features = ["json", "blocking"] }
+# rustls-tls (not the default native-tls) so the tree builds a single
+# TLS stack — sqlx already uses rustls — and drops the openssl C build.
+reqwest = { version = "0.12", default-features = false, features = ["json", "blocking", "rustls-tls", "charset", "http2"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 serde_yaml = "0.9"
@@ -69,7 +71,10 @@ colored = "3"
 axum = "0.8"
 async-stream = "0.3"
 tower-http = { version = "0.6", features = ["cors", "fs"] }
-sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "postgres", "sqlite"] }
+# Workspace default is sqlite-only (used by vela-protocol's index_db).
+# vela-hub re-adds the heavier `postgres` driver in its own manifest, so
+# the protocol library and its pure consumers don't build it.
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "tls-rustls", "sqlite"] }
 ed25519-dalek = { version = "2", features = ["rand_core"] }
 rand = "0.8"
 toml = "0.8"

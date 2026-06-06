@@ -3,14 +3,14 @@
 use crate::cli::{fail, fail_return, print_json};
 
 use crate::cli_commands::DiffPackAction;
-use crate::cli_style as style;
-use crate::{evidence_ci, repo, reviewer_identity};
+use vela_protocol::cli_style as style;
+use vela_protocol::{evidence_ci, repo, reviewer_identity};
 use serde_json::json;
 
 /// v0.193: handle `vela diff-pack <action>`. Build, show, or
 /// verify a Scientific Diff Pack (`vsd_*`).
 pub(crate) fn cmd_diff_pack(action: DiffPackAction) {
-    use crate::scientific_diff::{PackDraft, ScientificDiffPack};
+    use vela_protocol::scientific_diff::{PackDraft, ScientificDiffPack};
 
     match action {
         DiffPackAction::Create {
@@ -258,7 +258,7 @@ pub(crate) fn cmd_diff_pack(action: DiffPackAction) {
             }
         }
         DiffPackAction::BackfillRelease { frontier, json } => {
-            use crate::diff_pack_release;
+            use vela_protocol::diff_pack_release;
             let reports = diff_pack_release::backfill_all(&frontier)
                 .unwrap_or_else(|e| fail_return(&format!("backfill-release failed: {e}")));
             let created = reports.iter().filter(|r| r.created).count();
@@ -292,7 +292,7 @@ pub(crate) fn cmd_diff_pack(action: DiffPackAction) {
             }
         }
         DiffPackAction::PromoteVerdicts { frontier, json } => {
-            use crate::diff_pack_promote;
+            use vela_protocol::diff_pack_promote;
             let reports = diff_pack_promote::promote_all(&frontier)
                 .unwrap_or_else(|e| fail_return(&format!("promote-verdicts failed: {e}")));
             if json {

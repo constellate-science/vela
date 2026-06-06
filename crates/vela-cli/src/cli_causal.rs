@@ -3,15 +3,15 @@
 use crate::cli::{fail, fail_return};
 
 use crate::cli_commands::CausalAction;
-use crate::cli_style as style;
-use crate::repo;
+use vela_protocol::cli_style as style;
+use vela_protocol::repo;
 
 use colored::Colorize;
 use serde_json::json;
 
 /// v0.40: Causal-typing audit over a frontier.
 pub(crate) fn cmd_causal(action: CausalAction) {
-    use crate::causal_reasoning;
+    use vela_protocol::causal_reasoning;
 
     match action {
         CausalAction::Audit {
@@ -63,14 +63,14 @@ pub(crate) fn cmd_causal(action: CausalAction) {
             }
             for e in &entries {
                 let chip = match e.verdict {
-                    crate::causal_reasoning::Identifiability::Identified => style::ok("identified"),
-                    crate::causal_reasoning::Identifiability::Conditional => {
+                    vela_protocol::causal_reasoning::Identifiability::Identified => style::ok("identified"),
+                    vela_protocol::causal_reasoning::Identifiability::Conditional => {
                         style::warn("conditional")
                     }
-                    crate::causal_reasoning::Identifiability::Underidentified => {
+                    vela_protocol::causal_reasoning::Identifiability::Underidentified => {
                         style::lost("underidentified")
                     }
-                    crate::causal_reasoning::Identifiability::Underdetermined => {
+                    vela_protocol::causal_reasoning::Identifiability::Underdetermined => {
                         style::warn("underdetermined")
                     }
                 };
@@ -88,7 +88,7 @@ pub(crate) fn cmd_causal(action: CausalAction) {
                 if e.verdict.needs_reviewer_attention()
                     || matches!(
                         e.verdict,
-                        crate::causal_reasoning::Identifiability::Underdetermined
+                        vela_protocol::causal_reasoning::Identifiability::Underdetermined
                     )
                 {
                     println!("    {} {}", style::ok("fix:"), e.remediation);
@@ -101,7 +101,7 @@ pub(crate) fn cmd_causal(action: CausalAction) {
             on: target,
             json,
         } => {
-            use crate::causal_graph::{CausalEffectVerdict, identify_effect};
+            use vela_protocol::causal_graph::{CausalEffectVerdict, identify_effect};
 
             let project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
             let verdict = identify_effect(&project, &source, &target);
@@ -195,7 +195,7 @@ pub(crate) fn cmd_causal(action: CausalAction) {
             node,
             json,
         } => {
-            use crate::causal_graph::CausalGraph;
+            use vela_protocol::causal_graph::CausalGraph;
             let project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
             let graph = CausalGraph::from_project(&project);
 
@@ -273,7 +273,7 @@ pub(crate) fn cmd_causal(action: CausalAction) {
             target,
             json,
         } => {
-            use crate::counterfactual::{
+            use vela_protocol::counterfactual::{
                 CounterfactualQuery, CounterfactualVerdict, answer_counterfactual,
             };
 

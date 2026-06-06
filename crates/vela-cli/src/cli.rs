@@ -1,12 +1,13 @@
-use crate::{
+use vela_protocol::{
     adoption_log, adoption_transcript, benchmark, bridge, bundle, carina_validate, conformance,
-    correction_return, decision, diff, doctor, events, evidence_ci, export, frontier_controller,
+    correction_return, decision, diff, doctor, events, evidence_ci, export,
     frontier_health, frontier_incident, frontier_repo, frontier_task, impact, index_db, lint,
     normalize, packet, project, propagate, proposals, repo, research_trace, review, review_packet,
-    review_session, reviewer_identity, search, serve, share_package, sign, signals, source_inbox,
+    review_session, reviewer_identity, search, share_package, sign, signals, source_inbox,
     source_resolver, sources, state, state_integrity, static_share, task_workspace, tensions,
     validate,
 };
+use crate::serve;
 
 use std::collections::BTreeMap;
 use std::future::Future;
@@ -17,7 +18,7 @@ use std::sync::OnceLock;
 use clap::Parser;
 use colored::Colorize;
 
-use crate::cli_style as style;
+use vela_protocol::cli_style as style;
 use reqwest::Client;
 use serde::Serialize;
 use serde_json::{Value, json};
@@ -391,6 +392,7 @@ pub async fn run_command() {
         Commands::Conformance { dir } => {
             let _ = conformance::run(&dir);
         }
+        Commands::Gate { action } => cmd_gate(action),
         Commands::Version => println!("vela {}", env!("CARGO_PKG_VERSION")),
         Commands::Sign { action } => cmd_sign(action),
         Commands::Actor { action } => cmd_actor(action),
@@ -2215,7 +2217,7 @@ fn cmd_proof_add(
         _ => None,
     };
 
-    let provenance = crate::bundle::Provenance {
+    let provenance = vela_protocol::bundle::Provenance {
         source_type: "code_repository".to_string(),
         doi: None,
         pmid: None,
@@ -2229,12 +2231,12 @@ fn cmd_proof_add(
         license: Some("Apache-2.0 OR MIT".to_string()),
         publisher: None,
         funders: Vec::new(),
-        extraction: crate::bundle::Extraction::default(),
+        extraction: vela_protocol::bundle::Extraction::default(),
         review: None,
         citation_count: None,
     };
 
-    let artifact_id = crate::bundle::Artifact::content_address(
+    let artifact_id = vela_protocol::bundle::Artifact::content_address(
         "source_file",
         name,
         &format!("sha256:{script_hash_hex}"),
@@ -2242,7 +2244,7 @@ fn cmd_proof_add(
         Some(&script_path.display().to_string()),
     );
 
-    let artifact = crate::bundle::Artifact {
+    let artifact = vela_protocol::bundle::Artifact {
         id: artifact_id.clone(),
         kind: "source_file".to_string(),
         name: name.to_string(),
@@ -2259,7 +2261,7 @@ fn cmd_proof_add(
         metadata,
         review_state: None,
         retracted: false,
-        access_tier: crate::access_tier::AccessTier::default(),
+        access_tier: vela_protocol::access_tier::AccessTier::default(),
         created: verified_at.clone(),
     };
 
@@ -2314,13 +2316,13 @@ fn cmd_consensus(
     causal_grade_min: Option<&str>,
     json: bool,
 ) {
-    use crate::bundle::{CausalClaim, CausalEvidenceGrade};
+    use vela_protocol::bundle::{CausalClaim, CausalEvidenceGrade};
 
     if !target.starts_with("vf_") {
         fail(&format!("target `{target}` is not a vf_ finding id"));
     }
     let scheme =
-        crate::aggregate::WeightingScheme::parse(weighting_str).unwrap_or_else(|e| fail_return(&e));
+        vela_protocol::aggregate::WeightingScheme::parse(weighting_str).unwrap_or_else(|e| fail_return(&e));
 
     let parsed_claim = match causal_claim {
         None => None,
@@ -2341,13 +2343,13 @@ fn cmd_consensus(
             "invalid --causal-grade-min '{other}'; valid: theoretical | observational | quasi_experimental | rct"
         )),
     };
-    let filter = crate::aggregate::AggregateFilter {
+    let filter = vela_protocol::aggregate::AggregateFilter {
         causal_claim: parsed_claim,
         causal_grade_min: parsed_grade,
     };
     let project = repo::load_from_path(frontier).unwrap_or_else(|e| fail_return(&e));
 
-    let result = crate::aggregate::consensus_for_with_filter(&project, target, scheme, &filter)
+    let result = vela_protocol::aggregate::consensus_for_with_filter(&project, target, scheme, &filter)
         .unwrap_or_else(|| fail_return(&format!("target `{target}` not in frontier")));
 
     if json {
@@ -2405,16 +2407,16 @@ fn cmd_consensus(
 ///   - `affirmed` / `falsified`
 ///   - `quant:VALUE±TOL UNITS`  (e.g. `quant:0.4±0.1 SD`)
 ///   - `cat:LABEL`              (e.g. `cat:full_approval`)
-fn parse_expected_outcome(s: &str) -> Result<crate::bundle::ExpectedOutcome, String> {
+fn parse_expected_outcome(s: &str) -> Result<vela_protocol::bundle::ExpectedOutcome, String> {
     let trimmed = s.trim();
     if trimmed.eq_ignore_ascii_case("affirmed") {
-        return Ok(crate::bundle::ExpectedOutcome::Affirmed);
+        return Ok(vela_protocol::bundle::ExpectedOutcome::Affirmed);
     }
     if trimmed.eq_ignore_ascii_case("falsified") {
-        return Ok(crate::bundle::ExpectedOutcome::Falsified);
+        return Ok(vela_protocol::bundle::ExpectedOutcome::Falsified);
     }
     if let Some(rest) = trimmed.strip_prefix("cat:") {
-        return Ok(crate::bundle::ExpectedOutcome::Categorical {
+        return Ok(vela_protocol::bundle::ExpectedOutcome::Categorical {
             value: rest.to_string(),
         });
     }
@@ -2430,7 +2432,7 @@ fn parse_expected_outcome(s: &str) -> Result<crate::bundle::ExpectedOutcome, Str
         let tolerance: f64 = tol_s
             .parse()
             .map_err(|e| format!("bad quant tolerance `{tol_s}`: {e}"))?;
-        return Ok(crate::bundle::ExpectedOutcome::Quantitative {
+        return Ok(vela_protocol::bundle::ExpectedOutcome::Quantitative {
             value,
             tolerance,
             units: units.to_string(),
@@ -2477,7 +2479,7 @@ fn cmd_predict(
     }
 
     let lower = conditions_text.to_lowercase();
-    let conditions = crate::bundle::Conditions {
+    let conditions = vela_protocol::bundle::Conditions {
         text: conditions_text.to_string(),
         species_verified: Vec::new(),
         species_unverified: Vec::new(),
@@ -2491,7 +2493,7 @@ fn cmd_predict(
         cell_type: None,
     };
 
-    let prediction = crate::bundle::Prediction::new(
+    let prediction = vela_protocol::bundle::Prediction::new(
         claim.to_string(),
         targets,
         None,
@@ -2594,7 +2596,7 @@ fn cmd_resolve(
         ));
     }
 
-    let evidence = crate::bundle::Evidence {
+    let evidence = vela_protocol::bundle::Evidence {
         evidence_type: "experimental".to_string(),
         model_system: String::new(),
         species: None,
@@ -2617,7 +2619,7 @@ fn cmd_resolve(
     // commentary; richer linking lands in v0.34.x.
     let _ = doi; // currently unused — placeholder for v0.34.x.
 
-    let resolution = crate::bundle::Resolution::new(
+    let resolution = vela_protocol::bundle::Resolution::new(
         prediction_id.to_string(),
         actual_outcome.to_string(),
         matched,
@@ -2705,7 +2707,7 @@ fn cmd_predictions(frontier: &Path, by: Option<&str>, open: bool, json: bool) {
         .map(|r| r.prediction_id.as_str())
         .collect();
 
-    let mut filtered: Vec<&crate::bundle::Prediction> = project
+    let mut filtered: Vec<&vela_protocol::bundle::Prediction> = project
         .predictions
         .iter()
         .filter(|p| by.is_none_or(|b| p.made_by == b))
@@ -2798,7 +2800,7 @@ fn cmd_predictions_expire(frontier: &Path, now_override: Option<&str>, dry_run: 
     if dry_run {
         // Run on a clone so we don't actually mutate.
         let mut probe = repo::load_from_path(frontier).unwrap_or_else(|e| fail_return(&e));
-        let report = crate::calibration::expire_overdue_predictions(&mut probe, now_dt);
+        let report = vela_protocol::calibration::expire_overdue_predictions(&mut probe, now_dt);
         if json {
             println!(
                 "{}",
@@ -2827,7 +2829,7 @@ fn cmd_predictions_expire(frontier: &Path, now_override: Option<&str>, dry_run: 
         return;
     }
 
-    let report = crate::calibration::expire_overdue_predictions(&mut project, now_dt);
+    let report = vela_protocol::calibration::expire_overdue_predictions(&mut project, now_dt);
     repo::save_to_path(frontier, &project).unwrap_or_else(|e| fail_return(&e));
 
     if json {
@@ -2860,11 +2862,11 @@ fn cmd_calibration(frontier: &Path, actor: Option<&str>, json: bool) {
     let project = repo::load_from_path(frontier).unwrap_or_else(|e| fail_return(&e));
     let records = match actor {
         Some(a) => {
-            crate::calibration::calibration_for_actor(a, &project.predictions, &project.resolutions)
+            vela_protocol::calibration::calibration_for_actor(a, &project.predictions, &project.resolutions)
                 .map(|r| vec![r])
                 .unwrap_or_default()
         }
-        None => crate::calibration::calibration_records(&project.predictions, &project.resolutions),
+        None => vela_protocol::calibration::calibration_records(&project.predictions, &project.resolutions),
     };
 
     if json {
@@ -2937,7 +2939,7 @@ fn cmd_dataset_add(
 ) {
     let mut project = repo::load_from_path(frontier).unwrap_or_else(|e| fail_return(&e));
 
-    let provenance = crate::bundle::Provenance {
+    let provenance = vela_protocol::bundle::Provenance {
         source_type: "data_release".to_string(),
         doi: doi.map(|s| s.to_string()),
         pmid: None,
@@ -2951,7 +2953,7 @@ fn cmd_dataset_add(
         license: license.map(|s| s.to_string()),
         publisher: None,
         funders: Vec::new(),
-        extraction: crate::bundle::Extraction {
+        extraction: vela_protocol::bundle::Extraction {
             method: "manual_curation".to_string(),
             model: None,
             model_version: None,
@@ -2962,7 +2964,7 @@ fn cmd_dataset_add(
         citation_count: None,
     };
 
-    let mut dataset = crate::bundle::Dataset::new(
+    let mut dataset = vela_protocol::bundle::Dataset::new(
         name.to_string(),
         version.map(|s| s.to_string()),
         content_hash.to_string(),
@@ -3090,7 +3092,7 @@ fn cmd_negative_result_add(
                 ci_lower.unwrap_or_else(|| fail_return("--ci-lower required for registered_trial"));
             let ci_upper =
                 ci_upper.unwrap_or_else(|| fail_return("--ci-upper required for registered_trial"));
-            crate::bundle::NegativeResultKind::RegisteredTrial {
+            vela_protocol::bundle::NegativeResultKind::RegisteredTrial {
                 endpoint: endpoint.to_string(),
                 intervention: intervention.to_string(),
                 comparator: comparator.to_string(),
@@ -3109,7 +3111,7 @@ fn cmd_negative_result_add(
                 .unwrap_or_else(|| fail_return("--observation required for exploratory"));
             let attempts =
                 attempts.unwrap_or_else(|| fail_return("--attempts required for exploratory"));
-            crate::bundle::NegativeResultKind::Exploratory {
+            vela_protocol::bundle::NegativeResultKind::Exploratory {
                 reagent: reagent.to_string(),
                 observation: observation.to_string(),
                 attempts,
@@ -3120,7 +3122,7 @@ fn cmd_negative_result_add(
         )),
     };
 
-    let conditions = crate::bundle::Conditions {
+    let conditions = vela_protocol::bundle::Conditions {
         text: conditions_text.to_string(),
         species_verified: Vec::new(),
         species_unverified: Vec::new(),
@@ -3134,7 +3136,7 @@ fn cmd_negative_result_add(
         cell_type: None,
     };
 
-    let provenance = crate::bundle::Provenance {
+    let provenance = vela_protocol::bundle::Provenance {
         source_type: if matches!(kind, "registered_trial") {
             "clinical_trial".to_string()
         } else {
@@ -3152,7 +3154,7 @@ fn cmd_negative_result_add(
         license: None,
         publisher: None,
         funders: Vec::new(),
-        extraction: crate::bundle::Extraction {
+        extraction: vela_protocol::bundle::Extraction {
             method: "manual_curation".to_string(),
             model: None,
             model_version: None,
@@ -3203,7 +3205,7 @@ fn cmd_negative_result_add(
 /// the `vf_*` finding they bear against.
 fn cmd_negative_results(frontier: &Path, target: Option<&str>, json: bool) {
     let project = repo::load_from_path(frontier).unwrap_or_else(|e| fail_return(&e));
-    let filtered: Vec<&crate::bundle::NegativeResult> = project
+    let filtered: Vec<&vela_protocol::bundle::NegativeResult> = project
         .negative_results
         .iter()
         .filter(|nr| {
@@ -3242,10 +3244,10 @@ fn cmd_negative_results(frontier: &Path, target: Option<&str>, json: bool) {
     println!("  {}", style::tick_row(60));
     for nr in &filtered {
         let kind_label = match &nr.kind {
-            crate::bundle::NegativeResultKind::RegisteredTrial {
+            vela_protocol::bundle::NegativeResultKind::RegisteredTrial {
                 endpoint, power, ..
             } => format!("trial · {endpoint} · power {power:.2}"),
-            crate::bundle::NegativeResultKind::Exploratory {
+            vela_protocol::bundle::NegativeResultKind::Exploratory {
                 reagent, attempts, ..
             } => format!("exploratory · {reagent} · {attempts} attempts"),
         };
@@ -3276,7 +3278,7 @@ fn cmd_tier_set(
     json: bool,
 ) {
     let parsed_tier =
-        crate::access_tier::AccessTier::parse(tier).unwrap_or_else(|e| fail_return(&e));
+        vela_protocol::access_tier::AccessTier::parse(tier).unwrap_or_else(|e| fail_return(&e));
     let report = state::set_tier(frontier, object_type, object_id, parsed_tier, actor, reason)
         .unwrap_or_else(|e| fail_return(&e));
 
@@ -3351,24 +3353,24 @@ fn cmd_trajectory_step(
 ) {
     let parsed_kind = match kind {
         // v0.50 legacy kinds
-        "hypothesis" => crate::bundle::TrajectoryStepKind::Hypothesis,
-        "tried" => crate::bundle::TrajectoryStepKind::Tried,
-        "ruled_out" => crate::bundle::TrajectoryStepKind::RuledOut,
-        "observed" => crate::bundle::TrajectoryStepKind::Observed,
-        "refined" => crate::bundle::TrajectoryStepKind::Refined,
+        "hypothesis" => vela_protocol::bundle::TrajectoryStepKind::Hypothesis,
+        "tried" => vela_protocol::bundle::TrajectoryStepKind::Tried,
+        "ruled_out" => vela_protocol::bundle::TrajectoryStepKind::RuledOut,
+        "observed" => vela_protocol::bundle::TrajectoryStepKind::Observed,
+        "refined" => vela_protocol::bundle::TrajectoryStepKind::Refined,
         // v0.194 vision-taxonomy kinds
-        "question" => crate::bundle::TrajectoryStepKind::Question,
-        "context" => crate::bundle::TrajectoryStepKind::Context,
-        "data" => crate::bundle::TrajectoryStepKind::Data,
-        "tool" => crate::bundle::TrajectoryStepKind::Tool,
-        "model" => crate::bundle::TrajectoryStepKind::Model,
-        "expert" => crate::bundle::TrajectoryStepKind::Expert,
-        "decision" => crate::bundle::TrajectoryStepKind::Decision,
-        "protocol" => crate::bundle::TrajectoryStepKind::Protocol,
-        "output" => crate::bundle::TrajectoryStepKind::Output,
-        "review" => crate::bundle::TrajectoryStepKind::Review,
-        "risk" => crate::bundle::TrajectoryStepKind::Risk,
-        "outcome" => crate::bundle::TrajectoryStepKind::Outcome,
+        "question" => vela_protocol::bundle::TrajectoryStepKind::Question,
+        "context" => vela_protocol::bundle::TrajectoryStepKind::Context,
+        "data" => vela_protocol::bundle::TrajectoryStepKind::Data,
+        "tool" => vela_protocol::bundle::TrajectoryStepKind::Tool,
+        "model" => vela_protocol::bundle::TrajectoryStepKind::Model,
+        "expert" => vela_protocol::bundle::TrajectoryStepKind::Expert,
+        "decision" => vela_protocol::bundle::TrajectoryStepKind::Decision,
+        "protocol" => vela_protocol::bundle::TrajectoryStepKind::Protocol,
+        "output" => vela_protocol::bundle::TrajectoryStepKind::Output,
+        "review" => vela_protocol::bundle::TrajectoryStepKind::Review,
+        "risk" => vela_protocol::bundle::TrajectoryStepKind::Risk,
+        "outcome" => vela_protocol::bundle::TrajectoryStepKind::Outcome,
         other => fail_return(&format!(
             "--kind must be one of: hypothesis|tried|ruled_out|observed|refined (v0.50 legacy) or question|context|data|tool|model|expert|decision|protocol|output|review|risk|outcome (v0.194 vision-taxonomy), got '{other}'"
         )),
@@ -3409,7 +3411,7 @@ fn cmd_trajectory_step(
 /// v0.50: list Trajectories in a frontier.
 fn cmd_trajectories(frontier: &Path, target: Option<&str>, json: bool) {
     let project = repo::load_from_path(frontier).unwrap_or_else(|e| fail_return(&e));
-    let filtered: Vec<&crate::bundle::Trajectory> = project
+    let filtered: Vec<&vela_protocol::bundle::Trajectory> = project
         .trajectories
         .iter()
         .filter(|t| {
@@ -3535,7 +3537,7 @@ fn cmd_code_add(
         _ => None,
     };
 
-    let artifact = crate::bundle::CodeArtifact::new(
+    let artifact = vela_protocol::bundle::CodeArtifact::new(
         language.to_string(),
         repo_url.map(|s| s.to_string()),
         commit.map(|s| s.to_string()),
@@ -3719,8 +3721,8 @@ fn artifact_provenance(
     url: Option<&str>,
     doi: Option<&str>,
     license: Option<&str>,
-) -> crate::bundle::Provenance {
-    crate::bundle::Provenance {
+) -> vela_protocol::bundle::Provenance {
+    vela_protocol::bundle::Provenance {
         source_type: artifact_source_type(kind).to_string(),
         doi: doi.map(str::to_string),
         pmid: None,
@@ -3734,7 +3736,7 @@ fn artifact_provenance(
         license: license.map(str::to_string),
         publisher: None,
         funders: Vec::new(),
-        extraction: crate::bundle::Extraction {
+        extraction: vela_protocol::bundle::Extraction {
             method: "artifact_deposit".to_string(),
             model: None,
             model_version: None,
@@ -3767,7 +3769,7 @@ fn cmd_artifact_add(
     json_out: bool,
 ) {
     let tier =
-        crate::access_tier::AccessTier::parse(access_tier).unwrap_or_else(|e| fail_return(&e));
+        vela_protocol::access_tier::AccessTier::parse(access_tier).unwrap_or_else(|e| fail_return(&e));
     let mut size_bytes = None;
     let mut storage_mode = "pointer".to_string();
     let mut locator = url.map(str::to_string);
@@ -3809,7 +3811,7 @@ fn cmd_artifact_add(
     let source_title = source_title.unwrap_or(name);
     let provenance = artifact_provenance(kind, source_title, source_url_effective, doi, license);
     let metadata = parse_metadata_pairs(metadata);
-    let artifact = crate::bundle::Artifact::new(
+    let artifact = vela_protocol::bundle::Artifact::new(
         kind.to_string(),
         name.to_string(),
         content_hash,
@@ -3864,7 +3866,7 @@ fn cmd_artifact_add(
 
 fn cmd_artifacts(frontier: &Path, target: Option<&str>, json_out: bool) {
     let project = repo::load_from_path(frontier).unwrap_or_else(|e| fail_return(&e));
-    let filtered: Vec<&crate::bundle::Artifact> = project
+    let filtered: Vec<&vela_protocol::bundle::Artifact> = project
         .artifacts
         .iter()
         .filter(|artifact| {
@@ -3919,7 +3921,7 @@ fn cmd_artifacts(frontier: &Path, target: Option<&str>, json_out: bool) {
 
 fn cmd_artifact_audit(frontier: &Path, json_out: bool) {
     let project = repo::load_from_path(frontier).unwrap_or_else(|e| fail_return(&e));
-    let audit = crate::artifact_audit::audit_artifacts(frontier, &project);
+    let audit = vela_protocol::artifact_audit::audit_artifacts(frontier, &project);
     if json_out {
         print_json(&audit);
         if !audit.ok {
@@ -4405,7 +4407,7 @@ async fn cmd_clinical_trial_import(
     };
     let study: Value = serde_json::from_str(&raw)
         .unwrap_or_else(|e| fail(&format!("Failed to parse ClinicalTrials.gov JSON: {e}")));
-    let canonical_bytes = crate::canonical::to_canonical_bytes(&study)
+    let canonical_bytes = vela_protocol::canonical::to_canonical_bytes(&study)
         .unwrap_or_else(|e| fail(&format!("Failed to canonicalize trial JSON: {e}")));
     let content_hash = sha256_for_bytes(&canonical_bytes);
     let locator = artifact_blob_locator(frontier, &content_hash, &canonical_bytes)
@@ -4495,7 +4497,7 @@ async fn cmd_clinical_trial_import(
         None,
         Some(license),
     );
-    let artifact = crate::bundle::Artifact::new(
+    let artifact = vela_protocol::bundle::Artifact::new(
         "clinical_trial_record",
         title.to_string(),
         content_hash,
@@ -4508,7 +4510,7 @@ async fn cmd_clinical_trial_import(
         target,
         provenance,
         metadata,
-        crate::access_tier::AccessTier::Public,
+        vela_protocol::access_tier::AccessTier::Public,
     )
     .unwrap_or_else(|e| fail_return(&e));
     let artifact_id = artifact.id.clone();
@@ -4571,10 +4573,10 @@ fn cmd_replicate(
     no_cascade: bool,
     json: bool,
 ) {
-    if !crate::bundle::VALID_REPLICATION_OUTCOMES.contains(&outcome) {
+    if !vela_protocol::bundle::VALID_REPLICATION_OUTCOMES.contains(&outcome) {
         fail(&format!(
             "invalid outcome '{outcome}'; valid: {:?}",
-            crate::bundle::VALID_REPLICATION_OUTCOMES
+            vela_protocol::bundle::VALID_REPLICATION_OUTCOMES
         ));
     }
     if !target.starts_with("vf_") {
@@ -4595,7 +4597,7 @@ fn cmd_replicate(
     // also lift in_vivo/in_vitro/human_data flags from common keywords
     // so confidence math behaves sensibly downstream.
     let lower = conditions_text.to_lowercase();
-    let conditions = crate::bundle::Conditions {
+    let conditions = vela_protocol::bundle::Conditions {
         text: conditions_text.to_string(),
         species_verified: Vec::new(),
         species_unverified: Vec::new(),
@@ -4611,7 +4613,7 @@ fn cmd_replicate(
         cell_type: None,
     };
 
-    let evidence = crate::bundle::Evidence {
+    let evidence = vela_protocol::bundle::Evidence {
         evidence_type: "experimental".to_string(),
         model_system: String::new(),
         species: None,
@@ -4624,7 +4626,7 @@ fn cmd_replicate(
         evidence_spans: Vec::new(),
     };
 
-    let provenance = crate::bundle::Provenance {
+    let provenance = vela_protocol::bundle::Provenance {
         source_type: "published_paper".to_string(),
         doi: doi.map(|s| s.to_string()),
         pmid: pmid.map(|s| s.to_string()),
@@ -4638,7 +4640,7 @@ fn cmd_replicate(
         license: None,
         publisher: None,
         funders: Vec::new(),
-        extraction: crate::bundle::Extraction {
+        extraction: vela_protocol::bundle::Extraction {
             method: "manual_curation".to_string(),
             model: None,
             model_version: None,
@@ -4649,7 +4651,7 @@ fn cmd_replicate(
         citation_count: None,
     };
 
-    let mut rep = crate::bundle::Replication::new(
+    let mut rep = vela_protocol::bundle::Replication::new(
         target.to_string(),
         attempted_by.to_string(),
         outcome.to_string(),
@@ -4774,7 +4776,7 @@ fn cmd_replicate(
 /// v0.32: list replications in a frontier, optionally filtered by target.
 fn cmd_replications(frontier: &Path, target: Option<&str>, json: bool) {
     let project = repo::load_from_path(frontier).unwrap_or_else(|e| fail_return(&e));
-    let filtered: Vec<&crate::bundle::Replication> = project
+    let filtered: Vec<&vela_protocol::bundle::Replication> = project
         .replications
         .iter()
         .filter(|r| target.is_none_or(|t| r.target_finding == t))
@@ -6125,12 +6127,12 @@ fn cmd_status(path: &Path, json: bool) {
     }
 
     // Causal audit summary.
-    let audit = crate::causal_reasoning::audit_frontier(&project);
-    let audit_summary = crate::causal_reasoning::summarize_audit(&audit);
+    let audit = vela_protocol::causal_reasoning::audit_frontier(&project);
+    let audit_summary = vela_protocol::causal_reasoning::summarize_audit(&audit);
 
     // Federation health: peers + last sync.
-    let mut last_sync: Option<&crate::events::StateEvent> = None;
-    let mut last_conflict: Option<&crate::events::StateEvent> = None;
+    let mut last_sync: Option<&vela_protocol::events::StateEvent> = None;
+    let mut last_conflict: Option<&vela_protocol::events::StateEvent> = None;
     let mut total_conflicts = 0usize;
     for e in &project.events {
         match e.kind.as_str() {
@@ -6308,7 +6310,7 @@ fn cmd_status(path: &Path, json: bool) {
 /// v0.42: Recent canonical events. The `git log` analogue.
 fn cmd_log(path: &Path, limit: usize, kind_filter: Option<&str>, json: bool) {
     let project = repo::load_from_path(path).unwrap_or_else(|e| fail_return(&e));
-    let mut events: Vec<&crate::events::StateEvent> = project
+    let mut events: Vec<&vela_protocol::events::StateEvent> = project
         .events
         .iter()
         .filter(|e| match kind_filter {
@@ -6412,7 +6414,7 @@ fn cmd_inbox(path: &Path, kind_filter: Option<&str>, limit: usize, json: bool) {
         );
     }
 
-    let mut pending: Vec<&crate::proposals::StateProposal> = project
+    let mut pending: Vec<&vela_protocol::proposals::StateProposal> = project
         .proposals
         .iter()
         .filter(|p| {
@@ -6583,7 +6585,7 @@ fn cmd_ask(path: &Path, question: &str, json: bool) {
     answer(&project, question, json);
 }
 
-fn answer(project: &crate::project::Project, q: &str, json: bool) {
+fn answer(project: &vela_protocol::project::Project, q: &str, json: bool) {
     let lower = q.to_lowercase();
 
     // Pattern: pending / inbox.
@@ -6592,7 +6594,7 @@ fn answer(project: &crate::project::Project, q: &str, json: bool) {
         || lower.contains("queue")
         || lower.contains("to review")
     {
-        let pending: Vec<&crate::proposals::StateProposal> = project
+        let pending: Vec<&vela_protocol::proposals::StateProposal> = project
             .proposals
             .iter()
             .filter(|p| p.status == "pending_review")
@@ -6631,8 +6633,8 @@ fn answer(project: &crate::project::Project, q: &str, json: bool) {
         || lower.contains("identif")
         || lower.contains("causal")
     {
-        let entries = crate::causal_reasoning::audit_frontier(project);
-        let summary = crate::causal_reasoning::summarize_audit(&entries);
+        let entries = vela_protocol::causal_reasoning::audit_frontier(project);
+        let summary = vela_protocol::causal_reasoning::summarize_audit(&entries);
         if json {
             println!(
                 "{}",
@@ -6665,7 +6667,7 @@ fn answer(project: &crate::project::Project, q: &str, json: bool) {
                     .filter(|e| {
                         matches!(
                             e.verdict,
-                            crate::causal_reasoning::Identifiability::Underidentified
+                            vela_protocol::causal_reasoning::Identifiability::Underidentified
                         )
                     })
                     .take(8)
@@ -6684,7 +6686,7 @@ fn answer(project: &crate::project::Project, q: &str, json: bool) {
         || lower.contains("latest")
         || lower.contains("happen")
     {
-        let mut events: Vec<&crate::events::StateEvent> = project.events.iter().collect();
+        let mut events: Vec<&vela_protocol::events::StateEvent> = project.events.iter().collect();
         events.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
         events.truncate(8);
         if json {
@@ -6745,7 +6747,7 @@ fn answer(project: &crate::project::Project, q: &str, json: bool) {
     // Pattern: calibration.
     if lower.contains("calibration") || lower.contains("brier") || lower.contains("predict") {
         let records =
-            crate::calibration::calibration_records(&project.predictions, &project.resolutions);
+            vela_protocol::calibration::calibration_records(&project.predictions, &project.resolutions);
         if json {
             println!("{}", serde_json::to_string_pretty(&records).unwrap());
         } else if records.is_empty() {
@@ -6815,7 +6817,7 @@ fn answer(project: &crate::project::Project, q: &str, json: bool) {
     }
 }
 
-fn frontier_label(p: &crate::project::Project) -> String {
+fn frontier_label(p: &vela_protocol::project::Project) -> String {
     if p.project.name.trim().is_empty() {
         "(unnamed)".to_string()
     } else {
@@ -7188,7 +7190,7 @@ fn cmd_artifact_to_state(
     json: bool,
 ) {
     let report =
-        crate::artifact_to_state::import_packet_at_path(frontier, packet, actor, apply_artifacts)
+        vela_protocol::artifact_to_state::import_packet_at_path(frontier, packet, actor, apply_artifacts)
             .unwrap_or_else(|e| fail_return(&e));
     if json {
         print_json(&report);
@@ -7275,7 +7277,7 @@ pub(crate) struct CrossCheckSource {
 /// the upstream registry whether each one resolves. Closes
 /// part of THREAT_MODEL.md A6 (citation poisoning).
 pub(crate) async fn verify_packet_provenance(packet_path: &Path) -> ProvenanceVerificationReport {
-    use crate::artifact_to_state::ArtifactPacket;
+    use vela_protocol::artifact_to_state::ArtifactPacket;
     let raw = std::fs::read_to_string(packet_path)
         .unwrap_or_else(|e| fail_return(&format!("read packet: {e}")));
     let parsed: ArtifactPacket =
@@ -7360,7 +7362,7 @@ pub(crate) async fn cross_check_packet_provenance(
     packet_path: &Path,
     report: &mut ProvenanceVerificationReport,
 ) {
-    use crate::artifact_to_state::ArtifactPacket;
+    use vela_protocol::artifact_to_state::ArtifactPacket;
     // Re-read the packet to discover which identifiers cluster on
     // the same artifact. The first pass treated each identifier
     // independently; the cross-check pass groups by artifact id.
@@ -7893,9 +7895,9 @@ async fn cmd_source_adapter(action: SourceAdapterAction) {
             write_inbox,
             json,
         } => {
-            let report = crate::source_adapters::run(
+            let report = vela_protocol::source_adapters::run(
                 &frontier,
-                crate::source_adapters::SourceAdapterRunOptions {
+                vela_protocol::source_adapters::SourceAdapterRunOptions {
                     adapter,
                     actor,
                     entries,
@@ -7946,9 +7948,9 @@ fn cmd_runtime_adapter(action: RuntimeAdapterAction) {
             write_inbox,
             json,
         } => {
-            let report = crate::runtime_adapters::run(
+            let report = vela_protocol::runtime_adapters::run(
                 &frontier,
-                crate::runtime_adapters::RuntimeAdapterRunOptions {
+                vela_protocol::runtime_adapters::RuntimeAdapterRunOptions {
                     adapter,
                     input,
                     actor,
@@ -8127,8 +8129,8 @@ fn cmd_actor(action: ActorAction) {
                 .map(|s| sign::validate_orcid(s).unwrap_or_else(|e| fail_return(&e)));
             // v0.51: parse clearance up front so a typo fails at the
             // CLI boundary rather than silently degrading.
-            let clearance: Option<crate::access_tier::AccessTier> = clearance.as_deref().map(|s| {
-                crate::access_tier::AccessTier::parse(s).unwrap_or_else(|e| fail_return(&e))
+            let clearance: Option<vela_protocol::access_tier::AccessTier> = clearance.as_deref().map(|s| {
+                vela_protocol::access_tier::AccessTier::parse(s).unwrap_or_else(|e| fail_return(&e))
             });
 
             let mut project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
@@ -8464,7 +8466,7 @@ fn cmd_actor_lookup_orcid(
 /// v0.46: Cross-frontier bridge runtime — derive, list, show,
 /// confirm, and refute first-class `vbr_<id>` records.
 fn cmd_bridges(action: BridgesAction) {
-    use crate::bridge::{Bridge, BridgeStatus, derive_bridges};
+    use vela_protocol::bridge::{Bridge, BridgeStatus, derive_bridges};
     use std::collections::HashMap;
 
     fn bridges_dir(frontier: &Path) -> PathBuf {
@@ -8526,8 +8528,8 @@ fn cmd_bridges(action: BridgesAction) {
             .into_iter()
             .map(|b| b.id)
             .collect();
-        crate::events::validate_bridge_reviewed_against_state(&payload, &known_ids)?;
-        let event = crate::events::new_bridge_reviewed_event(
+        vela_protocol::events::validate_bridge_reviewed_against_state(&payload, &known_ids)?;
+        let event = vela_protocol::events::new_bridge_reviewed_event(
             bridge_id,
             reviewer_id,
             "human",
@@ -8824,8 +8826,8 @@ pub(crate) fn cmd_federation_push_resolution(
     vfr_id: Option<String>,
     json: bool,
 ) {
-    use crate::canonical;
-    use crate::sign;
+    use vela_protocol::canonical;
+    use vela_protocol::sign;
 
     let project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
 
@@ -8987,7 +8989,7 @@ pub(crate) fn cmd_federation_push_resolution(
 /// place where the actor's private key reads its drafts and signs them.
 /// The browser never sees the key.
 fn cmd_queue(action: QueueAction) {
-    use crate::queue;
+    use vela_protocol::queue;
     match action {
         QueueAction::List { queue_file, json } => {
             let path = queue_file.unwrap_or_else(queue::default_queue_path);
@@ -9146,7 +9148,7 @@ pub(crate) fn default_registry_path() -> PathBuf {
 /// caller is responsible for the lifetime of `dest` (typically a
 /// tempdir entry that is dropped after the consumer is done).
 fn resolve_vfr_to_path(vfr_id: &str, from: Option<&str>, dest: &Path) -> Result<(), String> {
-    use crate::registry;
+    use vela_protocol::registry;
     let registry_data = match from {
         Some(loc) if loc.starts_with("http") => registry::load_any(loc)?,
         Some(loc) => {
@@ -9180,7 +9182,7 @@ pub(crate) fn parse_signing_key(hex_str: &str) -> ed25519_dalek::SigningKey {
     ed25519_dalek::SigningKey::from_bytes(&key_bytes)
 }
 
-fn confirm_action(action: &crate::queue::QueuedAction) -> bool {
+fn confirm_action(action: &vela_protocol::queue::QueuedAction) -> bool {
     use std::io::{self, BufRead, Write};
     let mut stdout = io::stdout().lock();
     let _ = writeln!(
@@ -9206,10 +9208,10 @@ fn confirm_action(action: &crate::queue::QueuedAction) -> bool {
 fn sign_and_apply(
     signing_key: &ed25519_dalek::SigningKey,
     actor: &str,
-    action: &crate::queue::QueuedAction,
+    action: &vela_protocol::queue::QueuedAction,
 ) -> Result<String, String> {
-    use crate::events::StateTarget;
-    use crate::proposals;
+    use vela_protocol::events::StateTarget;
+    use vela_protocol::proposals;
     let args = &action.args;
     match action.kind.as_str() {
         "propose_review" | "propose_note" | "propose_revise_confidence" | "propose_retract" => {
@@ -9276,7 +9278,7 @@ fn sign_and_apply(
             // Sign the proposal locally to validate parity with what the
             // server-side write tool would have signed; the queue-sign
             // path applies via the local file, not via HTTP.
-            let _signature = crate::sign::sign_proposal(&proposal, signing_key)?;
+            let _signature = vela_protocol::sign::sign_proposal(&proposal, signing_key)?;
             let result = proposals::create_or_apply(&action.frontier, proposal, false)
                 .map_err(|e| format!("create_or_apply: {e}"))?;
             Ok(format!("proposal {}", result.proposal_id))
@@ -9303,16 +9305,16 @@ fn sign_and_apply(
                 "reason": reason,
                 "timestamp": timestamp,
             });
-            let bytes = crate::canonical::to_canonical_bytes(&preimage)?;
+            let bytes = vela_protocol::canonical::to_canonical_bytes(&preimage)?;
             use ed25519_dalek::Signer;
             let _signature = hex::encode(signing_key.sign(&bytes).to_bytes());
             if action.kind == "accept_proposal" {
                 let event_id =
-                    crate::proposals::accept_at_path(&action.frontier, proposal_id, actor, reason)
+                    vela_protocol::proposals::accept_at_path(&action.frontier, proposal_id, actor, reason)
                         .map_err(|e| format!("accept_at_path: {e}"))?;
                 Ok(format!("event {event_id}"))
             } else {
-                crate::proposals::reject_at_path(&action.frontier, proposal_id, actor, reason)
+                vela_protocol::proposals::reject_at_path(&action.frontier, proposal_id, actor, reason)
                     .map_err(|e| format!("reject_at_path: {e}"))?;
                 Ok(format!("rejected {proposal_id}"))
             }
@@ -9329,11 +9331,11 @@ fn sign_and_apply(
 /// was to hand-edit JSON; this command is the CLI on-ramp. Links go
 /// directly onto `findings[i].links` (links are not a state-changing
 /// proposal kind in v0).
-/// v0.19: bundled entity resolution. See `crate::entity_resolve` for the
+/// v0.19: bundled entity resolution. See `vela_protocol::entity_resolve` for the
 /// table + algorithm. CLI surface is two subcommands: `resolve` (mutates
 /// the frontier file) and `list` (read-only inspection of the table).
 fn cmd_entity(action: EntityAction) {
-    use crate::entity_resolve;
+    use vela_protocol::entity_resolve;
     match action {
         EntityAction::Resolve {
             frontier,
@@ -9418,7 +9420,7 @@ fn cmd_entity(action: EntityAction) {
 }
 
 fn cmd_link(action: LinkAction) {
-    use crate::bundle::{Link, LinkRef};
+    use vela_protocol::bundle::{Link, LinkRef};
     match action {
         LinkAction::Add {
             frontier,
@@ -9486,7 +9488,7 @@ fn cmd_link(action: LinkAction) {
                 if let Some(client) = client
                     && let Ok(resp) = client.get(locator).send()
                     && resp.status().is_success()
-                    && let Ok(dep_project) = resp.json::<crate::project::Project>()
+                    && let Ok(dep_project) = resp.json::<vela_protocol::project::Project>()
                 {
                     if let Some(target_finding) =
                         dep_project.findings.iter().find(|f| &f.id == target_vf)
@@ -9754,7 +9756,7 @@ pub(crate) fn cmd_frontier_release(
     previous: Option<String>,
     json: bool,
 ) {
-    use crate::frontier_release::{FrontierRelease, ReleaseDraft};
+    use vela_protocol::frontier_release::{FrontierRelease, ReleaseDraft};
 
     let project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
     let frontier_id = project.frontier_id();
@@ -9831,7 +9833,7 @@ pub(crate) fn cmd_frontier_release(
 
 /// v0.158: list every release recorded for a frontier.
 pub(crate) fn cmd_frontier_releases(frontier: PathBuf, json: bool) {
-    use crate::frontier_release::FrontierRelease;
+    use vela_protocol::frontier_release::FrontierRelease;
 
     let releases_dir = releases_dir_for(&frontier);
     let mut releases: Vec<FrontierRelease> = Vec::new();
@@ -10253,7 +10255,7 @@ fn releases_dir_for(frontier: &Path) -> PathBuf {
 }
 
 fn latest_release_id(releases_dir: &Path) -> Option<String> {
-    use crate::frontier_release::FrontierRelease;
+    use vela_protocol::frontier_release::FrontierRelease;
     if !releases_dir.exists() {
         return None;
     }
@@ -10496,9 +10498,9 @@ pub(crate) fn cmd_frontier_diff(
     };
 
     // ── Bucket findings ──
-    let mut added: Vec<&crate::bundle::FindingBundle> = Vec::new();
-    let mut updated: Vec<&crate::bundle::FindingBundle> = Vec::new();
-    let mut new_contradictions: Vec<&crate::bundle::FindingBundle> = Vec::new();
+    let mut added: Vec<&vela_protocol::bundle::FindingBundle> = Vec::new();
+    let mut updated: Vec<&vela_protocol::bundle::FindingBundle> = Vec::new();
+    let mut new_contradictions: Vec<&vela_protocol::bundle::FindingBundle> = Vec::new();
     let mut cumulative: usize = 0;
 
     for f in &project.findings {
@@ -10537,7 +10539,7 @@ pub(crate) fn cmd_frontier_diff(
     }
 
     // ── Render ──
-    let summary_for = |list: &[&crate::bundle::FindingBundle]| -> Vec<serde_json::Value> {
+    let summary_for = |list: &[&vela_protocol::bundle::FindingBundle]| -> Vec<serde_json::Value> {
         list.iter()
             .map(|f| {
                 json!({
@@ -10682,7 +10684,7 @@ fn cmd_proof_attest_verification(
     out: PathBuf,
     json: bool,
 ) {
-    use crate::proof_verification::{ProofVerification, VerificationDraft};
+    use vela_protocol::proof_verification::{ProofVerification, VerificationDraft};
 
     let key_hex = std::fs::read_to_string(&key)
         .map(|s| s.trim().to_string())
@@ -10737,7 +10739,7 @@ fn cmd_proof_attest_verification(
 
 /// v0.151: handle `vela proof-verify-attestation <record>`.
 fn cmd_proof_verify_attestation(record: PathBuf, json: bool) {
-    use crate::proof_verification::ProofVerification;
+    use vela_protocol::proof_verification::ProofVerification;
 
     let raw = std::fs::read_to_string(&record)
         .unwrap_or_else(|e| fail_return(&format!("read record: {e}")));
@@ -10786,7 +10788,7 @@ fn cmd_proof_verify_attestation(record: PathBuf, json: bool) {
 
 /// v0.157: handle `vela credit <frontier>`.
 fn cmd_credit(frontier: PathBuf, out: Option<PathBuf>, json: bool) {
-    use crate::credit::build_ledger;
+    use vela_protocol::credit::build_ledger;
 
     let project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
     let now = chrono::Utc::now().to_rfc3339();
@@ -10840,7 +10842,7 @@ fn cmd_credit(frontier: PathBuf, out: Option<PathBuf>, json: bool) {
 /// review threads on proposals or findings; append-only,
 /// signed, content-addressed.
 fn cmd_review_thread(action: ReviewThreadCli) {
-    use crate::review_thread::{MessageDraft, ReviewMessage, ReviewThread, ThreadTargetKind};
+    use vela_protocol::review_thread::{MessageDraft, ReviewMessage, ReviewThread, ThreadTargetKind};
 
     match action {
         ReviewThreadCli::Create {
@@ -10987,7 +10989,7 @@ fn cmd_review_thread(action: ReviewThreadCli) {
 /// v0.167: handle `vela hub ...`. Build + validate hub-spec
 /// primitive records.
 fn cmd_hub_spec(action: HubSpecCli) {
-    use crate::hub_spec::{HubSpec, HubSpecDraft};
+    use vela_protocol::hub_spec::{HubSpec, HubSpecDraft};
 
     match action {
         HubSpecCli::Declare {
@@ -11045,7 +11047,7 @@ fn cmd_hub_spec(action: HubSpecCli) {
             let parsed: HubSpec = serde_json::from_str(&body)
                 .unwrap_or_else(|e| fail_return(&format!("parse hub spec: {e}")));
             // Re-derive id from a fresh draft.
-            let rebuilt = HubSpec::from_draft(crate::hub_spec::HubSpecDraft {
+            let rebuilt = HubSpec::from_draft(vela_protocol::hub_spec::HubSpecDraft {
                 hub_id: parsed.hub_id.clone(),
                 display_name: parsed.display_name.clone(),
                 base_url: parsed.base_url.clone(),
@@ -11085,7 +11087,7 @@ fn cmd_hub_spec(action: HubSpecCli) {
 fn cmd_policy(action: PolicyAction) {
     match action {
         PolicyAction::Check { frontier, json } => {
-            let summary = crate::frontier_policy::load_policy_summary(&frontier)
+            let summary = vela_protocol::frontier_policy::load_policy_summary(&frontier)
                 .unwrap_or_else(|e| fail_return(&format!("policy check failed: {e}")));
             if json {
                 print_json(&summary);
@@ -11192,7 +11194,7 @@ fn cmd_task(action: TaskAction) {
             actor,
             json,
         } => {
-            let report = crate::code_executor::execute_task(&frontier, &task_id, &actor)
+            let report = vela_protocol::code_executor::execute_task(&frontier, &task_id, &actor)
                 .unwrap_or_else(|e| fail_return(&format!("task execute failed: {e}")));
             if json {
                 println!(
@@ -11800,7 +11802,7 @@ fn cmd_controller(action: ControllerAction) {
             json,
         } => {
             let kind = parse_controller_kind(&kind);
-            let report = frontier_controller::run(&frontier, kind, dry_run)
+            let report = frontier_task::run(&frontier, kind, dry_run)
                 .unwrap_or_else(|e| fail_return(&format!("controller run failed: {e}")));
             if json {
                 print_json(&report);
@@ -11976,7 +11978,7 @@ fn parse_incident_status(status: &str) -> frontier_incident::FrontierIncidentSta
         .unwrap_or_else(|e| fail_return(&format!("invalid incident status: {e}")))
 }
 
-fn parse_controller_kind(kind: &str) -> frontier_controller::FrontierControllerKind {
+fn parse_controller_kind(kind: &str) -> frontier_task::FrontierControllerKind {
     kind.parse()
         .unwrap_or_else(|e| fail_return(&format!("invalid controller kind: {e}")))
 }
@@ -12122,7 +12124,7 @@ fn print_task(task: &frontier_task::FrontierTask, json: bool) {
 /// v0.199: handle `vela tool` — register / show / verify a Tool
 /// Descriptor (`vtd_*`).
 fn cmd_tool(action: ToolCliAction) {
-    use crate::tool_descriptor::{CallingConvention, DescriptorDraft, ToolDescriptor};
+    use vela_protocol::tool_descriptor::{CallingConvention, DescriptorDraft, ToolDescriptor};
 
     match action {
         ToolCliAction::Register {
@@ -12253,7 +12255,7 @@ fn cmd_tool(action: ToolCliAction) {
 /// v0.200: handle `vela eval` — record / show / verify an
 /// Evaluation Record (`ver_*`).
 fn cmd_eval(action: EvalCliAction) {
-    use crate::evaluation_record::{
+    use vela_protocol::evaluation_record::{
         EvaluationKind, EvaluationRecord, Outcome, RecordDraft, TargetKind,
     };
 
@@ -12430,8 +12432,8 @@ fn cmd_eval(action: EvalCliAction) {
 /// v0.218: handle `vela conflict` — detect / resolve / list
 /// Verdict Conflicts on a frontier.
 fn cmd_conflict(action: ConflictCliAction) {
-    use crate::diff_pack_review;
-    use crate::verdict_conflict::{ConflictDraft, ResolutionMode, VerdictConflict};
+    use vela_protocol::diff_pack_review;
+    use vela_protocol::verdict_conflict::{ConflictDraft, ResolutionMode, VerdictConflict};
 
     match action {
         ConflictCliAction::Detect { frontier, json } => {
@@ -12659,7 +12661,7 @@ fn cmd_conflict(action: ConflictCliAction) {
 /// v0.163: handle `vela preprint <frontier>`. Renders a Markdown
 /// preprint body for the frontier.
 fn cmd_preprint(frontier: PathBuf, released_at: Option<String>, out: Option<PathBuf>, json: bool) {
-    use crate::preprint::render_preprint;
+    use vela_protocol::preprint::render_preprint;
 
     let project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
     let stamp = released_at.unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
@@ -12695,7 +12697,7 @@ fn cmd_preprint(frontier: PathBuf, released_at: Option<String>, out: Option<Path
 /// v0.163: handle `vela handle <id>`. Classifies a persistent
 /// identifier and prints the resolved kind + canonical URL.
 fn cmd_handle_resolve(handle: String, site: String, json: bool) {
-    use crate::resolver::resolve;
+    use vela_protocol::resolver::resolve;
 
     let resolved = resolve(&handle, &site);
     if json {
@@ -12730,9 +12732,9 @@ fn cmd_crossref(
     out: Option<PathBuf>,
     json: bool,
 ) {
-    use crate::credit::build_ledger;
-    use crate::crossref::{CrossrefDepositManifest, DepositInput, Depositor};
-    use crate::frontier_release::FrontierRelease;
+    use vela_protocol::credit::build_ledger;
+    use vela_protocol::crossref::{CrossrefDepositManifest, DepositInput, Depositor};
+    use vela_protocol::frontier_release::FrontierRelease;
 
     let project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
     let releases_dir = releases_dir_for(&frontier);
@@ -12815,7 +12817,7 @@ fn cmd_citation(
     out: Option<PathBuf>,
     json: bool,
 ) {
-    use crate::citation::{CitationFormat, render_finding, render_frontier};
+    use vela_protocol::citation::{CitationFormat, render_finding, render_frontier};
 
     let fmt = CitationFormat::parse(&format).unwrap_or_else(|e| fail_return(&e));
 
@@ -13005,7 +13007,7 @@ fn print_index_payload(label: &str, payload: &Value, json_output: bool) {
 
 /// v0.148: handle `vela registry hub-federation status`.
 pub(crate) fn cmd_hub_federation(action: HubFederationAction) {
-    use crate::checkpoint::RegistryCheckpoint;
+    use vela_protocol::checkpoint::RegistryCheckpoint;
 
     match action {
         HubFederationAction::Status { sources, json } => {
@@ -13186,7 +13188,7 @@ pub(crate) fn cmd_hub_federation(action: HubFederationAction) {
 
 /// v0.153: handle `vela registry verify-all`.
 pub(crate) fn cmd_verify_all(from: Option<PathBuf>, json: bool) {
-    use crate::registry;
+    use vela_protocol::registry;
 
     let registry_path = match from {
         Some(p) => registry::resolve_local(p.to_str().unwrap_or_default())
@@ -13270,8 +13272,8 @@ pub(crate) fn cmd_verify_all(from: Option<PathBuf>, json: bool) {
 
 /// v0.147: handle `vela registry checkpoint {create|verify}`.
 pub(crate) fn cmd_checkpoint(action: CheckpointAction) {
-    use crate::checkpoint::{CheckpointDraft, RegistryCheckpoint};
-    use crate::registry;
+    use vela_protocol::checkpoint::{CheckpointDraft, RegistryCheckpoint};
+    use vela_protocol::registry;
 
     match action {
         CheckpointAction::Create {
@@ -13390,7 +13392,7 @@ pub(crate) fn cmd_checkpoint(action: CheckpointAction) {
 
 /// v0.146: verify the owner-epoch chain transcript for a frontier.
 pub(crate) fn cmd_verify_chain(frontier: PathBuf, artifacts: PathBuf, json: bool) {
-    use crate::governance::{
+    use vela_protocol::governance::{
         ChainStatus, GovernancePolicy, OwnerEpochChain, OwnerRotateAttestationBundle,
         OwnerRotateProposal, verify_chain,
     };
@@ -13518,7 +13520,7 @@ pub(crate) struct FrontierRevocation {
     pub(crate) map: std::collections::HashMap<String, String>,
 }
 
-impl crate::governance::ActorRevocationLookup for FrontierRevocation {
+impl vela_protocol::governance::ActorRevocationLookup for FrontierRevocation {
     fn revoked_at(&self, actor_id: &str) -> Option<&str> {
         self.map.get(actor_id).map(String::as_str)
     }
@@ -13526,7 +13528,7 @@ impl crate::governance::ActorRevocationLookup for FrontierRevocation {
 
 /// v0.144: handle `vela registry governance {init|show|validate}`.
 pub(crate) fn cmd_governance(action: GovernanceAction) {
-    use crate::governance::{GovernancePolicy, PolicyDraft, Quorum};
+    use vela_protocol::governance::{GovernancePolicy, PolicyDraft, Quorum};
 
     match action {
         GovernanceAction::Init {
@@ -14051,13 +14053,13 @@ fn cmd_agent_bench(
     report_path: Option<&Path>,
     json_out: bool,
 ) {
-    let input = crate::agent_bench::BenchInput {
+    let input = vela_protocol::agent_bench::BenchInput {
         gold_path: gold.to_path_buf(),
         candidate_path: candidate.to_path_buf(),
         sources: sources.map(Path::to_path_buf),
         threshold: threshold.unwrap_or(0.0),
     };
-    let report = match crate::agent_bench::run(input) {
+    let report = match vela_protocol::agent_bench::run(input) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("{} bench failed: {e}", style::err_prefix());
@@ -14082,7 +14084,7 @@ fn cmd_agent_bench(
         println!();
         println!("  {}", "VELA · BENCH · AGENT STATE-UPDATE".dimmed());
         println!("  {}", style::tick_row(60));
-        print!("{}", crate::agent_bench::render_pretty(&report));
+        print!("{}", vela_protocol::agent_bench::render_pretty(&report));
         println!();
     }
 
@@ -14395,6 +14397,152 @@ fn cmd_verify(path: &Path, json_output: bool) {
             );
         }
         Err(e) => fail(&e),
+    }
+}
+
+fn cmd_gate(action: GateAction) {
+    use vela_protocol::deliverable_grade::{self, DeliverableGrade, GradeGate};
+    use vela_protocol::verifier_attachment::{
+        self, GateStatus, ProbeKind, VerifierAttachment, VerifierMethod,
+    };
+    match action {
+        GateAction::Grade { claim, grade, json } => {
+            let gate = deliverable_grade::grade_gate(&claim, grade.as_deref());
+            let passed = gate.passed();
+            if json {
+                let grade_str = match &gate {
+                    GradeGate::Ok(g) => Some(g.as_str().to_string()),
+                    _ => grade.clone(),
+                };
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "command": "gate grade",
+                        "passed": passed,
+                        "grade": grade_str,
+                        "reason": gate.reason(),
+                    }))
+                    .expect("serialize gate grade response")
+                );
+            } else if passed {
+                println!("gate grade: ok");
+                if let GradeGate::Ok(g) = gate {
+                    println!("  deliverable_grade: {g}  (claim text consistent with grade)");
+                }
+            } else {
+                eprintln!("gate grade: REJECTED\n  {}", gate.reason());
+            }
+            if !passed {
+                std::process::exit(1);
+            }
+        }
+        GateAction::Check {
+            claim,
+            attachments,
+            json,
+        } => {
+            let raw = std::fs::read_to_string(&attachments)
+                .unwrap_or_else(|e| fail_return(&format!("read {}: {e}", attachments.display())));
+            let atts: Vec<VerifierAttachment> = serde_json::from_str(&raw).unwrap_or_else(|e| {
+                fail_return(&format!(
+                    "parse {} as a JSON array of VerifierAttachment: {e}",
+                    attachments.display()
+                ))
+            });
+            // G4: every attachment must be structurally sound before the
+            // gate reasons over it.
+            for a in &atts {
+                if let Err(e) = a.verify() {
+                    fail(&format!("attachment {} is malformed: {e}", a.id));
+                }
+            }
+            let digest = verifier_attachment::claim_digest(&claim);
+            let outcome = verifier_attachment::derive_gate_status(&digest, &atts);
+            let verified = outcome.status == GateStatus::Verified;
+            if json {
+                let status = match outcome.status {
+                    GateStatus::Verified => "verified",
+                    GateStatus::NeedsVerification => "needs_verification",
+                    GateStatus::Refuted => "refuted",
+                };
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "command": "gate check",
+                        "claim_digest": digest,
+                        "attachments": atts.len(),
+                        "status": status,
+                        "reasons": outcome.reasons,
+                    }))
+                    .expect("serialize gate check response")
+                );
+            } else {
+                println!("gate check: {} attachment(s) over claim {digest}", atts.len());
+                match outcome.status {
+                    GateStatus::Verified => println!(
+                        "  status: VERIFIED\n  >=2 independent matched attachments + a surviving adversarial probe."
+                    ),
+                    GateStatus::Refuted => {
+                        println!("  status: REFUTED");
+                        for r in &outcome.reasons {
+                            println!("    - {r}");
+                        }
+                    }
+                    GateStatus::NeedsVerification => {
+                        println!("  status: needs_verification");
+                        for r in &outcome.reasons {
+                            println!("    - {r}");
+                        }
+                    }
+                }
+            }
+            if !verified {
+                std::process::exit(1);
+            }
+        }
+        GateAction::Vocab { json } => {
+            let grades: Vec<&str> = DeliverableGrade::ALL.iter().map(|g| g.as_str()).collect();
+            let methods: Vec<&str> = VerifierMethod::ALL.iter().map(|m| m.as_str()).collect();
+            let probes = [
+                ProbeKind::CounterexampleSearch,
+                ProbeKind::CaseBConfig,
+                ProbeKind::BoundaryDualFeasibility,
+                ProbeKind::FiniteSizeExtrapolation,
+                ProbeKind::IndependentReimplementation,
+            ];
+            let probe_kinds: Vec<&str> = probes.iter().map(|p| p.as_str()).collect();
+            if json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "command": "gate vocab",
+                        "deliverable_grades": grades,
+                        "solve_grades": DeliverableGrade::ALL
+                            .iter()
+                            .filter(|g| g.is_solve())
+                            .map(|g| g.as_str())
+                            .collect::<Vec<_>>(),
+                        "verifier_methods": methods,
+                        "probe_kinds": probe_kinds,
+                    }))
+                    .expect("serialize gate vocab response")
+                );
+            } else {
+                println!("deliverable grades ({}):", grades.len());
+                for g in DeliverableGrade::ALL {
+                    let mark = if g.is_solve() { " (solve)" } else { "" };
+                    println!("  {}{mark}", g.as_str());
+                }
+                println!("\nverifier methods ({}):", methods.len());
+                for m in &methods {
+                    println!("  {m}");
+                }
+                println!("\nadversarial probe kinds ({}):", probe_kinds.len());
+                for p in &probe_kinds {
+                    println!("  {p}");
+                }
+            }
+        }
     }
 }
 
@@ -14805,7 +14953,7 @@ fn cmd_lock(path: &Path, check: bool, json_output: bool) {
         cmd_lock_check(path, json_output);
         return;
     }
-    let payload = crate::frontier_repo::materialize(path).unwrap_or_else(|e| fail_return(&e));
+    let payload = vela_protocol::frontier_repo::materialize(path).unwrap_or_else(|e| fail_return(&e));
     if json_output {
         println!(
             "{}",
@@ -14855,14 +15003,14 @@ fn cmd_lock(path: &Path, check: bool, json_output: bool) {
 }
 
 fn cmd_lock_check(path: &Path, json_output: bool) {
-    use crate::frontier_repo::read_lock;
+    use vela_protocol::frontier_repo::read_lock;
     let lock = read_lock(path).unwrap_or_else(|e| fail_return(&e));
     let Some(lock) = lock else {
         fail("lock --check: no vela.lock found at path");
     };
     let project = repo::load_from_path(path).unwrap_or_else(|e| fail_return(&e));
-    let current_snapshot = format!("sha256:{}", crate::events::snapshot_hash(&project));
-    let current_event_log = format!("sha256:{}", crate::events::event_log_hash(&project.events));
+    let current_snapshot = format!("sha256:{}", vela_protocol::events::snapshot_hash(&project));
+    let current_event_log = format!("sha256:{}", vela_protocol::events::event_log_hash(&project.events));
     let mut drift: Vec<String> = Vec::new();
     if lock.snapshot_hash != current_snapshot {
         drift.push(format!(
@@ -14930,7 +15078,7 @@ fn cmd_doc(path: &Path, out: Option<&Path>, json_output: bool) {
         .map(Path::to_path_buf)
         .unwrap_or_else(|| path.join("doc"));
     let report =
-        crate::doc_render::write_site(&project, &out_dir).unwrap_or_else(|e| fail_return(&e));
+        vela_protocol::doc_render::write_site(&project, &out_dir).unwrap_or_else(|e| fail_return(&e));
     if json_output {
         print_json(&report);
         return;
@@ -15317,8 +15465,8 @@ fn cmd_impact(frontier: &Path, finding_id: &str, depth: Option<usize>, json: boo
 }
 
 fn cmd_discord(frontier: &Path, json: bool, kind_filter: Option<&str>) {
-    use crate::discord::DiscordKind;
-    use crate::discord_compute::compute_discord_assignment;
+    use vela_protocol::discord::DiscordKind;
+    use vela_protocol::discord_compute::compute_discord_assignment;
 
     let project = repo::load_from_path(frontier).unwrap_or_else(|e| fail_return(&e));
     let assignment = compute_discord_assignment(&project);
@@ -15899,6 +16047,7 @@ const SCIENCE_SUBCOMMANDS: &[&str] = &[
     "correction-return",
     "bench",
     "conformance",
+    "gate",
     "version",
     "sign",
     "actor",
@@ -16070,6 +16219,7 @@ Advanced (proposal-creation, agent inboxes, federation):
                 Validate returned corrections and draft review proposals
   bench         Run deterministic benchmark gates
   conformance   Run protocol conformance vectors
+  gate          Verification gate: deliverable-grade + verifier-attachment checks
   sign          Optional signing and signature verification
   runtime-adapter
                 Normalize external runtime exports into reviewable proposals
@@ -16508,8 +16658,8 @@ fn print_session_help() {
     println!();
 }
 
-fn print_session_dashboard(project: &crate::project::Project, repo_path: &Path) {
-    use crate::causal_reasoning::{audit_frontier, summarize_audit};
+fn print_session_dashboard(project: &vela_protocol::project::Project, repo_path: &Path) {
+    use vela_protocol::causal_reasoning::{audit_frontier, summarize_audit};
 
     let label = frontier_label(project);
     let vfr = project.frontier_id();
@@ -16541,11 +16691,11 @@ fn print_session_dashboard(project: &crate::project::Project, repo_path: &Path) 
             }
             bridge_total += 1;
             if let Ok(data) = std::fs::read_to_string(&path)
-                && let Ok(b) = serde_json::from_str::<crate::bridge::Bridge>(&data)
+                && let Ok(b) = serde_json::from_str::<vela_protocol::bridge::Bridge>(&data)
             {
                 match b.status {
-                    crate::bridge::BridgeStatus::Confirmed => bridge_confirmed += 1,
-                    crate::bridge::BridgeStatus::Derived => bridge_derived += 1,
+                    vela_protocol::bridge::BridgeStatus::Confirmed => bridge_confirmed += 1,
+                    vela_protocol::bridge::BridgeStatus::Derived => bridge_derived += 1,
                     _ => {}
                 }
             }
@@ -16563,9 +16713,9 @@ fn print_session_dashboard(project: &crate::project::Project, repo_path: &Path) 
     }
 
     println!();
-    let version = crate::project::VELA_COMPILER_VERSION
+    let version = vela_protocol::project::VELA_COMPILER_VERSION
         .strip_prefix("vela/")
-        .unwrap_or(crate::project::VELA_COMPILER_VERSION);
+        .unwrap_or(vela_protocol::project::VELA_COMPILER_VERSION);
     println!(
         "  {}",
         format!("VELA · {version} · {label}")

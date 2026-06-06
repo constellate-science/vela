@@ -546,6 +546,16 @@ pub(crate) enum Commands {
         #[arg(default_value = "tests/conformance")]
         dir: PathBuf,
     },
+    /// The verification gate: deliverable-grade and verifier-attachment
+    /// checks. `vela verify` proves the *log* is what was signed; `vela
+    /// gate` proves a *claim* earned its status — ≥2 independent matched
+    /// verifier attachments and a surviving adversarial probe, never a
+    /// self-reported "verified" string. See `vela_protocol::verifier_attachment`
+    /// and `vela_protocol::deliverable_grade`.
+    Gate {
+        #[command(subcommand)]
+        action: GateAction,
+    },
     /// Show version information
     Version,
     /// Optional signing and signature verification
@@ -2479,6 +2489,48 @@ pub(crate) enum SignAction {
         /// Number of unique valid signatures required (>= 1).
         #[arg(long)]
         to: u32,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+/// `vela gate` — the verification gate over a claim.
+#[derive(Subcommand)]
+pub(crate) enum GateAction {
+    /// L5 anti-inflation: require a deliverable grade and block
+    /// solve-language unless the grade is an actual solve. Exit 1 on a
+    /// gate failure (e.g. an `improved_published_bound` whose claim text
+    /// says "resolves #647").
+    Grade {
+        /// The claim text to lint.
+        #[arg(long)]
+        claim: String,
+        /// The deliverable grade (e.g. `improved_published_bound`,
+        /// `unconditional_solve`, `new_oeis_term`). Omit to see the
+        /// "grade required" failure.
+        #[arg(long)]
+        grade: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Derive the verification gate status (G1 independence + G2
+    /// claim-match + G3 surviving probe + G4 well-formed) for a claim
+    /// from a JSON array of verifier attachments. There is no setter:
+    /// the status is computed, never stored. Exit 1 unless the gate
+    /// derives `verified`.
+    Check {
+        /// The exact claim text the attachments must be bound to.
+        #[arg(long)]
+        claim: String,
+        /// Path to a JSON array of `VerifierAttachment` objects.
+        #[arg(long)]
+        attachments: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Print the deliverable-grade taxonomy and verifier-method /
+    /// probe-kind vocabularies (the closed sets the gate accepts).
+    Vocab {
         #[arg(long)]
         json: bool,
     },
