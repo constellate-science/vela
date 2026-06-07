@@ -590,6 +590,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/diff-packs", post(publish_diff_pack))
         .route("/diff-packs/{pack_id}", get(get_diff_pack))
         .route("/entries/{vfr_id}/findings/{vf_id}", get(get_finding))
+        .route(
+            "/entries/{vfr_id}/findings/{vf_id}/gate-status",
+            get(get_finding_gate_status),
+        )
+        .route(
+            "/entries/{vfr_id}/gate-status",
+            get(get_frontier_gate_status),
+        )
         .route("/entries/{vfr_id}/proof", get(get_proof_packet))
         .route(
             "/entries/{vfr_id}/proof/download",
@@ -1717,6 +1725,189 @@ async fn get_finding(
                 .into_response(),
         }
     }
+}
+
+/// `GET /entries/{vfr_id}/findings/{vf_id}/gate-status`
+///
+/// Returns the **derived** trust-gate status for one finding — never stored,
+/// always recomputed from the finding's current claim and its verifier
+/// attachments (doctrine: status is a read-time projection). The UI uses this
+/// to render verification as a material state without re-deriving the gate.
+///
+/// The response separates two things the campaign deliberately keeps apart:
+///   - `machine_sealed` — the gate says `verified` (G1–G4: ≥2 independent,
+///     matched, adversarially-probed attachments). This is the gold seam.
+///   - `reviewer_accepted` — a human review verdict of `accepted`. A finding
+///     can be reviewer-accepted yet NOT machine-sealed. `reviewer-accepted ≠
+///     machine-sealed`; the UI must not conflate them.
+/// `distinct_verifier_actors` / `distinct_methods` expose the independence
+/// truth directly (independence is by distinct method/solver, not by count of
+/// attachments), so the UI can be honest about thin evidence.
+async fn get_finding_gate_status(
+    State(state): State<AppState>,
+    Path((vfr_id, vf_id)): Path<(String, String)>,
+) -> Response {
+    let entry = match state.db.get_live_entry(&vfr_id).await {
+        Ok(Some(v)) => v,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": format!("{vfr_id} not found")})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("query: {e}")})),
+            )
+                .into_response();
+        }
+    };
+
+    let signed_at = entry
+        .get("signed_publish_at")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let Some(project) = load_substrate(&state, &vfr_id, signed_at).await else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"error": "frontier projection unavailable; pull via the CLI to inspect"})),
+        )
+            .into_response();
+    };
+
+    match finding_gate_status_body(
+        &project.findings,
+        &project.verifier_attachments,
+        &vfr_id,
+        &vf_id,
+    ) {
+        Some(body) => (StatusCode::OK, Json(body)).into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("{vf_id} not in {vfr_id}")})),
+        )
+            .into_response(),
+    }
+}
+
+/// `GET /entries/{vfr_id}/gate-status`
+///
+/// The frontier-wide projection: one gate-status row per finding, so a list
+/// view renders the whole frontier's seal state in a single request instead
+/// of N. Same derivation as the per-finding endpoint (status never stored).
+async fn get_frontier_gate_status(
+    State(state): State<AppState>,
+    Path(vfr_id): Path<String>,
+) -> Response {
+    let entry = match state.db.get_live_entry(&vfr_id).await {
+        Ok(Some(v)) => v,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": format!("{vfr_id} not found")})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("query: {e}")})),
+            )
+                .into_response();
+        }
+    };
+    let signed_at = entry
+        .get("signed_publish_at")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let Some(project) = load_substrate(&state, &vfr_id, signed_at).await else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"error": "frontier projection unavailable; pull via the CLI to inspect"})),
+        )
+            .into_response();
+    };
+
+    let rows: Vec<Value> = project
+        .findings
+        .iter()
+        .filter_map(|b| {
+            finding_gate_status_body(
+                &project.findings,
+                &project.verifier_attachments,
+                &vfr_id,
+                &b.id,
+            )
+        })
+        .collect();
+    let sealed = rows
+        .iter()
+        .filter(|r| r["machine_sealed"] == json!(true))
+        .count();
+    let body = json!({
+        "schema": "vela.gate-status-page.v0.1",
+        "vfr_id": vfr_id,
+        "count": rows.len(),
+        "machine_sealed_count": sealed,
+        "findings": rows,
+    });
+    (StatusCode::OK, Json(body)).into_response()
+}
+
+/// Pure projection: the gate-status response body for one finding, or `None`
+/// if the finding is absent. Takes just the slices it reads so the
+/// seal-vs-review distinction is unit-testable without a server, DB, or a
+/// fully-constructed `Project`.
+fn finding_gate_status_body(
+    findings: &[vela_protocol::bundle::FindingBundle],
+    attachments_all: &[vela_protocol::verifier_attachment::VerifierAttachment],
+    vfr_id: &str,
+    vf_id: &str,
+) -> Option<Value> {
+    use std::collections::BTreeSet;
+    use vela_protocol::bundle::ReviewState;
+    use vela_protocol::verifier_attachment::{GateStatus, claim_digest, derive_gate_status};
+
+    let bundle = findings.iter().find(|b| b.id == vf_id)?;
+
+    let digest = claim_digest(&bundle.assertion.text);
+    let attachments: Vec<_> = attachments_all
+        .iter()
+        .filter(|a| a.target == vf_id)
+        .cloned()
+        .collect();
+    let outcome = derive_gate_status(&digest, &attachments);
+
+    let distinct_actors: BTreeSet<&str> =
+        attachments.iter().map(|a| a.verifier_actor.as_str()).collect();
+    let distinct_methods: BTreeSet<String> = attachments
+        .iter()
+        .map(|a| a.verifier_method.as_str().to_string())
+        .collect();
+    let reviewer_accepted = matches!(bundle.flags.review_state, Some(ReviewState::Accepted));
+    let machine_sealed = outcome.status == GateStatus::Verified;
+
+    Some(json!({
+        "schema": "vela.gate-status.v0.1",
+        "vfr_id": vfr_id,
+        "vf_id": vf_id,
+        "claim_digest": digest,
+        // Machine seal (the gold seam): derived, fail-closed.
+        "gate_status": outcome.status,
+        "machine_sealed": machine_sealed,
+        "reasons": outcome.reasons,
+        // Human review verdict — distinct from the machine seal.
+        "reviewer_accepted": reviewer_accepted,
+        "review_state": bundle.flags.review_state,
+        // Independence truth, exposed so the UI cannot overstate thin evidence.
+        "attachment_count": attachments.len(),
+        "distinct_verifier_actors": distinct_actors.len(),
+        "distinct_methods": distinct_methods.len(),
+        // Stone seam: superseded by a newer content-addressed finding.
+        "superseded": bundle.flags.superseded,
+    }))
 }
 
 // ─── Proof packet ─────────────────────────────────────────────────────
@@ -5998,4 +6189,92 @@ fn render_entry_unavailable_html(urls: &PublicUrls, vfr_id: &str, reason: &str) 
         &main,
         &vfr_safe,
     )
+}
+
+#[cfg(test)]
+mod gate_status_tests {
+    use super::finding_gate_status_body;
+    use vela_protocol::bundle::FindingBundle;
+
+    // A complete-but-minimal finding, reviewer-accepted (flags.review_state),
+    // carrying ZERO verifier attachments. This is the exact shape the Lane C
+    // design hinges on: a human said "accepted" but no machine seal exists.
+    const REVIEWER_ACCEPTED_FINDING: &str = r#"{
+        "id": "vf_test0000000001",
+        "version": 1,
+        "assertion": {
+            "text": "a Sidon set of size 33 in {0,1}^8",
+            "type": "mechanism",
+            "entities": [],
+            "relation": null,
+            "direction": null
+        },
+        "evidence": {
+            "type": "computational",
+            "model_system": "search",
+            "species": null,
+            "method": "exhaustive enumeration",
+            "sample_size": null,
+            "effect_size": null,
+            "p_value": null,
+            "replicated": false,
+            "replication_count": null,
+            "evidence_spans": []
+        },
+        "conditions": {
+            "text": "n/a",
+            "species_verified": [],
+            "species_unverified": [],
+            "in_vitro": false,
+            "in_vivo": false,
+            "human_data": false,
+            "clinical_trial": false
+        },
+        "confidence": {
+            "kind": "frontier_epistemic",
+            "score": 0.7,
+            "method": "llm_initial",
+            "basis": "test",
+            "extraction_confidence": 0.9
+        },
+        "provenance": {
+            "source_type": "computation",
+            "title": "test"
+        },
+        "flags": {
+            "review_state": "accepted"
+        },
+        "created": "2026-06-07T00:00:00Z"
+    }"#;
+
+    #[test]
+    fn reviewer_accepted_is_not_machine_sealed() {
+        let f: FindingBundle =
+            serde_json::from_str(REVIEWER_ACCEPTED_FINDING).expect("deserialize test finding");
+        let findings = vec![f];
+        let body = finding_gate_status_body(&findings, &[], "vfr_test", "vf_test0000000001")
+            .expect("finding present");
+
+        // The keystone distinction: reviewer-accepted, but NO machine seal.
+        assert_eq!(body["reviewer_accepted"], serde_json::json!(true));
+        assert_eq!(body["machine_sealed"], serde_json::json!(false));
+        assert_eq!(body["gate_status"], serde_json::json!("needs_verification"));
+        // Zero attachments -> no independence to overstate.
+        assert_eq!(body["attachment_count"], serde_json::json!(0));
+        assert_eq!(body["distinct_verifier_actors"], serde_json::json!(0));
+        assert_eq!(body["distinct_methods"], serde_json::json!(0));
+        assert_eq!(body["superseded"], serde_json::json!(false));
+        assert_eq!(body["schema"], serde_json::json!("vela.gate-status.v0.1"));
+    }
+
+    #[test]
+    fn absent_finding_yields_none() {
+        let f: FindingBundle =
+            serde_json::from_str(REVIEWER_ACCEPTED_FINDING).expect("deserialize test finding");
+        let findings = vec![f];
+        assert!(
+            finding_gate_status_body(&findings, &[], "vfr_test", "vf_does_not_exist").is_none(),
+            "absent finding must return None (404), not a body"
+        );
+    }
 }
