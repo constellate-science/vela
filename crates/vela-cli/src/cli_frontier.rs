@@ -66,6 +66,7 @@ pub(crate) fn cmd_frontier(action: FrontierAction) {
                 released_diff_packs: Vec::new(),
                 verdict_conflicts: Vec::new(),
                 contradictions: Vec::new(),
+        verifier_attachments: Vec::new(),
             };
             repo::save_to_path(&path, &project).unwrap_or_else(|e| fail_return(&e));
             let payload = json!({

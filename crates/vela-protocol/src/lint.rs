@@ -917,6 +917,7 @@ mod tests {
             released_diff_packs: vec![],
             verdict_conflicts: vec![],
             contradictions: vec![],
+            verifier_attachments: vec![],
         }
     }
 

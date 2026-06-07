@@ -212,6 +212,7 @@ fn clone_project_metadata(p: &crate::project::Project) -> crate::project::Projec
         released_diff_packs: Vec::new(),
         verdict_conflicts: Vec::new(),
         contradictions: Vec::new(),
+        verifier_attachments: Vec::new(),
     }
 }
 

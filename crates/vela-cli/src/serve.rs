@@ -318,6 +318,7 @@ fn merge_projects(frontiers: Vec<(String, Project)>) -> Project {
         released_diff_packs: Vec::new(),
         verdict_conflicts: Vec::new(),
         contradictions: Vec::new(),
+        verifier_attachments: Vec::new(),
     };
     sources::materialize_project(&mut project);
     project

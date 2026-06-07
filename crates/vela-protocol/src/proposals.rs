@@ -1882,6 +1882,30 @@ fn validate_proposal_shape(frontier: &Project, proposal: &StateProposal) -> Resu
                 ));
             }
         }
+        "verifier.attach" => {
+            if proposal.target.r#type != "finding" {
+                return Err(format!(
+                    "verifier.attach proposal target.type must be 'finding', got '{}'",
+                    proposal.target.r#type
+                ));
+            }
+            let value = proposal
+                .payload
+                .get("attachment")
+                .ok_or("verifier.attach proposal missing payload.attachment")?
+                .clone();
+            let att: crate::verifier_attachment::VerifierAttachment =
+                serde_json::from_value(value)
+                    .map_err(|e| format!("Invalid verifier.attach payload: {e}"))?;
+            att.verify()
+                .map_err(|e| format!("verifier.attach attachment malformed: {e}"))?;
+            if att.target != proposal.target.id {
+                return Err(format!(
+                    "verifier.attach attachment.target {} does not match proposal target {}",
+                    att.target, proposal.target.id
+                ));
+            }
+        }
         // v0.52: NegativeResult deposit through the proposals
         // pipeline. Mirrors finding.add: payload.negative_result
         // carries the inline NegativeResult struct; target.id is the
@@ -3068,6 +3092,7 @@ fn apply_proposal(
         "finding.reject" => apply_reject(frontier, proposal, reviewer, decision_reason)?,
         "finding.supersede" => apply_supersede(frontier, proposal, reviewer, decision_reason)?,
         "artifact.assert" => apply_artifact_assert(frontier, proposal, reviewer, decision_reason)?,
+        "verifier.attach" => apply_verifier_attach(frontier, proposal, reviewer, decision_reason)?,
         // v0.52: agent-inbox-deposited nulls and trajectories follow
         // the same review-gated path as findings.
         "negative_result.assert" => {
@@ -3351,6 +3376,52 @@ fn apply_artifact_assert(
     events::validate_event_payload(&event.kind, &event.payload)?;
     event.id = events::compute_event_id(&event);
     Ok(event)
+}
+
+/// Bind a verifier attachment to a finding (`target.type == "finding"`). Appends
+/// to the sidecar `verifier_attachments` collection and emits
+/// `verifier_attachment.added`. Per-finding trust-gate status is derived on read.
+fn apply_verifier_attach(
+    frontier: &mut Project,
+    proposal: &StateProposal,
+    reviewer: &str,
+    _decision_reason: &str,
+) -> Result<StateEvent, String> {
+    if proposal.target.r#type != "finding" {
+        return Err(format!(
+            "verifier.attach target.type must be 'finding', got '{}'",
+            proposal.target.r#type
+        ));
+    }
+    let value = proposal
+        .payload
+        .get("attachment")
+        .ok_or("verifier.attach proposal missing payload.attachment")?
+        .clone();
+    let att: crate::verifier_attachment::VerifierAttachment = serde_json::from_value(value)
+        .map_err(|e| format!("Invalid verifier.attach payload: {e}"))?;
+    att.verify()
+        .map_err(|e| format!("verifier.attach attachment malformed: {e}"))?;
+    if att.target != proposal.target.id {
+        return Err(format!(
+            "verifier.attach attachment.target {} does not match proposal target {}",
+            att.target, proposal.target.id
+        ));
+    }
+    if !frontier.verifier_attachments.iter().any(|a| a.id == att.id) {
+        frontier.verifier_attachments.push(att.clone());
+    }
+    Ok(events::new_finding_event(events::FindingEventInput {
+        kind: events::EVENT_KIND_VERIFIER_ATTACHMENT_ADDED,
+        finding_id: &proposal.target.id,
+        actor_id: reviewer,
+        actor_type: events::actor_kind(reviewer),
+        reason: &proposal.reason,
+        before_hash: NULL_HASH,
+        after_hash: NULL_HASH,
+        payload: json!({ "proposal_id": proposal.id, "attachment": att }),
+        caveats: proposal.caveats.clone(),
+    }))
 }
 
 fn apply_review(
@@ -4974,6 +5045,75 @@ mod tests {
         let second_event =
             accept_at_path(&path, &created.proposal_id, "reviewer:test", "same").unwrap();
         assert_eq!(first_event, second_event);
+    }
+
+    #[test]
+    fn verifier_attach_accepts_and_derives_verified() {
+        use crate::verifier_attachment::{
+            derive_gate_status, AdversarialProbe, AttachmentDraft, AttachmentOutcome, MatchToClaim,
+            ProbeKind, ProbeResult, VerifierAttachment, VerifierMethod,
+        };
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("frontier.json");
+        let frontier = project::assemble("test", vec![finding("vf_test")], 0, 0, "test");
+        repo::save_to_path(&path, &frontier).unwrap();
+        let cd = crate::verifier_attachment::claim_digest("Test finding");
+        let mk = |method: VerifierMethod, solver: &str, indep: Vec<String>| {
+            VerifierAttachment::build(AttachmentDraft {
+                target: "vf_test".to_string(),
+                claim_digest: cd.clone(),
+                verifier_method: method,
+                solver_id: solver.to_string(),
+                independent_of: indep,
+                match_to_claim: MatchToClaim {
+                    matches: true,
+                    checker_actor: "opus".to_string(),
+                },
+                adversarial_probes: vec![AdversarialProbe {
+                    kind: ProbeKind::CounterexampleSearch,
+                    result: ProbeResult::Survived,
+                    note: String::new(),
+                }],
+                outcome: AttachmentOutcome::Passed,
+                verifier_actor: "opus".to_string(),
+                note: String::new(),
+            })
+            .unwrap()
+        };
+        let a1 = mk(VerifierMethod::ExactArithmeticRecompute, "solver-a", vec![]);
+        let a2 = mk(
+            VerifierMethod::LiteratureCorroboration,
+            "solver-b",
+            vec![a1.id.clone()],
+        );
+        for att in [&a1, &a2] {
+            let proposal = new_proposal(
+                "verifier.attach",
+                StateTarget {
+                    r#type: "finding".to_string(),
+                    id: "vf_test".to_string(),
+                },
+                "reviewer:test",
+                "human",
+                "attach verifier evidence",
+                json!({ "attachment": att }),
+                Vec::new(),
+                Vec::new(),
+            );
+            create_or_apply(&path, proposal, true).unwrap();
+        }
+        let reloaded = repo::load_from_path(&path).unwrap();
+        assert_eq!(
+            reloaded.verifier_attachments.len(),
+            2,
+            "both attachments stored in the sidecar collection"
+        );
+        // Per-finding gate status is DERIVED on read, never stored.
+        let outcome = derive_gate_status(&cd, &reloaded.verifier_attachments);
+        assert!(
+            outcome.is_verified(),
+            "two independent matched surviving-probe attachments must derive Verified"
+        );
     }
 
     #[test]

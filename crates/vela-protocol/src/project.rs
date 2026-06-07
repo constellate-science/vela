@@ -191,6 +191,12 @@ pub struct Project {
     /// see `apply_contradiction_resolved`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub contradictions: Vec<crate::contradiction::Contradiction>,
+    /// verifier attachments bound to findings (target = `vf_…`). Sidecar
+    /// collection (not a field on FindingBundle) so finding-state replay
+    /// digests are unaffected. Per-finding trust-gate status is DERIVED from
+    /// these on read, never stored. See `verifier_attachment`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub verifier_attachments: Vec<crate::verifier_attachment::VerifierAttachment>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -408,6 +414,7 @@ pub fn assemble(
         released_diff_packs: Vec::new(),
         verdict_conflicts: Vec::new(),
         contradictions: Vec::new(),
+        verifier_attachments: Vec::new(),
     };
     crate::sources::materialize_project(&mut project);
     project

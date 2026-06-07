@@ -60,6 +60,11 @@ pub const EVENT_KIND_ARTIFACT_ASSERTED: &str = "artifact.asserted";
 pub const EVENT_KIND_ARTIFACT_REVIEWED: &str = "artifact.reviewed";
 pub const EVENT_KIND_ARTIFACT_RETRACTED: &str = "artifact.retracted";
 
+/// A verifier attachment was bound to a finding (target = vf_…). The attachment
+/// travels in payload.attachment; the reducer appends it to the sidecar
+/// verifier_attachments collection. Per-finding trust status is derived on read.
+pub const EVENT_KIND_VERIFIER_ATTACHMENT_ADDED: &str = "verifier_attachment.added";
+
 /// v0.51: Re-classify a finding/negative_result/trajectory's read-side
 /// access tier. Audit-trail event for the dual-use channel: the
 /// fact that an object's tier changed (and who changed it, when, with
@@ -1674,6 +1679,13 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
                 return Err("payload.reason must be non-empty".to_string());
             }
         }
+        "verifier_attachment.added" => {
+            require_str("proposal_id")?;
+            if !object.get("attachment").map_or(false, |v| v.is_object()) {
+                return Err("verifier_attachment.added payload.attachment must be an object".to_string());
+            }
+        }
+
         other => return Err(format!("unknown event kind '{other}'")),
     }
     Ok(())

@@ -198,6 +198,7 @@ pub fn apply_event_indexed(
         "trajectory.reviewed" => apply_trajectory_reviewed(state, event),
         "trajectory.retracted" => apply_trajectory_retracted(state, event),
         "artifact.asserted" => apply_artifact_asserted(state, event),
+        "verifier_attachment.added" => apply_verifier_attachment_added(state, event),
         "artifact.reviewed" => apply_artifact_reviewed(state, event),
         "artifact.retracted" => apply_artifact_retracted(state, event),
         // v0.51: tier re-classification.
@@ -319,6 +320,7 @@ pub fn replay_from_genesis(
         released_diff_packs: Vec::new(),
         verdict_conflicts: Vec::new(),
         contradictions: Vec::new(),
+        verifier_attachments: Vec::new(),
     };
     crate::sources::materialize_project(&mut state);
     // v0.105: build the finding-id index once, reuse across every
@@ -740,6 +742,24 @@ fn apply_artifact_asserted(state: &mut Project, event: &StateEvent) -> Result<()
         return Ok(());
     }
     state.artifacts.push(artifact);
+    Ok(())
+}
+
+/// Append a verifier attachment (target = `vf_…`) to the sidecar collection.
+/// Idempotent on the content-addressed `vva_` id. The per-finding trust-gate
+/// status is derived from these on read (export), never stored here.
+fn apply_verifier_attachment_added(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    let value = event
+        .payload
+        .get("attachment")
+        .ok_or("reducer: verifier_attachment.added missing payload.attachment")?;
+    let att: crate::verifier_attachment::VerifierAttachment =
+        serde_json::from_value(value.clone())
+            .map_err(|e| format!("reducer: invalid verifier_attachment.added payload: {e}"))?;
+    if state.verifier_attachments.iter().any(|a| a.id == att.id) {
+        return Ok(());
+    }
+    state.verifier_attachments.push(att);
     Ok(())
 }
 
