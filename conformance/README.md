@@ -18,6 +18,19 @@ adversarial probe → `refuted`). The canonical Rust implementation
 every vector by `crates/vela-protocol/tests/gate_conformance.rs`; any
 implementation of the gate must reproduce the same verdicts.
 
+It must finally agree on **canonical hashing** — the byte form every
+content-addressed id (`vf_`, `vev_`, `vpr_`, snapshot/log hashes) is the
+SHA-256 of. `canonical-hashing.json` is the portable spec of
+`vela.canonical-json/v1`: inputs paired with their exact canonical string and
+SHA-256 (keys sorted at every depth, no whitespace, UTF-8 verbatim — *not*
+`\u`-escaped, floats in Ryu shortest-round-trip form). The Rust id-minter is
+pinned by `crates/vela-protocol/tests/canonical_hashing_conformance.rs`; the
+load-bearing Python `vev_` re-verifier (`vela_verify_log.canonical_bytes`) by
+`conformance/verify_canonical_hashing.py` (run from `verify.py`). The vector
+file's `scope` block names which functions conform and which are explicitly
+out of scope — notably the TypeScript reducer's `canonicalJson` is a
+comparison-only helper that diverges on floats and must **not** content-address.
+
 ## Contract
 
 Given any fixture file `cascade-fixture-NN.json`:

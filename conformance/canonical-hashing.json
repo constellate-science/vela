@@ -1,0 +1,70 @@
+{
+  "schema": "vela.canonical-hashing.v1",
+  "format_id": "vela.canonical-json/v1",
+  "doctrine": "Every content-addressed id in the protocol (vf_ finding, vev_ canonical event, vpr_ proposal, the snapshot hash, the event-log leaf) is the SHA-256 of the canonical JSON bytes of a value. Two implementations derive the same id from the same logical content only if their canonicalization is byte-identical. These vectors pin vela.canonical-json/v1 so any implementation can verify byte-for-byte: keys sorted lexicographically at every depth, no inter-token whitespace, UTF-8 preserved verbatim (NOT \\u-escaped), floats in serde_json/Ryu shortest-round-trip form (1.0 keeps its decimal point), array order preserved, non-finite floats rejected.",
+  "scope": {
+    "conforming_implementations": [
+      "Rust: vela_protocol::canonical::to_canonical_bytes / to_canonical_string / sha256_canonical (crates/vela-protocol/src/canonical.rs)",
+      "Python: vela_verify_log.canonical_bytes (clients/python/vela_verify_log.py) -- json.dumps(sort_keys=True, separators=(',',':'), ensure_ascii=False). This is the load-bearing path: it recomputes each vev_ id and refuses to trust the hub's leaves."
+    ],
+    "explicitly_out_of_scope": [
+      "TypeScript: canonicalJson in clients/typescript/vela_reducer.ts is NOT a content-addressing function and does NOT conform. It is used only to compare reducer effect-rows for cross-impl parity, where both sides are canonicalized by the same function so any divergence cancels. It diverges on floats (JSON.stringify renders 1.0 as `1`, no int/float distinction) and MUST NOT be used to derive or check a content-addressed id. The effect-row shape deliberately types numeric fields (e.g. confidence_score) as strings so no float ever enters that comparison.",
+      "Python default json.dumps WITHOUT ensure_ascii=False renders non-ASCII as \\uXXXX (e.g. amyloid-\\u03b2) and therefore does NOT conform. Any Python content-addressing path MUST pass ensure_ascii=False, as vela_verify_log.canonical_bytes does."
+    ]
+  },
+  "vectors": [
+    {
+      "name": "object keys sort at every depth",
+      "input": { "z": 1, "a": { "y": 2, "b": 3 }, "m": [ { "q": 4, "p": 5 } ] },
+      "canonical": "{\"a\":{\"b\":3,\"y\":2},\"m\":[{\"p\":5,\"q\":4}],\"z\":1}",
+      "sha256": "48dece5ad3195f95d131d1cb30bf238e35817f078c7bc60dc537f52386a5e705"
+    },
+    {
+      "name": "unicode preserved verbatim (load-bearing: amyloid-beta)",
+      "input": { "claim": "least prime factor near amyloid-β", "greek": "αβγ" },
+      "canonical": "{\"claim\":\"least prime factor near amyloid-β\",\"greek\":\"αβγ\"}",
+      "sha256": "016340518d42e38bf144785a7b4da7cc97a1338321b927915b6c2349721e0040"
+    },
+    {
+      "name": "floats render with a decimal point (content-address form)",
+      "input": { "ratio": 1.5, "score": 1.0, "tiny": 0.001 },
+      "canonical": "{\"ratio\":1.5,\"score\":1.0,\"tiny\":0.001}",
+      "sha256": "7339335626f370137d3df5ceefd12adf8475b735af4b573a408a1618c13a9ae8"
+    },
+    {
+      "name": "large integers are not float-ified",
+      "input": { "n": 10000000000 },
+      "canonical": "{\"n\":10000000000}",
+      "sha256": "8c1b9fc0ce7dcc85bc409bcefc822de2958395788064d04fd101da12fe2c24a3"
+    },
+    {
+      "name": "empty containers and null pass through",
+      "input": { "a": {}, "b": [], "c": null },
+      "canonical": "{\"a\":{},\"b\":[],\"c\":null}",
+      "sha256": "64c63d6a1dea783babc36561117faebdeac323c44917d9017730b64ea0f96e5f"
+    },
+    {
+      "name": "array order preserved while sibling keys sort",
+      "input": { "list": [ 3, 1, 2 ], "obj": { "b": 1, "a": 2 } },
+      "canonical": "{\"list\":[3,1,2],\"obj\":{\"a\":2,\"b\":1}}",
+      "sha256": "5f615f7aeff1d71f5e0f1f13b395dc2398269f10e0e5b26faba16db8e0f08280"
+    },
+    {
+      "name": "realistic event content preimage (10 fields, unicode in key)",
+      "input": {
+        "schema": "vela.event.v1",
+        "kind": "finding.accepted",
+        "target": "vf_abc",
+        "actor": "act_opus",
+        "timestamp": "2026-06-07T00:00:00Z",
+        "reason": "two independent verifiers",
+        "before_hash": "h0",
+        "after_hash": "h1",
+        "payload": { "status": "accepted", "β": "unicode-in-key" },
+        "caveats": []
+      },
+      "canonical": "{\"actor\":\"act_opus\",\"after_hash\":\"h1\",\"before_hash\":\"h0\",\"caveats\":[],\"kind\":\"finding.accepted\",\"payload\":{\"status\":\"accepted\",\"β\":\"unicode-in-key\"},\"reason\":\"two independent verifiers\",\"schema\":\"vela.event.v1\",\"target\":\"vf_abc\",\"timestamp\":\"2026-06-07T00:00:00Z\"}",
+      "sha256": "193a68dac9f7155174f73e294b1d5fa8a5038a92206bf517f43d4b1fac2b1846"
+    }
+  ]
+}

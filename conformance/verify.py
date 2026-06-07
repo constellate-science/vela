@@ -177,6 +177,16 @@ def main() -> int:
         print(f"vela conformance: FAIL ({failed}/{len(fixtures)} failed)  [python]")
         return 1
 
+    # Canonical-hashing conformance: the content-address form every `vev_`
+    # id hashes. Pins the load-bearing Python re-verifier to the same vectors
+    # the Rust id-minter is pinned to, so the two never drift apart. Runs in
+    # Python-only environments too (no Node needed).
+    ch_rc = _run_canonical_hashing(repo_root)
+    if ch_rc != 0:
+        print("vela conformance: FAIL  [canonical-hashing]")
+        return 1
+    print("vela conformance: ok  [canonical-hashing]")
+
     # Second implementation: the TypeScript reducer. Gating it here is
     # what keeps it from silently drifting — an unrun reducer rots (the
     # retired `vela_reducer.mjs` fell three fixture_versions behind
@@ -193,6 +203,20 @@ def main() -> int:
     print("vela conformance: ok  [typescript]")
     print("\nvela conformance: ok — python + typescript agree with the rust reference")
     return 0
+
+
+def _run_canonical_hashing(repo_root: Path) -> int:
+    """Run the canonical-hashing conformance check (Python content-address path)."""
+    script = repo_root / "conformance" / "verify_canonical_hashing.py"
+    if not script.exists():
+        print(f"  note: canonical-hashing check not found at {script}")
+        return 0
+    try:
+        result = subprocess.run([sys.executable, str(script)], cwd=repo_root)
+    except Exception as e:  # noqa: BLE001
+        print(f"  canonical-hashing invocation failed: {e}", file=sys.stderr)
+        return 1
+    return result.returncode
 
 
 def _run_ts_reducer(repo_root: Path, fixtures_dir: Path) -> int:

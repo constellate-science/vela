@@ -21,9 +21,11 @@
 //!
 //! In spirit this matches RFC 8785 (JSON Canonicalization Scheme) for the
 //! subset of values Vela emits — sorted keys, compact output, deterministic
-//! number form. Conformance vectors at `tests/conformance/canonical-hashing.json`
-//! pin the exact output for a small set of inputs so any v0.3 implementation
-//! can verify byte-for-byte equivalence.
+//! number form. Conformance vectors at `conformance/canonical-hashing.json`
+//! pin the exact output (and its SHA-256) for a set of inputs so any
+//! implementation can verify byte-for-byte equivalence. The Rust side is
+//! pinned by `tests/canonical_hashing_conformance.rs`; the load-bearing
+//! Python `vev_` re-verifier by `conformance/verify_canonical_hashing.py`.
 
 use std::collections::BTreeMap;
 
