@@ -687,6 +687,12 @@ def apply_event(state: dict, event: dict) -> None:
         "frontier.conflict_resolved",
     ):
         return
+    # verifier attachment bound to a finding. Mutates the Project-level
+    # state["verifier_attachments"] sidecar; a no-op on state["findings"]
+    # (the cross-impl finding-effects digest covers findings only). The
+    # Rust mirror is reducer.rs::apply_verifier_attachment_added.
+    elif kind == "verifier_attachment.added":
+        return
     # v0.67: bridge review verdict. Bridges live in `.vela/bridges/`
     # as a side table; the reducer arm is a no-op on
     # state["findings"]. Consumers project the verdict onto

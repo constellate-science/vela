@@ -684,6 +684,10 @@ function applyEvent(state: ReducerState, event: Event): void {
   else if (kind === "frontier.synced_with_peer") return;
   else if (kind === "frontier.conflict_detected") return;
   else if (kind === "frontier.conflict_resolved") return;
+  // verifier attachment bound to a finding: mutates the Project-level
+  // verifier_attachments sidecar; no-op on the findings digest. Rust mirror
+  // is reducer.rs::apply_verifier_attachment_added.
+  else if (kind === "verifier_attachment.added") return;
   else
     throw new Error(`reducer: unsupported event kind ${JSON.stringify(kind)}`);
 }
