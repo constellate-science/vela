@@ -2112,6 +2112,27 @@ pub(crate) enum Commands {
         json: bool,
     },
 
+    /// Bind a verifier attachment to a finding (propose → accept in one step).
+    /// Reads a `vela.verifier_attachment.v0.1` JSON object (whose `target` is the
+    /// finding's `vf_…` id) and lands it via the canonical `verifier.attach`
+    /// proposal→accept path. The finding's trust-gate status is derived on read.
+    Attach {
+        frontier: PathBuf,
+        /// The finding (`vf_…`) the attachment binds to.
+        #[arg(long)]
+        target: String,
+        /// Path to a JSON file holding the VerifierAttachment object.
+        #[arg(long)]
+        attachment_file: PathBuf,
+        /// Reviewer authority applying the attachment (e.g. `reviewer:opus`).
+        #[arg(long)]
+        reviewer: String,
+        #[arg(long, default_value = "bind verifier attachment")]
+        reason: String,
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Accept a batch of proposals in one load → apply-all → save pass.
     ///
     /// The scale-capable accept path: the single `accept` reloads, re-runs

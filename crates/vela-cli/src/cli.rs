@@ -393,6 +393,14 @@ pub async fn run_command() {
             let _ = conformance::run(&dir);
         }
         Commands::Gate { action } => cmd_gate(action),
+        Commands::Attach {
+            frontier,
+            target,
+            attachment_file,
+            reviewer,
+            reason,
+            json,
+        } => cmd_attach(&frontier, &target, &attachment_file, &reviewer, &reason, json),
         Commands::Reproduce { path, json } => cmd_reproduce(&path, json),
         Commands::Version => println!("vela {}", env!("CARGO_PKG_VERSION")),
         Commands::Sign { action } => cmd_sign(action),
@@ -14401,6 +14409,67 @@ fn cmd_verify(path: &Path, json_output: bool) {
     }
 }
 
+fn cmd_attach(
+    frontier: &std::path::Path,
+    target: &str,
+    attachment_file: &std::path::Path,
+    reviewer: &str,
+    reason: &str,
+    json: bool,
+) {
+    use vela_protocol::events::StateTarget;
+    let body = match std::fs::read_to_string(attachment_file) {
+        Ok(b) => b,
+        Err(e) => fail(&format!("read {}: {e}", attachment_file.display())),
+    };
+    let att_value: Value = match serde_json::from_str(&body) {
+        Ok(v) => v,
+        Err(e) => fail(&format!("parse attachment JSON: {e}")),
+    };
+    let actor_type = if reviewer.starts_with("agent:") {
+        "agent"
+    } else {
+        "human"
+    };
+    let proposal = proposals::new_proposal(
+        "verifier.attach",
+        StateTarget {
+            r#type: "finding".to_string(),
+            id: target.to_string(),
+        },
+        reviewer,
+        actor_type,
+        reason,
+        json!({ "attachment": att_value }),
+        Vec::new(),
+        Vec::new(),
+    );
+    match proposals::create_or_apply(frontier, proposal, true) {
+        Ok(result) => {
+            let event = result.applied_event_id.clone().unwrap_or_default();
+            if json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "command": "attach",
+                        "target": target,
+                        "proposal_id": result.proposal_id,
+                        "event_id": event,
+                        "applied": result.applied_event_id.is_some(),
+                    }))
+                    .expect("serialize attach response")
+                );
+            } else {
+                println!(
+                    "· ok attached verifier evidence to {target}\n  proposal {}\n  event {event}",
+                    result.proposal_id
+                );
+            }
+        }
+        Err(e) => fail(&format!("attach: {e}")),
+    }
+}
+
 fn cmd_gate(action: GateAction) {
     use vela_protocol::deliverable_grade::{self, DeliverableGrade, GradeGate};
     use vela_protocol::verifier_attachment::{
@@ -16291,6 +16360,7 @@ const SCIENCE_SUBCOMMANDS: &[&str] = &[
     "propose",
     "accept",
     "accept-batch",
+    "attach",
     "attest",
     "lineage",
     // v0.75: Carina spec deliverable (list/schema/validate
