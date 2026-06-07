@@ -83,6 +83,21 @@ const MAX_ACCEPT_BODY_BYTES: usize = 4 * 1024;
 /// substrate; large bulk still goes through the full publish path.
 const MAX_APPEND_BODY_BYTES: usize = 4 * 1024 * 1024;
 
+/// Anti-replay: how long a proposal signature stays valid after its signed
+/// `created_at`. The proposal signing preimage includes `created_at` (see
+/// `proposal_signing_bytes`), and proposals.rs states the design intent
+/// outright — "replay-attack detection layers on the signed envelope, not the
+/// content hash." A captured signature is bound to the `created_at` it was
+/// signed with (changing it breaks the signature), so enforcing a freshness
+/// window on that signed timestamp bounds how long a captured signature can be
+/// replayed. 15 min is generous for clock skew and offline-queued signers;
+/// tighten via `VELA_PROPOSAL_MAX_AGE_SECS`. (Idempotency on the `vpr_`
+/// content address already neutralizes *identical* in-window replays; this
+/// closes the leaked-signature-replayed-later surface that idempotency cannot.)
+const DEFAULT_PROPOSAL_MAX_AGE_SECS: i64 = 900;
+/// Tolerance for a signer's clock running ahead of the hub.
+const PROPOSAL_FUTURE_SKEW_SECS: i64 = 120;
+
 /// Per-(signer, frontier) submission budget. Submission is open, so the
 /// bucket is small. Refilled on a sliding 60 s window.
 const PROPOSAL_RATE_LIMIT: u32 = 30;
@@ -2909,6 +2924,49 @@ fn detects_gate_override(body: &Value) -> Option<&'static str> {
 /// valid Ed25519 signature over their own proposal may submit; the
 /// signature alone is the bind. The endpoint NEVER applies, accepts, or
 /// mutates frontier state — it only enqueues a pending proposal.
+/// Configured freshness window (seconds) for proposal signatures.
+fn proposal_max_age_secs() -> i64 {
+    std::env::var("VELA_PROPOSAL_MAX_AGE_SECS")
+        .ok()
+        .and_then(|s| s.parse::<i64>().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(DEFAULT_PROPOSAL_MAX_AGE_SECS)
+}
+
+/// Anti-replay freshness check on a proposal's signed `created_at`. Pure over
+/// `(created_at, now, window)` so it is unit-testable. Returns `Err(msg)` when
+/// the signature is stale (older than `max_age_secs`) or too far in the future
+/// (beyond `future_skew_secs`), or when `created_at` is not RFC3339 — a signed
+/// proposal always carries a real timestamp, so an unparseable one is rejected
+/// rather than waved through.
+fn check_proposal_freshness(
+    created_at: &str,
+    now: chrono::DateTime<chrono::Utc>,
+    max_age_secs: i64,
+    future_skew_secs: i64,
+) -> Result<(), String> {
+    let ts = chrono::DateTime::parse_from_rfc3339(created_at)
+        .map_err(|e| {
+            format!("proposal created_at {created_at:?} is not RFC3339 ({e}); cannot verify freshness")
+        })?
+        .with_timezone(&chrono::Utc);
+    let age = now.signed_duration_since(ts).num_seconds();
+    if age > max_age_secs {
+        return Err(format!(
+            "proposal signature is stale: created_at is {age}s old, exceeds the {max_age_secs}s \
+             freshness window (re-sign and resubmit)"
+        ));
+    }
+    if age < -future_skew_secs {
+        return Err(format!(
+            "proposal created_at is {}s in the future, beyond the {future_skew_secs}s clock-skew \
+             tolerance",
+            -age
+        ));
+    }
+    Ok(())
+}
+
 async fn propose_to_frontier(
     State(state): State<AppState>,
     Path(vfr_id): Path<String>,
@@ -3027,6 +3085,22 @@ async fn propose_to_frontier(
                 Json(json!({"ok": false, "error": format!("verify: {e}")})),
             );
         }
+    }
+
+    // 5b. Anti-replay: the signature binds `created_at`; reject a signature
+    //     outside the freshness window so a captured signature cannot be
+    //     replayed indefinitely. (Done after signature verify, so we only
+    //     freshness-gate genuinely-signed proposals.)
+    if let Err(e) = check_proposal_freshness(
+        &proposal.created_at,
+        chrono::Utc::now(),
+        proposal_max_age_secs(),
+        PROPOSAL_FUTURE_SKEW_SECS,
+    ) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"ok": false, "error": e, "code": "stale_signature"})),
+        );
     }
 
     // Force status to pending_review at the boundary regardless of what
@@ -6276,5 +6350,61 @@ mod gate_status_tests {
             finding_gate_status_body(&findings, &[], "vfr_test", "vf_does_not_exist").is_none(),
             "absent finding must return None (404), not a body"
         );
+    }
+}
+
+#[cfg(test)]
+mod proposal_freshness_tests {
+    use super::{check_proposal_freshness, PROPOSAL_FUTURE_SKEW_SECS};
+
+    fn now() -> chrono::DateTime<chrono::Utc> {
+        chrono::DateTime::parse_from_rfc3339("2026-06-07T12:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc)
+    }
+
+    #[test]
+    fn fresh_signature_passes() {
+        // created 5 min ago, window 15 min -> OK.
+        assert!(check_proposal_freshness(
+            "2026-06-07T11:55:00Z", now(), 900, PROPOSAL_FUTURE_SKEW_SECS
+        ).is_ok());
+    }
+
+    #[test]
+    fn stale_signature_rejected() {
+        // created 20 min ago, window 15 min -> stale.
+        let r = check_proposal_freshness(
+            "2026-06-07T11:40:00Z", now(), 900, PROPOSAL_FUTURE_SKEW_SECS
+        );
+        assert!(r.is_err());
+        assert!(r.unwrap_err().contains("stale"));
+    }
+
+    #[test]
+    fn future_dated_beyond_skew_rejected() {
+        // created 5 min in the future, skew tolerance 120s -> rejected.
+        let r = check_proposal_freshness(
+            "2026-06-07T12:05:00Z", now(), 900, PROPOSAL_FUTURE_SKEW_SECS
+        );
+        assert!(r.is_err());
+        assert!(r.unwrap_err().contains("future"));
+    }
+
+    #[test]
+    fn small_future_skew_tolerated() {
+        // 60s ahead, within 120s tolerance -> OK.
+        assert!(check_proposal_freshness(
+            "2026-06-07T12:01:00Z", now(), 900, PROPOSAL_FUTURE_SKEW_SECS
+        ).is_ok());
+    }
+
+    #[test]
+    fn unparseable_created_at_rejected() {
+        // A signed proposal always carries a real RFC3339 timestamp; an
+        // unparseable one is rejected, not waved through.
+        let r = check_proposal_freshness("not-a-timestamp", now(), 900, PROPOSAL_FUTURE_SKEW_SECS);
+        assert!(r.is_err());
+        assert!(r.unwrap_err().contains("RFC3339"));
     }
 }
