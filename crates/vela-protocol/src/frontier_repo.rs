@@ -1505,6 +1505,14 @@ fn issue(rule_id: &str, message: impl Into<String>) -> RepoLayoutIssue {
     }
 }
 
+fn default_split_mode() -> String {
+    "split".to_string()
+}
+
+fn default_visibility() -> String {
+    "public".to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1535,12 +1543,4 @@ mod tests {
             "sha256:new-snapshot"
         ));
     }
-}
-
-fn default_split_mode() -> String {
-    "split".to_string()
-}
-
-fn default_visibility() -> String {
-    "public".to_string()
 }

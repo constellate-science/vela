@@ -9586,14 +9586,13 @@ fn resolve_frontier_shards_manifest(frontier: &Path) -> Result<PathBuf, String> 
             return Ok(direct_manifest);
         }
     }
-    if frontier.file_name().and_then(|s| s.to_str()) == Some("frontier.json") {
-        if let Some(parent) = frontier.parent() {
+    if frontier.file_name().and_then(|s| s.to_str()) == Some("frontier.json")
+        && let Some(parent) = frontier.parent() {
             let manifest = parent.join("frontier-state-shards").join(manifest_name);
             if manifest.is_file() {
                 return Ok(manifest);
             }
         }
-    }
     Err(format!(
         "no frontier state shard manifest found for {}; expected frontier-state-shards/{manifest_name}",
         frontier.display()
@@ -9649,10 +9648,10 @@ fn frontier_json_status(frontier_bytes: u64) -> &'static str {
 }
 
 fn source_frontier_json_summary(manifest: &Value) -> Value {
-    let source_frontier_path = json_path_str(&manifest, &["source_frontier_json", "path"])
+    let source_frontier_path = json_path_str(manifest, &["source_frontier_json", "path"])
         .map(PathBuf::from)
-        .or_else(|| json_path_str(&manifest, &["frontier"]).map(PathBuf::from));
-    let declared_frontier_bytes = json_path_u64(&manifest, &["source_frontier_json", "byte_count"]);
+        .or_else(|| json_path_str(manifest, &["frontier"]).map(PathBuf::from));
+    let declared_frontier_bytes = json_path_u64(manifest, &["source_frontier_json", "byte_count"]);
     let current_frontier_bytes = source_frontier_path
         .as_ref()
         .and_then(|path| std::fs::metadata(path).ok())

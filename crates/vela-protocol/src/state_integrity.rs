@@ -392,6 +392,22 @@ fn is_accepted_state_event(kind: &str) -> bool {
     )
 }
 
+fn proof_freshness(frontier: &Project) -> String {
+    let state = &frontier.proof_state.latest_packet;
+    if state.status == "never_exported" {
+        return "unknown".to_string();
+    }
+    if state.status == "stale" {
+        return "stale".to_string();
+    }
+    let current_event_hash = events::event_log_hash(&frontier.events);
+    match state.event_log_hash.as_deref() {
+        Some(hash) if hash == current_event_hash => "fresh".to_string(),
+        Some(_) => "stale".to_string(),
+        None => "unknown".to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -431,21 +447,5 @@ mod tests {
         assert!(is_attributed(false, false, false, true)); // reviewer
         // none of them: came from nowhere.
         assert!(!is_attributed(false, false, false, false));
-    }
-}
-
-fn proof_freshness(frontier: &Project) -> String {
-    let state = &frontier.proof_state.latest_packet;
-    if state.status == "never_exported" {
-        return "unknown".to_string();
-    }
-    if state.status == "stale" {
-        return "stale".to_string();
-    }
-    let current_event_hash = events::event_log_hash(&frontier.events);
-    match state.event_log_hash.as_deref() {
-        Some(hash) if hash == current_event_hash => "fresh".to_string(),
-        Some(_) => "stale".to_string(),
-        None => "unknown".to_string(),
     }
 }

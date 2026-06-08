@@ -1681,7 +1681,7 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
         }
         "verifier_attachment.added" => {
             require_str("proposal_id")?;
-            if !object.get("attachment").map_or(false, |v| v.is_object()) {
+            if !object.get("attachment").is_some_and(|v| v.is_object()) {
                 return Err("verifier_attachment.added payload.attachment must be an object".to_string());
             }
         }

@@ -64,11 +64,10 @@ fn find_entrypoint(workspace: &Path) -> Option<PathBuf> {
         for e in entries.flatten() {
             let p = e.path();
             if p.is_file() {
-                if let Some(name) = p.file_name().and_then(|s| s.to_str()) {
-                    if is_entrypoint(name) {
+                if let Some(name) = p.file_name().and_then(|s| s.to_str())
+                    && is_entrypoint(name) {
                         return Some(p);
                     }
-                }
             } else if p.is_dir() {
                 subdirs.push(p);
             }
@@ -78,13 +77,11 @@ fn find_entrypoint(workspace: &Path) -> Option<PathBuf> {
             if let Ok(entries) = std::fs::read_dir(&sub) {
                 for e in entries.flatten() {
                     let p = e.path();
-                    if p.is_file() {
-                        if let Some(name) = p.file_name().and_then(|s| s.to_str()) {
-                            if is_entrypoint(name) {
+                    if p.is_file()
+                        && let Some(name) = p.file_name().and_then(|s| s.to_str())
+                            && is_entrypoint(name) {
                                 return Some(p);
                             }
-                        }
-                    }
                 }
             }
         }

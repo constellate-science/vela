@@ -957,15 +957,14 @@ impl HubDb {
         // NOT access control on an existing frontier. Without this check anyone
         // could overwrite any published frontier (and rewrite its actor /
         // revocation list) with their own self-signed manifest.
-        if let Some(existing_owner) = self.frontier_owner_pubkey(&entry.vfr_id).await? {
-            if existing_owner != entry.owner_pubkey {
+        if let Some(existing_owner) = self.frontier_owner_pubkey(&entry.vfr_id).await?
+            && existing_owner != entry.owner_pubkey {
                 return Err(format!(
                     "owner continuity: vfr {} already belongs to a different owner key; a \
                      re-publish must be signed by the original owner_pubkey",
                     entry.vfr_id
                 ));
             }
-        }
 
         // Monotonic anti-replay guard. A re-publish must not carry an OLDER
         // `signed_publish_at` than the live row. Without this, a captured old

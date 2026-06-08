@@ -155,8 +155,8 @@ pub fn verify_witness(witness: &Witness) -> VerifyResult {
 /// Fold a `claimed_size` cross-check into a verifier result: the witness
 /// must pass AND have exactly the claimed number of elements.
 fn with_size(mut r: VerifyResult, actual: usize, claimed: Option<usize>) -> VerifyResult {
-    if r.ok {
-        if let Some(c) = claimed {
+    if r.ok
+        && let Some(c) = claimed {
             if actual != c {
                 return VerifyResult::fail(format!(
                     "verifier passed but construction size {actual} != claimed_size {c}"
@@ -164,7 +164,6 @@ fn with_size(mut r: VerifyResult, actual: usize, claimed: Option<usize>) -> Veri
             }
             r.message = format!("{} (size {actual} = claimed)", r.message);
         }
-    }
     r
 }
 
@@ -318,7 +317,7 @@ pub fn verify_covering(blocks: &[Vec<usize>], v: usize, k: usize, t: usize) -> V
     let mut missing = 0usize;
     each_combination(v, t, &mut |sub| {
         need += 1;
-        if !covered.contains(&sub.to_vec()) {
+        if !covered.contains(sub) {
             missing += 1;
         }
     });
@@ -397,6 +396,10 @@ pub fn verify_costas(perm: &[i64]) -> VerifyResult {
 /// distance (min nonzero codeword weight, by exhaustive enumeration of
 /// the `q^k` codewords, guarded) is `>= claimed_d`. Prime-power `GF(q)`
 /// is refused rather than mis-verified.
+// Frozen exact verifier: the range loops index multiple parallel arrays
+// (codeword/weight); the explicit index is the faithful expression, not a
+// refactor target.
+#[allow(clippy::needless_range_loop)]
 pub fn verify_linear_code(generator: &[Vec<i64>], q: u64, claimed_d: usize) -> VerifyResult {
     const MAX_ENUM: u64 = 1_000_000;
     if !is_prime(q) {
@@ -523,7 +526,7 @@ fn is_prime(q: u64) -> bool {
     }
     let mut p = 2u64;
     while p * p <= q {
-        if q % p == 0 {
+        if q.is_multiple_of(p) {
             return false;
         }
         p += 1;
@@ -533,6 +536,9 @@ fn is_prime(q: u64) -> bool {
 
 /// Rank over `GF(q)` (q prime) of an integer matrix (entries already
 /// reduced mod q).
+// Gaussian elimination over GF(q): the inner loops index two rows by the same
+// column, so a range loop is the honest form (iterator pairs would obscure it).
+#[allow(clippy::needless_range_loop)]
 fn gf_rank(rows: &[Vec<u64>], q: u64) -> usize {
     let mut m: Vec<Vec<u64>> = rows.to_vec();
     if m.is_empty() {
@@ -541,7 +547,7 @@ fn gf_rank(rows: &[Vec<u64>], q: u64) -> usize {
     let ncols = m[0].len();
     let mut rank = 0usize;
     for col in 0..ncols {
-        let piv = (rank..m.len()).find(|&r| m[r][col] % q != 0);
+        let piv = (rank..m.len()).find(|&r| !m[r][col].is_multiple_of(q));
         let Some(piv) = piv else { continue };
         m.swap(rank, piv);
         let inv = mod_inv(m[rank][col] % q, q);
@@ -549,7 +555,7 @@ fn gf_rank(rows: &[Vec<u64>], q: u64) -> usize {
             m[rank][c] = (m[rank][c] * inv) % q;
         }
         for r in 0..m.len() {
-            if r != rank && m[r][col] % q != 0 {
+            if r != rank && !m[r][col].is_multiple_of(q) {
                 let f = m[r][col] % q;
                 for c in 0..ncols {
                     m[r][c] = (m[r][c] + q - (f * m[rank][c]) % q) % q;
