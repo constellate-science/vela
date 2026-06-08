@@ -1845,17 +1845,21 @@ async fn get_frontier_gate_status(
             .into_response();
     };
 
+    // Group attachments by target ONCE (O(attachments)), so each finding's
+    // derivation is an O(1) lookup. The earlier per-finding re-scan was
+    // O(findings × attachments) + O(findings²) on the bundle lookup — quadratic
+    // on large frontiers (e.g. 5.5k findings).
+    use std::collections::HashMap;
+    type Att = vela_protocol::verifier_attachment::VerifierAttachment;
+    let mut by_target: HashMap<&str, Vec<Att>> = HashMap::new();
+    for a in &project.verifier_attachments {
+        by_target.entry(a.target.as_str()).or_default().push(a.clone());
+    }
+    let empty: Vec<Att> = Vec::new();
     let rows: Vec<Value> = project
         .findings
         .iter()
-        .filter_map(|b| {
-            finding_gate_status_body(
-                &project.findings,
-                &project.verifier_attachments,
-                &vfr_id,
-                &b.id,
-            )
-        })
+        .map(|b| gate_status_value(b, by_target.get(b.id.as_str()).unwrap_or(&empty), &vfr_id))
         .collect();
     let sealed = rows
         .iter()
@@ -1881,33 +1885,46 @@ fn finding_gate_status_body(
     vfr_id: &str,
     vf_id: &str,
 ) -> Option<Value> {
-    use std::collections::BTreeSet;
-    use vela_protocol::bundle::ReviewState;
-    use vela_protocol::verifier_attachment::{GateStatus, claim_digest, derive_gate_status};
-
     let bundle = findings.iter().find(|b| b.id == vf_id)?;
-
-    let digest = claim_digest(&bundle.assertion.text);
+    // Single finding: filtering the attachments once is O(attachments). The
+    // frontier-wide path must NOT call this in a loop (that is O(findings ×
+    // attachments)); it groups attachments by target once and uses
+    // `gate_status_value` directly.
     let attachments: Vec<_> = attachments_all
         .iter()
         .filter(|a| a.target == vf_id)
         .cloned()
         .collect();
-    let outcome = derive_gate_status(&digest, &attachments);
+    Some(gate_status_value(bundle, &attachments, vfr_id))
+}
+
+/// Core projection: the gate-status body for one finding given its bundle and
+/// the attachments ALREADY filtered to it. No lookups or scans here, so the
+/// caller controls the cost — the frontier-wide endpoint resolves attachments
+/// once via a by-target map and calls this O(1) per finding.
+fn gate_status_value(
+    bundle: &vela_protocol::bundle::FindingBundle,
+    attachments: &[vela_protocol::verifier_attachment::VerifierAttachment],
+    vfr_id: &str,
+) -> Value {
+    use std::collections::BTreeSet;
+    use vela_protocol::bundle::ReviewState;
+    use vela_protocol::verifier_attachment::{GateStatus, claim_digest, derive_gate_status};
+
+    let digest = claim_digest(&bundle.assertion.text);
+    let outcome = derive_gate_status(&digest, attachments);
 
     let distinct_actors: BTreeSet<&str> =
         attachments.iter().map(|a| a.verifier_actor.as_str()).collect();
-    let distinct_methods: BTreeSet<String> = attachments
-        .iter()
-        .map(|a| a.verifier_method.as_str().to_string())
-        .collect();
+    let distinct_methods: BTreeSet<&str> =
+        attachments.iter().map(|a| a.verifier_method.as_str()).collect();
     let reviewer_accepted = matches!(bundle.flags.review_state, Some(ReviewState::Accepted));
     let machine_sealed = outcome.status == GateStatus::Verified;
 
-    Some(json!({
+    json!({
         "schema": "vela.gate-status.v0.1",
         "vfr_id": vfr_id,
-        "vf_id": vf_id,
+        "vf_id": bundle.id,
         "claim_digest": digest,
         // Machine seal (the gold seam): derived, fail-closed.
         "gate_status": outcome.status,
@@ -1922,7 +1939,7 @@ fn finding_gate_status_body(
         "distinct_methods": distinct_methods.len(),
         // Stone seam: superseded by a newer content-addressed finding.
         "superseded": bundle.flags.superseded,
-    }))
+    })
 }
 
 // ─── Proof packet ─────────────────────────────────────────────────────
