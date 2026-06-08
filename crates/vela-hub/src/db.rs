@@ -3056,9 +3056,15 @@ mod tests {
         HubDb::Sqlite(pool)
     }
 
-    fn fixture_project() -> Project {
+    // The bbb-extension fixture is campaign data (Alzheimer's BBB) that lives in
+    // the internal monorepo, not the standalone OSS checkout. Returns None when
+    // absent so the tests below skip cleanly there and still run in-monorepo.
+    fn fixture_project() -> Option<Project> {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../frontiers/bbb-extension.json");
+        if !path.exists() {
+            return None;
+        }
         let mut project = repo::load_from_path(&path).expect("load fixture frontier");
         if project.events.len() == 1 {
             let mut second = project.events[0].clone();
@@ -3066,7 +3072,7 @@ mod tests {
             second.timestamp = "2026-05-05T00:00:01Z".to_string();
             project.events.push(second);
         }
-        project
+        Some(project)
     }
 
     fn entry_for(project: &Project) -> RegistryEntry {
@@ -3088,7 +3094,10 @@ mod tests {
     #[tokio::test]
     async fn append_to_frontier_writes_only_new_rows_and_guards() {
         let db = sqlite_db().await;
-        let project = fixture_project();
+        let Some(project) = fixture_project() else {
+            eprintln!("skip: bbb-extension.json fixture absent (internal-only)");
+            return;
+        };
         let entry = entry_for(&project);
         let raw = serde_json::to_value(&entry).expect("entry json");
         db.insert_entry(&entry, &raw).await.expect("insert entry");
@@ -3191,7 +3200,10 @@ mod tests {
     #[tokio::test]
     async fn revocation_is_authoritative_and_append_only() {
         let db = sqlite_db().await;
-        let mut project = fixture_project();
+        let Some(mut project) = fixture_project() else {
+            eprintln!("skip: bbb-extension.json fixture absent (internal-only)");
+            return;
+        };
         let pubkey = "ab".repeat(32);
         project.actors.push(vela_protocol::sign::ActorRecord {
             id: "reviewer:compromised".to_string(),
@@ -3252,7 +3264,10 @@ mod tests {
     #[tokio::test]
     async fn promote_rejects_signed_publish_at_replay() {
         let db = sqlite_db().await;
-        let project = fixture_project();
+        let Some(project) = fixture_project() else {
+            eprintln!("skip: bbb-extension.json fixture absent (internal-only)");
+            return;
+        };
         let mut entry = entry_for(&project);
         entry.signed_publish_at = "2026-05-05T12:00:00Z".to_string();
         let raw = serde_json::to_value(&entry).expect("entry json");
@@ -3288,7 +3303,10 @@ mod tests {
     #[tokio::test]
     async fn event_first_promotion_preserves_event_log_order_and_hash() {
         let db = sqlite_db().await;
-        let project = fixture_project();
+        let Some(project) = fixture_project() else {
+            eprintln!("skip: bbb-extension.json fixture absent (internal-only)");
+            return;
+        };
         let entry = entry_for(&project);
         let raw = serde_json::to_value(&entry).expect("entry json");
         db.insert_entry(&entry, &raw).await.expect("insert entry");
@@ -3336,7 +3354,10 @@ mod tests {
     #[tokio::test]
     async fn event_first_pagination_rejects_unknown_cursor() {
         let db = sqlite_db().await;
-        let project = fixture_project();
+        let Some(project) = fixture_project() else {
+            eprintln!("skip: bbb-extension.json fixture absent (internal-only)");
+            return;
+        };
         let entry = entry_for(&project);
         let raw = serde_json::to_value(&entry).expect("entry json");
         db.insert_entry(&entry, &raw).await.expect("insert entry");
@@ -3354,7 +3375,10 @@ mod tests {
     #[tokio::test]
     async fn event_first_promotion_rejects_snapshot_hash_mismatch() {
         let db = sqlite_db().await;
-        let project = fixture_project();
+        let Some(project) = fixture_project() else {
+            eprintln!("skip: bbb-extension.json fixture absent (internal-only)");
+            return;
+        };
         let mut entry = entry_for(&project);
         entry.latest_snapshot_hash = "bad".to_string();
 
@@ -3368,7 +3392,10 @@ mod tests {
     #[tokio::test]
     async fn failed_latest_audit_demotes_prior_live_frontier() {
         let db = sqlite_db().await;
-        let project = fixture_project();
+        let Some(project) = fixture_project() else {
+            eprintln!("skip: bbb-extension.json fixture absent (internal-only)");
+            return;
+        };
         let entry = entry_for(&project);
         let raw = serde_json::to_value(&entry).expect("entry json");
         db.insert_entry(&entry, &raw).await.expect("insert entry");

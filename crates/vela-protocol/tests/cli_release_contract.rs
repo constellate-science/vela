@@ -22,12 +22,18 @@ fn vela_bin() -> PathBuf {
     debug
 }
 
-fn copy_bbb_frontier(tmp: &TempDir) -> PathBuf {
+// The bbb-alzheimer fixture is campaign data living in the internal monorepo,
+// not the standalone OSS checkout. Returns None when absent so the tests below
+// skip cleanly there and still run in-monorepo.
+fn copy_bbb_frontier(tmp: &TempDir) -> Option<PathBuf> {
     let source =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../frontiers/bbb-alzheimer.json");
+    if !source.exists() {
+        return None;
+    }
     let target = tmp.path().join("frontier.json");
     fs::copy(source, &target).expect("failed to copy BBB fixture");
-    target
+    Some(target)
 }
 
 fn run_json(args: &[&str]) -> Value {
@@ -96,7 +102,10 @@ fn stats_missing_frontier_reports_error_without_panic() {
 #[test]
 fn normalize_refuses_to_write_eventful_frontier() {
     let tmp = TempDir::new().unwrap();
-    let frontier = copy_bbb_frontier(&tmp);
+    let Some(frontier) = copy_bbb_frontier(&tmp) else {
+        eprintln!("skip: bbb-alzheimer.json fixture absent (internal-only)");
+        return;
+    };
     let finding_id = first_finding_id(&frontier);
     let out = tmp.path().join("normalized.json");
 
@@ -127,7 +136,10 @@ fn normalize_refuses_to_write_eventful_frontier() {
 #[test]
 fn proof_without_record_proof_state_leaves_input_byte_identical() {
     let tmp = TempDir::new().unwrap();
-    let frontier = copy_bbb_frontier(&tmp);
+    let Some(frontier) = copy_bbb_frontier(&tmp) else {
+        eprintln!("skip: bbb-alzheimer.json fixture absent (internal-only)");
+        return;
+    };
     let before = fs::read(&frontier).unwrap();
     let out = tmp.path().join("proof-packet");
 
@@ -148,7 +160,10 @@ fn proof_without_record_proof_state_leaves_input_byte_identical() {
 #[test]
 fn proof_record_proof_state_updates_frontier() {
     let tmp = TempDir::new().unwrap();
-    let frontier = copy_bbb_frontier(&tmp);
+    let Some(frontier) = copy_bbb_frontier(&tmp) else {
+        eprintln!("skip: bbb-alzheimer.json fixture absent (internal-only)");
+        return;
+    };
     let before = fs::read(&frontier).unwrap();
     let out = tmp.path().join("proof-packet");
 
@@ -171,7 +186,10 @@ fn proof_record_proof_state_updates_frontier() {
 #[test]
 fn note_is_proposal_backed_by_default_and_applies_with_flag() {
     let tmp = TempDir::new().unwrap();
-    let frontier = copy_bbb_frontier(&tmp);
+    let Some(frontier) = copy_bbb_frontier(&tmp) else {
+        eprintln!("skip: bbb-alzheimer.json fixture absent (internal-only)");
+        return;
+    };
     let finding_id = first_finding_id(&frontier);
     let before: Value = serde_json::from_slice(&fs::read(&frontier).unwrap()).unwrap();
     let initial_annotations = before["findings"][0]["annotations"]
@@ -245,7 +263,10 @@ fn note_is_proposal_backed_by_default_and_applies_with_flag() {
 #[test]
 fn stats_and_gap_text_preserve_review_lead_caveats() {
     let tmp = TempDir::new().unwrap();
-    let frontier = copy_bbb_frontier(&tmp);
+    let Some(frontier) = copy_bbb_frontier(&tmp) else {
+        eprintln!("skip: bbb-alzheimer.json fixture absent (internal-only)");
+        return;
+    };
 
     let stats = run_text(&["stats", frontier.to_str().unwrap()]);
     assert!(stats.contains("recorded proof:"));
@@ -259,7 +280,10 @@ fn stats_and_gap_text_preserve_review_lead_caveats() {
 #[test]
 fn tool_check_json_has_concise_tool_lists() {
     let tmp = TempDir::new().unwrap();
-    let frontier = copy_bbb_frontier(&tmp);
+    let Some(frontier) = copy_bbb_frontier(&tmp) else {
+        eprintln!("skip: bbb-alzheimer.json fixture absent (internal-only)");
+        return;
+    };
 
     let payload = run_json(&[
         "serve",

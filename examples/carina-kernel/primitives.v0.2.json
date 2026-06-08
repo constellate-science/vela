@@ -1,0 +1,133 @@
+{
+  "schema": "carina.examples.v0.2",
+  "topic": "Alzheimer's BBB dysfunction and delivery",
+  "primitives": {
+    "finding": {
+      "schema": "carina.finding.v0.2",
+      "id": "vf_example",
+      "assertion": {
+        "text": "APOE4 carriers show accelerated BBB dysfunction in a bounded early-AD cohort.",
+        "type": "mechanistic"
+      },
+      "conditions": {
+        "text": "Human cohort; early symptomatic or cognitively at-risk Alzheimer's disease; assay and genotype boundary required."
+      },
+      "evidence_ids": ["ve_example"],
+      "confidence": {
+        "score": 0.72,
+        "method": "reviewer_estimated",
+        "scope": "bounded human biomarker evidence"
+      },
+      "lineage": {
+        "source_ids": ["src_example"],
+        "artifact_ids": ["va_example"]
+      },
+      "status": "proposed"
+    },
+    "evidence": {
+      "schema": "carina.evidence.v0.2",
+      "id": "ve_example",
+      "source_id": "src_example",
+      "artifact_id": "va_example",
+      "locator": "doi:10.1038/s41586-020-2247-3",
+      "span": "Source span, registry field, table, or artifact offset.",
+      "supports": ["vf_example"],
+      "limitations": ["Does not establish treatment benefit."]
+    },
+    "artifact": {
+      "schema": "carina.artifact.v0.2",
+      "id": "va_example",
+      "kind": "source_record",
+      "locator": "https://clinicaltrials.gov/study/NCT04639050",
+      "content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "parents": []
+    },
+    "proposal": {
+      "schema": "carina.proposal.v0.2",
+      "id": "vpr_example",
+      "kind": "finding.add",
+      "target": { "type": "frontier", "id": "vfr_example" },
+      "actor": { "id": "reviewer:demo", "type": "human" },
+      "provenance": {
+        "packet_id": "cap_example",
+        "artifact_ids": ["va_example"],
+        "external_object_ids": ["ext_claim_001"]
+      },
+      "status": "pending"
+    },
+    "diff": {
+      "schema": "carina.diff.v0.2",
+      "proposal_id": "vpr_example",
+      "before": { "finding_count": 262 },
+      "after": { "finding_count": 263 },
+      "changed_objects": ["vf_example"]
+    },
+    "event": {
+      "schema": "carina.event.v0.2",
+      "id": "vev_example",
+      "kind": "finding.reviewed",
+      "target": { "type": "finding", "id": "vf_example" },
+      "actor": { "id": "reviewer:demo", "type": "human" },
+      "timestamp": "2026-05-07T00:00:00Z",
+      "reason": "Accepted as bounded evidence, not clinical interpretation.",
+      "payload": {
+        "proposal_id": "vpr_example",
+        "status": "accepted"
+      }
+    },
+    "attestation": {
+      "schema": "carina.attestation.v0.2",
+      "id": "vat_example",
+      "actor": { "id": "reviewer:demo", "type": "human" },
+      "target": { "type": "event", "id": "vev_example" },
+      "status": "attested",
+      "scope": "source locator and interpretation boundary"
+    },
+    "question": {
+      "schema": "carina.question.v0.2",
+      "id": "vq_example",
+      "text": "Which evidence would separate BBB dysfunction as mechanism from BBB delivery as intervention?",
+      "rationale": "Decision-critical uncertainty before frontier promotion."
+    },
+    "protocol": {
+      "schema": "carina.protocol.v0.2",
+      "id": "vprot_example",
+      "title": "DCE-MRI BBB permeability measurement",
+      "produces": ["ve_example"]
+    },
+    "experiment": {
+      "schema": "carina.experiment.v0.2",
+      "id": "vexp_example",
+      "question_id": "vq_example",
+      "protocol_id": "vprot_example",
+      "intended_update": "narrow or strengthen BBB biomarker state"
+    },
+    "mechanism": {
+      "schema": "carina.mechanism.v0.2",
+      "id": "vmech_example",
+      "relation": "supports",
+      "shape": "threshold",
+      "source_finding_id": "vf_example",
+      "target_finding_id": "vf_downstream_example"
+    },
+    "lineage": {
+      "schema": "carina.lineage.v0.2",
+      "object_id": "vf_example",
+      "parents": ["va_example", "ve_example", "vpr_example"],
+      "event_ids": ["vev_example"]
+    },
+    "confidence": {
+      "schema": "carina.confidence.v0.2",
+      "score": 0.72,
+      "method": "reviewer_estimated",
+      "scope": "bounded human biomarker evidence",
+      "history": [
+        {
+          "event_id": "vev_example",
+          "from": null,
+          "to": 0.72
+        }
+      ]
+    }
+  }
+}

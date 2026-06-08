@@ -1,0 +1,240 @@
+{
+  "schema": "carina.examples.v0.5",
+  "topic": "Alzheimer's BBB dysfunction and delivery",
+  "primitives": {
+    "finding": {
+      "schema": "carina.finding.v0.3",
+      "id": "vf_example",
+      "assertion": {
+        "text": "APOE4 carriers show accelerated BBB dysfunction in a bounded early-AD cohort.",
+        "type": "mechanistic"
+      },
+      "conditions": {
+        "text": "Human cohort; early symptomatic or cognitively at-risk Alzheimer's disease; assay and genotype boundary required."
+      },
+      "evidence_ids": [
+        "ve_example"
+      ],
+      "confidence": {
+        "score": 0.72,
+        "method": "reviewer_estimated",
+        "scope": "bounded human biomarker evidence"
+      },
+      "lineage": {
+        "source_ids": [
+          "src_example"
+        ],
+        "artifact_ids": [
+          "va_example"
+        ]
+      },
+      "status": "proposed"
+    },
+    "evidence": {
+      "schema": "carina.evidence.v0.3",
+      "id": "ve_example",
+      "source_id": "src_example",
+      "artifact_id": "va_example",
+      "locator": "doi:10.1038/s41586-020-2247-3",
+      "span": "Source span, registry field, table, or artifact offset.",
+      "supports": [
+        "vf_example"
+      ],
+      "limitations": [
+        "Does not establish treatment benefit."
+      ]
+    },
+    "artifact": {
+      "schema": "carina.artifact.v0.3",
+      "id": "va_example",
+      "kind": "source_record",
+      "locator": "https://clinicaltrials.gov/study/NCT04639050",
+      "content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "parents": []
+    },
+    "proposal": {
+      "schema": "carina.proposal.v0.3",
+      "id": "vpr_example",
+      "kind": "finding.add",
+      "target": {
+        "type": "frontier",
+        "id": "vfr_example"
+      },
+      "actor": {
+        "id": "reviewer:demo",
+        "type": "human"
+      },
+      "provenance": {
+        "packet_id": "cap_example",
+        "artifact_ids": [
+          "va_example"
+        ],
+        "external_object_ids": [
+          "ext_claim_001"
+        ]
+      },
+      "status": "pending"
+    },
+    "diff": {
+      "schema": "carina.diff.v0.3",
+      "proposal_id": "vpr_example",
+      "before": {
+        "finding_count": 262
+      },
+      "after": {
+        "finding_count": 263
+      },
+      "changed_objects": [
+        "vf_example"
+      ]
+    },
+    "event": {
+      "schema": "carina.event.v0.3",
+      "id": "vev_example",
+      "kind": "finding.reviewed",
+      "target": {
+        "type": "finding",
+        "id": "vf_example"
+      },
+      "actor": {
+        "id": "reviewer:demo",
+        "type": "human"
+      },
+      "timestamp": "2026-05-07T00:00:00Z",
+      "reason": "Accepted as bounded evidence, not clinical interpretation.",
+      "payload": {
+        "proposal_id": "vpr_example",
+        "status": "accepted"
+      }
+    },
+    "attestation": {
+      "schema": "carina.attestation.v0.3",
+      "id": "vat_example",
+      "actor": {
+        "id": "reviewer:demo",
+        "type": "human"
+      },
+      "target": {
+        "type": "event",
+        "id": "vev_example"
+      },
+      "status": "attested",
+      "scope": "source locator and interpretation boundary"
+    },
+    "question": {
+      "schema": "carina.question.v0.3",
+      "id": "vq_example",
+      "text": "Which evidence would separate BBB dysfunction as mechanism from BBB delivery as intervention?",
+      "rationale": "Decision-critical uncertainty before frontier promotion."
+    },
+    "protocol": {
+      "schema": "carina.protocol.v0.3",
+      "id": "vprot_example",
+      "title": "DCE-MRI BBB permeability measurement",
+      "produces": [
+        "ve_example"
+      ]
+    },
+    "experiment": {
+      "schema": "carina.experiment.v0.3",
+      "id": "vexp_example",
+      "question_id": "vq_example",
+      "protocol_id": "vprot_example",
+      "intended_update": "narrow or strengthen BBB biomarker state"
+    },
+    "mechanism": {
+      "schema": "carina.mechanism.v0.3",
+      "id": "vmech_example",
+      "relation": "supports",
+      "shape": "threshold",
+      "source_finding_id": "vf_example",
+      "target_finding_id": "vf_downstream_example"
+    },
+    "lineage": {
+      "schema": "carina.lineage.v0.3",
+      "object_id": "vf_example",
+      "parents": [
+        "va_example",
+        "ve_example",
+        "vpr_example"
+      ],
+      "event_ids": [
+        "vev_example"
+      ]
+    },
+    "confidence": {
+      "schema": "carina.confidence.v0.3",
+      "score": 0.72,
+      "method": "reviewer_estimated",
+      "scope": "bounded human biomarker evidence",
+      "history": [
+        {
+          "event_id": "vev_example",
+          "from": null,
+          "to": 0.72
+        }
+      ]
+    },
+    "proof": {
+      "schema": "carina.proof.v0.3",
+      "id": "vpf_example",
+      "tool": "lean4",
+      "tool_version": "4.7.0",
+      "script_locator": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "verifier_output_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "verified_at": "2026-05-09T00:00:00Z",
+      "target_finding_id": "vf_example"
+    },
+    "atlas": {
+      "schema": "carina.atlas.v0.4",
+      "id": "vat_brain_tumor_translation_example",
+      "name": "Brain Tumor Translation",
+      "domain": "oncology",
+      "scope_note": "Adult glioma translation: why preclinical glioma interventions fail to translate. See projects/brain-tumor-translation/SCOPE.md.",
+      "composing_frontiers": [
+        {
+          "vfr_id": "vfr_5c602c9ef6bcbcd0",
+          "name": "brain-tumor-translation",
+          "locator": "file:///Users/williamblair/personal/vela/projects/brain-tumor-translation/frontier.json",
+          "role": "core"
+        },
+        {
+          "vfr_id": "vfr_5076e7b3ff8e6b0f",
+          "name": "anti-amyloid-translation",
+          "locator": "file:///Users/williamblair/personal/vela/projects/anti-amyloid-translation/frontier.json",
+          "role": "sister-frontier"
+        }
+      ],
+      "bridges": [],
+      "maintainers": [
+        {
+          "actor_id": "reviewer:will-blair",
+          "role": "maintainer"
+        }
+      ],
+      "created_at": "2026-05-09T22:00:00Z"
+    },
+    "constellation": {
+      "schema": "carina.constellation.v0.5",
+      "id": "vco_neuro_translation_demo",
+      "name": "Neuro Translation Constellation",
+      "scope_note": "Cross-domain map covering brain-tumor translation + anti-amyloid translation + (future) neurodegeneration frontiers under shared BBB physiology and CNS drug delivery questions.",
+      "composing_atlases": [
+        {
+          "vat_id": "vat_38563fc1f6818e53",
+          "name": "Brain Tumor Translation",
+          "locator": "file:///Users/williamblair/personal/vela/atlases/brain-tumor-translation/manifest.yaml",
+          "role": "core"
+        }
+      ],
+      "cross_atlas_bridges": [],
+      "maintainers": [
+        {
+          "actor_id": "reviewer:will-blair",
+          "role": "maintainer"
+        }
+      ],
+      "created_at": "2026-05-09T22:00:00Z"
+    }
+  }
+}
