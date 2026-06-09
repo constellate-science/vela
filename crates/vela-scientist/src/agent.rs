@@ -393,14 +393,6 @@ pub fn discover_files_recursive(
     Ok(out)
 }
 
-/// One file the agent decided not to process, with a human-readable
-/// reason. Surfaced in every agent's report and in the CLI output.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct SkippedFile {
-    pub path: String,
-    pub reason: String,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
