@@ -1,0 +1,36 @@
+{
+  "id": "rev_001_bbb_correction",
+  "workspace": "projects/bbb-flagship",
+  "finding_id": "vf_956821693aaf4cf7",
+  "reviewer": "hermes_agent_manual_review",
+  "reviewed_at": "2026-04-11T22:45:52Z",
+  "scope": "bbb_opening_trusted_subset",
+  "status": "accepted",
+  "action": {
+    "type": "qualified",
+    "target": "trusted_interpretation"
+  },
+  "reason": "The current frontier can be overread as showing that BBB opening itself is therapeutically efficacious. That reading is not supported once the 2018 FUS-alone caveat is carried forward.",
+  "evidence_considered": [
+    {
+      "finding_id": "vf_da4f13aeb9bcc242",
+      "role": "qualifier",
+      "note": "Opening alone showed no group-wise amyloid change post-sonication."
+    },
+    {
+      "finding_id": "vf_e3503117f0808570",
+      "role": "procedure_anchor",
+      "note": "The positive signal occurs during monthly aducanumab infusions with regional FUS treatment."
+    },
+    {
+      "finding_id": "vf_956821693aaf4cf7",
+      "role": "qualified_finding",
+      "note": "Treat as a combination-specific efficacy signal, not generic proof of BBB-opening efficacy."
+    }
+  ],
+  "state_change": {
+    "assumption_retired": "safe opening implies therapeutic efficacy",
+    "new_interpretation": "FUS BBB opening is currently a delivery-enabling modality with feasibility/safety support; efficacy support is limited to a specific FUS-plus-aducanumab regimen.",
+    "old_interpretation": "FUS BBB opening has emerging therapeutic efficacy in AD."
+  }
+}

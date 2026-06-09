@@ -52,7 +52,7 @@ use tower_http::cors::CorsLayer;
 use vela_hub::db;
 use vela_hub::storage::Storage;
 use vela_protocol::canonical;
-use vela_protocol::counterfactual::{CounterfactualQuery, answer_counterfactual};
+use vela_edge::counterfactual::{CounterfactualQuery, answer_counterfactual};
 use vela_protocol::events::{event_log_hash, snapshot_hash};
 use vela_protocol::project::Project;
 use vela_protocol::registry::{RegistryEntry as ProtocolEntry, verify_entry};
@@ -699,7 +699,7 @@ fn root_json() -> Value {
                     "InvalidIntervention  — set_to outside [0, 1]"
                 ],
                 "schema": "https://vela.science/schema/counterfactual/v0.45.1",
-                "kernel": "vela_protocol::counterfactual::answer_counterfactual"
+                "kernel": "vela_edge::counterfactual::answer_counterfactual"
             }
         }
     })
@@ -3482,7 +3482,7 @@ async fn append_to_frontier_endpoint(
             );
         }
     };
-    let batch: Vec<vela_protocol::incremental_ingest::AppendRecord> =
+    let batch: Vec<vela_edge::incremental_ingest::AppendRecord> =
         match serde_json::from_value(batch_value.clone()) {
             Ok(b) => b,
             Err(e) => {
@@ -3560,11 +3560,11 @@ async fn append_to_frontier_endpoint(
     let mut events = Vec::new();
     for record in &batch {
         match record {
-            vela_protocol::incremental_ingest::AppendRecord::Finding { finding, event } => {
+            vela_edge::incremental_ingest::AppendRecord::Finding { finding, event } => {
                 findings.push((**finding).clone());
                 events.push((**event).clone());
             }
-            vela_protocol::incremental_ingest::AppendRecord::EventOnly { event } => {
+            vela_edge::incremental_ingest::AppendRecord::EventOnly { event } => {
                 events.push((**event).clone());
             }
         }

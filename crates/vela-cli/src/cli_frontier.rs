@@ -6,8 +6,9 @@ use crate::cli::{
 };
 use crate::cli_commands::FrontierAction;
 use vela_protocol::cli_style as style;
-use vela_protocol::{frontier_repo, project, proposals};
-
+use vela_protocol::frontier_repo;
+use vela_protocol::project;
+use vela_protocol::proposals;
 use colored::Colorize;
 use serde_json::json;
 

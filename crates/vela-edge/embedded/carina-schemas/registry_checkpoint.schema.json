@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/schemas/registry_checkpoint.schema.json",
+  "title": "Vela Registry Checkpoint (v0.1)",
+  "description": "A registry operator's signed claim that at sequence N the registry held exactly the given set of entries, summarized by a content-addressed root over the canonical entry list. Consumers verify the signature against the operator's pubkey, recompute the root from the registry they hold, and assert the two agree. Forms a chain via `previous_checkpoint`; v0.148 federation cross-checks the chain across hubs.",
+  "type": "object",
+  "required": [
+    "schema",
+    "checkpoint_id",
+    "hub_id",
+    "sequence",
+    "entry_count",
+    "registry_root",
+    "signer_pubkey",
+    "signature",
+    "created_at"
+  ],
+  "properties": {
+    "schema": { "type": "string", "const": "vela.registry_checkpoint.v0.1" },
+    "checkpoint_id": { "type": "string", "pattern": "^vrc_[a-zA-Z0-9_]+$" },
+    "hub_id": { "type": "string", "minLength": 1 },
+    "sequence": { "type": "integer", "minimum": 0 },
+    "entry_count": { "type": "integer", "minimum": 0 },
+    "registry_root": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "sha256 over canonical bytes of the alphabetically-sorted list of (vfr_id, latest_snapshot_hash, latest_event_log_hash, owner_pubkey, signature) tuples. Deterministic over the same registry state."
+    },
+    "previous_checkpoint": {
+      "type": "string",
+      "pattern": "^vrc_[a-zA-Z0-9_]+$",
+      "description": "Optional vrc_* id of the predecessor checkpoint. Omitted for sequence=0."
+    },
+    "signer_pubkey": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "signature": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{128}$",
+      "description": "Ed25519 signature over the canonical preimage (checkpoint body with signature + checkpoint_id zeroed)."
+    },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

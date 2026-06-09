@@ -24,6 +24,7 @@ sqlx = { workspace = true, features = ["postgres"] }
 dotenvy.workspace = true
 reqwest.workspace = true
 vela-protocol.workspace = true
+vela-edge = { path = "../vela-edge" }
 async-stream.workspace = true
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

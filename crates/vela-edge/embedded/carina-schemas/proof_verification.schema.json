@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/schemas/proof_verification.schema.json",
+  "title": "Vela Proof Verification Record (v0.1)",
+  "description": "A signed attestation that an external verifier (Lean kernel, Coq runtime, etc.) ran a Carina Proof artifact's script and produced a specific output hash. The substrate stores the attestation; the verifier runs outside the substrate. Consumers verify the attestation's signature against the verifier_actor's pubkey and trust the verifier's judgment for the named (tool, tool_version, lake_manifest_hash) tuple.",
+  "type": "object",
+  "required": [
+    "schema",
+    "verification_id",
+    "proof_id",
+    "tool",
+    "tool_version",
+    "script_locator",
+    "verifier_output_hash",
+    "status",
+    "verified_at",
+    "verifier_actor",
+    "verifier_pubkey",
+    "signature"
+  ],
+  "properties": {
+    "schema": { "type": "string", "const": "vela.proof_verification.v0.1" },
+    "verification_id": { "type": "string", "pattern": "^vpv_[a-zA-Z0-9_]+$" },
+    "proof_id": { "type": "string", "pattern": "^vpf_[a-zA-Z0-9_]+$" },
+    "tool": { "type": "string", "enum": ["lean4", "coq", "isabelle", "agda", "metamath", "rocq", "other"] },
+    "tool_version": { "type": "string", "minLength": 1 },
+    "script_locator": {
+      "type": "string",
+      "description": "Content-addressed locator of the proof script the verifier ran. Typically `sha256:<64hex>` over the bytes of the script file."
+    },
+    "lake_manifest_hash": {
+      "type": "string",
+      "description": "Optional sha256 over the Lake manifest (or equivalent build manifest for non-Lean tools). When present, pins the dependency-version closure so two verifications under the same manifest hash are reproducible."
+    },
+    "verifier_output_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "sha256 over the verifier's standard output. Two runs under the same toolchain + script + manifest produce the same hash."
+    },
+    "status": { "type": "string", "enum": ["verified", "failed", "toolchain_mismatch"] },
+    "verified_at": { "type": "string", "format": "date-time" },
+    "verifier_actor": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Free-form actor identifier (typically a GitHub Action job url, a registered Vela actor id, or an institutional steward id)."
+    },
+    "verifier_pubkey": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "signature": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{128}$",
+      "description": "Ed25519 signature over the canonical preimage (record body with signature + verification_id zeroed)."
+    }
+  }
+}

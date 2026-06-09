@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/carina/schemas/tool_descriptor.schema.json",
+  "title": "Tool Descriptor (v0.1)",
+  "description": "v0.199: a Carina primitive declaring `this frontier consumes outputs from this tool`. ToolUniverse-compatible. Makes the dependency explicit and auditable so a Trail step that says `kind: Tool` can be resolved to a concrete tool's identity, version, and calling convention. Pinned by Lean Theorem 25 (tool descriptor injectivity).",
+  "type": "object",
+  "required": [
+    "schema",
+    "descriptor_id",
+    "tool_name",
+    "tool_version",
+    "provider",
+    "calling_convention",
+    "input_schema",
+    "output_schema"
+  ],
+  "properties": {
+    "schema": { "type": "string", "const": "vela.tool_descriptor.v0.1" },
+    "descriptor_id": {
+      "type": "string",
+      "pattern": "^vtd_[a-f0-9]{16}$",
+      "description": "Content-addressed descriptor id."
+    },
+    "tool_name": { "type": "string", "minLength": 1 },
+    "tool_version": { "type": "string", "minLength": 1 },
+    "provider": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Free-form provider identifier (e.g. tooluniverse:protein-fold:2024.10)."
+    },
+    "calling_convention": {
+      "type": "string",
+      "enum": ["http_json", "python_callable", "cli_subprocess", "mcp_server"]
+    },
+    "input_schema": {
+      "type": "object",
+      "description": "JSON Schema describing the tool's input shape."
+    },
+    "output_schema": {
+      "type": "object",
+      "description": "JSON Schema describing the tool's output shape."
+    },
+    "evidence_url": { "type": ["string", "null"] },
+    "cited_in_findings": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^vf_[a-f0-9]{16}$" }
+    }
+  },
+  "additionalProperties": false
+}

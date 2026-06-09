@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/carina/schemas/constellation.schema.json",
+  "title": "Carina Constellation (v0.5)",
+  "description": "A network of connected Vela Atlases across scientific domains. The sixteenth Carina primitive (v0.5). Composes one or more Atlases (vat_*) into a higher-level domain map; cross-Atlas bridges live as the Atlas's own bridges where the bridge endpoints land in different composing Atlases. The roadmap doc names Constellation as the layer above Atlas. Constellation is read-only over per-Atlas snapshots; Atlas stays the unit of reviewer-confirmed bridges.",
+  "type": "object",
+  "required": ["schema", "id", "name", "composing_atlases"],
+  "properties": {
+    "schema": { "type": "string", "const": "carina.constellation.v0.5" },
+    "id": {
+      "type": "string",
+      "pattern": "^vco_[a-zA-Z0-9_]+$",
+      "description": "Constellation content-addressed id."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "scope_note": {
+      "type": "string",
+      "description": "Optional bounded-question text describing what cross-domain question this Constellation maps."
+    },
+    "composing_atlases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["vat_id", "name"],
+        "properties": {
+          "vat_id": { "type": "string", "pattern": "^vat_[a-zA-Z0-9_]+$" },
+          "name": { "type": "string" },
+          "locator": { "type": "string" },
+          "role": {
+            "type": "string",
+            "description": "Optional role within the Constellation (e.g. 'core', 'partner-atlas')."
+          }
+        }
+      }
+    },
+    "cross_atlas_bridges": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^vbr_[a-zA-Z0-9_]+$",
+        "description": "Pointer to a Bridge primitive whose endpoints span two composing Atlases."
+      }
+    },
+    "maintainers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["actor_id"],
+        "properties": {
+          "actor_id": { "type": "string" },
+          "role": { "type": "string" }
+        }
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "description": "RFC3339 timestamp."
+    }
+  }
+}

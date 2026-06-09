@@ -5,7 +5,12 @@ use crate::cli::{
     scan_for_sensitive_paths,
 };
 use vela_protocol::cli_style as style;
-use vela_protocol::{conformance, events, lint, sign, signals, validate};
+use vela_edge::conformance;
+use vela_protocol::events;
+use vela_edge::lint;
+use vela_protocol::sign;
+use vela_protocol::signals;
+use vela_edge::validate;
 use serde_json::Value;
 use std::path::Path;
 

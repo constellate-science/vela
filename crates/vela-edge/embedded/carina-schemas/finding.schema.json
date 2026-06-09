@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/carina/schemas/finding.schema.json",
+  "title": "Carina Finding (v0.3)",
+  "description": "A scientific assertion bound to its evidence, conditions, confidence, and provenance. The primary state object on a frontier.",
+  "type": "object",
+  "required": ["schema", "id", "assertion", "evidence_ids", "confidence", "status"],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "carina.finding.v0.3"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^vf_[a-zA-Z0-9_]+$"
+    },
+    "assertion": {
+      "type": "object",
+      "required": ["text", "type"],
+      "properties": {
+        "text": { "type": "string", "minLength": 1 },
+        "type": { "type": "string" }
+      }
+    },
+    "conditions": {
+      "type": "object",
+      "properties": {
+        "text": { "type": "string" }
+      }
+    },
+    "evidence_ids": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^ve_[a-zA-Z0-9_]+$" }
+    },
+    "confidence": {
+      "type": "object",
+      "required": ["score"],
+      "properties": {
+        "score": { "type": "number", "minimum": 0, "maximum": 1 },
+        "method": { "type": "string" },
+        "scope": { "type": "string" }
+      }
+    },
+    "lineage": {
+      "type": "object",
+      "properties": {
+        "source_ids": { "type": "array", "items": { "type": "string" } },
+        "artifact_ids": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["proposed", "accepted", "needs_revision", "contested", "rejected", "retracted"]
+    }
+  }
+}

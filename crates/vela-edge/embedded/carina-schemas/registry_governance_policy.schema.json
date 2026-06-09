@@ -1,0 +1,94 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/schemas/registry_governance_policy.schema.json",
+  "title": "Vela Registry Governance Policy (v0.1)",
+  "description": "Per-frontier governance policy. Declares who can authorize owner rotation, what threshold of distinct attestations is required, what role constraints apply, and (during bootstrap only) whether the current owner alone can satisfy quorum. Ships with v0.144 of the Vela substrate; the binding to owner-rotate ships in v0.145.",
+  "type": "object",
+  "required": [
+    "schema",
+    "policy_id",
+    "frontier_id",
+    "owner_epoch",
+    "bootstrap_epoch",
+    "rotate_quorum",
+    "created_at"
+  ],
+  "properties": {
+    "schema": { "type": "string", "const": "vela.registry_governance_policy.v0.1" },
+    "policy_id": { "type": "string", "pattern": "^vgp_[a-zA-Z0-9_]+$" },
+    "frontier_id": { "type": "string", "pattern": "^vfr_[a-zA-Z0-9_]+$" },
+    "owner_epoch": { "type": "integer", "minimum": 0 },
+    "bootstrap_epoch": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Epoch at which this policy was first content-addressed. When the policy authorizes the first governed rotation (epoch 0 -> 1), `current_owner_counts` must flip to false in the successor policy."
+    },
+    "valid_from_entry_hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "Optional hash of the registry entry this policy first attaches to. Locks the policy to a specific chain position; populated once the policy is bound."
+    },
+    "rotate_quorum": {
+      "type": "object",
+      "required": ["threshold", "eligible_actors", "current_owner_counts"],
+      "properties": {
+        "threshold": { "type": "integer", "minimum": 1 },
+        "eligible_actors": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "current_owner_counts": {
+          "type": "boolean",
+          "description": "Whether the current registry owner counts toward the rotation quorum. Must be `true` only for bootstrap_epoch=0 policies; the v0.145 verifier rejects any non-bootstrap policy that sets this to true."
+        },
+        "role_constraints": {
+          "type": "object",
+          "description": "Optional per-role minimum counts within the satisfying quorum. Keys are role names (e.g. `domain_maintainer`, `registry_steward`); values are minimum-required counts.",
+          "additionalProperties": false,
+          "properties": {
+            "min_domain_maintainers": { "type": "integer", "minimum": 0 },
+            "min_registry_stewards": { "type": "integer", "minimum": 0 },
+            "min_independent_stewards": { "type": "integer", "minimum": 0 }
+          }
+        }
+      }
+    },
+    "emergency_quorum": {
+      "type": "object",
+      "description": "Quorum that applies when the current owner is compromised and the standard rotate path cannot be executed.",
+      "required": ["threshold", "eligible_actors", "current_owner_counts"],
+      "properties": {
+        "threshold": { "type": "integer", "minimum": 1 },
+        "eligible_actors": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "current_owner_counts": { "type": "boolean" },
+        "timelock_hours": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "policy_update_quorum": {
+      "type": "object",
+      "description": "Quorum required to replace this policy with a successor. Threshold MUST be greater than or equal to the rotate_quorum threshold to prevent policy weakening.",
+      "required": ["threshold", "eligible_actors", "current_owner_counts"],
+      "properties": {
+        "threshold": { "type": "integer", "minimum": 1 },
+        "eligible_actors": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 1
+        },
+        "current_owner_counts": { "type": "boolean" },
+        "timelock_hours": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "attestation_ttl_hours": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "How long a governance attestation remains valid after signing. Default 168 (one week)."
+    },
+    "created_at": { "type": "string", "format": "date-time" }
+  }
+}

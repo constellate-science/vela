@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/carina/schemas/agent_attestation.schema.json",
+  "title": "Agent Attestation Envelope (v0.1)",
+  "description": "v0.195: a signed envelope around any LLM-produced artifact. Standardizes model name + version + tool calls + token counts + output hash + parent prompt hash so the chain of custody from agent run → proposals / diff packs / trajectory steps is auditable. Pinned by Lean Theorem 24 (agent attestation injectivity).",
+  "type": "object",
+  "required": [
+    "schema",
+    "attestation_id",
+    "agent_actor",
+    "model_name",
+    "model_version",
+    "started_at",
+    "finished_at",
+    "total_tokens",
+    "tool_calls",
+    "output_hashes",
+    "signature",
+    "signer_pubkey_hex"
+  ],
+  "properties": {
+    "schema": { "type": "string", "const": "vela.agent_attestation.v0.1" },
+    "attestation_id": {
+      "type": "string",
+      "pattern": "^vaa_[a-f0-9]{16}$",
+      "description": "Content-addressed envelope id."
+    },
+    "agent_actor": {
+      "type": "string",
+      "pattern": "^agent:[a-z0-9_-]+$",
+      "description": "agent:<name> form. Must match the actor on the proposals/packs the envelope attests to."
+    },
+    "model_name": {
+      "type": "string",
+      "description": "e.g. claude-opus-4.7, gpt-5-pro, gemini-3.5-pro."
+    },
+    "model_version": {
+      "type": "string",
+      "description": "Exact model version or release tag."
+    },
+    "started_at": { "type": "string", "format": "date-time" },
+    "finished_at": { "type": "string", "format": "date-time" },
+    "total_tokens": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "tool_calls": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tool_name", "input_hash", "output_hash", "duration_ms"],
+        "properties": {
+          "tool_name": { "type": "string" },
+          "input_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "output_hash": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "duration_ms": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "description": "Ordered list of tool calls made during the run. Hashes are sha256 of canonical-bytes input/output."
+    },
+    "output_hashes": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+      "description": "sha256 of each artifact (proposal, diff pack, trajectory step) the run produced. Lets a downstream verifier confirm the artifact wasn't modified after attestation."
+    },
+    "prompt_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Optional sha256 of the canonical prompt sent to the model. Lets a reviewer audit the model's input without storing the prompt verbatim."
+    },
+    "parent_attestation": {
+      "type": "string",
+      "pattern": "^vaa_[a-f0-9]{16}$",
+      "description": "Optional reference to a prior attestation in a multi-turn chain."
+    },
+    "signature": { "type": "string", "pattern": "^[a-f0-9]{128}$" },
+    "signer_pubkey_hex": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}

@@ -551,7 +551,7 @@ pub(crate) enum Commands {
     /// gate` proves a *claim* earned its status — ≥2 independent matched
     /// verifier attachments and a surviving adversarial probe, never a
     /// self-reported "verified" string. See `vela_protocol::verifier_attachment`
-    /// and `vela_protocol::deliverable_grade`.
+    /// and `vela_edge::deliverable_grade`.
     Gate {
         #[command(subcommand)]
         action: GateAction,

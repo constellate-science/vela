@@ -12,7 +12,7 @@ use crate::cli_commands::*;
 /// v0.164: handle `vela lean ...`. Anchors substrate theorems to
 /// their content-addressed source bytes.
 pub(crate) fn cmd_lean(action: LeanAction) {
-    use vela_protocol::lean_anchors::{LeanAnchor, THEOREMS, lean_dir_default};
+    use vela_edge::lean_anchors::{LeanAnchor, THEOREMS, lean_dir_default};
 
     match action {
         LeanAction::List { json } => {
@@ -282,7 +282,7 @@ pub(crate) fn cmd_lean(action: LeanAction) {
             for path in anchor_paths {
                 let body = std::fs::read_to_string(&path)
                     .unwrap_or_else(|e| fail_return(&format!("read {}: {e}", path.display())));
-                let anchor: vela_protocol::lean_anchors::LeanAnchor = serde_json::from_str(&body)
+                let anchor: vela_edge::lean_anchors::LeanAnchor = serde_json::from_str(&body)
                     .unwrap_or_else(|e| fail_return(&format!("parse {}: {e}", path.display())));
 
                 // Classify the theorem's axioms when a report is present.
@@ -443,7 +443,7 @@ pub(crate) fn cmd_lean(action: LeanAction) {
                 let abody = std::fs::read_to_string(&anchor_path).unwrap_or_else(|e| {
                     fail_return(&format!("read {}: {e}", anchor_path.display()))
                 });
-                let a: vela_protocol::lean_anchors::LeanAnchor = serde_json::from_str(&abody)
+                let a: vela_edge::lean_anchors::LeanAnchor = serde_json::from_str(&abody)
                     .unwrap_or_else(|e| fail_return(&format!("parse anchor: {e}")));
                 if a.anchor_id != rec.anchor_id {
                     fail(&format!(

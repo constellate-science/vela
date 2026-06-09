@@ -6,12 +6,14 @@ use crate::cli::{
 };
 use crate::cli_commands::*;
 use vela_protocol::cli_style as style;
-use vela_protocol::{events, repo, sign};
+use vela_protocol::events;
+use vela_protocol::repo;
+use vela_protocol::sign;
 use serde_json::json;
 
 /// v0.145: handle `vela registry owner-rotate-governed {propose|attest|apply}`.
 pub(crate) fn cmd_owner_rotate_governed(action: OwnerRotateGovernedAction) {
-    use vela_protocol::governance::{
+    use vela_edge::governance::{
         AttestationEntry, GovernancePolicy, OwnerRotateAttestationBundle, OwnerRotateProposal,
         ProposalDraft, verify_quorum,
     };
@@ -372,12 +374,12 @@ pub(crate) fn cmd_owner_rotate_governed(action: OwnerRotateGovernedAction) {
                 let raw = std::fs::read_to_string(&chain_path).unwrap_or_else(|e| {
                     fail_return(&format!("read chain {}: {e}", chain_path.display()))
                 });
-                serde_json::from_str::<vela_protocol::governance::OwnerEpochChain>(&raw)
+                serde_json::from_str::<vela_edge::governance::OwnerEpochChain>(&raw)
                     .unwrap_or_else(|e| fail_return(&format!("parse chain: {e}")))
             } else {
-                vela_protocol::governance::OwnerEpochChain::new(vfr_id.clone())
+                vela_edge::governance::OwnerEpochChain::new(vfr_id.clone())
             };
-            let transition = vela_protocol::governance::ChainTransition {
+            let transition = vela_edge::governance::ChainTransition {
                 owner_epoch: proposal_obj.owner_epoch,
                 policy_id: policy_obj.policy_id.clone(),
                 proposal_id: proposal_obj.proposal_id.clone(),

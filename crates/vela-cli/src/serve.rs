@@ -21,8 +21,15 @@ use tower_http::cors::CorsLayer;
 
 use vela_protocol::bundle::FindingBundle;
 use vela_protocol::project::{self, ConfidenceDistribution, Project, ProjectStats};
-use vela_protocol::{bridge, decision, events, observer, repo, signals, sources, state, tool_registry};
-
+use vela_edge::bridge;
+use vela_edge::decision;
+use vela_protocol::events;
+use vela_edge::observer;
+use vela_protocol::repo;
+use vela_protocol::signals;
+use vela_protocol::sources;
+use vela_protocol::state;
+use vela_protocol::tool_registry;
 pub enum ProjectSource {
     Single(PathBuf),
     Directory(PathBuf),
@@ -1054,22 +1061,22 @@ async fn execute_tool(
         // require VELA_AGENT_KEY_HEX (or skip-as-error). Stateless
         // one-shot calls — the agent does its own session bookkeeping
         // and only invokes Vela when ready to submit.
-        "vela_agent_submit_diff_pack" => (vela_protocol::vela_agent_mcp::submit_diff_pack(args), None),
-        "vela_agent_open_trajectory" => (vela_protocol::vela_agent_mcp::open_trajectory(args), None),
+        "vela_agent_submit_diff_pack" => (vela_edge::vela_agent_mcp::submit_diff_pack(args), None),
+        "vela_agent_open_trajectory" => (vela_edge::vela_agent_mcp::open_trajectory(args), None),
         // v0.214: read-side tools. None require VELA_AGENT_KEY_HEX.
-        "vela_agent_get_pack" => (vela_protocol::vela_agent_mcp::get_pack(args), None),
-        "vela_agent_list_packs" => (vela_protocol::vela_agent_mcp::list_packs(args), None),
-        "vela_agent_get_attestation" => (vela_protocol::vela_agent_mcp::get_attestation(args), None),
-        "vela_agent_list_trajectories" => (vela_protocol::vela_agent_mcp::list_trajectories(args), None),
-        "vela_agent_frontier_summary" => (vela_protocol::vela_agent_mcp::frontier_summary(args), None),
+        "vela_agent_get_pack" => (vela_edge::vela_agent_mcp::get_pack(args), None),
+        "vela_agent_list_packs" => (vela_edge::vela_agent_mcp::list_packs(args), None),
+        "vela_agent_get_attestation" => (vela_edge::vela_agent_mcp::get_attestation(args), None),
+        "vela_agent_list_trajectories" => (vela_edge::vela_agent_mcp::list_trajectories(args), None),
+        "vela_agent_frontier_summary" => (vela_edge::vela_agent_mcp::frontier_summary(args), None),
         // v0.220: parity read tools.
         "vela_agent_get_tool_descriptor" => {
-            (vela_protocol::vela_agent_mcp::get_tool_descriptor(args), None)
+            (vela_edge::vela_agent_mcp::get_tool_descriptor(args), None)
         }
-        "vela_agent_get_evaluation" => (vela_protocol::vela_agent_mcp::get_evaluation(args), None),
-        "vela_agent_list_evaluations" => (vela_protocol::vela_agent_mcp::list_evaluations(args), None),
-        "vela_agent_get_conflict" => (vela_protocol::vela_agent_mcp::get_conflict(args), None),
-        "vela_agent_list_conflicts" => (vela_protocol::vela_agent_mcp::list_conflicts(args), None),
+        "vela_agent_get_evaluation" => (vela_edge::vela_agent_mcp::get_evaluation(args), None),
+        "vela_agent_list_evaluations" => (vela_edge::vela_agent_mcp::list_evaluations(args), None),
+        "vela_agent_get_conflict" => (vela_edge::vela_agent_mcp::get_conflict(args), None),
+        "vela_agent_list_conflicts" => (vela_edge::vela_agent_mcp::list_conflicts(args), None),
         _ => (Err(format!("Unknown tool: {name}")), None),
     }
 }
@@ -1505,14 +1512,14 @@ async fn http_queue_append(
     }
     let args = body.get("args").cloned().unwrap_or(Value::Null);
     let queued_at = chrono::Utc::now().to_rfc3339();
-    let action = vela_protocol::queue::QueuedAction {
+    let action = vela_edge::queue::QueuedAction {
         kind,
         frontier: path,
         args,
         queued_at: queued_at.clone(),
     };
-    let queue_path = vela_protocol::queue::default_queue_path();
-    if let Err(error) = vela_protocol::queue::append(&queue_path, action) {
+    let queue_path = vela_edge::queue::default_queue_path();
+    if let Err(error) = vela_edge::queue::append(&queue_path, action) {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": format!("append to queue: {error}")})),
@@ -1569,7 +1576,7 @@ async fn http_from_carina(
     // Validate the body against the ArtifactPacket schema before
     // touching disk. Decoupling validation from filesystem write
     // means a malformed packet returns 400 cheaply.
-    let packet: vela_protocol::artifact_to_state::ArtifactPacket =
+    let packet: vela_edge::artifact_to_state::ArtifactPacket =
         match serde_json::from_value(body.clone()) {
             Ok(p) => p,
             Err(e) => {
@@ -1620,7 +1627,7 @@ async fn http_from_carina(
     // Drop the project lock around the import call so the import's
     // own loads/writes don't deadlock against ongoing reads.
     drop(state.project.lock().await);
-    let report = match vela_protocol::artifact_to_state::import_packet_at_path(
+    let report = match vela_edge::artifact_to_state::import_packet_at_path(
         &path,
         tmp.path(),
         &actor,
@@ -1797,13 +1804,13 @@ async fn http_finding_by_id(
             // existing finding fields remain authoritative; this
             // is a derived view per docs/THEORY.md Section 7.
             let sp =
-                vela_protocol::provenance_compute::status_provenance_for_finding(&project, &finding.id);
+                vela_edge::provenance_compute::status_provenance_for_finding(&project, &finding.id);
             let belnap = sp.derive_status();
             // v0.87: surface the substrate-derived discord set per
             // docs/THEORY.md Section 4. Detectors run read-only
             // against the live Project state; results are advisory.
             let discord =
-                vela_protocol::discord_compute::compute_discord_for_finding(&project, &finding.id);
+                vela_edge::discord_compute::compute_discord_for_finding(&project, &finding.id);
             let discord_kinds: Vec<String> =
                 discord.iter().map(|k| k.as_str().to_string()).collect();
             let mut value = serde_json::to_value(finding).unwrap_or_default();
@@ -1881,8 +1888,8 @@ async fn http_discord(
     State(state): State<AppState>,
     axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
 ) -> Json<Value> {
-    use vela_protocol::discord::DiscordKind;
-    use vela_protocol::discord_compute::compute_discord_assignment;
+    use vela_edge::discord::DiscordKind;
+    use vela_edge::discord_compute::compute_discord_assignment;
 
     let project = state.project.lock().await;
     let assignment = compute_discord_assignment(&project);
@@ -1971,7 +1978,7 @@ async fn http_artifact_audit(State(state): State<AppState>) -> Json<Value> {
 
 async fn http_proof(State(state): State<AppState>) -> Json<Value> {
     let project = state.project.lock().await;
-    let integrity = vela_protocol::state_integrity::analyze(&project);
+    let integrity = vela_edge::state_integrity::analyze(&project);
     let signal_report = signals::analyze(&project, &[]);
     let latest = &project.proof_state.latest_packet;
     Json(json!({

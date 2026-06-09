@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/schemas/owner_rotate_attestation_bundle.schema.json",
+  "title": "Vela Owner Rotate Attestation Bundle (v0.1)",
+  "description": "Aggregate of detached Ed25519 signatures over an owner_rotate_proposal's canonical preimage hash. Each entry binds an attester_id (must be registered + unrevoked at signed_at in the frontier's actor list) to a signature. Quorum verification counts distinct attester pubkeys against the active governance policy's rotate_quorum.threshold.",
+  "type": "object",
+  "required": ["schema", "bundle_id", "proposal_id", "proposal_preimage_hash", "attestations"],
+  "properties": {
+    "schema": { "type": "string", "const": "vela.owner_rotate_attestation_bundle.v0.1" },
+    "bundle_id": { "type": "string", "pattern": "^vab_[a-zA-Z0-9_]+$" },
+    "proposal_id": { "type": "string", "pattern": "^vop_[a-zA-Z0-9_]+$" },
+    "proposal_preimage_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "attestations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["attester_id", "attester_pubkey", "judgment", "signature", "signed_at"],
+        "properties": {
+          "attester_id": { "type": "string", "minLength": 1 },
+          "attester_pubkey": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "judgment": {
+            "type": "string",
+            "enum": ["approve_owner_rotate", "reject_owner_rotate", "abstain"]
+          },
+          "signature": { "type": "string", "pattern": "^[0-9a-f]{128}$" },
+          "signed_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

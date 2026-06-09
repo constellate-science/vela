@@ -22,6 +22,7 @@ path = "src/main.rs"
 
 [dependencies]
 vela-protocol = { workspace = true }
+vela-edge = { path = "../vela-edge" }
 clap = { workspace = true }
 serde_json = { workspace = true }
 # v0.142: paper-to-vela end-to-end. Calls the same four upstreams

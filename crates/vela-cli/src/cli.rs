@@ -1,12 +1,48 @@
-use vela_protocol::{
-    adoption_log, adoption_transcript, benchmark, bridge, bundle, carina_validate, conformance,
-    correction_return, decision, diff, doctor, events, evidence_ci, export,
-    frontier_health, frontier_incident, frontier_repo, frontier_task, impact, index_db, lint,
-    normalize, packet, project, propagate, proposals, repo, research_trace, review, review_packet,
-    review_session, reviewer_identity, search, share_package, sign, signals, source_inbox,
-    source_resolver, sources, state, state_integrity, static_share, task_workspace, tensions,
-    validate,
-};
+use vela_edge::adoption_log;
+use vela_edge::adoption_transcript;
+use vela_edge::benchmark;
+use vela_edge::bridge;
+use vela_protocol::bundle;
+use vela_edge::carina_validate;
+use vela_edge::conformance;
+use vela_edge::correction_return;
+use vela_edge::decision;
+use vela_protocol::diff;
+use vela_edge::doctor;
+use vela_protocol::events;
+use vela_protocol::evidence_ci;
+use vela_protocol::export;
+use vela_edge::frontier_health;
+use vela_edge::frontier_incident;
+use vela_protocol::frontier_repo;
+use vela_edge::frontier_task;
+use vela_edge::impact;
+use vela_edge::index_db;
+use vela_edge::lint;
+use vela_edge::normalize;
+use vela_protocol::packet;
+use vela_protocol::project;
+use vela_protocol::propagate;
+use vela_protocol::proposals;
+use vela_protocol::repo;
+use vela_protocol::research_trace;
+use vela_edge::review;
+use vela_edge::review_packet;
+use vela_edge::review_session;
+use vela_edge::reviewer_identity;
+use vela_edge::search;
+use vela_edge::share_package;
+use vela_protocol::sign;
+use vela_protocol::signals;
+use vela_edge::source_inbox;
+use vela_edge::source_resolver;
+use vela_protocol::sources;
+use vela_protocol::state;
+use vela_edge::state_integrity;
+use vela_edge::static_share;
+use vela_edge::task_workspace;
+use vela_edge::tensions;
+use vela_edge::validate;
 use crate::serve;
 
 use std::collections::BTreeMap;
@@ -2332,7 +2368,7 @@ fn cmd_consensus(
         fail(&format!("target `{target}` is not a vf_ finding id"));
     }
     let scheme =
-        vela_protocol::aggregate::WeightingScheme::parse(weighting_str).unwrap_or_else(|e| fail_return(&e));
+        vela_edge::aggregate::WeightingScheme::parse(weighting_str).unwrap_or_else(|e| fail_return(&e));
 
     let parsed_claim = match causal_claim {
         None => None,
@@ -2353,13 +2389,13 @@ fn cmd_consensus(
             "invalid --causal-grade-min '{other}'; valid: theoretical | observational | quasi_experimental | rct"
         )),
     };
-    let filter = vela_protocol::aggregate::AggregateFilter {
+    let filter = vela_edge::aggregate::AggregateFilter {
         causal_claim: parsed_claim,
         causal_grade_min: parsed_grade,
     };
     let project = repo::load_from_path(frontier).unwrap_or_else(|e| fail_return(&e));
 
-    let result = vela_protocol::aggregate::consensus_for_with_filter(&project, target, scheme, &filter)
+    let result = vela_edge::aggregate::consensus_for_with_filter(&project, target, scheme, &filter)
         .unwrap_or_else(|| fail_return(&format!("target `{target}` not in frontier")));
 
     if json {
@@ -2810,7 +2846,7 @@ fn cmd_predictions_expire(frontier: &Path, now_override: Option<&str>, dry_run: 
     if dry_run {
         // Run on a clone so we don't actually mutate.
         let mut probe = repo::load_from_path(frontier).unwrap_or_else(|e| fail_return(&e));
-        let report = vela_protocol::calibration::expire_overdue_predictions(&mut probe, now_dt);
+        let report = vela_edge::calibration::expire_overdue_predictions(&mut probe, now_dt);
         if json {
             println!(
                 "{}",
@@ -2839,7 +2875,7 @@ fn cmd_predictions_expire(frontier: &Path, now_override: Option<&str>, dry_run: 
         return;
     }
 
-    let report = vela_protocol::calibration::expire_overdue_predictions(&mut project, now_dt);
+    let report = vela_edge::calibration::expire_overdue_predictions(&mut project, now_dt);
     repo::save_to_path(frontier, &project).unwrap_or_else(|e| fail_return(&e));
 
     if json {
@@ -2872,11 +2908,11 @@ fn cmd_calibration(frontier: &Path, actor: Option<&str>, json: bool) {
     let project = repo::load_from_path(frontier).unwrap_or_else(|e| fail_return(&e));
     let records = match actor {
         Some(a) => {
-            vela_protocol::calibration::calibration_for_actor(a, &project.predictions, &project.resolutions)
+            vela_edge::calibration::calibration_for_actor(a, &project.predictions, &project.resolutions)
                 .map(|r| vec![r])
                 .unwrap_or_default()
         }
-        None => vela_protocol::calibration::calibration_records(&project.predictions, &project.resolutions),
+        None => vela_edge::calibration::calibration_records(&project.predictions, &project.resolutions),
     };
 
     if json {
@@ -6137,8 +6173,8 @@ fn cmd_status(path: &Path, json: bool) {
     }
 
     // Causal audit summary.
-    let audit = vela_protocol::causal_reasoning::audit_frontier(&project);
-    let audit_summary = vela_protocol::causal_reasoning::summarize_audit(&audit);
+    let audit = vela_edge::causal_reasoning::audit_frontier(&project);
+    let audit_summary = vela_edge::causal_reasoning::summarize_audit(&audit);
 
     // Federation health: peers + last sync.
     let mut last_sync: Option<&vela_protocol::events::StateEvent> = None;
@@ -6643,8 +6679,8 @@ fn answer(project: &vela_protocol::project::Project, q: &str, json: bool) {
         || lower.contains("identif")
         || lower.contains("causal")
     {
-        let entries = vela_protocol::causal_reasoning::audit_frontier(project);
-        let summary = vela_protocol::causal_reasoning::summarize_audit(&entries);
+        let entries = vela_edge::causal_reasoning::audit_frontier(project);
+        let summary = vela_edge::causal_reasoning::summarize_audit(&entries);
         if json {
             println!(
                 "{}",
@@ -6677,7 +6713,7 @@ fn answer(project: &vela_protocol::project::Project, q: &str, json: bool) {
                     .filter(|e| {
                         matches!(
                             e.verdict,
-                            vela_protocol::causal_reasoning::Identifiability::Underidentified
+                            vela_edge::causal_reasoning::Identifiability::Underidentified
                         )
                     })
                     .take(8)
@@ -6757,7 +6793,7 @@ fn answer(project: &vela_protocol::project::Project, q: &str, json: bool) {
     // Pattern: calibration.
     if lower.contains("calibration") || lower.contains("brier") || lower.contains("predict") {
         let records =
-            vela_protocol::calibration::calibration_records(&project.predictions, &project.resolutions);
+            vela_edge::calibration::calibration_records(&project.predictions, &project.resolutions);
         if json {
             println!("{}", serde_json::to_string_pretty(&records).unwrap());
         } else if records.is_empty() {
@@ -7200,7 +7236,7 @@ fn cmd_artifact_to_state(
     json: bool,
 ) {
     let report =
-        vela_protocol::artifact_to_state::import_packet_at_path(frontier, packet, actor, apply_artifacts)
+        vela_edge::artifact_to_state::import_packet_at_path(frontier, packet, actor, apply_artifacts)
             .unwrap_or_else(|e| fail_return(&e));
     if json {
         print_json(&report);
@@ -7287,7 +7323,7 @@ pub(crate) struct CrossCheckSource {
 /// the upstream registry whether each one resolves. Closes
 /// part of THREAT_MODEL.md A6 (citation poisoning).
 pub(crate) async fn verify_packet_provenance(packet_path: &Path) -> ProvenanceVerificationReport {
-    use vela_protocol::artifact_to_state::ArtifactPacket;
+    use vela_edge::artifact_to_state::ArtifactPacket;
     let raw = std::fs::read_to_string(packet_path)
         .unwrap_or_else(|e| fail_return(&format!("read packet: {e}")));
     let parsed: ArtifactPacket =
@@ -7372,7 +7408,7 @@ pub(crate) async fn cross_check_packet_provenance(
     packet_path: &Path,
     report: &mut ProvenanceVerificationReport,
 ) {
-    use vela_protocol::artifact_to_state::ArtifactPacket;
+    use vela_edge::artifact_to_state::ArtifactPacket;
     // Re-read the packet to discover which identifiers cluster on
     // the same artifact. The first pass treated each identifier
     // independently; the cross-check pass groups by artifact id.
@@ -7905,9 +7941,9 @@ async fn cmd_source_adapter(action: SourceAdapterAction) {
             write_inbox,
             json,
         } => {
-            let report = vela_protocol::source_adapters::run(
+            let report = vela_edge::source_adapters::run(
                 &frontier,
-                vela_protocol::source_adapters::SourceAdapterRunOptions {
+                vela_edge::source_adapters::SourceAdapterRunOptions {
                     adapter,
                     actor,
                     entries,
@@ -7958,9 +7994,9 @@ fn cmd_runtime_adapter(action: RuntimeAdapterAction) {
             write_inbox,
             json,
         } => {
-            let report = vela_protocol::runtime_adapters::run(
+            let report = vela_edge::runtime_adapters::run(
                 &frontier,
-                vela_protocol::runtime_adapters::RuntimeAdapterRunOptions {
+                vela_edge::runtime_adapters::RuntimeAdapterRunOptions {
                     adapter,
                     input,
                     actor,
@@ -8476,7 +8512,7 @@ fn cmd_actor_lookup_orcid(
 /// v0.46: Cross-frontier bridge runtime — derive, list, show,
 /// confirm, and refute first-class `vbr_<id>` records.
 fn cmd_bridges(action: BridgesAction) {
-    use vela_protocol::bridge::{Bridge, BridgeStatus, derive_bridges};
+    use vela_edge::bridge::{Bridge, BridgeStatus, derive_bridges};
     use std::collections::HashMap;
 
     fn bridges_dir(frontier: &Path) -> PathBuf {
@@ -8999,7 +9035,7 @@ pub(crate) fn cmd_federation_push_resolution(
 /// place where the actor's private key reads its drafts and signs them.
 /// The browser never sees the key.
 fn cmd_queue(action: QueueAction) {
-    use vela_protocol::queue;
+    use vela_edge::queue;
     match action {
         QueueAction::List { queue_file, json } => {
             let path = queue_file.unwrap_or_else(queue::default_queue_path);
@@ -9192,7 +9228,7 @@ pub(crate) fn parse_signing_key(hex_str: &str) -> ed25519_dalek::SigningKey {
     ed25519_dalek::SigningKey::from_bytes(&key_bytes)
 }
 
-fn confirm_action(action: &vela_protocol::queue::QueuedAction) -> bool {
+fn confirm_action(action: &vela_edge::queue::QueuedAction) -> bool {
     use std::io::{self, BufRead, Write};
     let mut stdout = io::stdout().lock();
     let _ = writeln!(
@@ -9218,7 +9254,7 @@ fn confirm_action(action: &vela_protocol::queue::QueuedAction) -> bool {
 fn sign_and_apply(
     signing_key: &ed25519_dalek::SigningKey,
     actor: &str,
-    action: &vela_protocol::queue::QueuedAction,
+    action: &vela_edge::queue::QueuedAction,
 ) -> Result<String, String> {
     use vela_protocol::events::StateTarget;
     use vela_protocol::proposals;
@@ -9341,11 +9377,11 @@ fn sign_and_apply(
 /// was to hand-edit JSON; this command is the CLI on-ramp. Links go
 /// directly onto `findings[i].links` (links are not a state-changing
 /// proposal kind in v0).
-/// v0.19: bundled entity resolution. See `vela_protocol::entity_resolve` for the
+/// v0.19: bundled entity resolution. See `vela_edge::entity_resolve` for the
 /// table + algorithm. CLI surface is two subcommands: `resolve` (mutates
 /// the frontier file) and `list` (read-only inspection of the table).
 fn cmd_entity(action: EntityAction) {
-    use vela_protocol::entity_resolve;
+    use vela_edge::entity_resolve;
     match action {
         EntityAction::Resolve {
             frontier,
@@ -9765,7 +9801,7 @@ pub(crate) fn cmd_frontier_release(
     previous: Option<String>,
     json: bool,
 ) {
-    use vela_protocol::frontier_release::{FrontierRelease, ReleaseDraft};
+    use vela_edge::frontier_release::{FrontierRelease, ReleaseDraft};
 
     let project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
     let frontier_id = project.frontier_id();
@@ -9842,7 +9878,7 @@ pub(crate) fn cmd_frontier_release(
 
 /// v0.158: list every release recorded for a frontier.
 pub(crate) fn cmd_frontier_releases(frontier: PathBuf, json: bool) {
-    use vela_protocol::frontier_release::FrontierRelease;
+    use vela_edge::frontier_release::FrontierRelease;
 
     let releases_dir = releases_dir_for(&frontier);
     let mut releases: Vec<FrontierRelease> = Vec::new();
@@ -10264,7 +10300,7 @@ fn releases_dir_for(frontier: &Path) -> PathBuf {
 }
 
 fn latest_release_id(releases_dir: &Path) -> Option<String> {
-    use vela_protocol::frontier_release::FrontierRelease;
+    use vela_edge::frontier_release::FrontierRelease;
     if !releases_dir.exists() {
         return None;
     }
@@ -10797,7 +10833,7 @@ fn cmd_proof_verify_attestation(record: PathBuf, json: bool) {
 
 /// v0.157: handle `vela credit <frontier>`.
 fn cmd_credit(frontier: PathBuf, out: Option<PathBuf>, json: bool) {
-    use vela_protocol::credit::build_ledger;
+    use vela_edge::credit::build_ledger;
 
     let project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
     let now = chrono::Utc::now().to_rfc3339();
@@ -10851,7 +10887,7 @@ fn cmd_credit(frontier: PathBuf, out: Option<PathBuf>, json: bool) {
 /// review threads on proposals or findings; append-only,
 /// signed, content-addressed.
 fn cmd_review_thread(action: ReviewThreadCli) {
-    use vela_protocol::review_thread::{MessageDraft, ReviewMessage, ReviewThread, ThreadTargetKind};
+    use vela_edge::review_thread::{MessageDraft, ReviewMessage, ReviewThread, ThreadTargetKind};
 
     match action {
         ReviewThreadCli::Create {
@@ -10998,7 +11034,7 @@ fn cmd_review_thread(action: ReviewThreadCli) {
 /// v0.167: handle `vela hub ...`. Build + validate hub-spec
 /// primitive records.
 fn cmd_hub_spec(action: HubSpecCli) {
-    use vela_protocol::hub_spec::{HubSpec, HubSpecDraft};
+    use vela_edge::hub_spec::{HubSpec, HubSpecDraft};
 
     match action {
         HubSpecCli::Declare {
@@ -11056,7 +11092,7 @@ fn cmd_hub_spec(action: HubSpecCli) {
             let parsed: HubSpec = serde_json::from_str(&body)
                 .unwrap_or_else(|e| fail_return(&format!("parse hub spec: {e}")));
             // Re-derive id from a fresh draft.
-            let rebuilt = HubSpec::from_draft(vela_protocol::hub_spec::HubSpecDraft {
+            let rebuilt = HubSpec::from_draft(vela_edge::hub_spec::HubSpecDraft {
                 hub_id: parsed.hub_id.clone(),
                 display_name: parsed.display_name.clone(),
                 base_url: parsed.base_url.clone(),
@@ -11203,7 +11239,7 @@ fn cmd_task(action: TaskAction) {
             actor,
             json,
         } => {
-            let report = vela_protocol::code_executor::execute_task(&frontier, &task_id, &actor)
+            let report = vela_edge::code_executor::execute_task(&frontier, &task_id, &actor)
                 .unwrap_or_else(|e| fail_return(&format!("task execute failed: {e}")));
             if json {
                 println!(
@@ -12133,7 +12169,7 @@ fn print_task(task: &frontier_task::FrontierTask, json: bool) {
 /// v0.199: handle `vela tool` — register / show / verify a Tool
 /// Descriptor (`vtd_*`).
 fn cmd_tool(action: ToolCliAction) {
-    use vela_protocol::tool_descriptor::{CallingConvention, DescriptorDraft, ToolDescriptor};
+    use vela_edge::tool_descriptor::{CallingConvention, DescriptorDraft, ToolDescriptor};
 
     match action {
         ToolCliAction::Register {
@@ -12264,7 +12300,7 @@ fn cmd_tool(action: ToolCliAction) {
 /// v0.200: handle `vela eval` — record / show / verify an
 /// Evaluation Record (`ver_*`).
 fn cmd_eval(action: EvalCliAction) {
-    use vela_protocol::evaluation_record::{
+    use vela_edge::evaluation_record::{
         EvaluationKind, EvaluationRecord, Outcome, RecordDraft, TargetKind,
     };
 
@@ -12670,7 +12706,7 @@ fn cmd_conflict(action: ConflictCliAction) {
 /// v0.163: handle `vela preprint <frontier>`. Renders a Markdown
 /// preprint body for the frontier.
 fn cmd_preprint(frontier: PathBuf, released_at: Option<String>, out: Option<PathBuf>, json: bool) {
-    use vela_protocol::preprint::render_preprint;
+    use vela_edge::preprint::render_preprint;
 
     let project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
     let stamp = released_at.unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
@@ -12741,9 +12777,9 @@ fn cmd_crossref(
     out: Option<PathBuf>,
     json: bool,
 ) {
-    use vela_protocol::credit::build_ledger;
-    use vela_protocol::crossref::{CrossrefDepositManifest, DepositInput, Depositor};
-    use vela_protocol::frontier_release::FrontierRelease;
+    use vela_edge::credit::build_ledger;
+    use vela_edge::crossref::{CrossrefDepositManifest, DepositInput, Depositor};
+    use vela_edge::frontier_release::FrontierRelease;
 
     let project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
     let releases_dir = releases_dir_for(&frontier);
@@ -12826,7 +12862,7 @@ fn cmd_citation(
     out: Option<PathBuf>,
     json: bool,
 ) {
-    use vela_protocol::citation::{CitationFormat, render_finding, render_frontier};
+    use vela_edge::citation::{CitationFormat, render_finding, render_frontier};
 
     let fmt = CitationFormat::parse(&format).unwrap_or_else(|e| fail_return(&e));
 
@@ -13016,7 +13052,7 @@ fn print_index_payload(label: &str, payload: &Value, json_output: bool) {
 
 /// v0.148: handle `vela registry hub-federation status`.
 pub(crate) fn cmd_hub_federation(action: HubFederationAction) {
-    use vela_protocol::checkpoint::RegistryCheckpoint;
+    use vela_edge::checkpoint::RegistryCheckpoint;
 
     match action {
         HubFederationAction::Status { sources, json } => {
@@ -13281,7 +13317,7 @@ pub(crate) fn cmd_verify_all(from: Option<PathBuf>, json: bool) {
 
 /// v0.147: handle `vela registry checkpoint {create|verify}`.
 pub(crate) fn cmd_checkpoint(action: CheckpointAction) {
-    use vela_protocol::checkpoint::{CheckpointDraft, RegistryCheckpoint};
+    use vela_edge::checkpoint::{CheckpointDraft, RegistryCheckpoint};
     use vela_protocol::registry;
 
     match action {
@@ -13401,7 +13437,7 @@ pub(crate) fn cmd_checkpoint(action: CheckpointAction) {
 
 /// v0.146: verify the owner-epoch chain transcript for a frontier.
 pub(crate) fn cmd_verify_chain(frontier: PathBuf, artifacts: PathBuf, json: bool) {
-    use vela_protocol::governance::{
+    use vela_edge::governance::{
         ChainStatus, GovernancePolicy, OwnerEpochChain, OwnerRotateAttestationBundle,
         OwnerRotateProposal, verify_chain,
     };
@@ -13529,7 +13565,7 @@ pub(crate) struct FrontierRevocation {
     pub(crate) map: std::collections::HashMap<String, String>,
 }
 
-impl vela_protocol::governance::ActorRevocationLookup for FrontierRevocation {
+impl vela_edge::governance::ActorRevocationLookup for FrontierRevocation {
     fn revoked_at(&self, actor_id: &str) -> Option<&str> {
         self.map.get(actor_id).map(String::as_str)
     }
@@ -13537,7 +13573,7 @@ impl vela_protocol::governance::ActorRevocationLookup for FrontierRevocation {
 
 /// v0.144: handle `vela registry governance {init|show|validate}`.
 pub(crate) fn cmd_governance(action: GovernanceAction) {
-    use vela_protocol::governance::{GovernancePolicy, PolicyDraft, Quorum};
+    use vela_edge::governance::{GovernancePolicy, PolicyDraft, Quorum};
 
     match action {
         GovernanceAction::Init {
@@ -14062,13 +14098,13 @@ fn cmd_agent_bench(
     report_path: Option<&Path>,
     json_out: bool,
 ) {
-    let input = vela_protocol::agent_bench::BenchInput {
+    let input = vela_edge::agent_bench::BenchInput {
         gold_path: gold.to_path_buf(),
         candidate_path: candidate.to_path_buf(),
         sources: sources.map(Path::to_path_buf),
         threshold: threshold.unwrap_or(0.0),
     };
-    let report = match vela_protocol::agent_bench::run(input) {
+    let report = match vela_edge::agent_bench::run(input) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("{} bench failed: {e}", style::err_prefix());
@@ -14093,7 +14129,7 @@ fn cmd_agent_bench(
         println!();
         println!("  {}", "VELA · BENCH · AGENT STATE-UPDATE".dimmed());
         println!("  {}", style::tick_row(60));
-        print!("{}", vela_protocol::agent_bench::render_pretty(&report));
+        print!("{}", vela_edge::agent_bench::render_pretty(&report));
         println!();
     }
 
@@ -14471,7 +14507,7 @@ fn cmd_attach(
 }
 
 fn cmd_gate(action: GateAction) {
-    use vela_protocol::deliverable_grade::{self, DeliverableGrade, GradeGate};
+    use vela_edge::deliverable_grade::{self, DeliverableGrade, GradeGate};
     use vela_protocol::verifier_attachment::{
         self, GateStatus, ProbeKind, VerifierAttachment, VerifierMethod,
     };
@@ -15285,7 +15321,7 @@ fn cmd_doc(path: &Path, out: Option<&Path>, json_output: bool) {
         .map(Path::to_path_buf)
         .unwrap_or_else(|| path.join("doc"));
     let report =
-        vela_protocol::doc_render::write_site(&project, &out_dir).unwrap_or_else(|e| fail_return(&e));
+        vela_edge::doc_render::write_site(&project, &out_dir).unwrap_or_else(|e| fail_return(&e));
     if json_output {
         print_json(&report);
         return;
@@ -15672,8 +15708,8 @@ fn cmd_impact(frontier: &Path, finding_id: &str, depth: Option<usize>, json: boo
 }
 
 fn cmd_discord(frontier: &Path, json: bool, kind_filter: Option<&str>) {
-    use vela_protocol::discord::DiscordKind;
-    use vela_protocol::discord_compute::compute_discord_assignment;
+    use vela_edge::discord::DiscordKind;
+    use vela_edge::discord_compute::compute_discord_assignment;
 
     let project = repo::load_from_path(frontier).unwrap_or_else(|e| fail_return(&e));
     let assignment = compute_discord_assignment(&project);
@@ -16870,7 +16906,7 @@ fn print_session_help() {
 }
 
 fn print_session_dashboard(project: &vela_protocol::project::Project, repo_path: &Path) {
-    use vela_protocol::causal_reasoning::{audit_frontier, summarize_audit};
+    use vela_edge::causal_reasoning::{audit_frontier, summarize_audit};
 
     let label = frontier_label(project);
     let vfr = project.frontier_id();
@@ -16902,11 +16938,11 @@ fn print_session_dashboard(project: &vela_protocol::project::Project, repo_path:
             }
             bridge_total += 1;
             if let Ok(data) = std::fs::read_to_string(&path)
-                && let Ok(b) = serde_json::from_str::<vela_protocol::bridge::Bridge>(&data)
+                && let Ok(b) = serde_json::from_str::<vela_edge::bridge::Bridge>(&data)
             {
                 match b.status {
-                    vela_protocol::bridge::BridgeStatus::Confirmed => bridge_confirmed += 1,
-                    vela_protocol::bridge::BridgeStatus::Derived => bridge_derived += 1,
+                    vela_edge::bridge::BridgeStatus::Confirmed => bridge_confirmed += 1,
+                    vela_edge::bridge::BridgeStatus::Derived => bridge_derived += 1,
                     _ => {}
                 }
             }

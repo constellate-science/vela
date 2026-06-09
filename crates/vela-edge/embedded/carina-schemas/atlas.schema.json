@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/carina/schemas/atlas.schema.json",
+  "title": "Carina Atlas (v0.4)",
+  "description": "A living, versioned map of a scientific domain composed of one or more Vela frontiers. The fifteenth Carina primitive (v0.4). An Atlas is a read-only composition over per-frontier event logs; frontier stays the substrate-level unit of replay. See docs/MISSION_ATLAS.md.",
+  "type": "object",
+  "required": ["schema", "id", "name", "domain", "composing_frontiers"],
+  "properties": {
+    "schema": { "type": "string", "const": "carina.atlas.v0.4" },
+    "id": {
+      "type": "string",
+      "pattern": "^vat_[a-zA-Z0-9_]+$",
+      "description": "Atlas content-addressed id."
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Human-readable Atlas name (e.g. 'Brain Tumor Translation')."
+    },
+    "domain": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Scientific domain the Atlas covers (e.g. 'oncology', 'neurodegeneration', 'additive combinatorics')."
+    },
+    "scope_note": {
+      "type": "string",
+      "description": "Optional bounded-question text describing what is in scope and what is not."
+    },
+    "composing_frontiers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["vfr_id", "name"],
+        "properties": {
+          "vfr_id": { "type": "string", "pattern": "^vfr_[a-zA-Z0-9_]+$" },
+          "name": { "type": "string" },
+          "locator": { "type": "string" },
+          "role": {
+            "type": "string",
+            "description": "Optional role within the Atlas (e.g. 'core', 'sister-frontier', 'reference')."
+          }
+        }
+      }
+    },
+    "bridges": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^vbr_[a-zA-Z0-9_]+$",
+        "description": "Pointer to a Bridge primitive (vbr_*) carrying a confirmed cross-frontier link."
+      }
+    },
+    "maintainers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["actor_id"],
+        "properties": {
+          "actor_id": {
+            "type": "string",
+            "description": "Actor id (e.g. 'reviewer:will-blair' or 'agent:atlas-bot-2026-05-09')."
+          },
+          "role": {
+            "type": "string",
+            "description": "Optional role label (maintainer, curator, reviewer)."
+          }
+        }
+      }
+    },
+    "review_policy_locator": {
+      "type": "string",
+      "description": "Optional locator for the Atlas-level review policy (file path, doi, URL)."
+    },
+    "created_at": {
+      "type": "string",
+      "description": "RFC3339 timestamp when the Atlas was first composed."
+    }
+  }
+}

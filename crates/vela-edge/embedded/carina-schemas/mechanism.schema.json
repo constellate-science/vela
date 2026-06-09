@@ -1,0 +1,22 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/carina/schemas/mechanism.schema.json",
+  "title": "Carina Mechanism (v0.3)",
+  "description": "A typed link between two findings expressing how one supports, refutes, mediates, or modulates the other.",
+  "type": "object",
+  "required": ["schema", "id", "relation", "source_finding_id", "target_finding_id"],
+  "properties": {
+    "schema": { "type": "string", "const": "carina.mechanism.v0.3" },
+    "id": { "type": "string", "pattern": "^vmech_[a-zA-Z0-9_]+$" },
+    "relation": {
+      "type": "string",
+      "enum": ["supports", "refutes", "mediates", "moderates", "is_required_for", "is_correlate_of"]
+    },
+    "shape": {
+      "type": "string",
+      "description": "Optional functional-form hint: linear, threshold, dose_response, switch, ..."
+    },
+    "source_finding_id": { "type": "string", "pattern": "^vf_[a-zA-Z0-9_]+$" },
+    "target_finding_id": { "type": "string", "pattern": "^vf_[a-zA-Z0-9_]+$" }
+  }
+}

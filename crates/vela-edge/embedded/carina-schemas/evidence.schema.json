@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/carina/schemas/evidence.schema.json",
+  "title": "Carina Evidence (v0.3)",
+  "description": "A pointer from a finding to a source artifact, with the locator and span that supports the assertion.",
+  "type": "object",
+  "required": ["schema", "id", "supports"],
+  "properties": {
+    "schema": { "type": "string", "const": "carina.evidence.v0.3" },
+    "id": { "type": "string", "pattern": "^ve_[a-zA-Z0-9_]+$" },
+    "source_id": { "type": "string" },
+    "artifact_id": { "type": "string" },
+    "locator": {
+      "type": "string",
+      "description": "doi:, pmid:, nct:, URL, or content-addressed sha256: identifier."
+    },
+    "span": { "type": "string" },
+    "supports": {
+      "type": "array",
+      "items": { "type": "string", "pattern": "^vf_[a-zA-Z0-9_]+$" }
+    },
+    "limitations": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

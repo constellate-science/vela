@@ -36,27 +36,27 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use tower_http::cors::CorsLayer;
 
-use vela_protocol::adoption_log;
-use vela_protocol::bridge::{Bridge, BridgeStatus};
+use vela_edge::adoption_log;
+use vela_edge::bridge::{Bridge, BridgeStatus};
 use vela_protocol::bundle::{FindingBundle, Replication};
-use vela_protocol::causal_reasoning::{Identifiability, audit_frontier, summarize_audit};
-use vela_protocol::decision;
+use vela_edge::causal_reasoning::{Identifiability, audit_frontier, summarize_audit};
+use vela_edge::decision;
 use vela_protocol::diff_pack_review::{self, DiffPackVerdict};
 use vela_protocol::evidence_ci;
-use vela_protocol::frontier_health;
-use vela_protocol::frontier_incident;
-use vela_protocol::frontier_task;
-use vela_protocol::index_db_schema;
+use vela_edge::frontier_health;
+use vela_edge::frontier_incident;
+use vela_edge::frontier_task;
+use vela_edge::index_db_schema;
 use vela_protocol::project::Project;
 use vela_protocol::proposals::{self, StateProposal};
 use vela_protocol::repo;
-use vela_protocol::review_packet;
-use vela_protocol::review_session;
-use vela_protocol::reviewer_identity;
+use vela_edge::review_packet;
+use vela_edge::review_session;
+use vela_edge::reviewer_identity;
 use vela_protocol::scientific_diff::ScientificDiffPack;
-use vela_protocol::source_inbox;
+use vela_edge::source_inbox;
 use vela_protocol::state::{self, ReviseOptions};
-use vela_protocol::task_workspace;
+use vela_edge::task_workspace;
 
 const TOKENS_CSS: &str = include_str!("../embedded/web/styles/tokens.css");
 const WORKBENCH_CSS: &str = include_str!("../embedded/web/styles/workbench.css");
@@ -1577,7 +1577,7 @@ async fn page_ask(State(state): State<AppState>) -> Response {
 }
 
 async fn page_transcript(State(state): State<AppState>) -> Response {
-    let transcript = match vela_protocol::adoption_transcript::build(&state.repo_path) {
+    let transcript = match vela_edge::adoption_transcript::build(&state.repo_path) {
         Ok(transcript) => transcript,
         Err(e) => return error_page("transcript", "Could not build adoption transcript", &e),
     };
@@ -4111,7 +4111,7 @@ async fn page_proof_center(State(state): State<AppState>) -> Response {
         Err(e) => return error_page("proof", "Could not load frontier", &e),
     };
 
-    let integrity = vela_protocol::state_integrity::analyze(&project);
+    let integrity = vela_edge::state_integrity::analyze(&project);
     let signals = vela_protocol::signals::analyze(&project, &[]);
     let packet = &project.proof_state.latest_packet;
     let recorded_snapshot = packet.snapshot_hash.as_deref().unwrap_or("not recorded");
@@ -14744,7 +14744,7 @@ async fn page_threads_list(State(state): State<AppState>) -> Response {
         Err(e) => return error_page("threads", "Could not load frontier", &e),
     };
     let label = frontier_label(&project);
-    let threads = vela_protocol::review_thread::load_all_threads(&state.repo_path);
+    let threads = vela_edge::review_thread::load_all_threads(&state.repo_path);
 
     let stats = format!(
         r#"<div class="wb-stats">
@@ -14759,14 +14759,14 @@ async fn page_threads_list(State(state): State<AppState>) -> Response {
             .iter()
             .filter(|t| matches!(
                 t.target_kind,
-                vela_protocol::review_thread::ThreadTargetKind::Proposal
+                vela_edge::review_thread::ThreadTargetKind::Proposal
             ))
             .count(),
         vf = threads
             .iter()
             .filter(|t| matches!(
                 t.target_kind,
-                vela_protocol::review_thread::ThreadTargetKind::Finding
+                vela_edge::review_thread::ThreadTargetKind::Finding
             ))
             .count(),
     );
@@ -14779,9 +14779,9 @@ async fn page_threads_list(State(state): State<AppState>) -> Response {
             .iter()
             .map(|t| {
                 let target_kind = match t.target_kind {
-                    vela_protocol::review_thread::ThreadTargetKind::Proposal => "proposal",
-                    vela_protocol::review_thread::ThreadTargetKind::Finding => "finding",
-                    vela_protocol::review_thread::ThreadTargetKind::DiffPack => "diff_pack",
+                    vela_edge::review_thread::ThreadTargetKind::Proposal => "proposal",
+                    vela_edge::review_thread::ThreadTargetKind::Finding => "finding",
+                    vela_edge::review_thread::ThreadTargetKind::DiffPack => "diff_pack",
                 };
                 let last_activity = t
                     .messages
@@ -14844,15 +14844,15 @@ async fn page_thread_detail(
         Err(e) => return error_page("threads", "Could not load frontier", &e),
     };
     let label = frontier_label(&project);
-    let thread = match vela_protocol::review_thread::load_thread(&state.repo_path, &thread_id) {
+    let thread = match vela_edge::review_thread::load_thread(&state.repo_path, &thread_id) {
         Some(t) => t,
         None => return error_page("threads", "Thread not found", &thread_id),
     };
 
     let target_kind = match thread.target_kind {
-        vela_protocol::review_thread::ThreadTargetKind::Proposal => "proposal",
-        vela_protocol::review_thread::ThreadTargetKind::Finding => "finding",
-        vela_protocol::review_thread::ThreadTargetKind::DiffPack => "diff_pack",
+        vela_edge::review_thread::ThreadTargetKind::Proposal => "proposal",
+        vela_edge::review_thread::ThreadTargetKind::Finding => "finding",
+        vela_edge::review_thread::ThreadTargetKind::DiffPack => "diff_pack",
     };
 
     let messages_html: String = if thread.messages.is_empty() {

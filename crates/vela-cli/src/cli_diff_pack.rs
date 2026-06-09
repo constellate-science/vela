@@ -4,7 +4,9 @@ use crate::cli::{fail, fail_return, print_json};
 
 use crate::cli_commands::DiffPackAction;
 use vela_protocol::cli_style as style;
-use vela_protocol::{evidence_ci, repo, reviewer_identity};
+use vela_protocol::evidence_ci;
+use vela_protocol::repo;
+use vela_edge::reviewer_identity;
 use serde_json::json;
 
 /// v0.193: handle `vela diff-pack <action>`. Build, show, or
@@ -258,7 +260,7 @@ pub(crate) fn cmd_diff_pack(action: DiffPackAction) {
             }
         }
         DiffPackAction::BackfillRelease { frontier, json } => {
-            use vela_protocol::diff_pack_release;
+            use vela_edge::diff_pack_release;
             let reports = diff_pack_release::backfill_all(&frontier)
                 .unwrap_or_else(|e| fail_return(&format!("backfill-release failed: {e}")));
             let created = reports.iter().filter(|r| r.created).count();
@@ -292,7 +294,7 @@ pub(crate) fn cmd_diff_pack(action: DiffPackAction) {
             }
         }
         DiffPackAction::PromoteVerdicts { frontier, json } => {
-            use vela_protocol::diff_pack_promote;
+            use vela_edge::diff_pack_promote;
             let reports = diff_pack_promote::promote_all(&frontier)
                 .unwrap_or_else(|e| fail_return(&format!("promote-verdicts failed: {e}")));
             if json {

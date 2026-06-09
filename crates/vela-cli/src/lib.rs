@@ -1321,7 +1321,7 @@ fn handle_conjecture_verify(args: &[String]) {
             std::process::exit(1);
         }
     };
-    let conj: vela_protocol::conjecture::Conjecture = match serde_json::from_str(&body) {
+    let conj: vela_edge::conjecture::Conjecture = match serde_json::from_str(&body) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("{} parse {path}: {e}", "err ·".red());
@@ -1367,7 +1367,7 @@ fn handle_proof_packet_verify(args: &[String]) {
             std::process::exit(1);
         }
     };
-    let packet: vela_protocol::proof_packet::ProofPacket =
+    let packet: vela_edge::proof_packet::ProofPacket =
         match serde_json::from_str(&body) {
             Ok(p) => p,
             Err(e) => {
@@ -1406,7 +1406,7 @@ fn handle_proof_packet_verify_external(args: &[String]) {
             std::process::exit(1);
         }
     };
-    let packet: vela_protocol::proof_packet::ProofPacket =
+    let packet: vela_edge::proof_packet::ProofPacket =
         match serde_json::from_str(&body) {
             Ok(p) => p,
             Err(e) => {

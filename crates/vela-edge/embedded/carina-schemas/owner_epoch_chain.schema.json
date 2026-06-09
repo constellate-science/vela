@@ -1,0 +1,38 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/schemas/owner_epoch_chain.schema.json",
+  "title": "Vela Owner Epoch Chain (v0.1)",
+  "description": "Chain transcript recording every governed owner-rotation transition on a frontier. Each entry pins the policy that governed the transition, the proposal that authorized it, the attestation bundle that satisfied quorum, and the entry hashes before and after. Consumers pulling a registry entry use this transcript to verify the owner-epoch chain end-to-end.",
+  "type": "object",
+  "required": ["schema", "frontier_id", "transitions"],
+  "properties": {
+    "schema": { "type": "string", "const": "vela.owner_epoch_chain.v0.1" },
+    "frontier_id": { "type": "string", "pattern": "^vfr_[a-zA-Z0-9_]+$" },
+    "transitions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "owner_epoch",
+          "policy_id",
+          "proposal_id",
+          "bundle_id",
+          "previous_entry_hash",
+          "new_owner_actor_id",
+          "new_owner_pubkey",
+          "signed_at"
+        ],
+        "properties": {
+          "owner_epoch": { "type": "integer", "minimum": 1 },
+          "policy_id": { "type": "string", "pattern": "^vgp_[a-zA-Z0-9_]+$" },
+          "proposal_id": { "type": "string", "pattern": "^vop_[a-zA-Z0-9_]+$" },
+          "bundle_id": { "type": "string", "pattern": "^vab_[a-zA-Z0-9_]+$" },
+          "previous_entry_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+          "new_owner_actor_id": { "type": "string", "minLength": 1 },
+          "new_owner_pubkey": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "signed_at": { "type": "string", "format": "date-time" }
+        }
+      }
+    }
+  }
+}

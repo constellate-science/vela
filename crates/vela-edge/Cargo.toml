@@ -1,0 +1,36 @@
+[package]
+name = "vela-edge"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Vela edge layer above the protocol waist: significance, curation, ingestion, search, operations."
+readme = "../../README.md"
+publish = true
+[lib]
+name = "vela_edge"
+path = "src/lib.rs"
+[dependencies]
+vela-protocol = { path = "../vela-protocol" }
+vela-protocol-core = { workspace = true }
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+chrono.workspace = true
+indicatif.workspace = true
+hex.workspace = true
+regex.workspace = true
+urlencoding.workspace = true
+colored.workspace = true
+sqlx.workspace = true
+ed25519-dalek.workspace = true
+rand.workspace = true
+toml.workspace = true
+tempfile.workspace = true
+[dev-dependencies]
+[lints]
+workspace = true

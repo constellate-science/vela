@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use vela_protocol::bundle::FindingBundle;
-use vela_protocol::ingest::extract_pdf_text;
+use vela_edge::ingest::extract_pdf_text;
 use vela_protocol::project::Project;
 use vela_protocol::proposals::{AgentRun, StateProposal};
 use vela_protocol::repo;

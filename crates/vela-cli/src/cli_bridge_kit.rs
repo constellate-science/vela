@@ -6,7 +6,7 @@ use crate::cli_commands::BridgeKitAction;
 pub(crate) async fn cmd_bridge_kit(action: BridgeKitAction) {
     match action {
         BridgeKitAction::Validate { source, json } => {
-            let report = vela_protocol::artifact_to_state::validate_bridge_kit_path(&source);
+            let report = vela_edge::artifact_to_state::validate_bridge_kit_path(&source);
             if json {
                 print_json(&report);
             } else {

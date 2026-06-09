@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/carina/schemas/scientific_diff.schema.json",
+  "title": "Scientific Diff Pack (v0.1)",
+  "description": "v0.193: an aggregator object that bundles N proposals into one reviewable change-set. The per-proposal carina.diff.v0.3 schema stays for atomic event diffs; vsd_* sits one level up and is what a reviewer actually reads. Content-addressed over the (frontier_id, ordered proposals, aggregate_kind, summary, created_at) tuple; pinned by Lean Theorem 23 (Scientific Diff Pack id injectivity).",
+  "type": "object",
+  "required": [
+    "schema",
+    "pack_id",
+    "frontier_id",
+    "created_at",
+    "summary",
+    "proposals",
+    "aggregate_kind"
+  ],
+  "properties": {
+    "schema": { "type": "string", "const": "vela.scientific_diff.v0.1" },
+    "pack_id": {
+      "type": "string",
+      "pattern": "^vsd_[a-f0-9]{16}$",
+      "description": "Content-addressed pack id derived from canonical bytes over the (frontier_id, ordered proposals, aggregate_kind, summary, created_at) tuple."
+    },
+    "frontier_id": {
+      "type": "string",
+      "pattern": "^vfr_[a-f0-9]+$"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "summary": {
+      "type": "string",
+      "maxLength": 280,
+      "description": "Reviewer-readable summary of what this pack changes. <=280 chars (tweet-length discipline)."
+    },
+    "proposals": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^vpr_[a-zA-Z0-9_]+$"
+      },
+      "description": "Ordered list of vpr_* proposal ids the pack bundles. Order matters — pack id is content-addressed over this list, and apply replays them in canonical order."
+    },
+    "aggregate_kind": {
+      "type": "string",
+      "description": "Plain-language category of the aggregate change. Free-form but conventionally one of: finding.cluster_revision, evidence.refresh, correction.batch, trajectory.continuation, replication.outcome, agent.proposal_set."
+    },
+    "agent_run": {
+      "type": "string",
+      "pattern": "^vaa_[a-f0-9]{16}$",
+      "description": "Optional reference to a v0.195 agent attestation envelope. When present, declares the pack was produced by an LLM agent under a signed attestation."
+    },
+    "parent_pack": {
+      "type": "string",
+      "pattern": "^vsd_[a-f0-9]{16}$",
+      "description": "Optional reference to a prior pack this one amends. Forms a chain of amendments without rewriting history."
+    },
+    "applied_event_id": {
+      "type": "string",
+      "description": "Optional. Set after `vela diff-pack apply` writes the pack id into each member's applied_event metadata."
+    },
+    "signature": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{128}$",
+      "description": "Optional Ed25519 signature over the canonical preimage. Validates the pack was authorized by the declared signer."
+    },
+    "signer_pubkey_hex": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Optional Ed25519 public key the signature was produced under."
+    }
+  }
+}

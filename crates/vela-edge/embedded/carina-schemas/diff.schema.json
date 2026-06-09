@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/carina/schemas/diff.schema.json",
+  "title": "Carina Diff (v0.3)",
+  "description": "The change a proposal would induce on frontier state. Computed by replaying the proposal against the current state without writing.",
+  "type": "object",
+  "required": ["schema", "proposal_id", "before", "after", "changed_objects"],
+  "properties": {
+    "schema": { "type": "string", "const": "carina.diff.v0.3" },
+    "proposal_id": { "type": "string", "pattern": "^vpr_[a-zA-Z0-9_]+$" },
+    "before": {
+      "type": "object",
+      "description": "Snapshot of relevant counts and objects before applying."
+    },
+    "after": {
+      "type": "object",
+      "description": "Snapshot of relevant counts and objects after applying."
+    },
+    "changed_objects": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

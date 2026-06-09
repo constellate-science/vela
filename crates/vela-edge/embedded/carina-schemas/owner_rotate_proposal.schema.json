@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/schemas/owner_rotate_proposal.schema.json",
+  "title": "Vela Owner Rotate Proposal (v0.1)",
+  "description": "Content-addressed proposal binding a specific owner-rotation event. Governance attestations sign the canonical bytes of this object. Pins frontier, old/new owner, owner epoch, previous registry entry hash, and governance policy id so attestations cannot be replayed against a different frontier or policy.",
+  "type": "object",
+  "required": [
+    "schema",
+    "proposal_id",
+    "frontier_id",
+    "old_owner_actor_id",
+    "old_owner_pubkey",
+    "new_owner_actor_id",
+    "new_owner_pubkey",
+    "owner_epoch",
+    "previous_registry_entry_hash",
+    "governance_policy_id",
+    "reason",
+    "created_at",
+    "expires_at",
+    "nonce"
+  ],
+  "properties": {
+    "schema": { "type": "string", "const": "vela.owner_rotate_proposal.v0.1" },
+    "proposal_id": { "type": "string", "pattern": "^vop_[a-zA-Z0-9_]+$" },
+    "frontier_id": { "type": "string", "pattern": "^vfr_[a-zA-Z0-9_]+$" },
+    "old_owner_actor_id": { "type": "string", "minLength": 1 },
+    "old_owner_pubkey": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "new_owner_actor_id": { "type": "string", "minLength": 1 },
+    "new_owner_pubkey": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+    "owner_epoch": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Target owner epoch after this rotation lands. Genesis frontiers start at owner_epoch=0 (covered by the bootstrap policy); the first governed rotation produces owner_epoch=1."
+    },
+    "previous_registry_entry_hash": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "governance_policy_id": { "type": "string", "pattern": "^vgp_[a-zA-Z0-9_]+$" },
+    "reason": { "type": "string", "minLength": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "nonce": { "type": "string", "minLength": 1 }
+  }
+}

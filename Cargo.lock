@@ -3413,6 +3413,7 @@ dependencies = [
  "urlencoding",
  "vela-atlas",
  "vela-constellation",
+ "vela-edge",
  "vela-protocol",
  "vela-scientist",
  "vela-search",
@@ -3431,6 +3432,31 @@ dependencies = [
  "sha2 0.10.9",
  "tempfile",
  "vela-atlas",
+]
+
+[[package]]
+name = "vela-edge"
+version = "0.691.0"
+dependencies = [
+ "chrono",
+ "colored",
+ "ed25519-dalek",
+ "hex",
+ "indicatif",
+ "rand 0.8.6",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2 0.10.9",
+ "sqlx",
+ "tempfile",
+ "tokio",
+ "toml",
+ "urlencoding",
+ "vela-protocol",
+ "vela-protocol-core",
 ]
 
 [[package]]
@@ -3457,6 +3483,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "vela-edge",
  "vela-protocol",
 ]
 
@@ -3519,6 +3546,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "tokio",
+ "vela-edge",
  "vela-protocol",
 ]
 
@@ -3538,6 +3566,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "urlencoding",
+ "vela-edge",
  "vela-protocol",
 ]
 

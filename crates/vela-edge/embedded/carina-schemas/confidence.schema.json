@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://vela-science.org/carina/schemas/confidence.schema.json",
+  "title": "Carina Confidence (v0.3)",
+  "description": "A finding's confidence score, attribution method, scope, and historical adjustments. Replay re-derives history from the event log.",
+  "type": "object",
+  "required": ["schema", "score"],
+  "properties": {
+    "schema": { "type": "string", "const": "carina.confidence.v0.3" },
+    "score": { "type": "number", "minimum": 0, "maximum": 1 },
+    "method": {
+      "type": "string",
+      "description": "How the score was set: reviewer_estimated, ensemble_aggregated, replication_weighted, ..."
+    },
+    "scope": { "type": "string" },
+    "history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["event_id", "to"],
+        "properties": {
+          "event_id": { "type": "string", "pattern": "^vev_[a-zA-Z0-9_]+$" },
+          "from": { "type": ["number", "null"] },
+          "to": { "type": "number", "minimum": 0, "maximum": 1 }
+        }
+      }
+    }
+  }
+}

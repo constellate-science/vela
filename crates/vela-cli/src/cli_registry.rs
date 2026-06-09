@@ -6,7 +6,11 @@ use crate::cli::{
 };
 use crate::cli_commands::*;
 use vela_protocol::cli_style as style;
-use vela_protocol::{bundle, events, incremental_ingest, repo, sign};
+use vela_protocol::bundle;
+use vela_protocol::events;
+use vela_edge::incremental_ingest;
+use vela_protocol::repo;
+use vela_protocol::sign;
 use colored::Colorize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};

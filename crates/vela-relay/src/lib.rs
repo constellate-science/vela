@@ -34,17 +34,17 @@
 //!
 //! ## Re-exports
 //!
-//! - [`vela_protocol::artifact_to_state::ArtifactPacket`] — input/output type for the artifact-to-vela shape.
-//! - [`vela_protocol::source_adapters`] — the source-adapter spec table.
-//! - [`vela_protocol::runtime_adapters`] — the runtime-adapter spec table.
+//! - [`vela_edge::artifact_to_state::ArtifactPacket`] — input/output type for the artifact-to-vela shape.
+//! - [`vela_edge::source_adapters`] — the source-adapter spec table.
+//! - [`vela_edge::runtime_adapters`] — the runtime-adapter spec table.
 //!
 //! Doctrine: this crate does not implement adapters itself. It
 //! exposes the four-shape contract so the substrate's adapter
 //! ecosystem can grow without touching the kernel crate.
 
-pub use vela_protocol::artifact_to_state;
-pub use vela_protocol::runtime_adapters;
-pub use vela_protocol::source_adapters;
+pub use vela_edge::artifact_to_state;
+pub use vela_edge::runtime_adapters;
+pub use vela_edge::source_adapters;
 
 /// v0.142: paper-to-vela end-to-end. See `paper::paper_to_vela`.
 pub mod paper;

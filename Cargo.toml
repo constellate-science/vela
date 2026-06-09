@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/vela-protocol",
+    "crates/vela-edge",
     "crates/vela-protocol-core",
     "crates/vela-protocol-wasm",
     "crates/vela-scientist",

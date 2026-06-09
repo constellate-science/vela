@@ -3,7 +3,8 @@
 use crate::cli::{fail_return, print_json, wrap_line};
 
 use vela_protocol::cli_style as style;
-use vela_protocol::{repo, state};
+use vela_protocol::repo;
+use vela_protocol::state;
 use std::path::Path;
 
 use colored::Colorize;
