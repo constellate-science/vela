@@ -819,6 +819,12 @@ pub(crate) enum Commands {
         #[command(subcommand)]
         action: LeanAction,
     },
+    /// Verify banked attempts (`vat_`): id re-derivation + Ed25519
+    /// signature + claim_digest, exactly as the reducer does on deposit.
+    Attempt {
+        #[command(subcommand)]
+        action: AttemptAction,
+    },
     /// v0.193: Scientific Diff Pack (`vsd_*`). Bundle N proposals
     /// into one reviewable change-set. The per-proposal Carina
     /// Diff (v0.3) stays for atomic event diffs; this primitive
@@ -3155,6 +3161,21 @@ pub(crate) enum LeanAction {
         /// `axiom_verdict` and `tcb_id` match.
         #[arg(long)]
         tcb: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum AttemptAction {
+    /// Verify a banked attempt file: a single `Attempt` JSON, or a
+    /// CanopusAttemptLedger (`{"records": [...]}`, v1 or v2). Each record's
+    /// `vat_` id must re-derive, its claim_digest must match, and its Ed25519
+    /// signature must verify under the declared pubkey. Unsigned records (no
+    /// signature) are reported, not failed.
+    Verify {
+        /// Path to an Attempt JSON or a ledger with a `records` array.
+        file: PathBuf,
         #[arg(long)]
         json: bool,
     },

@@ -43,6 +43,7 @@ pub mod evidence_ci;
 pub mod merkle;
 pub mod export;
 pub mod contradiction;
+pub mod faithfulness;
 pub mod federation;
 pub mod nanopub;
 pub mod frontier_graph;
