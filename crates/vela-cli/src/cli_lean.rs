@@ -615,6 +615,81 @@ pub(crate) fn cmd_attempt(action: AttemptAction) {
     }
 }
 
+/// Structurally verify cross-domain transfers (`vtr_`): id re-derivation +
+/// Ed25519 signature, mirroring `cmd_attempt`. The T1–T5 admission gate
+/// (`derive_transfer_status`) runs in the reducer / on read, not here.
+pub(crate) fn cmd_transfer(action: TransferAction) {
+    use vela_protocol::transfer::Transfer;
+    match action {
+        TransferAction::Verify { file, json } => {
+            let body = std::fs::read_to_string(&file)
+                .unwrap_or_else(|e| fail_return(&format!("read {}: {e}", file.display())));
+            let val: serde_json::Value = serde_json::from_str(&body)
+                .unwrap_or_else(|e| fail_return(&format!("parse {}: {e}", file.display())));
+            let records: Vec<serde_json::Value> = val
+                .get("records")
+                .and_then(|r| r.as_array())
+                .cloned()
+                .unwrap_or_else(|| vec![val.clone()]);
+
+            let mut verified = 0usize;
+            let mut unsigned = 0usize;
+            let mut failures: Vec<String> = Vec::new();
+            for (i, rv) in records.iter().enumerate() {
+                let sig_empty = rv
+                    .get("signature")
+                    .and_then(|s| s.as_str())
+                    .map(str::is_empty)
+                    .unwrap_or(true);
+                let t: Transfer = match serde_json::from_value(rv.clone()) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        failures.push(format!("record {i}: parse error: {e}"));
+                        continue;
+                    }
+                };
+                if sig_empty {
+                    unsigned += 1;
+                    continue;
+                }
+                match t.verify() {
+                    Ok(()) => verified += 1,
+                    Err(e) => failures.push(format!("{}: {e}", t.transfer_id)),
+                }
+            }
+
+            if json {
+                print_json(&json!({
+                    "ok": failures.is_empty(),
+                    "command": "transfer.verify",
+                    "verified": verified,
+                    "unsigned": unsigned,
+                    "failed": failures.len(),
+                    "failures": failures,
+                }));
+            } else if failures.is_empty() {
+                let tail = if unsigned > 0 {
+                    format!(" ({unsigned} unsigned, skipped)")
+                } else {
+                    String::new()
+                };
+                println!(
+                    "{} {} transfer(s) verify{}",
+                    style::ok("transfer.verify"),
+                    verified,
+                    tail
+                );
+            } else {
+                fail(&format!(
+                    "{verified} verified, {unsigned} unsigned, {} FAILED:\n  {}",
+                    failures.len(),
+                    failures.join("\n  ")
+                ));
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

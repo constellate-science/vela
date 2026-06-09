@@ -825,6 +825,13 @@ pub(crate) enum Commands {
         #[command(subcommand)]
         action: AttemptAction,
     },
+    /// Verify cross-domain transfers (`vtr_`): id re-derivation + Ed25519
+    /// signature, exactly as the reducer does on deposit. Admission (whether
+    /// the link is sound) is a separate read-time derivation over project state.
+    Transfer {
+        #[command(subcommand)]
+        action: TransferAction,
+    },
     /// v0.193: Scientific Diff Pack (`vsd_*`). Bundle N proposals
     /// into one reviewable change-set. The per-proposal Carina
     /// Diff (v0.3) stays for atomic event diffs; this primitive
@@ -3175,6 +3182,21 @@ pub(crate) enum AttemptAction {
     /// signature) are reported, not failed.
     Verify {
         /// Path to an Attempt JSON or a ledger with a `records` array.
+        file: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum TransferAction {
+    /// Verify a cross-domain transfer file: a single `Transfer` JSON, or a
+    /// `{"records": [...]}` ledger. Each record's `vtr_` id must re-derive and
+    /// its Ed25519 signature must verify under the declared pubkey. Unsigned
+    /// records are reported, not failed. (This is the structural check; the
+    /// T1–T5 admission gate runs in the reducer / `derive_transfer_status`.)
+    Verify {
+        /// Path to a Transfer JSON or a ledger with a `records` array.
         file: PathBuf,
         #[arg(long)]
         json: bool,
