@@ -687,6 +687,27 @@ pub(crate) fn cmd_transfer(action: TransferAction) {
                 ));
             }
         }
+        TransferAction::Mint { draft, key, out } => {
+            use vela_protocol::transfer::{Transfer, TransferDraft};
+            let body = std::fs::read_to_string(&draft)
+                .unwrap_or_else(|e| fail_return(&format!("read draft {}: {e}", draft.display())));
+            let d: TransferDraft = serde_json::from_str(&body)
+                .unwrap_or_else(|e| fail_return(&format!("parse draft {}: {e}", draft.display())));
+            let key_hex = std::fs::read_to_string(&key)
+                .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
+            let key_bytes = hex::decode(key_hex.trim())
+                .unwrap_or_else(|e| fail_return(&format!("decode key hex: {e}")));
+            let key_arr: [u8; 32] = key_bytes
+                .try_into()
+                .unwrap_or_else(|_| fail_return("signing key must be 32 bytes"));
+            let signing = ed25519_dalek::SigningKey::from_bytes(&key_arr);
+            let t = Transfer::build(d, &signing)
+                .unwrap_or_else(|e| fail_return(&format!("build transfer: {e}")));
+            let json_out = serde_json::to_string_pretty(&t).unwrap_or_default();
+            std::fs::write(&out, format!("{json_out}\n"))
+                .unwrap_or_else(|e| fail_return(&format!("write {}: {e}", out.display())));
+            println!("{} {} -> {}", style::ok("transfer.mint"), t.transfer_id, out.display());
+        }
     }
 }
 

@@ -3213,6 +3213,20 @@ pub(crate) enum TransferAction {
         #[arg(long)]
         json: bool,
     },
+    /// Mint a signed `vtr_` from a draft JSON (the Transfer body minus
+    /// id/signature/signer): source_claim, source_claim_digest, target_claim,
+    /// target_premise_digest, homomorphism{...}. Signs with the Ed25519 key
+    /// (raw 32-byte hex seed) and writes the content-addressed record.
+    Mint {
+        /// Path to the draft JSON.
+        draft: PathBuf,
+        /// Path to the Ed25519 signing key (64 hex chars).
+        #[arg(long)]
+        key: PathBuf,
+        /// Where to write the signed `vtr_` record.
+        #[arg(long)]
+        out: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]

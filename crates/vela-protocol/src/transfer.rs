@@ -118,15 +118,21 @@ fn is_default_provenance(p: &crate::attempt::Provenance) -> bool {
 }
 
 /// Everything needed to build a [`Transfer`] except the derived id/signature.
+/// `Deserialize` so a producer can mint from a draft JSON (`vela transfer mint`).
+#[derive(Deserialize)]
 pub struct TransferDraft {
     pub source_claim: String,
     pub source_claim_digest: String,
+    #[serde(default)]
     pub source_gate_status_claimed: String,
+    #[serde(default)]
     pub source_attachments: Vec<String>,
     pub target_claim: String,
     pub target_premise_digest: String,
     pub homomorphism: HomomorphismDescriptor,
+    #[serde(default)]
     pub provenance: crate::attempt::Provenance,
+    #[serde(default)]
     pub note: String,
 }
 
