@@ -207,6 +207,12 @@ pub const EVENT_KIND_CONTRADICTION_RESOLVED: &str = "contradiction.resolved";
 /// verifies its id + signature and upserts it into `Project.attempts`.
 pub const EVENT_KIND_ATTEMPT_DEPOSITED: &str = "attempt.deposited";
 
+/// A signed cross-domain [`crate::transfer::Transfer`] is deposited. The full
+/// object travels in `payload.transfer`; the reducer verifies its id +
+/// signature and upserts it into `Project.transfers`. Admission (whether the
+/// link is sound) is derived on read, never stored.
+pub const EVENT_KIND_TRANSFER_DEPOSITED: &str = "transfer.deposited";
+
 /// An append-only lifecycle transition on an attempt. The
 /// [`crate::attempt::ResolutionEvent`] travels in `payload.resolution`; the
 /// reducer upserts it into `Project.attempt_resolutions` (idempotent by
@@ -604,6 +610,36 @@ pub fn new_attempt_deposited_event(
     caveats: Vec<String>,
 ) -> StateEvent {
     new_attempt_event(EVENT_KIND_ATTEMPT_DEPOSITED, attempt_id, actor_id, actor_type, reason, payload, caveats)
+}
+
+/// Build a `transfer.deposited` event. The full signed [`crate::transfer::Transfer`]
+/// travels in `payload.transfer`; the reducer verifies it and upserts into
+/// `Project.transfers`.
+pub fn new_transfer_deposited_event(
+    transfer_id: &str,
+    actor_id: &str,
+    actor_type: &str,
+    reason: &str,
+    payload: Value,
+    caveats: Vec<String>,
+) -> StateEvent {
+    let mut event = StateEvent {
+        schema: EVENT_SCHEMA.to_string(),
+        id: String::new(),
+        kind: EVENT_KIND_TRANSFER_DEPOSITED.to_string(),
+        target: StateTarget { r#type: "transfer".to_string(), id: transfer_id.to_string() },
+        actor: StateActor { id: actor_id.to_string(), r#type: actor_type.to_string() },
+        timestamp: Utc::now().to_rfc3339(),
+        reason: reason.to_string(),
+        before_hash: NULL_HASH.to_string(),
+        after_hash: NULL_HASH.to_string(),
+        payload,
+        caveats,
+        signature: None,
+        schema_artifact_id: None,
+    };
+    event.id = event_id(&event);
+    event
 }
 
 /// Build an `attempt.resolved` event. The [`crate::attempt::ResolutionEvent`]

@@ -1133,6 +1133,7 @@ mod tests {
             verifier_attachments: vec![],
             attempts: vec![],
             attempt_resolutions: vec![],
+            transfers: vec![],
         };
 
         let report = verify_frontier_data(&frontier, None).unwrap();
@@ -1187,6 +1188,7 @@ mod tests {
             verifier_attachments: vec![],
             attempts: vec![],
             attempt_resolutions: vec![],
+            transfers: vec![],
         }
     }
 

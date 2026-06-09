@@ -42,6 +42,9 @@ pub enum EdgeKind {
     Supersedes,
     Extends,
     Replicates,
+    /// A cross-domain transfer (`vtr_`): the source claim discharges a premise
+    /// of the target claim via a kernel-verified verifier-homomorphism.
+    Discharges,
 }
 
 impl EdgeKind {
@@ -62,6 +65,7 @@ impl EdgeKind {
             "supersedes" => Self::Supersedes,
             "extends" => Self::Extends,
             "replicates" => Self::Replicates,
+            "discharges" => Self::Discharges,
             _ => return None,
         })
     }
@@ -80,11 +84,12 @@ impl EdgeKind {
             Self::Supersedes => "supersedes",
             Self::Extends => "extends",
             Self::Replicates => "replicates",
+            Self::Discharges => "discharges",
         }
     }
 
     /// Every edge kind, for enumeration and parsing.
-    pub const ALL: [EdgeKind; 10] = [
+    pub const ALL: [EdgeKind; 11] = [
         Self::Supports,
         Self::Contradicts,
         Self::DependsOn,
@@ -95,6 +100,7 @@ impl EdgeKind {
         Self::Supersedes,
         Self::Extends,
         Self::Replicates,
+        Self::Discharges,
     ];
 
     /// Parse from either the canonical string ([`Self::as_str`]) or a

@@ -920,6 +920,7 @@ mod tests {
             verifier_attachments: vec![],
             attempts: vec![],
             attempt_resolutions: vec![],
+            transfers: vec![],
         }
     }
 

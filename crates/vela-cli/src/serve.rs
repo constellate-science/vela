@@ -328,6 +328,7 @@ fn merge_projects(frontiers: Vec<(String, Project)>) -> Project {
         verifier_attachments: Vec::new(),
         attempts: Vec::new(),
         attempt_resolutions: Vec::new(),
+        transfers: Vec::new(),
     };
     sources::materialize_project(&mut project);
     project

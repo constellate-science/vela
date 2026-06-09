@@ -207,6 +207,11 @@ pub struct Project {
     /// `apply_attempt_resolved` and `Project::head_resolution`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attempt_resolutions: Vec<crate::attempt::ResolutionEvent>,
+    /// Signed cross-domain transfers (`vtr_`). Immutable deposits; admission
+    /// (whether the link is sound) is DERIVED via `derive_transfer_status` on
+    /// read, never stored. See `apply_transfer_deposited`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub transfers: Vec<crate::transfer::Transfer>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -427,6 +432,7 @@ pub fn assemble(
         verifier_attachments: Vec::new(),
         attempts: Vec::new(),
         attempt_resolutions: Vec::new(),
+        transfers: Vec::new(),
     };
     crate::sources::materialize_project(&mut project);
     project

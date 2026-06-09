@@ -154,6 +154,8 @@ pub const VALID_LINK_TYPES: &[&str] = &[
     "improves",
     "generalizes",
     "specializes",
+    // cross-domain transfer (vtr_):
+    "discharges",
 ];
 
 /// The local finding id of a link target, stripping any cross-frontier

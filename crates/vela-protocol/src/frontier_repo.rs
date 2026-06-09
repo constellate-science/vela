@@ -873,6 +873,7 @@ fn empty_project(name: &str, description: &str, compiled_at: &str) -> Project {
         verifier_attachments: Vec::new(),
         attempts: Vec::new(),
         attempt_resolutions: Vec::new(),
+        transfers: Vec::new(),
     }
 }
 

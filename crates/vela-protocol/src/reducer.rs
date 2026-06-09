@@ -267,6 +267,7 @@ pub fn apply_event_indexed(
         "contradiction.resolved" => apply_contradiction_resolved(state, event),
         // Attempt lifecycle: a signed deposit, then append-only resolutions.
         "attempt.deposited" => apply_attempt_deposited(state, event),
+        "transfer.deposited" => apply_transfer_deposited(state, event),
         "attempt.resolved" => apply_attempt_resolved(state, event),
         other => Err(format!("reducer: unsupported event kind '{other}'")),
     }
@@ -326,6 +327,7 @@ pub fn replay_from_genesis(
         verifier_attachments: Vec::new(),
         attempts: Vec::new(),
         attempt_resolutions: Vec::new(),
+        transfers: Vec::new(),
     };
     crate::sources::materialize_project(&mut state);
     // v0.105: build the finding-id index once, reuse across every
@@ -1328,6 +1330,30 @@ fn apply_attempt_deposited(state: &mut Project, event: &StateEvent) -> Result<()
         .map_err(|e| format!("attempt.deposited rejected: {e}"))?;
 
     upsert_by(&mut state.attempts, attempt, |a, b| a.attempt_id == b.attempt_id);
+    Ok(())
+}
+
+/// Upsert a signed cross-domain transfer into `state.transfers` when a
+/// `transfer.deposited` event lands. The full object lives in
+/// `payload.transfer`. Integrity: the object must `verify()` (id re-derives,
+/// signature checks) — a forged or hand-edited transfer is rejected. Admission
+/// (whether the link is sound) is NOT decided here; it is derived on read via
+/// `transfer::derive_transfer_status`. Idempotent by `vtr_` id.
+fn apply_transfer_deposited(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    use crate::transfer::Transfer;
+
+    let value = event
+        .payload
+        .get("transfer")
+        .ok_or("transfer.deposited event missing payload.transfer")?
+        .clone();
+    let transfer: Transfer =
+        serde_json::from_value(value).map_err(|e| format!("transfer.deposited payload parse: {e}"))?;
+    transfer
+        .verify()
+        .map_err(|e| format!("transfer.deposited rejected: {e}"))?;
+
+    upsert_by(&mut state.transfers, transfer, |a, b| a.transfer_id == b.transfer_id);
     Ok(())
 }
 
