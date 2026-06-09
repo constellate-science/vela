@@ -15581,7 +15581,7 @@ pub(crate) fn load_frontier_or_fail(path: &Path) -> project::Project {
 
 fn cmd_retro_impact(record: &str, frontier: &Path, json: bool) {
     let project = load_frontier_or_fail(frontier);
-    let impact = vela_protocol::dependency_oracle::dependency_impact(&project, record);
+    let impact = vela_edge::dependency_oracle::dependency_impact(&project, record);
     if json {
         print_json(&serde_json::to_value(&impact).unwrap_or_default());
     } else {

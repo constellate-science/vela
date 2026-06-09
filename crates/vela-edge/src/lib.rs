@@ -23,6 +23,7 @@ pub mod credit;
 pub mod crossref;
 pub mod decision;
 pub mod deliverable_grade;
+pub mod dependency_oracle;
 pub mod diff_pack_promote;
 pub mod diff_pack_release;
 pub mod discord;

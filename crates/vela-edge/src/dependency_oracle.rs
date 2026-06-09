@@ -22,7 +22,7 @@
 //! resolution), so the headline number is "verified state resting on this," not
 //! "mentions of this."
 
-use crate::project::Project;
+use vela_protocol::project::Project;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 /// The dependency impact of one record: who rests on it, transitively.
@@ -63,7 +63,7 @@ fn reverse_dep_map(project: &Project) -> BTreeMap<String, BTreeSet<String>> {
 fn is_verified(project: &Project, id: &str) -> bool {
     matches!(
         project.head_resolution(id).map(|r| &r.resolution),
-        Some(crate::attempt::AttemptResolution::Verified { .. })
+        Some(vela_protocol::attempt::AttemptResolution::Verified { .. })
     )
 }
 
@@ -109,7 +109,7 @@ pub fn dependency_impact(project: &Project, record_id: &str) -> DependencyImpact
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::attempt::{Attempt, AttemptDraft, AttemptResolution, ResolutionEvent};
+    use vela_protocol::attempt::{Attempt, AttemptDraft, AttemptResolution, ResolutionEvent};
     use ed25519_dalek::SigningKey;
     use rand::rngs::OsRng;
 
@@ -143,7 +143,7 @@ mod tests {
 
     #[test]
     fn transitive_weight_counts_the_reverse_closure() {
-        let mut p = crate::test_support::make_project("dep", vec![]);
+        let mut p = vela_protocol::test_support::make_project("dep", vec![]);
         // a <- b <- c (c depends on b, b depends on a)
         let a = att(1, "base", vec![]);
         let b = att(2, "mid", vec![a.attempt_id.clone()]);
@@ -159,7 +159,7 @@ mod tests {
 
     #[test]
     fn verified_weight_counts_only_gate_verified_dependents() {
-        let mut p = crate::test_support::make_project("dep", vec![]);
+        let mut p = vela_protocol::test_support::make_project("dep", vec![]);
         let a = att(1, "base", vec![]);
         let b = att(2, "mid", vec![a.attempt_id.clone()]);
         let (aid, bid) = (a.attempt_id.clone(), b.attempt_id.clone());
@@ -179,7 +179,7 @@ mod tests {
 
     #[test]
     fn unknown_record_has_zero_impact() {
-        let p = crate::test_support::make_project("dep", vec![]);
+        let p = vela_protocol::test_support::make_project("dep", vec![]);
         assert_eq!(dependency_impact(&p, "vat_nope").weight, 0);
     }
 }
