@@ -20,6 +20,9 @@ path = "src/lib.rs"
 # (agents) without inducing a cyclic Cargo dependency. The library
 # in this crate stays a pure substrate library.
 
+[features]
+test-support = []
+
 [dependencies]
 vela-protocol-core = { workspace = true }
 reqwest.workspace = true

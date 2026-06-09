@@ -1241,104 +1241,9 @@ pub fn init_repo(dir: &Path, project: &Project) -> Result<(), String> {
 mod tests {
     use super::*;
     use crate::bundle::*;
-    use crate::project;
     use tempfile::TempDir;
 
-    fn make_finding(id: &str, score: f64, assertion_type: &str) -> FindingBundle {
-        FindingBundle {
-            id: id.into(),
-            version: 1,
-            previous_version: None,
-            assertion: Assertion {
-                text: format!("Finding {id}"),
-                assertion_type: assertion_type.into(),
-                entities: vec![Entity {
-                    name: "TestEntity".into(),
-                    entity_type: "protein".into(),
-                    identifiers: serde_json::Map::new(),
-                    canonical_id: None,
-                    candidates: vec![],
-                    aliases: vec![],
-                    resolution_provenance: None,
-                    resolution_confidence: 1.0,
-                    resolution_method: None,
-                    species_context: None,
-                    needs_review: false,
-                }],
-                relation: None,
-                direction: None,
-                causal_claim: None,
-                causal_evidence_grade: None,
-            },
-            evidence: Evidence {
-                evidence_type: "experimental".into(),
-                model_system: String::new(),
-                species: None,
-                method: String::new(),
-                sample_size: None,
-                effect_size: None,
-                p_value: None,
-                replicated: false,
-                replication_count: None,
-                evidence_spans: vec![],
-            },
-            conditions: Conditions {
-                text: String::new(),
-                species_verified: vec![],
-                species_unverified: vec![],
-                in_vitro: false,
-                in_vivo: false,
-                human_data: false,
-                clinical_trial: false,
-                concentration_range: None,
-                duration: None,
-                age_group: None,
-                cell_type: None,
-            },
-            confidence: Confidence::raw(score, "seeded prior", 0.85),
-            provenance: Provenance {
-                source_type: "published_paper".into(),
-                doi: None,
-                pmid: None,
-                pmc: None,
-                openalex_id: None,
-                url: None,
-                title: "Test".into(),
-                authors: vec![],
-                year: Some(2024),
-                journal: None,
-                license: None,
-                publisher: None,
-                funders: vec![],
-                extraction: Extraction::default(),
-                review: None,
-                citation_count: None,
-            },
-            flags: Flags {
-                gap: false,
-                negative_space: false,
-                contested: false,
-                retracted: false,
-                declining: false,
-                gravity_well: false,
-                review_state: None,
-                superseded: false,
-                signature_threshold: None,
-                jointly_accepted: false,
-            },
-            links: vec![],
-            annotations: vec![],
-            attachments: vec![],
-            created: String::new(),
-            updated: None,
-
-            access_tier: crate::access_tier::AccessTier::Public,
-        }
-    }
-
-    fn make_project(name: &str, findings: Vec<FindingBundle>) -> Project {
-        project::assemble(name, findings, 10, 0, "Test project")
-    }
+    use crate::test_support::{make_finding, make_project};
 
     // ── detect tests ────────────────────────────────────────────────
 
@@ -1737,37 +1642,6 @@ name = "minimal"
         assert_eq!(loaded.findings.len(), 1);
     }
 
-    #[test]
-    fn load_from_path_packet_dir() {
-        let tmp = TempDir::new().unwrap();
-        let dir = tmp.path().join("packet-frontier");
-
-        let mut original = make_project(
-            "packet-frontier",
-            vec![make_finding("vf_pkt1", 0.81, "mechanism")],
-        );
-        original.review_events.push(ReviewEvent {
-            id: "rev_pkt1".into(),
-            workspace: Some("bbb".into()),
-            finding_id: "vf_pkt1".into(),
-            reviewer: "reviewer:test".into(),
-            reviewed_at: "2026-01-01T00:00:00Z".into(),
-            scope: Some("external".into()),
-            status: Some("accepted".into()),
-            action: ReviewAction::Approved,
-            reason: "Imported from another lab".into(),
-            evidence_considered: vec![],
-            state_change: None,
-        });
-        original.stats.review_event_count = original.review_events.len();
-        crate::export::export_packet(&original, &dir).unwrap();
-
-        let loaded = load_from_path(&dir).unwrap();
-        assert_eq!(loaded.project.name, "packet-frontier");
-        assert_eq!(loaded.findings.len(), 1);
-        assert_eq!(loaded.review_events.len(), 1);
-        assert_eq!(loaded.stats.review_event_count, 1);
-    }
 
     // ── project file -> repo -> project file roundtrip ────────────
 

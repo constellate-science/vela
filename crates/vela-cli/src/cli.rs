@@ -11,7 +11,7 @@ use vela_protocol::diff;
 use vela_edge::doctor;
 use vela_protocol::events;
 use vela_protocol::evidence_ci;
-use vela_protocol::export;
+use vela_edge::export;
 use vela_edge::frontier_health;
 use vela_edge::frontier_incident;
 use vela_protocol::frontier_repo;
@@ -20,12 +20,12 @@ use vela_edge::impact;
 use vela_edge::index_db;
 use vela_edge::lint;
 use vela_edge::normalize;
-use vela_protocol::packet;
+use vela_edge::packet;
 use vela_protocol::project;
 use vela_protocol::propagate;
 use vela_protocol::proposals;
 use vela_protocol::repo;
-use vela_protocol::research_trace;
+use vela_edge::research_trace;
 use vela_edge::review;
 use vela_edge::review_packet;
 use vela_edge::review_session;
@@ -33,7 +33,7 @@ use vela_edge::reviewer_identity;
 use vela_edge::search;
 use vela_edge::share_package;
 use vela_protocol::sign;
-use vela_protocol::signals;
+use vela_edge::signals;
 use vela_edge::source_inbox;
 use vela_edge::source_resolver;
 use vela_protocol::sources;
@@ -3967,7 +3967,7 @@ fn cmd_artifacts(frontier: &Path, target: Option<&str>, json_out: bool) {
 
 fn cmd_artifact_audit(frontier: &Path, json_out: bool) {
     let project = repo::load_from_path(frontier).unwrap_or_else(|e| fail_return(&e));
-    let audit = vela_protocol::artifact_audit::audit_artifacts(frontier, &project);
+    let audit = vela_edge::artifact_audit::audit_artifacts(frontier, &project);
     if json_out {
         print_json(&audit);
         if !audit.ok {

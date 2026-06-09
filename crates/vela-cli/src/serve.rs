@@ -26,10 +26,10 @@ use vela_edge::decision;
 use vela_protocol::events;
 use vela_edge::observer;
 use vela_protocol::repo;
-use vela_protocol::signals;
+use vela_edge::signals;
 use vela_protocol::sources;
 use vela_protocol::state;
-use vela_protocol::tool_registry;
+use vela_edge::tool_registry;
 pub enum ProjectSource {
     Single(PathBuf),
     Directory(PathBuf),
@@ -1971,7 +1971,7 @@ async fn http_artifact_audit(State(state): State<AppState>) -> Json<Value> {
         }));
     };
     Json(
-        serde_json::to_value(vela_protocol::artifact_audit::audit_artifacts(&path, &project))
+        serde_json::to_value(vela_edge::artifact_audit::audit_artifacts(&path, &project))
             .unwrap_or_else(|_| json!({"ok": false, "error": "serialization failed"})),
     )
 }

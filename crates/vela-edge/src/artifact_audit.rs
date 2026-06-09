@@ -7,8 +7,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::bundle::Artifact;
-use crate::project::Project;
+use vela_protocol::bundle::Artifact;
+use vela_protocol::project::Project;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ArtifactAudit {
@@ -356,11 +356,11 @@ mod tests {
     use serde_json::json;
 
     use super::*;
-    use crate::access_tier::AccessTier;
-    use crate::bundle::{
+    use vela_protocol::access_tier::AccessTier;
+    use vela_protocol::bundle::{
         Assertion, Conditions, Confidence, Evidence, Extraction, Flags, Provenance,
     };
-    use crate::project;
+    use vela_protocol::project;
 
     #[test]
     fn local_blob_hash_and_size_are_checked() {
@@ -467,7 +467,7 @@ mod tests {
     }
 
     fn project_with_one_finding() -> Project {
-        let finding = crate::bundle::FindingBundle::new(
+        let finding = vela_protocol::bundle::FindingBundle::new(
             Assertion {
                 text: "Lecanemab trial records belong in the frontier.".to_string(),
                 assertion_type: "treatment_effect".to_string(),

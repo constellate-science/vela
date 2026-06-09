@@ -9,7 +9,7 @@ use vela_edge::conformance;
 use vela_protocol::events;
 use vela_edge::lint;
 use vela_protocol::sign;
-use vela_protocol::signals;
+use vela_edge::signals;
 use vela_edge::validate;
 use serde_json::Value;
 use std::path::Path;

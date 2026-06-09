@@ -12,9 +12,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use crate::events::StateTarget;
-use crate::project::Project;
-use crate::proposals::{self, StateProposal};
+use vela_protocol::events::StateTarget;
+use vela_protocol::project::Project;
+use vela_protocol::proposals::{self, StateProposal};
 
 pub const RESEARCH_TRACE_SCHEMA: &str = "vela.research_trace.v0.1";
 
@@ -486,7 +486,7 @@ fn sources_by_id(trace: &ResearchTrace, source_ids: &[String]) -> Vec<TraceSourc
 }
 
 fn observation_id(trace_id: &str, output_id: &str) -> String {
-    let bytes = crate::canonical::to_canonical_bytes(&json!({
+    let bytes = vela_protocol::canonical::to_canonical_bytes(&json!({
         "trace_id": trace_id,
         "output_id": output_id,
     }))

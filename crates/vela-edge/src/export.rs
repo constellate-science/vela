@@ -8,9 +8,14 @@ use chrono::Utc;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-use crate::bundle::{Artifact, FindingBundle};
-use crate::project::Project;
-use crate::{events, packet, repo, signals, sources, state};
+use vela_protocol::bundle::{Artifact, FindingBundle};
+use vela_protocol::project::Project;
+use vela_protocol::events;
+use crate::packet;
+use vela_protocol::repo;
+use crate::signals;
+use vela_protocol::sources;
+use vela_protocol::state;
 
 /// Supported export formats.
 #[derive(Debug, Clone, Copy)]
@@ -69,7 +74,7 @@ pub fn run(frontier_path: &Path, format_str: &str, output: Option<&Path>) {
     let format = match ExportFormat::from_str(format_str) {
         Ok(f) => f,
         Err(e) => {
-            eprintln!("{} {e}", crate::cli_style::err_prefix());
+            eprintln!("{} {e}", vela_protocol::cli_style::err_prefix());
             std::process::exit(1);
         }
     };
@@ -78,7 +83,7 @@ pub fn run(frontier_path: &Path, format_str: &str, output: Option<&Path>) {
         let out_dir = output.unwrap_or_else(|| {
             eprintln!(
                 "{} {} format requires --output <directory>",
-                crate::cli_style::err_prefix(),
+                vela_protocol::cli_style::err_prefix(),
                 format_str
             );
             std::process::exit(1);
@@ -99,7 +104,7 @@ pub fn run(frontier_path: &Path, format_str: &str, output: Option<&Path>) {
                 );
             }
             Err(e) => {
-                eprintln!("{} {e}", crate::cli_style::err_prefix());
+                eprintln!("{} {e}", vela_protocol::cli_style::err_prefix());
                 std::process::exit(1);
             }
         }
@@ -492,8 +497,8 @@ struct PacketCheckSummary {
     checked_artifacts: Vec<String>,
     artifact_audit: crate::artifact_audit::ArtifactAudit,
     counts: PacketManifestStats,
-    proposal_summary: crate::proposals::ProposalSummary,
-    proof_state: crate::proposals::ProofState,
+    proposal_summary: vela_protocol::proposals::ProposalSummary,
+    proof_state: vela_protocol::proposals::ProofState,
     source_debt: PacketSourceDebtSummary,
     reviewer_sections: PacketReviewerSections,
     reviewer_replay_manifest: String,
@@ -1093,7 +1098,7 @@ pub fn export_packet_with_source(
         checked_artifacts: checked_artifacts.clone(),
         artifact_audit: artifact_audit.clone(),
         counts: stats.clone(),
-        proposal_summary: crate::proposals::summary(frontier),
+        proposal_summary: vela_protocol::proposals::summary(frontier),
         proof_state: frontier.proof_state.clone(),
         source_debt: source_debt.summary.clone(),
         reviewer_sections: reviewer_sections.clone(),
@@ -1106,7 +1111,7 @@ pub fn export_packet_with_source(
     let replay_report = events::replay_report(frontier);
     let ro_crate = signals::ro_crate_metadata(frontier, &checked_artifacts);
 
-    let frontier_bytes = crate::canonical::to_canonical_bytes(frontier)
+    let frontier_bytes = vela_protocol::canonical::to_canonical_bytes(frontier)
         .map_err(|e| format!("Failed to serialize frontier for source hash: {e}"))?;
     let proof_trace = PacketProofTrace {
         trace_version: "0.2.0".to_string(),
@@ -1115,7 +1120,7 @@ pub fn export_packet_with_source(
         source_hash: hex::encode(Sha256::digest(&frontier_bytes)),
         snapshot_hash: replay_report.current_hash.clone(),
         event_log_hash: replay_report.event_log_hash.clone(),
-        proposal_state_hash: crate::proposals::proposal_state_hash(&frontier.proposals),
+        proposal_state_hash: vela_protocol::proposals::proposal_state_hash(&frontier.proposals),
         replay_status: replay_report.status.clone(),
         packet_manifest_hash: None,
         schema_version: frontier.vela_version.clone(),
@@ -2139,8 +2144,8 @@ pub fn validate_nanopub(jsonld: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bundle::*;
-    use crate::project;
+    use vela_protocol::bundle::*;
+    use vela_protocol::project;
 
     fn make_frontier() -> Project {
         let f1 = FindingBundle {
@@ -2248,7 +2253,7 @@ mod tests {
             created: String::new(),
             updated: None,
 
-            access_tier: crate::access_tier::AccessTier::Public,
+            access_tier: vela_protocol::access_tier::AccessTier::Public,
         };
 
         project::assemble("Test frontier", vec![f1], 1, 0, "Test description")

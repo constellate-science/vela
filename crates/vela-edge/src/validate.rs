@@ -15,7 +15,7 @@ use vela_protocol::bundle::{
 };
 use crate::lint;
 use crate::normalize;
-use vela_protocol::packet;
+use crate::packet;
 use vela_protocol::repo;
 
 const VALID_EXTRACT_METHODS: &[&str] = &[

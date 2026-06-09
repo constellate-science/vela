@@ -11,9 +11,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-use crate::project::{self, Project};
-use crate::proposals;
-use crate::sources;
+use vela_protocol::project::{self, Project};
+use vela_protocol::proposals;
+use vela_protocol::sources;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SignalTarget {
@@ -660,8 +660,8 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
     // Drift between the two is a strict-mode failure — the source
     // record wins, and the finding must be rewritten via
     // `vela normalize --resync-provenance`.
-    let mut by_doi: BTreeMap<String, &crate::sources::SourceRecord> = BTreeMap::new();
-    let mut by_pmid: BTreeMap<String, &crate::sources::SourceRecord> = BTreeMap::new();
+    let mut by_doi: BTreeMap<String, &vela_protocol::sources::SourceRecord> = BTreeMap::new();
+    let mut by_pmid: BTreeMap<String, &vela_protocol::sources::SourceRecord> = BTreeMap::new();
     let mut duplicate_dois: BTreeSet<String> = BTreeSet::new();
     let mut duplicate_pmids: BTreeSet<String> = BTreeSet::new();
     for source in &frontier.sources {
@@ -748,7 +748,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
     // that verifies against the registered public key. Unregistered
     // actor.ids fall back to the legacy placeholder-rejection rule.
     if !frontier.actors.is_empty() {
-        let registry: BTreeMap<&str, &crate::sign::ActorRecord> = frontier
+        let registry: BTreeMap<&str, &vela_protocol::sign::ActorRecord> = frontier
             .actors
             .iter()
             .map(|actor| (actor.id.as_str(), actor))
@@ -794,7 +794,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
             let pubkey = actor_record.public_key.as_str();
             let invalid = match event.signature.as_deref() {
                 None => Some("missing".to_string()),
-                Some(_) => match crate::sign::verify_event_signature(event, pubkey) {
+                Some(_) => match vela_protocol::sign::verify_event_signature(event, pubkey) {
                     Ok(true) => None,
                     Ok(false) => Some("does not verify".to_string()),
                     Err(err) => Some(err),
@@ -1208,7 +1208,7 @@ fn contains_condition_sensitive_claim(text: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::bundle::{
+    use vela_protocol::bundle::{
         Assertion, Conditions, Confidence, Evidence, FindingBundle, Flags, Provenance,
     };
 
@@ -1292,7 +1292,7 @@ mod tests {
             created: "2026-01-01T00:00:00Z".to_string(),
             updated: None,
 
-            access_tier: crate::access_tier::AccessTier::Public,
+            access_tier: vela_protocol::access_tier::AccessTier::Public,
         }
     }
 

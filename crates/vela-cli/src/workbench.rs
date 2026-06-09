@@ -4112,7 +4112,7 @@ async fn page_proof_center(State(state): State<AppState>) -> Response {
     };
 
     let integrity = vela_edge::state_integrity::analyze(&project);
-    let signals = vela_protocol::signals::analyze(&project, &[]);
+    let signals = vela_edge::signals::analyze(&project, &[]);
     let packet = &project.proof_state.latest_packet;
     let recorded_snapshot = packet.snapshot_hash.as_deref().unwrap_or("not recorded");
     let recorded_event_log = packet.event_log_hash.as_deref().unwrap_or("not recorded");
@@ -4561,7 +4561,7 @@ async fn page_sources(State(state): State<AppState>) -> Response {
     };
     let source_summary = vela_protocol::sources::source_summary(&project);
     let evidence_summary = vela_protocol::sources::evidence_summary(&project);
-    let signals = vela_protocol::signals::analyze(&project, &[]);
+    let signals = vela_edge::signals::analyze(&project, &[]);
     let source_issue_count = signals
         .signals
         .iter()
