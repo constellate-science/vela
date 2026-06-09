@@ -5,7 +5,7 @@
 //! `gate_status` each must derive, plus grade-gate cases. This test runs
 //! the canonical Rust implementation
 //! ([`vela_protocol::verifier_attachment::derive_gate_status`] and
-//! [`vela_protocol::deliverable_grade::grade_gate`]) against every vector,
+//! [`vela_edge::deliverable_grade::grade_gate`]) against every vector,
 //! so the reject-vectors (zero attachments → needs_verification,
 //! passed-but-unmatched, refuted probe) are pinned as a contract any
 //! implementation of the gate must satisfy.
@@ -13,7 +13,7 @@
 use std::path::PathBuf;
 
 use serde_json::Value;
-use vela_protocol::deliverable_grade::grade_gate;
+use vela_edge::deliverable_grade::grade_gate;
 use vela_protocol::verifier_attachment::{
     claim_digest, derive_gate_status, AdversarialProbe, AttachmentDraft, AttachmentOutcome,
     GateStatus, MatchToClaim, ProbeKind, ProbeResult, VerifierAttachment, VerifierMethod,

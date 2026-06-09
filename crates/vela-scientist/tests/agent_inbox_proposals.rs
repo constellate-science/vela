@@ -54,6 +54,8 @@ fn empty_frontier(name: &str) -> Project {
         confidence_updates: vec![],
         events: vec![],
         proposals: vec![],
+        attempts: vec![],
+        attempt_resolutions: vec![],
         proof_state: Default::default(),
         signatures: vec![],
         actors: vec![],

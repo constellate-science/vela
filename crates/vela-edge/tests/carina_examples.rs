@@ -689,7 +689,7 @@ fn load_primitives_v0_3() -> Value {
 
 #[test]
 fn carina_v0_3_aggregate_round_trips_all_14_schemas() {
-    use vela_protocol::carina_validate;
+    use vela_edge::carina_validate;
     let value = load_primitives_v0_3();
     let primitives = value
         .get("primitives")
@@ -769,7 +769,7 @@ fn carina_event_payload_validator_agrees_with_schema() {
     // signature-pure Rust validator at events.rs accepts also
     // passes the v0.3 event JSON Schema. The schema is the public
     // spec; the Rust validator is authoritative for replay.
-    use vela_protocol::carina_validate;
+    use vela_edge::carina_validate;
     use vela_protocol::events::validate_event_payload;
 
     let kind = "finding.reviewed";
@@ -807,7 +807,7 @@ fn load_primitives_v0_4() -> Value {
 
 #[test]
 fn carina_v0_4_aggregate_round_trips_all_15_schemas() {
-    use vela_protocol::carina_validate;
+    use vela_edge::carina_validate;
     let value = load_primitives_v0_4();
     assert_eq!(
         value.get("schema").and_then(Value::as_str),
@@ -898,7 +898,7 @@ fn load_primitives_v0_5() -> Value {
 
 #[test]
 fn carina_v0_5_aggregate_round_trips_all_16_schemas() {
-    use vela_protocol::carina_validate;
+    use vela_edge::carina_validate;
     let value = load_primitives_v0_5();
     assert_eq!(
         value.get("schema").and_then(Value::as_str),
@@ -958,7 +958,7 @@ fn load_primitives_v0_6() -> Value {
 
 #[test]
 fn carina_v0_6_aggregate_round_trips_all_17_schemas() {
-    use vela_protocol::carina_validate;
+    use vela_edge::carina_validate;
     let value = load_primitives_v0_6();
     assert_eq!(
         value.get("schema").and_then(Value::as_str),
