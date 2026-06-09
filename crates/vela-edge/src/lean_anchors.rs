@@ -273,6 +273,13 @@ pub const THEOREMS: &[TheoremDescriptor] = &[
         decl: "theorem34_eval_descriptor_composition_eval_first",
         substrate_role: "If a ver_* targets a vtd_* and a vsd_* on the same frontier contains members that also reference that vtd_*, then the descriptor's identity is preserved across the full event chain in either order (record_evaluation then accept_pack, or accept_pack then record_evaluation). Closes the three-way composition opened by T25 + T27 + T28. Substrate-side anchor for downstream consumers replaying the log: vtd_* references resolve the same way regardless of event order.",
     },
+    TheoremDescriptor {
+        id: 35,
+        title: "Cross-frontier transfer soundness (Theorem 23 / the constellation layer)",
+        module: "Vela/Transfer.lean",
+        decl: "transfer_sound",
+        substrate_role: "A verifier-homomorphism T : Transfer A B carries a verified object in frontier A to a verified object in frontier B, so a gate-verified claim in domain X discharges a premise in domain Y WITHOUT re-running A's verifier. The kernel-verified basis of the vtr_ Transfer object's T2 clause (derive_transfer_status): a vtr_ may only reach Admitted when its transfer theorem's vlv_ is axiom-clean. This is the one substrate theorem about the relation BETWEEN frontiers; the single-domain theorems (T2-T4) cannot express it. The concrete maps (cwc_to_dna_sound, sidon_to_golomb_sound, ...) each instantiate it with a real, Mathlib-free, sorry-free soundness proof.",
+    },
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
