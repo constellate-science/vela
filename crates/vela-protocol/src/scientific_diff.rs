@@ -25,7 +25,7 @@
 //!   - v0.201 diff_pack.released: a canonical event arm that turns
 //!     a signed pack into a federated record across hubs.
 
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
@@ -179,8 +179,7 @@ impl ScientificDiffPack {
     /// is content-addressed over its body, not its signature).
     pub fn sign(&mut self, key: &SigningKey) {
         let preimage = self.preimage_bytes();
-        let sig = key.sign(&preimage);
-        self.signature = Some(hex::encode(sig.to_bytes()));
+        self.signature = Some(hex::encode(crate::sign::sign_bytes(key, &preimage)));
         self.signer_pubkey_hex = Some(hex::encode(key.verifying_key().to_bytes()));
     }
 
@@ -231,20 +230,9 @@ impl ScientificDiffPack {
             ));
         }
         if let (Some(sig_hex), Some(pub_hex)) = (&self.signature, &self.signer_pubkey_hex) {
-            let pubkey_bytes = hex::decode(pub_hex).map_err(|e| format!("decode pubkey: {e}"))?;
-            let pubkey_arr: [u8; 32] = pubkey_bytes
-                .try_into()
-                .map_err(|_| "pubkey must be 32 bytes".to_string())?;
-            let verifying =
-                VerifyingKey::from_bytes(&pubkey_arr).map_err(|e| format!("verifying key: {e}"))?;
-            let sig_bytes = hex::decode(sig_hex).map_err(|e| format!("decode signature: {e}"))?;
-            let sig_arr: [u8; 64] = sig_bytes
-                .try_into()
-                .map_err(|_| "signature must be 64 bytes".to_string())?;
-            let sig = Signature::from_bytes(&sig_arr);
-            verifying
-                .verify(&self.preimage_bytes(), &sig)
-                .map_err(|e| format!("signature verify: {e}"))?;
+            if !crate::sign::verify_action_signature(&self.preimage_bytes(), sig_hex, pub_hex)? {
+                return Err("scientific_diff signature does not verify under signer_pubkey_hex".to_string());
+            }
         } else if self.signature.is_some() || self.signer_pubkey_hex.is_some() {
             return Err("signature and signer_pubkey_hex must be set together".to_string());
         }
