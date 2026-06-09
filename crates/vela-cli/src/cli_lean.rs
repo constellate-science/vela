@@ -157,9 +157,21 @@ pub(crate) fn cmd_lean(action: LeanAction) {
             actor,
             lean_toolchain,
             mathlib_revision,
+            axioms_report,
+            kernel_recheck_log,
+            kernel_checker,
+            kernel_checker_version,
+            allowed_axioms,
+            forbidden_axioms,
+            out_tcb,
             json,
         } => {
-            use vela_protocol::lean_verification::{LeanVerification, VerificationDraft};
+            use vela_protocol::lean_verification::{
+                KernelRecheck, LeanVerification, VerificationDraft,
+            };
+            use vela_protocol::tcb_policy::{
+                TcbDraft, TcbPolicy, DEFAULT_ALLOWED_AXIOMS, FORBIDDEN_AXIOMS,
+            };
 
             let key_hex = std::fs::read_to_string(&key)
                 .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
@@ -195,10 +207,57 @@ pub(crate) fn cmd_lean(action: LeanAction) {
                     .unwrap_or_else(|| "unknown".to_string())
             });
 
+            // Build the TCB policy (allow/forbid lists default to the
+            // standard sets) and record it as a content-addressed object.
+            let csv = |s: Option<String>, default: &[&str]| -> Vec<String> {
+                match s {
+                    Some(v) => v
+                        .split(',')
+                        .map(|x| x.trim().to_string())
+                        .filter(|x| !x.is_empty())
+                        .collect(),
+                    None => default.iter().map(|x| (*x).to_string()).collect(),
+                }
+            };
+            let policy = TcbPolicy::build(TcbDraft {
+                allowed_axioms: csv(allowed_axioms, DEFAULT_ALLOWED_AXIOMS),
+                forbidden_axioms: csv(forbidden_axioms, FORBIDDEN_AXIOMS),
+                kernel_checker: kernel_checker.clone(),
+                kernel_checker_version: kernel_checker_version.clone(),
+                lean_toolchain: toolchain.clone(),
+                mathlib_revision: mathlib.clone(),
+            })
+            .unwrap_or_else(|e| fail_return(&format!("build tcb policy: {e}")));
+
+            // External kernel re-check outcome.
+            let recheck = match &kernel_recheck_log {
+                None => KernelRecheck::NotRun,
+                Some(p) => match std::fs::read_to_string(p) {
+                    Ok(t) if t.contains("KERNEL_RECHECK_FAILED") => KernelRecheck::Failed,
+                    Ok(_) => KernelRecheck::Passed,
+                    Err(e) => fail_return(&format!("read kernel re-check log {}: {e}", p.display())),
+                },
+            };
+
+            // Per-decl axiom report (absent => axiom-unknown / legacy records).
+            let axioms_map = axioms_report.as_ref().map(|p| {
+                let t = std::fs::read_to_string(p).unwrap_or_else(|e| {
+                    fail_return(&format!("read axioms report {}: {e}", p.display()))
+                });
+                parse_axioms_report(&t)
+            });
+
             let out = out_dir.unwrap_or_else(|| anchors_dir.clone());
             if let Err(e) = std::fs::create_dir_all(&out) {
                 fail(&format!("create {}: {e}", out.display()));
             }
+            // Persist the policy object.
+            let tcb_path = out_tcb.unwrap_or_else(|| out.join("policy.vtcb.json"));
+            std::fs::write(
+                &tcb_path,
+                format!("{}\n", serde_json::to_string_pretty(&policy).expect("serialize tcb")),
+            )
+            .unwrap_or_else(|e| fail_return(&format!("write {}: {e}", tcb_path.display())));
 
             let now = chrono::Utc::now().to_rfc3339();
             let mut summary = Vec::new();
@@ -226,6 +285,59 @@ pub(crate) fn cmd_lean(action: LeanAction) {
                 let anchor: vela_protocol::lean_anchors::LeanAnchor = serde_json::from_str(&body)
                     .unwrap_or_else(|e| fail_return(&format!("parse {}: {e}", path.display())));
 
+                // Classify the theorem's axioms when a report is present.
+                let (status, axioms, verdict, kernel_recheck, axioms_hash, tcb_id) =
+                    match &axioms_map {
+                        None => (
+                            "verified".to_string(),
+                            Vec::new(),
+                            None,
+                            None,
+                            String::new(),
+                            String::new(),
+                        ),
+                        Some(map) => {
+                            let decl = THEOREMS
+                                .iter()
+                                .find(|d| d.id == anchor.theorem_id)
+                                .map(|d| d.decl.to_string())
+                                .unwrap_or_else(|| {
+                                    fail_return(&format!(
+                                        "anchor T{} is not in the theorem registry",
+                                        anchor.theorem_id
+                                    ))
+                                });
+                            // Fail closed: a report is present but this decl is
+                            // absent. Never silently mint an axiom-unknown
+                            // (and thus possibly `verified`) record.
+                            let axioms = map.get(&decl).cloned().unwrap_or_else(|| {
+                                fail_return(&format!(
+                                    "axioms report has no entry for decl `{decl}` (T{}); \
+                                     refusing to classify it as clean",
+                                    anchor.theorem_id
+                                ))
+                            });
+                            let verdict = policy.classify(&axioms);
+                            let status = axiom_status(verdict, &axioms, recheck).to_string();
+                            let line_digest = {
+                                let mut h = sha2::Sha256::new();
+                                sha2::Digest::update(
+                                    &mut h,
+                                    format!("{decl}|{}", axioms.join(",")).as_bytes(),
+                                );
+                                hex::encode(h.finalize())
+                            };
+                            (
+                                status,
+                                axioms,
+                                Some(verdict),
+                                Some(recheck),
+                                line_digest,
+                                policy.tcb_id.clone(),
+                            )
+                        }
+                    };
+
                 let record = LeanVerification::build(
                     VerificationDraft {
                         anchor_id: anchor.anchor_id.clone(),
@@ -235,9 +347,14 @@ pub(crate) fn cmd_lean(action: LeanAction) {
                         lean_toolchain: toolchain.clone(),
                         mathlib_revision: mathlib.clone(),
                         verifier_output_hash: verifier_output_hash.clone(),
-                        status: "verified".to_string(),
+                        status,
                         verified_at: now.clone(),
                         verifier_actor: actor.clone(),
+                        tcb_id,
+                        axioms,
+                        axiom_verdict: verdict,
+                        kernel_recheck,
+                        axioms_output_hash: axioms_hash,
                     },
                     &signing,
                 )
@@ -252,6 +369,8 @@ pub(crate) fn cmd_lean(action: LeanAction) {
                     "theorem_id": anchor.theorem_id,
                     "anchor_id": anchor.anchor_id,
                     "verification_id": record.verification_id,
+                    "status": record.status,
+                    "axiom_verdict": record.axiom_verdict.map(|v| v.as_str()),
                     "out": record_path.display().to_string(),
                 }));
             }
@@ -263,22 +382,26 @@ pub(crate) fn cmd_lean(action: LeanAction) {
                     "verifier_output_hash": verifier_output_hash,
                     "lean_toolchain": toolchain,
                     "mathlib_revision": mathlib,
+                    "tcb_id": policy.tcb_id,
+                    "kernel_recheck": recheck.as_str(),
                     "records": summary,
                 });
                 print_json(&payload);
             } else {
                 println!(
-                    "{} signed {} verification record(s) under {} (toolchain {})",
+                    "{} signed {} verification record(s) under {} (toolchain {}, tcb {})",
                     style::ok("lean.verify-all"),
                     summary.len(),
                     out.display(),
-                    toolchain
+                    toolchain,
+                    policy.tcb_id,
                 );
             }
         }
         LeanAction::VerifyCheck {
             record,
             anchor,
+            tcb,
             json,
         } => {
             use vela_protocol::lean_verification::LeanVerification;
@@ -288,6 +411,34 @@ pub(crate) fn cmd_lean(action: LeanAction) {
                 .unwrap_or_else(|e| fail_return(&format!("parse verification: {e}")));
             rec.verify()
                 .unwrap_or_else(|e| fail_return(&format!("verify failed: {e}")));
+            // Independently re-classify the record's axioms against the policy.
+            if let Some(tcb_path) = tcb {
+                use vela_protocol::tcb_policy::TcbPolicy;
+                let tbody = std::fs::read_to_string(&tcb_path).unwrap_or_else(|e| {
+                    fail_return(&format!("read {}: {e}", tcb_path.display()))
+                });
+                let policy: TcbPolicy = serde_json::from_str(&tbody)
+                    .unwrap_or_else(|e| fail_return(&format!("parse tcb policy: {e}")));
+                policy
+                    .verify()
+                    .unwrap_or_else(|e| fail_return(&format!("tcb policy invalid: {e}")));
+                if !rec.tcb_id.is_empty() && rec.tcb_id != policy.tcb_id {
+                    fail(&format!(
+                        "tcb_id mismatch: record cites {}, policy is {}",
+                        rec.tcb_id, policy.tcb_id
+                    ));
+                }
+                if let Some(declared) = rec.axiom_verdict {
+                    let recomputed = policy.classify(&rec.axioms);
+                    if recomputed != declared {
+                        fail(&format!(
+                            "axiom_verdict mismatch: record declares {}, policy recomputes {}",
+                            declared.as_str(),
+                            recomputed.as_str()
+                        ));
+                    }
+                }
+            }
             if let Some(anchor_path) = anchor {
                 let abody = std::fs::read_to_string(&anchor_path).unwrap_or_else(|e| {
                     fail_return(&format!("read {}: {e}", anchor_path.display()))
@@ -327,5 +478,120 @@ pub(crate) fn cmd_lean(action: LeanAction) {
                 );
             }
         }
+    }
+}
+
+/// Parse the per-decl axiom report emitted by `lean/Vela/AxiomAudit.lean`.
+/// Each relevant line has the form `AXIOMS <decl> | a, b, c` (the axiom list
+/// may be empty). Returns a map `decl -> sorted, deduped axiom names`. Lines
+/// without the `AXIOMS ` prefix are ignored, so the report can carry other
+/// diagnostic output.
+fn parse_axioms_report(text: &str) -> std::collections::BTreeMap<String, Vec<String>> {
+    let mut map = std::collections::BTreeMap::new();
+    for line in text.lines() {
+        let line = line.trim();
+        let Some(rest) = line.strip_prefix("AXIOMS ") else {
+            continue;
+        };
+        let (decl, axioms) = match rest.split_once('|') {
+            Some((d, a)) => (d.trim().to_string(), a),
+            None => (rest.trim().to_string(), ""),
+        };
+        let mut list: Vec<String> = axioms
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        list.sort();
+        list.dedup();
+        map.insert(decl, list);
+    }
+    map
+}
+
+/// Decide the verification status string from the axiom verdict, the observed
+/// axioms, and the external kernel re-check:
+/// - a `sorryAx` hole is always `failed_axiom_check` (a genuine proof gap);
+/// - a proof clean except for compiler-trust axioms (`native_decide` etc.) is
+///   the honest `compiler_checked` tier, not a failure;
+/// - any other unlisted axiom is `failed_axiom_check` (conservative default);
+/// - a kernel-clean proof is `verified`, unless the external re-check failed.
+fn axiom_status(
+    verdict: vela_protocol::tcb_policy::AxiomVerdict,
+    axioms: &[String],
+    recheck: vela_protocol::lean_verification::KernelRecheck,
+) -> &'static str {
+    use vela_protocol::lean_verification::KernelRecheck;
+    use vela_protocol::tcb_policy::AxiomVerdict;
+    if axioms.iter().any(|a| a == "sorryAx") {
+        return "failed_axiom_check";
+    }
+    match verdict {
+        AxiomVerdict::ForbiddenAxiom => "compiler_checked",
+        AxiomVerdict::UnlistedAxiom => "failed_axiom_check",
+        AxiomVerdict::KernelClean => {
+            if recheck == KernelRecheck::Failed {
+                "failed_axiom_check"
+            } else {
+                "verified"
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vela_protocol::lean_verification::KernelRecheck;
+    use vela_protocol::tcb_policy::{TcbPolicy, AxiomVerdict};
+
+    fn policy() -> TcbPolicy {
+        TcbPolicy::default_for("leanprover/lean4:v4.29.1", "v4.29.1", "none", "").unwrap()
+    }
+
+    #[test]
+    fn parse_report_keys_by_decl() {
+        let text = "noise line\n\
+            AXIOMS Vela.Foo.bar | propext, Classical.choice\n\
+            AXIOMS Vela.Foo.baz | \n\
+            AXIOMS Vela.Foo.qux | Lean.ofReduceBool, Lean.trustCompiler\n";
+        let m = parse_axioms_report(text);
+        assert_eq!(m.get("Vela.Foo.bar").unwrap(), &vec!["Classical.choice", "propext"]);
+        assert!(m.get("Vela.Foo.baz").unwrap().is_empty());
+        assert_eq!(
+            m.get("Vela.Foo.qux").unwrap(),
+            &vec!["Lean.ofReduceBool", "Lean.trustCompiler"]
+        );
+    }
+
+    #[test]
+    fn native_decide_is_compiler_checked_not_failed() {
+        let axioms = vec!["Lean.ofReduceBool".to_string(), "Lean.trustCompiler".to_string()];
+        let verdict = policy().classify(&axioms);
+        assert_eq!(verdict, AxiomVerdict::ForbiddenAxiom);
+        assert_eq!(axiom_status(verdict, &axioms, KernelRecheck::NotRun), "compiler_checked");
+    }
+
+    #[test]
+    fn sorry_is_failed_axiom_check() {
+        let axioms = vec!["sorryAx".to_string()];
+        let verdict = policy().classify(&axioms);
+        assert_eq!(axiom_status(verdict, &axioms, KernelRecheck::NotRun), "failed_axiom_check");
+    }
+
+    #[test]
+    fn kernel_clean_verified_unless_recheck_failed() {
+        let axioms = vec!["propext".to_string()];
+        let verdict = policy().classify(&axioms);
+        assert_eq!(axiom_status(verdict, &axioms, KernelRecheck::Passed), "verified");
+        assert_eq!(axiom_status(verdict, &axioms, KernelRecheck::NotRun), "verified");
+        assert_eq!(axiom_status(verdict, &axioms, KernelRecheck::Failed), "failed_axiom_check");
+    }
+
+    #[test]
+    fn unlisted_axiom_is_failed() {
+        let axioms = vec!["MyDev.customAxiom".to_string()];
+        let verdict = policy().classify(&axioms);
+        assert_eq!(axiom_status(verdict, &axioms, KernelRecheck::NotRun), "failed_axiom_check");
     }
 }

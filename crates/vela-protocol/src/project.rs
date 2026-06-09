@@ -197,6 +197,16 @@ pub struct Project {
     /// these on read, never stored. See `verifier_attachment`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub verifier_attachments: Vec<crate::verifier_attachment::VerifierAttachment>,
+    /// Signed banked attempts (`vat_`). Immutable deposits; the verified
+    /// status is DERIVED from the gate + attempt_resolutions on read, never
+    /// stored. See `apply_attempt_deposited`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attempts: Vec<crate::attempt::Attempt>,
+    /// Append-only lifecycle transitions on attempts (`vre_`). Idempotent by
+    /// id; the head per attempt is the latest by `at`. See
+    /// `apply_attempt_resolved` and `Project::head_resolution`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attempt_resolutions: Vec<crate::attempt::ResolutionEvent>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -415,12 +425,25 @@ pub fn assemble(
         verdict_conflicts: Vec::new(),
         contradictions: Vec::new(),
         verifier_attachments: Vec::new(),
+        attempts: Vec::new(),
+        attempt_resolutions: Vec::new(),
     };
     crate::sources::materialize_project(&mut project);
     project
 }
 
 impl Project {
+    /// The head (latest by `at`) lifecycle resolution for an attempt, or
+    /// `None` if the attempt is still an unresolved candidate. Computed on
+    /// read from the append-only `attempt_resolutions`, never stored.
+    #[must_use]
+    pub fn head_resolution(&self, attempt_id: &str) -> Option<&crate::attempt::ResolutionEvent> {
+        self.attempt_resolutions
+            .iter()
+            .filter(|r| r.attempt_id == attempt_id)
+            .max_by(|a, b| a.at.cmp(&b.at))
+    }
+
     /// Return the stable Vela-addressable frontier ID. Prefers the stored
     /// field; if absent, derives from the `frontier.created` genesis
     /// event in `events[0]`; if no genesis event is present, falls back

@@ -1,0 +1,21 @@
+{
+  "description": "Cross-impl conformance for the vat_ Attempt content-address. The Rust minter (crates/vela-protocol/src/attempt.rs, derive_id) and the Python re-verifier (conformance/verify_attempt_id.py) must derive identical ids from the same canonical body. The id preimage is the canonical JSON of the Attempt body with attempt_id, signature, and signer_pubkey_hex zeroed; vat_ + sha256(preimage)[:16]. Key-independent on purpose.",
+  "vectors": [
+    {
+      "name": "minimal",
+      "body": {
+        "attempt_id": "",
+        "claim": "c",
+        "claim_digest": "2e7d2c03a9507ae2",
+        "frontier": "f",
+        "kind": "k",
+        "problem": 1,
+        "schema": "vela.attempt.v0.1",
+        "signature": "",
+        "signer_pubkey_hex": ""
+      },
+      "canonical_preimage": "{\"attempt_id\":\"\",\"claim\":\"c\",\"claim_digest\":\"2e7d2c03a9507ae2\",\"frontier\":\"f\",\"kind\":\"k\",\"problem\":1,\"schema\":\"vela.attempt.v0.1\",\"signature\":\"\",\"signer_pubkey_hex\":\"\"}",
+      "expected_attempt_id": "vat_0008df5d18b5bdea"
+    }
+  ]
+}

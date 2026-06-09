@@ -202,6 +202,17 @@ pub const EVENT_KIND_FRONTIER_CONFLICT_RESOLVED: &str = "frontier.conflict_resol
 /// never platform-adjudicated truth.
 pub const EVENT_KIND_CONTRADICTION_RESOLVED: &str = "contradiction.resolved";
 
+/// A signed banked attempt (`vat_`) is deposited into the frontier. The full
+/// [`crate::attempt::Attempt`] travels in `payload.attempt`; the reducer
+/// verifies its id + signature and upserts it into `Project.attempts`.
+pub const EVENT_KIND_ATTEMPT_DEPOSITED: &str = "attempt.deposited";
+
+/// An append-only lifecycle transition on an attempt. The
+/// [`crate::attempt::ResolutionEvent`] travels in `payload.resolution`; the
+/// reducer upserts it into `Project.attempt_resolutions` (idempotent by
+/// `vre_` id; the head per attempt is the latest by `at`).
+pub const EVENT_KIND_ATTEMPT_RESOLVED: &str = "attempt.resolved";
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StateTarget {
     pub r#type: String,
@@ -538,6 +549,67 @@ pub fn new_contradiction_resolved_event(
             r#type: actor_type.to_string(),
         },
         timestamp,
+        reason: reason.to_string(),
+        before_hash: NULL_HASH.to_string(),
+        after_hash: NULL_HASH.to_string(),
+        payload,
+        caveats,
+        signature: None,
+        schema_artifact_id: None,
+    };
+    event.id = event_id(&event);
+    event
+}
+
+/// Build an `attempt.deposited` event. Target is the attempt's `vat_` id;
+/// the full signed object travels in `payload.attempt`. The reducer verifies
+/// it and upserts into `Project.attempts`.
+pub fn new_attempt_deposited_event(
+    attempt_id: &str,
+    actor_id: &str,
+    actor_type: &str,
+    reason: &str,
+    payload: Value,
+    caveats: Vec<String>,
+) -> StateEvent {
+    let mut event = StateEvent {
+        schema: EVENT_SCHEMA.to_string(),
+        id: String::new(),
+        kind: EVENT_KIND_ATTEMPT_DEPOSITED.to_string(),
+        target: StateTarget { r#type: "attempt".to_string(), id: attempt_id.to_string() },
+        actor: StateActor { id: actor_id.to_string(), r#type: actor_type.to_string() },
+        timestamp: Utc::now().to_rfc3339(),
+        reason: reason.to_string(),
+        before_hash: NULL_HASH.to_string(),
+        after_hash: NULL_HASH.to_string(),
+        payload,
+        caveats,
+        signature: None,
+        schema_artifact_id: None,
+    };
+    event.id = event_id(&event);
+    event
+}
+
+/// Build an `attempt.resolved` event. Target is the resolved attempt's
+/// `vat_` id; the [`crate::attempt::ResolutionEvent`] travels in
+/// `payload.resolution`. The reducer upserts it into
+/// `Project.attempt_resolutions` (idempotent by `vre_` id).
+pub fn new_attempt_resolved_event(
+    attempt_id: &str,
+    actor_id: &str,
+    actor_type: &str,
+    reason: &str,
+    payload: Value,
+    caveats: Vec<String>,
+) -> StateEvent {
+    let mut event = StateEvent {
+        schema: EVENT_SCHEMA.to_string(),
+        id: String::new(),
+        kind: EVENT_KIND_ATTEMPT_RESOLVED.to_string(),
+        target: StateTarget { r#type: "attempt".to_string(), id: attempt_id.to_string() },
+        actor: StateActor { id: actor_id.to_string(), r#type: actor_type.to_string() },
+        timestamp: Utc::now().to_rfc3339(),
         reason: reason.to_string(),
         before_hash: NULL_HASH.to_string(),
         after_hash: NULL_HASH.to_string(),

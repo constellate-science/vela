@@ -1131,6 +1131,8 @@ mod tests {
             verdict_conflicts: vec![],
             contradictions: vec![],
             verifier_attachments: vec![],
+            attempts: vec![],
+            attempt_resolutions: vec![],
         };
 
         let report = verify_frontier_data(&frontier, None).unwrap();
@@ -1183,6 +1185,8 @@ mod tests {
             verdict_conflicts: vec![],
             contradictions: vec![],
             verifier_attachments: vec![],
+            attempts: vec![],
+            attempt_resolutions: vec![],
         }
     }
 

@@ -871,6 +871,8 @@ fn empty_project(name: &str, description: &str, compiled_at: &str) -> Project {
         verdict_conflicts: Vec::new(),
         contradictions: Vec::new(),
         verifier_attachments: Vec::new(),
+        attempts: Vec::new(),
+        attempt_resolutions: Vec::new(),
     }
 }
 

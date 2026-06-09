@@ -918,6 +918,8 @@ mod tests {
             verdict_conflicts: vec![],
             contradictions: vec![],
             verifier_attachments: vec![],
+            attempts: vec![],
+            attempt_resolutions: vec![],
         }
     }
 

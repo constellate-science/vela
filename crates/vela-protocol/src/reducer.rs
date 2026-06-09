@@ -265,6 +265,9 @@ pub fn apply_event_indexed(
         // T7: a contradiction resolution lands on the log. Upsert the
         // resolved Contradiction into state.contradictions by id.
         "contradiction.resolved" => apply_contradiction_resolved(state, event),
+        // Attempt lifecycle: a signed deposit, then append-only resolutions.
+        "attempt.deposited" => apply_attempt_deposited(state, event),
+        "attempt.resolved" => apply_attempt_resolved(state, event),
         other => Err(format!("reducer: unsupported event kind '{other}'")),
     }
 }
@@ -321,6 +324,8 @@ pub fn replay_from_genesis(
         verdict_conflicts: Vec::new(),
         contradictions: Vec::new(),
         verifier_attachments: Vec::new(),
+        attempts: Vec::new(),
+        attempt_resolutions: Vec::new(),
     };
     crate::sources::materialize_project(&mut state);
     // v0.105: build the finding-id index once, reuse across every
@@ -1292,6 +1297,68 @@ fn apply_contradiction_resolved(state: &mut Project, event: &StateEvent) -> Resu
     Ok(())
 }
 
+/// Upsert a signed banked attempt into `state.attempts` when an
+/// `attempt.deposited` event lands. The full object lives in
+/// `payload.attempt`. Integrity: the object must `verify()` (id re-derives,
+/// signature checks, claim_digest matches) — a forged or hand-edited deposit
+/// is rejected. Idempotent by `vat_` id.
+fn apply_attempt_deposited(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    use crate::attempt::Attempt;
+
+    let value = event
+        .payload
+        .get("attempt")
+        .ok_or("attempt.deposited event missing payload.attempt")?
+        .clone();
+    let attempt: Attempt =
+        serde_json::from_value(value).map_err(|e| format!("attempt.deposited payload parse: {e}"))?;
+    attempt
+        .verify()
+        .map_err(|e| format!("attempt.deposited rejected: {e}"))?;
+
+    if let Some(slot) = state
+        .attempts
+        .iter_mut()
+        .find(|a| a.attempt_id == attempt.attempt_id)
+    {
+        *slot = attempt;
+    } else {
+        state.attempts.push(attempt);
+    }
+    Ok(())
+}
+
+/// Append a lifecycle transition into `state.attempt_resolutions` when an
+/// `attempt.resolved` event lands. The [`crate::attempt::ResolutionEvent`]
+/// lives in `payload.resolution`. Integrity: the object must `verify()`
+/// (`vre_` id re-derives). Idempotent by `vre_` id; the head per attempt is
+/// the latest by `at`, computed on read (`Project::head_resolution`).
+fn apply_attempt_resolved(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    use crate::attempt::ResolutionEvent;
+
+    let value = event
+        .payload
+        .get("resolution")
+        .ok_or("attempt.resolved event missing payload.resolution")?
+        .clone();
+    let resolution: ResolutionEvent = serde_json::from_value(value)
+        .map_err(|e| format!("attempt.resolved payload parse: {e}"))?;
+    resolution
+        .verify()
+        .map_err(|e| format!("attempt.resolved rejected: {e}"))?;
+
+    if let Some(slot) = state
+        .attempt_resolutions
+        .iter_mut()
+        .find(|r| r.resolution_id == resolution.resolution_id)
+    {
+        *slot = resolution;
+    } else {
+        state.attempt_resolutions.push(resolution);
+    }
+    Ok(())
+}
+
 /// v0.57: Apply a `finding.span_repaired` event. Appends a
 /// `{section, text}` span object to
 /// `state.findings[i].evidence.evidence_spans`. Idempotent:
@@ -1880,5 +1947,86 @@ mod tests {
             .map(crate::events::finding_hash)
             .collect();
         assert_eq!(hashes_before, hashes_after);
+    }
+
+    #[test]
+    fn attempt_deposit_and_resolution_roundtrip() {
+        use crate::attempt::{Attempt, AttemptDraft, AttemptResolution, ResolutionEvent};
+        use ed25519_dalek::SigningKey;
+        let key = SigningKey::from_bytes(&[7u8; 32]);
+        let mut state = project::assemble("test", vec![], 0, 0, "test");
+
+        let att = Attempt::build(
+            AttemptDraft {
+                problem: 309,
+                kind: "lower_bound".to_string(),
+                claim: "a(8) >= 33".to_string(),
+                ..Default::default()
+            },
+            &key,
+        )
+        .unwrap();
+        let dep = att.deposit_event("agent:opus", "agent", "bank attempt");
+        apply_event(&mut state, &dep).unwrap();
+        assert_eq!(state.attempts.len(), 1);
+        assert_eq!(state.attempts[0].attempt_id, att.attempt_id);
+        // Idempotent: re-applying the same deposit is a no-op.
+        apply_event(&mut state, &dep).unwrap();
+        assert_eq!(state.attempts.len(), 1);
+        // No resolution yet -> still a candidate.
+        assert!(state.head_resolution(&att.attempt_id).is_none());
+
+        let res = ResolutionEvent::new(
+            &att.attempt_id,
+            AttemptResolution::Verified { gate_ref: "gate@vva_x".to_string() },
+            "reviewer:will-blair",
+            "2026-06-09T00:00:00Z",
+            "two independent methods",
+        )
+        .unwrap();
+        apply_event(&mut state, &res.to_state_event("reviewer", "verified")).unwrap();
+        assert_eq!(
+            state.head_resolution(&att.attempt_id).unwrap().resolution.as_str(),
+            "verified"
+        );
+
+        // A later refutation becomes the head (latest by `at`); history kept.
+        let res2 = ResolutionEvent::new(
+            &att.attempt_id,
+            AttemptResolution::Refuted { by_probe: "case_b".to_string() },
+            "reviewer:skeptic",
+            "2026-06-10T00:00:00Z",
+            "Case B breaks it",
+        )
+        .unwrap();
+        apply_event(&mut state, &res2.to_state_event("reviewer", "refuted")).unwrap();
+        assert_eq!(
+            state.head_resolution(&att.attempt_id).unwrap().resolution.as_str(),
+            "refuted"
+        );
+        assert_eq!(state.attempt_resolutions.len(), 2);
+    }
+
+    #[test]
+    fn forged_attempt_deposit_is_rejected_by_reducer() {
+        use crate::attempt::{Attempt, AttemptDraft};
+        use ed25519_dalek::SigningKey;
+        let key = SigningKey::from_bytes(&[9u8; 32]);
+        let mut state = project::assemble("test", vec![], 0, 0, "test");
+        let att = Attempt::build(
+            AttemptDraft {
+                problem: 1,
+                kind: "k".to_string(),
+                claim: "c".to_string(),
+                ..Default::default()
+            },
+            &key,
+        )
+        .unwrap();
+        let mut dep = att.deposit_event("agent:opus", "agent", "x");
+        // Hand-edit the embedded attempt: the signature no longer verifies.
+        dep.payload["attempt"]["claim"] = serde_json::json!("tampered");
+        assert!(apply_event(&mut state, &dep).is_err());
+        assert_eq!(state.attempts.len(), 0);
     }
 }

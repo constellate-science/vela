@@ -132,6 +132,15 @@ pub enum ProbeKind {
     FiniteSizeExtrapolation,
     /// Re-implement the construction independently and compare.
     IndependentReimplementation,
+    /// Statement-faithfulness: throw a prover at the formalized statement S
+    /// AND its negation ¬S. Both provable ⇒ the formalization is
+    /// vacuous/contradictory (misformalized). Also flags a statement that is
+    /// trivially provable, or a proof that uses no hypothesis. A `Refuted`
+    /// result here means the *verification claim* is unfaithful, not that the
+    /// underlying mathematics is false — and it drives the gate to Refuted so
+    /// a green kernel seal can never stand on a statement that does not mean
+    /// what it claims.
+    FormalismFidelity,
 }
 
 impl ProbeKind {
@@ -143,6 +152,7 @@ impl ProbeKind {
             Self::BoundaryDualFeasibility => "boundary_dual_feasibility",
             Self::FiniteSizeExtrapolation => "finite_size_extrapolation",
             Self::IndependentReimplementation => "independent_reimplementation",
+            Self::FormalismFidelity => "formalism_fidelity",
         }
     }
 }
@@ -187,6 +197,53 @@ pub enum AttachmentOutcome {
     Failed,
 }
 
+/// A method-specific integrity claim layered on top of [`AttachmentOutcome`].
+///
+/// `Passed` says the method accepted; this says whether the method ran
+/// *soundly*. A Lean proof can pass `lake build` yet depend on
+/// `native_decide` (compiler trust) or `sorry` — sound elaboration, unsound
+/// kernel claim. The producer that mints a `lean_kernel` attachment sets this
+/// from the [`crate::tcb_policy::AxiomVerdict`] of the underlying
+/// verification, so the gate can refuse compromised methods without ever
+/// importing Lean specifics (G5).
+///
+/// Default is [`MethodIntegrity::Unattested`], serialized as *absent* so
+/// pre-existing `vva_` records re-derive their content-addressed id
+/// unchanged.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MethodIntegrity {
+    /// No method-specific integrity claim is made (legacy, or a method for
+    /// which integrity is not applicable). Neither trusted nor rejected.
+    #[default]
+    Unattested,
+    /// The method self-certifies clean (e.g. the Lean axiom set is
+    /// `KernelClean`, or an independent recompute matched).
+    Sound,
+    /// The method ran but its integrity check failed (a forbidden/unlisted
+    /// Lean axiom, a failed external kernel re-check, a solver in an
+    /// untrusted mode). Excluded from the matched set by the gate.
+    Compromised,
+}
+
+impl MethodIntegrity {
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Unattested => "unattested",
+            Self::Sound => "sound",
+            Self::Compromised => "compromised",
+        }
+    }
+
+    /// Used by `skip_serializing_if` so the default serializes as absent,
+    /// keeping legacy `vva_` ids stable.
+    #[must_use]
+    pub fn is_unattested(&self) -> bool {
+        *self == Self::Unattested
+    }
+}
+
 /// A single verifier's judgment, content-addressed and bound to the
 /// exact claim it checked.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -212,6 +269,10 @@ pub struct VerifierAttachment {
     #[serde(default)]
     pub adversarial_probes: Vec<AdversarialProbe>,
     pub outcome: AttachmentOutcome,
+    /// Method-specific integrity (G5). Absent on legacy records; a
+    /// `Compromised` attachment is excluded from the matched set.
+    #[serde(default, skip_serializing_if = "MethodIntegrity::is_unattested")]
+    pub method_integrity: MethodIntegrity,
     pub verifier_actor: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub note: String,
@@ -264,11 +325,23 @@ impl VerifierAttachment {
             match_to_claim: draft.match_to_claim,
             adversarial_probes: draft.adversarial_probes,
             outcome: draft.outcome,
+            method_integrity: MethodIntegrity::Unattested,
             verifier_actor: draft.verifier_actor,
             note: draft.note,
         };
         att.id = att.derive_id()?;
         Ok(att)
+    }
+
+    /// Set the method integrity and re-derive the content-addressed id.
+    /// The Lean producer calls this with the [`crate::tcb_policy::AxiomVerdict`]
+    /// mapped through [`crate::lean_verification::LeanVerification::to_attachment_integrity`].
+    /// Because integrity is part of the canonical body, a `Sound`/`Compromised`
+    /// attachment necessarily has a different id than its `Unattested` form.
+    pub fn with_method_integrity(mut self, integrity: MethodIntegrity) -> Result<Self, String> {
+        self.method_integrity = integrity;
+        self.id = self.derive_id()?;
+        Ok(self)
     }
 
     /// Re-derive the content-addressed id from the canonical body with
@@ -304,12 +377,24 @@ impl VerifierAttachment {
     }
 
     /// Whether this attachment is well-formed *and* matches the given
-    /// claim digest with `outcome = passed` and `match_to_claim`.
+    /// claim digest with `outcome = passed`, `match_to_claim`, and an
+    /// integrity that is not `Compromised` (G5).
     fn is_passing_match(&self, current_digest: &str) -> bool {
         self.id.starts_with("vva_")
             && self.outcome == AttachmentOutcome::Passed
             && self.claim_digest == current_digest
             && self.match_to_claim.matches
+            && self.method_integrity != MethodIntegrity::Compromised
+    }
+
+    /// Whether this attachment would have matched the claim but is excluded
+    /// solely because its method integrity is `Compromised` (G5 reason).
+    fn is_compromised_match(&self, current_digest: &str) -> bool {
+        self.id.starts_with("vva_")
+            && self.outcome == AttachmentOutcome::Passed
+            && self.claim_digest == current_digest
+            && self.match_to_claim.matches
+            && self.method_integrity == MethodIntegrity::Compromised
     }
 }
 
@@ -369,7 +454,26 @@ pub fn derive_gate_status(
         .iter()
         .filter(|a| a.is_passing_match(current_claim_digest))
         .collect();
-    if !passed.is_empty() && matched.len() < passed.len() {
+
+    // G5 method-integrity: an attachment that *would* match the claim but
+    // ran with a compromised method (e.g. a forbidden Lean axiom such as
+    // `native_decide`/`sorry`, or a failed external kernel re-check) is
+    // excluded from the matched set. A `lean_kernel` proof that trusts the
+    // compiler can therefore never push a finding to Verified.
+    let compromised = attachments
+        .iter()
+        .filter(|a| a.is_compromised_match(current_claim_digest))
+        .count();
+    if compromised > 0 {
+        reasons.push(format!(
+            "G5: {compromised} attachment(s) excluded — method integrity compromised \
+             (e.g. forbidden Lean axiom or failed kernel re-check)"
+        ));
+    }
+
+    // Genuine claim mismatch: passed, but neither matched nor merely
+    // compromised (wrong claim digest, or match_to_claim=false).
+    if passed.len() > matched.len() + compromised {
         reasons.push(
             "G2: an attachment passed but is unmatched to the current claim (passed_but_unmatched)"
                 .to_string(),
@@ -625,6 +729,110 @@ mod tests {
         let outcome = derive_gate_status(&digest, &[a1, a2]);
         assert_eq!(outcome.status, GateStatus::NeedsVerification);
         assert!(outcome.reasons.iter().any(|r| r.starts_with("G3")));
+    }
+
+    #[test]
+    fn formalism_fidelity_refuted_drives_refuted() {
+        // A FormalismFidelity probe that refutes (statement and negation both
+        // provable => misformalized) drives the whole gate to Refuted, so a
+        // kernel-clean proof of an unfaithful statement cannot stand.
+        let digest = claim_digest("claim X");
+        let fidelity_refuted = AdversarialProbe {
+            kind: ProbeKind::FormalismFidelity,
+            result: ProbeResult::Refuted,
+            note: "statement and its negation both provable".to_string(),
+        };
+        let a1 = attach(
+            &digest,
+            VerifierMethod::LeanKernel,
+            "lean4@4.29.1",
+            vec![],
+            vec![fidelity_refuted],
+        );
+        let a2 = attach(
+            &digest,
+            VerifierMethod::ComputationalSearch,
+            "cp-sat",
+            vec![a1.id.clone()],
+            vec![surviving_probe()],
+        );
+        let outcome = derive_gate_status(&digest, &[a1, a2]);
+        assert_eq!(outcome.status, GateStatus::Refuted);
+    }
+
+    #[test]
+    fn compromised_attachment_excluded_from_matched() {
+        // Two attachments that would otherwise verify, but the second ran a
+        // compromised method (e.g. a native_decide Lean proof). It is
+        // excluded from the matched set, so the finding falls back to
+        // NeedsVerification with a G5 reason — never Verified.
+        let digest = claim_digest("claim X");
+        let a1 = attach(
+            &digest,
+            VerifierMethod::ComputationalSearch,
+            "cp-sat",
+            vec![],
+            vec![surviving_probe()],
+        );
+        let a2 = attach(
+            &digest,
+            VerifierMethod::LeanKernel,
+            "lean4@4.29.1",
+            vec![a1.id.clone()],
+            vec![surviving_probe()],
+        )
+        .with_method_integrity(MethodIntegrity::Compromised)
+        .unwrap();
+        let outcome = derive_gate_status(&digest, &[a1, a2]);
+        assert_eq!(outcome.status, GateStatus::NeedsVerification);
+        assert!(outcome.reasons.iter().any(|r| r.starts_with("G5")));
+        // and it must NOT be misreported as a plain claim mismatch
+        assert!(!outcome.reasons.iter().any(|r| r.starts_with("G2")));
+    }
+
+    #[test]
+    fn sound_attachment_still_verifies() {
+        // Regression: explicitly marking integrity Sound on both legs keeps
+        // the finding Verified (the field defaults out, ids stay stable).
+        let digest = claim_digest("claim X");
+        let a1 = attach(
+            &digest,
+            VerifierMethod::ComputationalSearch,
+            "cp-sat",
+            vec![],
+            vec![surviving_probe()],
+        )
+        .with_method_integrity(MethodIntegrity::Sound)
+        .unwrap();
+        let a2 = attach(
+            &digest,
+            VerifierMethod::LeanKernel,
+            "lean4@4.29.1",
+            vec![a1.id.clone()],
+            vec![surviving_probe()],
+        )
+        .with_method_integrity(MethodIntegrity::Sound)
+        .unwrap();
+        let outcome = derive_gate_status(&digest, &[a1, a2]);
+        assert_eq!(outcome.status, GateStatus::Verified, "{:?}", outcome.reasons);
+    }
+
+    #[test]
+    fn unattested_integrity_serializes_absent_and_id_is_stable() {
+        // Legacy-id stability: an Unattested attachment must serialize
+        // without a method_integrity key, so a record minted before this
+        // field existed re-derives the same vva_ id.
+        let digest = claim_digest("claim X");
+        let a = attach(
+            &digest,
+            VerifierMethod::ComputationalSearch,
+            "cp-sat",
+            vec![],
+            vec![surviving_probe()],
+        );
+        let json = serde_json::to_string(&a).unwrap();
+        assert!(!json.contains("method_integrity"), "default must serialize absent: {json}");
+        a.verify().unwrap();
     }
 
     #[test]

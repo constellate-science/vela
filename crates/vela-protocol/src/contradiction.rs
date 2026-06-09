@@ -111,6 +111,24 @@ impl Contradiction {
         }
     }
 
+    /// Mint a CANDIDATE contradiction recording a formalism-fidelity
+    /// failure: a `FormalismFidelity` adversarial probe found the formalized
+    /// statement and its negation both provable (or the statement trivially
+    /// true / proof using no hypothesis), so the formalization does not
+    /// capture the intended claim. `formalization_ref` is the offending
+    /// proof/verification id (`vlv_`/`vpv_`/`vva_`). Per the doctrine this is
+    /// only ever a `Candidate` — a signal for human review, `authoritative`
+    /// never true, minted at the producer seam, never inside the gate.
+    #[must_use]
+    pub fn from_misformalization(
+        frontier_id: &str,
+        finding_id: &str,
+        formalization_ref: &str,
+        basis: &str,
+    ) -> Self {
+        Self::candidate(frontier_id, finding_id, formalization_ref, basis)
+    }
+
     /// True if the contradiction is open (unresolved) as of world-time
     /// `at`: it had been opened on or before `at` (or has no explicit
     /// open time yet) and was not closed on or before `at`. This is the
@@ -343,6 +361,29 @@ mod tests {
             c.contradiction_id, resolved.contradiction_id,
             "status transition must preserve identity"
         );
+    }
+
+    #[test]
+    fn misformalization_mints_a_candidate_only() {
+        // A formalism-fidelity failure mints a Candidate contradiction
+        // pointing at the offending proof, never auto-adjudicated.
+        let c = Contradiction::from_misformalization(
+            "vfr_x",
+            "vf_finding",
+            "vlv_badproof00000000",
+            "formalism fidelity: statement and negation both provable",
+        );
+        assert_eq!(c.status, ContradictionStatus::Candidate);
+        assert!(!c.is_adjudicated());
+        assert_eq!(c.claim_boundary()["authoritative"], false);
+        // Re-deriving the same misformalization yields the same id (stable).
+        let c2 = Contradiction::from_misformalization(
+            "vfr_x",
+            "vf_finding",
+            "vlv_badproof00000000",
+            "different basis text",
+        );
+        assert_eq!(c.contradiction_id, c2.contradiction_id);
     }
 
     #[test]

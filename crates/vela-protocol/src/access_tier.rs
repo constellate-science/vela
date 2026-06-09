@@ -213,6 +213,8 @@ fn clone_project_metadata(p: &crate::project::Project) -> crate::project::Projec
         verdict_conflicts: Vec::new(),
         contradictions: Vec::new(),
         verifier_attachments: Vec::new(),
+        attempts: Vec::new(),
+        attempt_resolutions: Vec::new(),
     }
 }
 

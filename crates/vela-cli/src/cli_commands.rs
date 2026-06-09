@@ -3107,6 +3107,38 @@ pub(crate) enum LeanAction {
         /// `mathlib4.git` pin in `lean/lakefile.lean`.
         #[arg(long)]
         mathlib_revision: Option<String>,
+        /// Path to the per-decl axiom report emitted by `Vela/AxiomAudit.lean`
+        /// (lines `AXIOMS <decl> | axiom1, axiom2`). When present, each
+        /// theorem's axioms are classified against the TCB policy and the
+        /// record status is set accordingly. When absent, records are minted
+        /// axiom-unknown (legacy behavior).
+        #[arg(long)]
+        axioms_report: Option<PathBuf>,
+        /// Path to the external kernel re-check log (lean4checker/Lean4Lean).
+        /// Presence of the marker `KERNEL_RECHECK_FAILED` marks the re-check
+        /// failed; an empty/clean log marks it passed; omitting the flag
+        /// marks it not-run.
+        #[arg(long)]
+        kernel_recheck_log: Option<PathBuf>,
+        /// External kernel checker name recorded in the TCB policy
+        /// (e.g. `lean4checker`). Defaults to `none`.
+        #[arg(long, default_value = "none")]
+        kernel_checker: String,
+        /// External kernel checker version pin (e.g. `lean4checker@v4.29.1`).
+        #[arg(long, default_value = "")]
+        kernel_checker_version: String,
+        /// Comma-separated allowlist of axioms. Defaults to the three
+        /// standard classical axioms.
+        #[arg(long)]
+        allowed_axioms: Option<String>,
+        /// Comma-separated forbidden axioms. Defaults to the standard
+        /// compiler-trust / `sorry` set.
+        #[arg(long)]
+        forbidden_axioms: Option<String>,
+        /// Output path for the `vtcb_` policy JSON (default:
+        /// `<out_dir>/policy.vtcb.json`).
+        #[arg(long)]
+        out_tcb: Option<PathBuf>,
         #[arg(long)]
         json: bool,
     },
@@ -3118,6 +3150,11 @@ pub(crate) enum LeanAction {
         /// record's anchor_id + module_sha256 still match.
         #[arg(long)]
         anchor: Option<PathBuf>,
+        /// Optional path to the `vtcb_` policy JSON. When present,
+        /// re-classifies the record's axioms and asserts the stored
+        /// `axiom_verdict` and `tcb_id` match.
+        #[arg(long)]
+        tcb: Option<PathBuf>,
         #[arg(long)]
         json: bool,
     },
