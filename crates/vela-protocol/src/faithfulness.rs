@@ -92,12 +92,9 @@ impl FidelityVerdict {
     }
 }
 
-/// `sha256(claim.trim())[:16]` — identical to `attempt::claim_digest` and
-/// `verifier_attachment::claim_digest`, so a claim has one digest everywhere.
-#[must_use]
-pub fn claim_digest(claim: &str) -> String {
-    hex::encode(Sha256::digest(claim.trim().as_bytes()))[..16].to_string()
-}
+/// The one canonical claim digest, defined in `verifier_attachment` and
+/// re-exported so a claim has one digest everywhere.
+pub use crate::verifier_attachment::claim_digest;
 
 /// A signed attestation that a formal statement faithfully encodes an informal
 /// claim.

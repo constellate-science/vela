@@ -561,10 +561,11 @@ pub fn new_contradiction_resolved_event(
     event
 }
 
-/// Build an `attempt.deposited` event. Target is the attempt's `vat_` id;
-/// the full signed object travels in `payload.attempt`. The reducer verifies
-/// it and upserts into `Project.attempts`.
-pub fn new_attempt_deposited_event(
+/// Shared builder for the attempt-lifecycle events (`attempt.deposited` /
+/// `attempt.resolved`): both target an attempt's `vat_` id and differ only in
+/// `kind` and the payload they carry.
+fn new_attempt_event(
+    kind: &str,
     attempt_id: &str,
     actor_id: &str,
     actor_type: &str,
@@ -575,7 +576,7 @@ pub fn new_attempt_deposited_event(
     let mut event = StateEvent {
         schema: EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: EVENT_KIND_ATTEMPT_DEPOSITED.to_string(),
+        kind: kind.to_string(),
         target: StateTarget { r#type: "attempt".to_string(), id: attempt_id.to_string() },
         actor: StateActor { id: actor_id.to_string(), r#type: actor_type.to_string() },
         timestamp: Utc::now().to_rfc3339(),
@@ -591,9 +592,22 @@ pub fn new_attempt_deposited_event(
     event
 }
 
-/// Build an `attempt.resolved` event. Target is the resolved attempt's
-/// `vat_` id; the [`crate::attempt::ResolutionEvent`] travels in
-/// `payload.resolution`. The reducer upserts it into
+/// Build an `attempt.deposited` event. The full signed object travels in
+/// `payload.attempt`; the reducer verifies it and upserts into
+/// `Project.attempts`.
+pub fn new_attempt_deposited_event(
+    attempt_id: &str,
+    actor_id: &str,
+    actor_type: &str,
+    reason: &str,
+    payload: Value,
+    caveats: Vec<String>,
+) -> StateEvent {
+    new_attempt_event(EVENT_KIND_ATTEMPT_DEPOSITED, attempt_id, actor_id, actor_type, reason, payload, caveats)
+}
+
+/// Build an `attempt.resolved` event. The [`crate::attempt::ResolutionEvent`]
+/// travels in `payload.resolution`; the reducer upserts it into
 /// `Project.attempt_resolutions` (idempotent by `vre_` id).
 pub fn new_attempt_resolved_event(
     attempt_id: &str,
@@ -603,23 +617,7 @@ pub fn new_attempt_resolved_event(
     payload: Value,
     caveats: Vec<String>,
 ) -> StateEvent {
-    let mut event = StateEvent {
-        schema: EVENT_SCHEMA.to_string(),
-        id: String::new(),
-        kind: EVENT_KIND_ATTEMPT_RESOLVED.to_string(),
-        target: StateTarget { r#type: "attempt".to_string(), id: attempt_id.to_string() },
-        actor: StateActor { id: actor_id.to_string(), r#type: actor_type.to_string() },
-        timestamp: Utc::now().to_rfc3339(),
-        reason: reason.to_string(),
-        before_hash: NULL_HASH.to_string(),
-        after_hash: NULL_HASH.to_string(),
-        payload,
-        caveats,
-        signature: None,
-        schema_artifact_id: None,
-    };
-    event.id = event_id(&event);
-    event
+    new_attempt_event(EVENT_KIND_ATTEMPT_RESOLVED, attempt_id, actor_id, actor_type, reason, payload, caveats)
 }
 
 /// Canonical hash of one evidence atom. Mirrors `finding_hash` for the

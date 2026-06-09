@@ -380,20 +380,24 @@ impl VerifierAttachment {
     /// claim digest with `outcome = passed`, `match_to_claim`, and an
     /// integrity that is not `Compromised` (G5).
     fn is_passing_match(&self, current_digest: &str) -> bool {
+        self.is_base_match(current_digest)
+            && self.method_integrity != MethodIntegrity::Compromised
+    }
+
+    /// Well-formed, passed, claim-matched — everything but the integrity check.
+    /// The integrity check is the only thing distinguishing a passing match
+    /// (G5 ok) from a compromised one (G5 excluded).
+    fn is_base_match(&self, current_digest: &str) -> bool {
         self.id.starts_with("vva_")
             && self.outcome == AttachmentOutcome::Passed
             && self.claim_digest == current_digest
             && self.match_to_claim.matches
-            && self.method_integrity != MethodIntegrity::Compromised
     }
 
     /// Whether this attachment would have matched the claim but is excluded
     /// solely because its method integrity is `Compromised` (G5 reason).
     fn is_compromised_match(&self, current_digest: &str) -> bool {
-        self.id.starts_with("vva_")
-            && self.outcome == AttachmentOutcome::Passed
-            && self.claim_digest == current_digest
-            && self.match_to_claim.matches
+        self.is_base_match(current_digest)
             && self.method_integrity == MethodIntegrity::Compromised
     }
 }

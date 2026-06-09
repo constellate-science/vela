@@ -1297,6 +1297,17 @@ fn apply_contradiction_resolved(state: &mut Project, event: &StateEvent) -> Resu
     Ok(())
 }
 
+/// Idempotent upsert into a content-addressed collection: replace the element
+/// that matches `item` by `same`, or append it. The shared shape behind the
+/// attempt/resolution reducer arms.
+fn upsert_by<T>(vec: &mut Vec<T>, item: T, same: impl Fn(&T, &T) -> bool) {
+    if let Some(slot) = vec.iter_mut().find(|x| same(x, &item)) {
+        *slot = item;
+    } else {
+        vec.push(item);
+    }
+}
+
 /// Upsert a signed banked attempt into `state.attempts` when an
 /// `attempt.deposited` event lands. The full object lives in
 /// `payload.attempt`. Integrity: the object must `verify()` (id re-derives,
@@ -1316,15 +1327,7 @@ fn apply_attempt_deposited(state: &mut Project, event: &StateEvent) -> Result<()
         .verify()
         .map_err(|e| format!("attempt.deposited rejected: {e}"))?;
 
-    if let Some(slot) = state
-        .attempts
-        .iter_mut()
-        .find(|a| a.attempt_id == attempt.attempt_id)
-    {
-        *slot = attempt;
-    } else {
-        state.attempts.push(attempt);
-    }
+    upsert_by(&mut state.attempts, attempt, |a, b| a.attempt_id == b.attempt_id);
     Ok(())
 }
 
@@ -1347,15 +1350,9 @@ fn apply_attempt_resolved(state: &mut Project, event: &StateEvent) -> Result<(),
         .verify()
         .map_err(|e| format!("attempt.resolved rejected: {e}"))?;
 
-    if let Some(slot) = state
-        .attempt_resolutions
-        .iter_mut()
-        .find(|r| r.resolution_id == resolution.resolution_id)
-    {
-        *slot = resolution;
-    } else {
-        state.attempt_resolutions.push(resolution);
-    }
+    upsert_by(&mut state.attempt_resolutions, resolution, |a, b| {
+        a.resolution_id == b.resolution_id
+    });
     Ok(())
 }
 

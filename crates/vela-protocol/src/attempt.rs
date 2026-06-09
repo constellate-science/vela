@@ -145,12 +145,10 @@ pub struct AttemptDraft {
     pub provenance: Provenance,
 }
 
-/// `sha256(claim.trim())[:16]` — identical to
-/// `verifier_attachment::claim_digest` and `canopus_trust.py`.
-#[must_use]
-pub fn claim_digest(claim: &str) -> String {
-    hex::encode(Sha256::digest(claim.trim().as_bytes()))[..16].to_string()
-}
+/// The one canonical claim digest (`sha256(claim.trim())[:16]`), defined in
+/// `verifier_attachment` and re-exported here so a claim has one digest
+/// everywhere (and matches `canopus_trust.py`).
+pub use crate::verifier_attachment::claim_digest;
 
 impl Attempt {
     /// Build and sign a banked attempt. The id is content-addressed over the

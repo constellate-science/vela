@@ -3442,7 +3442,6 @@ dependencies = [
  "colored",
  "ed25519-dalek",
  "hex",
- "indicatif",
  "rand 0.8.6",
  "regex",
  "reqwest",
