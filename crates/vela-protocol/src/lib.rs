@@ -6,6 +6,7 @@ pub mod canonical;
 pub mod causal_graph;
 pub mod confidence;
 pub mod endorsement;
+pub mod identity;
 pub mod diff;
 pub mod diff_pack_review;
 pub mod events;
