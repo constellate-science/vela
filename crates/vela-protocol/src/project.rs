@@ -212,6 +212,11 @@ pub struct Project {
     /// read, never stored. See `apply_transfer_deposited`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub transfers: Vec<crate::transfer::Transfer>,
+    /// Signed significance endorsements (`ven_`). Stored as individual records,
+    /// NEVER aggregated into a score — significance is social and uncomputed by
+    /// design. See `apply_endorsement_deposited` and `docs/SIGNIFICANCE_SLOT.md`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub endorsements: Vec<crate::endorsement::Endorsement>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -433,6 +438,7 @@ pub fn assemble(
         attempts: Vec::new(),
         attempt_resolutions: Vec::new(),
         transfers: Vec::new(),
+        endorsements: Vec::new(),
     };
     crate::sources::materialize_project(&mut project);
     project

@@ -268,6 +268,7 @@ pub fn apply_event_indexed(
         // Attempt lifecycle: a signed deposit, then append-only resolutions.
         "attempt.deposited" => apply_attempt_deposited(state, event),
         "transfer.deposited" => apply_transfer_deposited(state, event),
+        "endorsement.deposited" => apply_endorsement_deposited(state, event),
         "attempt.resolved" => apply_attempt_resolved(state, event),
         other => Err(format!("reducer: unsupported event kind '{other}'")),
     }
@@ -328,6 +329,7 @@ pub fn replay_from_genesis(
         attempts: Vec::new(),
         attempt_resolutions: Vec::new(),
         transfers: Vec::new(),
+        endorsements: Vec::new(),
     };
     crate::sources::materialize_project(&mut state);
     // v0.105: build the finding-id index once, reuse across every
@@ -1354,6 +1356,32 @@ fn apply_transfer_deposited(state: &mut Project, event: &StateEvent) -> Result<(
         .map_err(|e| format!("transfer.deposited rejected: {e}"))?;
 
     upsert_by(&mut state.transfers, transfer, |a, b| a.transfer_id == b.transfer_id);
+    Ok(())
+}
+
+/// Upsert a signed significance endorsement into `state.endorsements` when an
+/// `endorsement.deposited` event lands. The object lives in
+/// `payload.endorsement`. Integrity: it must `verify()` (id re-derives,
+/// signature checks). Idempotent by `ven_` id. There is deliberately NO
+/// aggregation here — endorsements accumulate as individual records and are
+/// never folded into a significance score.
+fn apply_endorsement_deposited(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    use crate::endorsement::Endorsement;
+
+    let value = event
+        .payload
+        .get("endorsement")
+        .ok_or("endorsement.deposited event missing payload.endorsement")?
+        .clone();
+    let endorsement: Endorsement = serde_json::from_value(value)
+        .map_err(|e| format!("endorsement.deposited payload parse: {e}"))?;
+    endorsement
+        .verify()
+        .map_err(|e| format!("endorsement.deposited rejected: {e}"))?;
+
+    upsert_by(&mut state.endorsements, endorsement, |a, b| {
+        a.endorsement_id == b.endorsement_id
+    });
     Ok(())
 }
 

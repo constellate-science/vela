@@ -611,6 +611,7 @@ pub async fn run_command() {
         Commands::Lean { action } => cmd_lean(action),
         Commands::Attempt { action } => crate::cli_lean::cmd_attempt(action),
         Commands::Transfer { action } => crate::cli_lean::cmd_transfer(action),
+        Commands::RetroImpact { record, frontier, json } => cmd_retro_impact(&record, &frontier, json),
         Commands::DiffPack { action } => cmd_diff_pack(action),
         Commands::Policy { action } => cmd_policy(action),
         Commands::Task { action } => cmd_task(action),
@@ -15578,6 +15579,22 @@ pub(crate) fn load_frontier_or_fail(path: &Path) -> project::Project {
     })
 }
 
+fn cmd_retro_impact(record: &str, frontier: &Path, json: bool) {
+    let project = load_frontier_or_fail(frontier);
+    let impact = vela_protocol::dependency_oracle::dependency_impact(&project, record);
+    if json {
+        print_json(&serde_json::to_value(&impact).unwrap_or_default());
+    } else {
+        println!(
+            "impact {}: {} record(s) rest on it ({} gate-verified); {} direct",
+            record,
+            impact.weight,
+            impact.verified_weight,
+            impact.direct_dependents.len()
+        );
+    }
+}
+
 fn hash_path_or_fail(path: &Path) -> String {
     hash_path(path).unwrap_or_else(|e| {
         fail_return(&format!(
@@ -16268,6 +16285,7 @@ const SCIENCE_SUBCOMMANDS: &[&str] = &[
     "lean",
     "attempt",
     "transfer",
+    "retro-impact",
     "diff-pack",
     "policy",
     "controller",

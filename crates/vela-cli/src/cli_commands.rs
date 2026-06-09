@@ -832,6 +832,18 @@ pub(crate) enum Commands {
         #[command(subcommand)]
         action: TransferAction,
     },
+    /// Retro-impact: how much downstream verified state rests on a record,
+    /// via the declared dependency graph (`depends_on` + transfer discharges).
+    /// A deterministic oracle over verified state, never a popularity score.
+    RetroImpact {
+        /// The record id (`vat_`/`vf_`/`vfr_`/`vtr_`) to measure.
+        record: String,
+        /// Path to the frontier (project root or frontier.json file).
+        #[arg(long)]
+        frontier: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
     /// v0.193: Scientific Diff Pack (`vsd_*`). Bundle N proposals
     /// into one reviewable change-set. The per-proposal Carina
     /// Diff (v0.3) stays for atomic event diffs; this primitive

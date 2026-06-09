@@ -216,6 +216,7 @@ fn clone_project_metadata(p: &crate::project::Project) -> crate::project::Projec
         attempts: Vec::new(),
         attempt_resolutions: Vec::new(),
         transfers: Vec::new(),
+        endorsements: Vec::new(),
     }
 }
 
