@@ -65,6 +65,8 @@ fn empty_frontier(name: &str) -> Project {
         artifacts: vec![],
         contradictions: vec![],
         verifier_attachments: vec![],
+        transfers: vec![],
+        endorsements: vec![],
         predictions: vec![],
         resolutions: vec![],
         peers: vec![],
