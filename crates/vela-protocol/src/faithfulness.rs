@@ -33,7 +33,7 @@
 //! are orthogonal and both required before a Lean proof can carry an informal
 //! claim to `Verified`.
 
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -164,7 +164,7 @@ impl FaithfulnessAttestation {
             signer_pubkey_hex: hex::encode(key.verifying_key().to_bytes()),
         };
         let preimage = att.preimage_bytes();
-        att.signature = hex::encode(key.sign(&preimage).to_bytes());
+        att.signature = hex::encode(crate::sign::sign_bytes(key, &preimage));
         att.attestation_id = att.derive_id();
         Ok(att)
     }
@@ -210,21 +210,13 @@ impl FaithfulnessAttestation {
                 self.attestation_id
             ));
         }
-        let pubkey_bytes =
-            hex::decode(&self.signer_pubkey_hex).map_err(|e| format!("decode pubkey: {e}"))?;
-        let pubkey_arr: [u8; 32] = pubkey_bytes
-            .try_into()
-            .map_err(|_| "pubkey must be 32 bytes".to_string())?;
-        let verifying =
-            VerifyingKey::from_bytes(&pubkey_arr).map_err(|e| format!("verifying key: {e}"))?;
-        let sig_bytes =
-            hex::decode(&self.signature).map_err(|e| format!("decode signature: {e}"))?;
-        let sig_arr: [u8; 64] = sig_bytes
-            .try_into()
-            .map_err(|_| "signature must be 64 bytes".to_string())?;
-        verifying
-            .verify(&self.preimage_bytes(), &Signature::from_bytes(&sig_arr))
-            .map_err(|e| format!("signature verify: {e}"))?;
+        if !crate::sign::verify_action_signature(
+            &self.preimage_bytes(),
+            &self.signature,
+            &self.signer_pubkey_hex,
+        )? {
+            return Err("faithfulness signature does not verify under the declared pubkey".to_string());
+        }
         let rederived = self.derive_id();
         if rederived != self.attestation_id {
             return Err(format!(

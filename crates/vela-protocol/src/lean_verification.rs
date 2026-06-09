@@ -16,7 +16,7 @@
 //! (v0.170) attests that those bytes built under a specific
 //! toolchain.
 
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -200,8 +200,7 @@ impl LeanVerification {
             signature_hex: String::new(),
         };
         let preimage = record.preimage_bytes();
-        let sig = key.sign(&preimage);
-        record.signature_hex = hex::encode(sig.to_bytes());
+        record.signature_hex = hex::encode(crate::sign::sign_bytes(key, &preimage));
         record.verification_id = record.derive_id();
         Ok(record)
     }
@@ -281,22 +280,13 @@ impl LeanVerification {
     /// pubkey AND the verification_id was derived from the
     /// signed body.
     pub fn verify(&self) -> Result<(), String> {
-        let pubkey_bytes =
-            hex::decode(&self.verifier_pubkey_hex).map_err(|e| format!("decode pubkey: {e}"))?;
-        let pubkey_arr: [u8; 32] = pubkey_bytes
-            .try_into()
-            .map_err(|_| "pubkey must be 32 bytes".to_string())?;
-        let verifying =
-            VerifyingKey::from_bytes(&pubkey_arr).map_err(|e| format!("verifying key: {e}"))?;
-        let sig_bytes =
-            hex::decode(&self.signature_hex).map_err(|e| format!("decode signature: {e}"))?;
-        let sig_arr: [u8; 64] = sig_bytes
-            .try_into()
-            .map_err(|_| "signature must be 64 bytes".to_string())?;
-        let sig = Signature::from_bytes(&sig_arr);
-        verifying
-            .verify(&self.preimage_bytes(), &sig)
-            .map_err(|e| format!("signature verify: {e}"))?;
+        if !crate::sign::verify_action_signature(
+            &self.preimage_bytes(),
+            &self.signature_hex,
+            &self.verifier_pubkey_hex,
+        )? {
+            return Err("lean verification signature does not verify under the declared pubkey".to_string());
+        }
         let rederived = self.derive_id();
         if rederived != self.verification_id {
             return Err(format!(
@@ -363,7 +353,7 @@ mod tests {
             signature_hex: String::new(),
         };
         let preimage = r.preimage_bytes();
-        r.signature_hex = hex::encode(key.sign(&preimage).to_bytes());
+        r.signature_hex = hex::encode(crate::sign::sign_bytes(key, &preimage));
         r.verification_id = r.derive_id();
         r
     }

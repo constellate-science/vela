@@ -96,9 +96,7 @@ impl ProofVerification {
             signature: String::new(),
         };
         let preimage = record.preimage_bytes()?;
-        use ed25519_dalek::Signer;
-        let sig = signing_key.sign(&preimage);
-        record.signature = hex::encode(sig.to_bytes());
+        record.signature = hex::encode(crate::sign::sign_bytes(signing_key, &preimage));
         record.verification_id = record.derive_id()?;
         Ok(record)
     }
@@ -140,39 +138,10 @@ impl ProofVerification {
                 self.verification_id, derived
             ));
         }
-        let pk_bytes = hex::decode(&self.verifier_pubkey)
-            .map_err(|e| format!("verifier_pubkey not hex: {e}"))?;
-        if pk_bytes.len() != 32 {
-            return Err(format!(
-                "verifier_pubkey must be 32 bytes (got {})",
-                pk_bytes.len()
-            ));
-        }
-        let pk = ed25519_dalek::VerifyingKey::from_bytes(
-            pk_bytes
-                .as_slice()
-                .try_into()
-                .map_err(|e| format!("verifier_pubkey: {e}"))?,
-        )
-        .map_err(|e| format!("verifier_pubkey malformed: {e}"))?;
-        let sig_bytes =
-            hex::decode(&self.signature).map_err(|e| format!("signature not hex: {e}"))?;
-        if sig_bytes.len() != 64 {
-            return Err(format!(
-                "signature must be 64 bytes (got {})",
-                sig_bytes.len()
-            ));
-        }
-        let sig = ed25519_dalek::Signature::from_bytes(
-            sig_bytes
-                .as_slice()
-                .try_into()
-                .map_err(|e| format!("signature: {e}"))?,
-        );
         let preimage = self.preimage_bytes()?;
-        use ed25519_dalek::Verifier;
-        pk.verify(&preimage, &sig)
-            .map_err(|e| format!("verification signature does not verify: {e}"))?;
+        if !crate::sign::verify_action_signature(&preimage, &self.signature, &self.verifier_pubkey)? {
+            return Err("verification signature does not verify under verifier_pubkey".to_string());
+        }
         Ok(())
     }
 }

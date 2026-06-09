@@ -27,7 +27,7 @@
 //!   gate result is derived from the `vva_` attachments on read, the same
 //!   discipline the substrate already uses for `gate_status`.
 
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -192,7 +192,7 @@ impl Attempt {
             signer_pubkey_hex: hex::encode(key.verifying_key().to_bytes()),
         };
         let preimage = att.id_preimage_bytes()?;
-        att.signature = hex::encode(key.sign(&preimage).to_bytes());
+        att.signature = hex::encode(crate::sign::sign_bytes(key, &preimage));
         att.attempt_id = att.derive_id()?;
         Ok(att)
     }
@@ -254,21 +254,9 @@ impl Attempt {
             return Err("attempt.claim_digest does not match claim".to_string());
         }
         let preimage = self.id_preimage_bytes()?;
-        let pubkey_bytes =
-            hex::decode(&self.signer_pubkey_hex).map_err(|e| format!("decode pubkey: {e}"))?;
-        let pubkey_arr: [u8; 32] = pubkey_bytes
-            .try_into()
-            .map_err(|_| "pubkey must be 32 bytes".to_string())?;
-        let verifying =
-            VerifyingKey::from_bytes(&pubkey_arr).map_err(|e| format!("verifying key: {e}"))?;
-        let sig_bytes =
-            hex::decode(&self.signature).map_err(|e| format!("decode signature: {e}"))?;
-        let sig_arr: [u8; 64] = sig_bytes
-            .try_into()
-            .map_err(|_| "signature must be 64 bytes".to_string())?;
-        verifying
-            .verify(&preimage, &Signature::from_bytes(&sig_arr))
-            .map_err(|e| format!("signature verify: {e}"))?;
+        if !crate::sign::verify_action_signature(&preimage, &self.signature, &self.signer_pubkey_hex)? {
+            return Err("attempt signature does not verify under the declared pubkey".to_string());
+        }
         let rederived = self.derive_id()?;
         if rederived != self.attempt_id {
             return Err(format!(
