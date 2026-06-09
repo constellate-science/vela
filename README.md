@@ -78,7 +78,7 @@ confidence. A finding can be reviewer-accepted and still gate
 | `conformance/` | The cross-implementation test-vector suite (reducer fixtures + gate reject-vectors). |
 | `examples/sidon-a309370` | A worked, re-verifiable reference: the OEIS A309370 Sidon records you can re-check with `vela reproduce`. |
 | `lean/` | Machine-checked proofs of the governance-soundness theorems, plus `SidonCertificate.lean` (a kernel-checked vcert). |
-| `schema/`, `schemas/` | Carina kernel schemas. |
+| `schema/` | Carina kernel schemas. |
 
 ## Build
 
