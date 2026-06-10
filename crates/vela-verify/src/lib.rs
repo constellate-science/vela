@@ -37,10 +37,18 @@ pub struct VerifyResult {
 
 impl VerifyResult {
     fn ok(message: impl Into<String>) -> Self {
-        Self { ok: true, message: message.into(), value: None }
+        Self {
+            ok: true,
+            message: message.into(),
+            value: None,
+        }
     }
     fn fail(message: impl Into<String>) -> Self {
-        Self { ok: false, message: message.into(), value: None }
+        Self {
+            ok: false,
+            message: message.into(),
+            value: None,
+        }
     }
 }
 
@@ -113,6 +121,79 @@ pub enum Witness {
     /// increasing cuts `c_0 < ... < c_k` such that every consecutive
     /// interval `(c_{i-1}, c_i]` has integer product `== 1 (mod p)`.
     IntervalProduct { p: u64, cuts: Vec<u64> },
+    /// An Erdős #203 partial CRT covering certificate: a modulus `m`
+    /// (decimal string, coprime to 6) and prime rows, each pinning the
+    /// multiplicative orders of 2 and 3 mod `p` and an affine line
+    /// `(alpha, beta, gamma, h)` such that `p | 2^k 3^l m + 1` iff
+    /// `alpha*k + beta*l == gamma (mod h)`, checked exhaustively over
+    /// `(k, l) in [0, h)^2`.
+    CrtPartialCover { m: String, rows: Vec<CrtCoverRow> },
+    /// An Erdős #684 effective lower-bound certificate: for each entry
+    /// `(k, m)`, `m = prod_{p<=k} p^(floor(log_p k)+1)` is recomputed and
+    /// adding `j + (m-1-j)` in base `p` produces zero Kummer carries for
+    /// all `2 <= j <= k`, `p <= j` — hence `f(m-1) > k`.
+    KummerNoCarry { entries: Vec<KummerEntry> },
+    /// An Erdős #700 value certificate: for each `(n, f)`,
+    /// `f = min_{1<k<=n/2} gcd(n, C(n,k))`, recomputed via Kummer
+    /// (`gcd(n, C(n,k)) = prod_{p|n} p^min(v_p(n), carries_p(k, n-k))`)
+    /// so no big integers ever materialize.
+    MinBinomGcd { cases: Vec<MinGcdCase> },
+    /// An Erdős #1093 (ELS93) deficiency certificate: for each entry,
+    /// `C(N,k)` is Kummer-defined (no prime `p <= k` divides it) and the
+    /// deficiency `delta(N,k) = #{1<=i<=k : (N-k+i) | i*C(k,i)}` equals
+    /// the claimed value (and slot positions, when given). Divisibility
+    /// is decided by smooth factorization + Legendre — `i*C(k,i)` is
+    /// never materialized.
+    BinomDeficiency { entries: Vec<DeficiencyEntry> },
+    /// An Erdős #1094 exception-enumeration certificate: every
+    /// counterexample with `N >= 2k`, `k <= k_max` arises as
+    /// `N = x + k - r` with `x | gcd(lcm(1..k), r*C(k,r))`, `k | x`.
+    /// The verifier re-enumerates all candidates and confirms the found
+    /// exception set equals the claimed `(N, k)` list exactly.
+    /// Fail-closed: an unresolved candidate aborts rather than claims.
+    BinomExceptionEnum {
+        k_max: u64,
+        exceptions: Vec<(u64, u64)>,
+    },
+}
+
+/// One prime row of an Erdős #203 partial-cover certificate.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CrtCoverRow {
+    pub p: u64,
+    pub ord2: u64,
+    pub ord3: u64,
+    pub h: u64,
+    pub t_p: u64,
+    pub m_mod_p: u64,
+    /// `(alpha, beta, gamma, modulus)` with `modulus == h`.
+    pub line: [u64; 4],
+}
+
+/// One `(k, m)` entry of an Erdős #684 certificate.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct KummerEntry {
+    pub k: u64,
+    pub m: u64,
+}
+
+/// One `(n, f)` case of an Erdős #700 certificate.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct MinGcdCase {
+    pub n: u64,
+    pub f: u64,
+}
+
+/// One `(k, N, delta, slots)` entry of an Erdős #1093 deficiency
+/// certificate. `n` is a decimal string (up to 38 digits / u128);
+/// `slots` is optional — when absent only the count is checked.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DeficiencyEntry {
+    pub k: u64,
+    pub n: String,
+    pub delta: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub slots: Option<Vec<u64>>,
 }
 
 impl Witness {
@@ -128,6 +209,11 @@ impl Witness {
             Witness::Costas { .. } => "costas",
             Witness::LinearCode { .. } => "linear_code",
             Witness::IntervalProduct { .. } => "interval_product",
+            Witness::CrtPartialCover { .. } => "crt_partial_cover",
+            Witness::KummerNoCarry { .. } => "kummer_no_carry",
+            Witness::MinBinomGcd { .. } => "min_binom_gcd",
+            Witness::BinomDeficiency { .. } => "binom_deficiency",
+            Witness::BinomExceptionEnum { .. } => "binom_exception_enum",
         }
     }
 }
@@ -136,25 +222,49 @@ impl Witness {
 /// `claimed_size` cross-check.
 pub fn verify_witness(witness: &Witness) -> VerifyResult {
     match witness {
-        Witness::Sidon { n, points, claimed_size } => {
-            with_size(verify_sidon(points, *n), points.len(), *claimed_size)
-        }
+        Witness::Sidon {
+            n,
+            points,
+            claimed_size,
+        } => with_size(verify_sidon(points, *n), points.len(), *claimed_size),
         Witness::Golomb { marks } => verify_golomb(marks),
-        Witness::Cap { n, points, claimed_size } => {
-            with_size(verify_cap(points, *n), points.len(), *claimed_size)
-        }
-        Witness::Bh { n, h, points, claimed_size } => {
-            with_size(verify_bh(points, *n, *h), points.len(), *claimed_size)
-        }
+        Witness::Cap {
+            n,
+            points,
+            claimed_size,
+        } => with_size(verify_cap(points, *n), points.len(), *claimed_size),
+        Witness::Bh {
+            n,
+            h,
+            points,
+            claimed_size,
+        } => with_size(verify_bh(points, *n, *h), points.len(), *claimed_size),
         Witness::Covering { v, k, t, blocks } => verify_covering(blocks, *v, *k, *t),
         Witness::IntervalProduct { p, cuts } => verify_interval_product(*p, cuts),
-        Witness::ConstantWeight { n, d, w, words, claimed_size } => {
-            with_size(verify_constant_weight(words, *n, *d, *w), words.len(), *claimed_size)
+        Witness::CrtPartialCover { m, rows } => verify_crt_partial_cover(m, rows),
+        Witness::KummerNoCarry { entries } => verify_kummer_no_carry(entries),
+        Witness::MinBinomGcd { cases } => verify_min_binom_gcd(cases),
+        Witness::BinomDeficiency { entries } => verify_binom_deficiency(entries),
+        Witness::BinomExceptionEnum { k_max, exceptions } => {
+            verify_binom_exception_enum(*k_max, exceptions)
         }
+        Witness::ConstantWeight {
+            n,
+            d,
+            w,
+            words,
+            claimed_size,
+        } => with_size(
+            verify_constant_weight(words, *n, *d, *w),
+            words.len(),
+            *claimed_size,
+        ),
         Witness::Costas { perm } => verify_costas(perm),
-        Witness::LinearCode { q, claimed_d, generator } => {
-            verify_linear_code(generator, *q, *claimed_d)
-        }
+        Witness::LinearCode {
+            q,
+            claimed_d,
+            generator,
+        } => verify_linear_code(generator, *q, *claimed_d),
     }
 }
 
@@ -162,14 +272,15 @@ pub fn verify_witness(witness: &Witness) -> VerifyResult {
 /// must pass AND have exactly the claimed number of elements.
 fn with_size(mut r: VerifyResult, actual: usize, claimed: Option<usize>) -> VerifyResult {
     if r.ok
-        && let Some(c) = claimed {
-            if actual != c {
-                return VerifyResult::fail(format!(
-                    "verifier passed but construction size {actual} != claimed_size {c}"
-                ));
-            }
-            r.message = format!("{} (size {actual} = claimed)", r.message);
+        && let Some(c) = claimed
+    {
+        if actual != c {
+            return VerifyResult::fail(format!(
+                "verifier passed but construction size {actual} != claimed_size {c}"
+            ));
         }
+        r.message = format!("{} (size {actual} = claimed)", r.message);
+    }
     r
 }
 
@@ -248,6 +359,496 @@ pub fn verify_interval_product(p: u64, cuts: &[u64]) -> VerifyResult {
     ))
 }
 
+// --- shared exact number theory -------------------------------------------
+
+/// Number of carries when adding `a + b` in base `p` (Kummer's theorem:
+/// this equals `v_p(C(a+b, a))`).
+fn carries_base_p(mut a: u128, mut b: u128, p: u128) -> u64 {
+    let mut carry: u128 = 0;
+    let mut count: u64 = 0;
+    while a > 0 || b > 0 || carry > 0 {
+        let s = a % p + b % p + carry;
+        carry = u128::from(s >= p);
+        count += carry as u64;
+        a /= p;
+        b /= p;
+    }
+    count
+}
+
+/// Legendre: `v_p(n!)`.
+fn vp_factorial(n: u64, p: u64) -> u64 {
+    let mut s = 0u64;
+    let mut pk = p;
+    while pk <= n {
+        s += n / pk;
+        pk = pk.saturating_mul(p);
+    }
+    s
+}
+
+/// `v_p(C(n, k))` via Legendre.
+fn vp_binom(n: u64, k: u64, p: u64) -> u64 {
+    vp_factorial(n, p) - vp_factorial(k, p) - vp_factorial(n - k, p)
+}
+
+/// `v_p(n)` for `n >= 1`.
+fn vp_of(mut n: u64, p: u64) -> u64 {
+    let mut v = 0u64;
+    while n.is_multiple_of(p) {
+        n /= p;
+        v += 1;
+    }
+    v
+}
+
+fn gcd_u64(mut a: u64, mut b: u64) -> u64 {
+    while b != 0 {
+        let t = a % b;
+        a = b;
+        b = t;
+    }
+    a
+}
+
+/// Primes up to `n` inclusive (trial division; `n` is small here).
+fn primes_upto(n: u64) -> Vec<u64> {
+    (2..=n).filter(|&q| is_prime(q)).collect()
+}
+
+/// Parse a decimal string into u128 (guard: 1..=38 digits, all ASCII).
+fn parse_decimal_u128(s: &str) -> Result<u128, String> {
+    if s.is_empty() || s.len() > 38 || !s.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(format!("`{s}` is not a 1..=38 digit decimal string"));
+    }
+    s.parse::<u128>().map_err(|e| format!("parse `{s}`: {e}"))
+}
+
+/// A decimal string mod a small modulus, by digit streaming — handles
+/// integers far beyond u128 without big-int arithmetic.
+fn decimal_mod(s: &str, m: u64) -> Result<u64, String> {
+    if s.is_empty() || !s.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(format!("`{s}` is not a decimal string"));
+    }
+    let mut acc: u64 = 0;
+    for b in s.bytes() {
+        acc = (acc * 10 + u64::from(b - b'0')) % m;
+    }
+    Ok(acc)
+}
+
+/// Multiplicative order of `base` mod prime `p` (`base` not divisible
+/// by `p`); iterates at most `p - 1` steps.
+fn multiplicative_order(base: u64, p: u64) -> Result<u64, String> {
+    if base.is_multiple_of(p) {
+        return Err(format!("{base} is 0 mod {p}; order undefined"));
+    }
+    let mut acc = base % p;
+    let mut ord = 1u64;
+    while acc != 1 {
+        acc = acc * base % p;
+        ord += 1;
+        if ord >= p {
+            return Err(format!("order of {base} mod {p} did not divide p-1"));
+        }
+    }
+    Ok(ord)
+}
+
+// --- Erdős #203: partial CRT cover ----------------------------------------
+
+/// Verify an Erdős #203 partial CRT covering certificate. `m` is a
+/// decimal string coprime to 6; each row pins a prime `p`, the orders of
+/// 2 and 3 mod `p`, `h = lcm(ord2, ord3)`, `t_p = (-m^-1) mod p`,
+/// `m mod p`, and an affine line such that `p | 2^k 3^l m + 1` iff
+/// `alpha*k + beta*l == gamma (mod h)` — checked exhaustively over
+/// `(k, l) in [0, h)^2`. Deterministic and total.
+pub fn verify_crt_partial_cover(m: &str, rows: &[CrtCoverRow]) -> VerifyResult {
+    if rows.is_empty() {
+        return VerifyResult::fail("need at least one prime row");
+    }
+    match (decimal_mod(m, 2), decimal_mod(m, 3)) {
+        (Ok(r2), Ok(r3)) => {
+            if r2 == 0 || r3 == 0 {
+                return VerifyResult::fail("m must be coprime to 6");
+            }
+        }
+        (Err(e), _) | (_, Err(e)) => return VerifyResult::fail(e),
+    }
+    for row in rows {
+        let p = row.p;
+        if p < 5 || p > 1_000_000 || !is_prime(p) {
+            return VerifyResult::fail(format!("row p={p} must be a prime in [5, 10^6]"));
+        }
+        let ord2 = match multiplicative_order(2, p) {
+            Ok(v) => v,
+            Err(e) => return VerifyResult::fail(e),
+        };
+        let ord3 = match multiplicative_order(3, p) {
+            Ok(v) => v,
+            Err(e) => return VerifyResult::fail(e),
+        };
+        if ord2 != row.ord2 || ord3 != row.ord3 {
+            return VerifyResult::fail(format!(
+                "row p={p}: ord(2)={ord2}, ord(3)={ord3} != claimed ({}, {})",
+                row.ord2, row.ord3
+            ));
+        }
+        let h = ord2 / gcd_u64(ord2, ord3) * ord3;
+        if h != row.h || row.line[3] != h {
+            return VerifyResult::fail(format!(
+                "row p={p}: lcm(ord2, ord3)={h} != claimed h={} / line modulus {}",
+                row.h, row.line[3]
+            ));
+        }
+        if h > 5_000 {
+            return VerifyResult::fail(format!("row p={p}: h={h} exceeds the 5000 guard"));
+        }
+        let mm = match decimal_mod(m, p) {
+            Ok(v) => v,
+            Err(e) => return VerifyResult::fail(e),
+        };
+        if mm != row.m_mod_p || mm == 0 {
+            return VerifyResult::fail(format!(
+                "row p={p}: m mod p = {mm} != claimed {} (and must be nonzero)",
+                row.m_mod_p
+            ));
+        }
+        let t = (p - mod_pow(mm, p - 2, p)) % p;
+        if t != row.t_p {
+            return VerifyResult::fail(format!(
+                "row p={p}: (-m^-1) mod p = {t} != claimed t_p={}",
+                row.t_p
+            ));
+        }
+        let (al, be, ga) = (row.line[0], row.line[1], row.line[2]);
+        for k in 0..h {
+            for l in 0..h {
+                let lhs = (mod_pow(2, k, p) * mod_pow(3, l, p) % p * mm % p + 1) % p == 0;
+                let rhs = (al * k + be * l) % h == ga % h;
+                if lhs != rhs {
+                    return VerifyResult::fail(format!(
+                        "row p={p}: congruence line fails at (k, l) = ({k}, {l})"
+                    ));
+                }
+            }
+        }
+    }
+    VerifyResult::ok(format!(
+        "Erdos #203 partial CRT cover: m coprime to 6, {} prime row(s) verified (p | 2^k 3^l m + 1 <=> affine line mod h)",
+        rows.len()
+    ))
+}
+
+// --- Erdős #684: Kummer no-carry lower bound -------------------------------
+
+/// Verify an Erdős #684 certificate: for each `(k, m)`, recompute
+/// `m = prod_{p<=k} p^(floor(log_p k)+1)` and confirm zero Kummer carries
+/// adding `j + (m-1-j)` in base `p` for all `2 <= j <= k`, `p <= j` —
+/// hence no prime `p <= j` divides `C(m-1, j)` and `f(m-1) > k`.
+pub fn verify_kummer_no_carry(entries: &[KummerEntry]) -> VerifyResult {
+    if entries.is_empty() {
+        return VerifyResult::fail("need at least one (k, m) entry");
+    }
+    for e in entries {
+        let k = e.k;
+        if !(3..=20).contains(&k) {
+            return VerifyResult::fail(format!("k={k} outside the [3, 20] guard"));
+        }
+        let mut m: u64 = 1;
+        for p in primes_upto(k) {
+            let mut pe = 1u64;
+            let mut exp = 0u64;
+            while pe * p <= k {
+                pe *= p;
+                exp += 1;
+            }
+            for _ in 0..=exp {
+                m = match m.checked_mul(p) {
+                    Some(v) => v,
+                    None => return VerifyResult::fail(format!("M_{k} overflows u64")),
+                };
+            }
+        }
+        if m != e.m {
+            return VerifyResult::fail(format!("k={k}: recomputed M_k={m} != claimed {}", e.m));
+        }
+        let n = m - 1;
+        for j in 2..=k {
+            for p in primes_upto(j) {
+                if carries_base_p(u128::from(j), u128::from(n - j), u128::from(p)) != 0 {
+                    return VerifyResult::fail(format!(
+                        "k={k}: carry adding {j} + (M-1-{j}) base {p} — C(M-1, {j}) not p-free"
+                    ));
+                }
+            }
+        }
+    }
+    VerifyResult::ok(format!(
+        "Erdos #684 certificate: f(M_k - 1) > k verified for {} value(s) of k (zero Kummer carries)",
+        entries.len()
+    ))
+}
+
+// --- Erdős #700: min gcd(n, C(n,k)) ----------------------------------------
+
+/// Verify an Erdős #700 value certificate: for each `(n, f)`, recompute
+/// `f(n) = min_{1<k<=n/2} gcd(n, C(n,k))` via the Kummer identity
+/// `gcd(n, C(n,k)) = prod_{p|n} p^min(v_p(n), carries_p(k, n-k))`.
+pub fn verify_min_binom_gcd(cases: &[MinGcdCase]) -> VerifyResult {
+    if cases.is_empty() {
+        return VerifyResult::fail("need at least one (n, f) case");
+    }
+    for c in cases {
+        let n = c.n;
+        if !(4..=10_000).contains(&n) {
+            return VerifyResult::fail(format!("n={n} outside the [4, 10000] guard"));
+        }
+        let mut factors: Vec<(u64, u64)> = Vec::new();
+        let mut rem = n;
+        let mut p = 2u64;
+        while p * p <= rem {
+            if rem.is_multiple_of(p) {
+                factors.push((p, vp_of(rem, p)));
+                while rem.is_multiple_of(p) {
+                    rem /= p;
+                }
+            }
+            p += 1;
+        }
+        if rem > 1 {
+            factors.push((rem, 1));
+        }
+        let mut best = u64::MAX;
+        for k in 2..=n / 2 {
+            let mut g = 1u64;
+            for &(p, vn) in &factors {
+                let carries = carries_base_p(u128::from(k), u128::from(n - k), u128::from(p));
+                g *= p.pow(vn.min(carries) as u32);
+            }
+            best = best.min(g);
+        }
+        if best != c.f {
+            return VerifyResult::fail(format!("n={n}: recomputed f(n)={best} != claimed {}", c.f));
+        }
+    }
+    VerifyResult::ok(format!(
+        "Erdos #700 certificate: f(n) = min gcd(n, C(n,k)) verified for {} case(s)",
+        cases.len()
+    ))
+}
+
+// --- Erdős #1093: ELS93 deficiency -----------------------------------------
+
+/// Does `x | i * C(k, i)`? Every prime factor of `i * C(k, i)` is `<= k`,
+/// so trial-divide `x` by primes `<= k`; a residual `> 1` means no.
+/// Otherwise check `v_p(i) + v_p(C(k,i)) >= e` for each `p^e || x` —
+/// `i * C(k, i)` itself is never materialized.
+fn divides_smooth(mut x: u128, i: u64, k: u64) -> bool {
+    for p in primes_upto(k) {
+        if x == 1 {
+            break;
+        }
+        let pp = u128::from(p);
+        let mut e = 0u64;
+        while x % pp == 0 {
+            x /= pp;
+            e += 1;
+        }
+        if e > 0 && vp_of(i, p) + vp_binom(k, i, p) < e {
+            return false;
+        }
+    }
+    x == 1
+}
+
+/// Verify an Erdős #1093 (ELS93) deficiency certificate: each entry's
+/// `C(N,k)` is Kummer-defined and `delta(N,k)` (and slot positions, when
+/// given) recompute exactly. `N` may be up to 38 decimal digits.
+pub fn verify_binom_deficiency(entries: &[DeficiencyEntry]) -> VerifyResult {
+    if entries.is_empty() {
+        return VerifyResult::fail("need at least one entry");
+    }
+    for e in entries {
+        let k = e.k;
+        if !(2..=150).contains(&k) {
+            return VerifyResult::fail(format!("k={k} outside the [2, 150] guard"));
+        }
+        let n = match parse_decimal_u128(&e.n) {
+            Ok(v) => v,
+            Err(err) => return VerifyResult::fail(err),
+        };
+        if n < 2 * u128::from(k) {
+            return VerifyResult::fail(format!("entry k={k}: need N >= 2k"));
+        }
+        for p in primes_upto(k) {
+            if carries_base_p(u128::from(k), n - u128::from(k), u128::from(p)) != 0 {
+                return VerifyResult::fail(format!(
+                    "entry k={k}: prime {p} divides C(N,k) — not Kummer-defined"
+                ));
+            }
+        }
+        let mut slots: Vec<u64> = Vec::new();
+        for i in 1..=k {
+            let x = n - u128::from(k) + u128::from(i);
+            if divides_smooth(x, i, k) {
+                slots.push(i);
+            }
+        }
+        if slots.len() as u64 != e.delta {
+            return VerifyResult::fail(format!(
+                "entry k={k}: recomputed delta={} != claimed {}",
+                slots.len(),
+                e.delta
+            ));
+        }
+        if let Some(claimed) = &e.slots
+            && &slots != claimed
+        {
+            return VerifyResult::fail(format!(
+                "entry k={k}: smooth slots {slots:?} != claimed {claimed:?}"
+            ));
+        }
+    }
+    VerifyResult::ok(format!(
+        "Erdos #1093 deficiency certificate: {} entr(ies) Kummer-defined with delta and slots recomputed exactly",
+        entries.len()
+    ))
+}
+
+// --- Erdős #1094: exception enumeration ------------------------------------
+
+/// `C(k, r)` for `k <= 40` — exact in u64.
+fn binom_u64(k: u64, r: u64) -> u64 {
+    let r = r.min(k - r);
+    let mut res = 1u64;
+    for i in 1..=r {
+        res = res * (k - r + i) / i;
+    }
+    res
+}
+
+/// All divisors of `g`, where `g | lcm(1..k)` so every prime factor is
+/// `<= k`. Returns None if `g` does not fully factor over primes `<= k`
+/// or the divisor count exceeds the guard.
+fn divisors_smooth(g: u64, k: u64) -> Option<Vec<u64>> {
+    let mut rem = g;
+    let mut pf: Vec<(u64, u64)> = Vec::new();
+    for p in primes_upto(k) {
+        if rem.is_multiple_of(p) {
+            pf.push((p, vp_of(rem, p)));
+            while rem.is_multiple_of(p) {
+                rem /= p;
+            }
+        }
+    }
+    if rem != 1 {
+        return None;
+    }
+    let mut divs: Vec<u64> = vec![1];
+    for (p, e) in pf {
+        let prev = divs.clone();
+        let mut pe = 1u64;
+        for _ in 0..e {
+            pe *= p;
+            for d in &prev {
+                divs.push(d * pe);
+            }
+        }
+        if divs.len() > 200_000 {
+            return None;
+        }
+    }
+    Some(divs)
+}
+
+/// Is `(N, k)` a #1094 exception — no prime `p <= max(N/k, k)` divides
+/// `C(N, k)`? Early-exits on the first dividing prime. Returns None
+/// (fail-closed) if a candidate survives past the 10^7 prime guard
+/// without a verdict — that can only happen for a would-be NEW
+/// exception, where refusing to claim is the correct behavior.
+fn is_exception_guarded(n: u64, k: u64) -> Option<bool> {
+    let mut p = 2u64;
+    // Condition `p <= max(N/k, k)` without floats: p <= k || p*k <= N.
+    while p <= k || p.saturating_mul(k) <= n {
+        if is_prime(p) && vp_binom(n, k, p) > 0 {
+            return Some(false);
+        }
+        if p > 10_000_000 {
+            return None;
+        }
+        p += 1;
+    }
+    Some(true)
+}
+
+/// Verify an Erdős #1094 exception-enumeration certificate: re-enumerate
+/// every candidate `N = x + k - r` (`x | gcd(lcm(1..k), r*C(k,r))`,
+/// `k | x`, `N >= 2k`) for `k <= k_max` and confirm the exception set
+/// equals the claimed `(N, k)` list exactly.
+pub fn verify_binom_exception_enum(k_max: u64, exceptions: &[(u64, u64)]) -> VerifyResult {
+    if !(3..=40).contains(&k_max) {
+        return VerifyResult::fail(format!("k_max={k_max} outside the [3, 40] guard"));
+    }
+    let claimed: std::collections::BTreeSet<(u64, u64)> = exceptions.iter().copied().collect();
+    for &(n, k) in &claimed {
+        if k > k_max || n < 2 * k {
+            return VerifyResult::fail(format!(
+                "claimed exception (N={n}, k={k}) outside k <= k_max / N >= 2k"
+            ));
+        }
+    }
+    let mut found: std::collections::BTreeSet<(u64, u64)> = std::collections::BTreeSet::new();
+    let mut lambda: u64 = 1;
+    let mut candidates: u64 = 0;
+    for k in 2..=k_max {
+        lambda = lambda / gcd_u64(lambda, k) * k;
+        for r in 1..=k {
+            let g = gcd_u64(lambda, r * binom_u64(k, r));
+            let divs = match divisors_smooth(g, k) {
+                Some(d) => d,
+                None => {
+                    return VerifyResult::fail(format!(
+                        "divisor enumeration guard exceeded at k={k}, r={r}"
+                    ));
+                }
+            };
+            for x in divs {
+                if !x.is_multiple_of(k) {
+                    continue;
+                }
+                let n = x + k - r;
+                if n < 2 * k {
+                    continue;
+                }
+                candidates += 1;
+                match is_exception_guarded(n, k) {
+                    Some(true) => {
+                        found.insert((n, k));
+                    }
+                    Some(false) => {}
+                    None => {
+                        return VerifyResult::fail(format!(
+                            "exception test guard exceeded at (N={n}, k={k}) — refusing to claim"
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    if found != claimed {
+        let extra: Vec<_> = found.difference(&claimed).collect();
+        let missing: Vec<_> = claimed.difference(&found).collect();
+        return VerifyResult::fail(format!(
+            "exception set mismatch: extra {extra:?}, missing {missing:?}"
+        ));
+    }
+    VerifyResult::ok(format!(
+        "Erdos #1094 enumeration: {candidates} candidate(s) checked for k <= {k_max}; exception set of {} matches exactly",
+        claimed.len()
+    ))
+}
+
 pub fn verify_golomb(marks: &[i64]) -> VerifyResult {
     let set: HashSet<&i64> = marks.iter().collect();
     if set.len() != marks.len() {
@@ -298,7 +899,9 @@ pub fn verify_cap(points: &[Vec<i64>], n: usize) -> VerifyResult {
             }
         }
     }
-    VerifyResult::ok(format!("cap verified: {m} points in F_3^{n}, no 3 collinear"))
+    VerifyResult::ok(format!(
+        "cap verified: {m} points in F_3^{n}, no 3 collinear"
+    ))
 }
 
 /// A `B_h` set in `{0,1}^n`: all sums of `h` elements (with repetition,
@@ -344,7 +947,10 @@ pub fn verify_covering(blocks: &[Vec<usize>], v: usize, k: usize, t: usize) -> V
             s.into_iter().collect()
         })
         .collect();
-    if !norm.iter().all(|b| b.len() == k && b.iter().all(|&x| x < v)) {
+    if !norm
+        .iter()
+        .all(|b| b.len() == k && b.iter().all(|&x| x < v))
+    {
         return VerifyResult::fail(format!("blocks not valid {k}-subsets of [0,{v})"));
     }
     let mut covered: HashSet<Vec<usize>> = HashSet::new();
@@ -638,12 +1244,121 @@ mod tests {
         // In {0,1}^3: {000, 100, 010, 001} — pairwise sums all distinct?
         // sums include 000,100,010,001 (i=j) and 110,101,011 (i<j) — all
         // distinct. A valid (small) Sidon set.
-        vec![
-            vec![0, 0, 0],
-            vec![1, 0, 0],
-            vec![0, 1, 0],
-            vec![0, 0, 1],
-        ]
+        vec![vec![0, 0, 0], vec![1, 0, 0], vec![0, 1, 0], vec![0, 0, 1]]
+    }
+
+    #[test]
+    fn crt_partial_cover_accepts_real_rows_and_rejects_corruption() {
+        let m = "8168305011630835886634520238999";
+        let rows = vec![
+            CrtCoverRow {
+                p: 5,
+                ord2: 4,
+                ord3: 4,
+                h: 4,
+                t_p: 1,
+                m_mod_p: 4,
+                line: [1, 3, 0, 4],
+            },
+            CrtCoverRow {
+                p: 7,
+                ord2: 3,
+                ord3: 6,
+                h: 6,
+                t_p: 1,
+                m_mod_p: 6,
+                line: [2, 1, 0, 6],
+            },
+        ];
+        assert!(verify_crt_partial_cover(m, &rows).ok);
+        // Corrupt t_p.
+        let mut bad = rows.clone();
+        bad[0].t_p = 2;
+        assert!(!verify_crt_partial_cover(m, &bad).ok);
+        // Corrupt the affine line.
+        let mut bad = rows.clone();
+        bad[1].line = [2, 1, 1, 6];
+        assert!(!verify_crt_partial_cover(m, &bad).ok);
+        // m divisible by 3 is rejected.
+        assert!(!verify_crt_partial_cover("9", &rows).ok);
+    }
+
+    #[test]
+    fn kummer_no_carry_accepts_erdos684_table_and_rejects_corruption() {
+        let entries = vec![
+            KummerEntry { k: 3, m: 36 },
+            KummerEntry { k: 7, m: 88200 },
+            KummerEntry { k: 12, m: 64033200 },
+        ];
+        assert!(verify_kummer_no_carry(&entries).ok);
+        // Wrong M_k.
+        let bad = vec![KummerEntry { k: 3, m: 72 }];
+        assert!(!verify_kummer_no_carry(&bad).ok);
+        // Out of guard range.
+        assert!(!verify_kummer_no_carry(&[KummerEntry { k: 25, m: 1 }]).ok);
+    }
+
+    #[test]
+    fn min_binom_gcd_accepts_erdos700_cases_and_rejects_corruption() {
+        let cases = vec![
+            MinGcdCase { n: 30, f: 6 },
+            MinGcdCase { n: 77, f: 7 },
+            MinGcdCase { n: 49, f: 7 },
+        ];
+        assert!(verify_min_binom_gcd(&cases).ok);
+        assert!(!verify_min_binom_gcd(&[MinGcdCase { n: 30, f: 5 }]).ok);
+    }
+
+    #[test]
+    fn binom_deficiency_accepts_els93_row_and_rejects_corruption() {
+        // ELS93 table row k=8, N=44: delta=2 at slots [4, 6].
+        let good = DeficiencyEntry {
+            k: 8,
+            n: "44".to_string(),
+            delta: 2,
+            slots: Some(vec![4, 6]),
+        };
+        assert!(verify_binom_deficiency(&[good.clone()]).ok);
+        // Count-only form.
+        let count_only = DeficiencyEntry {
+            slots: None,
+            ..good.clone()
+        };
+        assert!(verify_binom_deficiency(&[count_only]).ok);
+        // Wrong delta.
+        let bad = DeficiencyEntry {
+            delta: 1,
+            slots: None,
+            ..good.clone()
+        };
+        assert!(!verify_binom_deficiency(&[bad]).ok);
+        // Wrong slots.
+        let bad = DeficiencyEntry {
+            slots: Some(vec![4, 7]),
+            ..good
+        };
+        assert!(!verify_binom_deficiency(&[bad]).ok);
+        // A big-N entry (the k=129 delta=1 example) exercises the u128 path.
+        let big = DeficiencyEntry {
+            k: 129,
+            n: "3180883073384828665489".to_string(),
+            delta: 1,
+            slots: Some(vec![65]),
+        };
+        assert!(verify_binom_deficiency(&[big]).ok);
+    }
+
+    #[test]
+    fn binom_exception_enum_matches_els_for_small_k_and_rejects_corruption() {
+        // Re-derived ELS exceptions with k <= 8 (49 candidates).
+        let els8: Vec<(u64, u64)> = vec![(7, 3), (13, 4), (14, 4), (23, 5), (62, 6), (44, 8)];
+        assert!(verify_binom_exception_enum(8, &els8).ok);
+        // Missing one exception fails.
+        assert!(!verify_binom_exception_enum(8, &els8[1..]).ok);
+        // A fabricated extra exception fails.
+        let mut padded = els8.clone();
+        padded.push((100, 5));
+        assert!(!verify_binom_exception_enum(8, &padded).ok);
     }
 
     #[test]
