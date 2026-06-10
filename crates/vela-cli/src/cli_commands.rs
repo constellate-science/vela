@@ -335,11 +335,6 @@ pub(crate) enum Commands {
         /// Output stable JSON for --check-tools
         #[arg(long)]
         json: bool,
-        /// Serve the local Workbench web UI (`web/`) alongside the
-        /// HTTP API. Implies `--http` if no port is specified
-        /// (default 3848). Phase R, v0.5.
-        #[arg(long)]
-        workbench: bool,
     },
     /// v0.42: Show what's pending right now — the daily-driver
     /// equivalent of `git status`. One screen: counts, the inbox,
@@ -1063,21 +1058,6 @@ pub(crate) enum Commands {
     Link {
         #[command(subcommand)]
         action: LinkAction,
-    },
-    /// v0.48: launch the local workbench web app — a localhost UI
-    /// rendering the substrate against the cwd's `.vela/` repo.
-    /// Read+write: confirm/refute bridges, browse findings, audit.
-    /// Pure Rust, no node/bun dependency, single binary.
-    Workbench {
-        /// Path to a Vela repo. Defaults to cwd.
-        #[arg(default_value = ".")]
-        path: PathBuf,
-        /// Port to bind on localhost. Default 3850.
-        #[arg(long, default_value_t = 3850)]
-        port: u16,
-        /// Skip auto-opening the default browser.
-        #[arg(long)]
-        no_open: bool,
     },
     /// v0.46: derive, list, and review cross-frontier bridges.
     /// A bridge is a content-addressed `vbr_<id>` record asserting

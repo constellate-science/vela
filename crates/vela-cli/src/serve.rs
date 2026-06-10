@@ -394,7 +394,7 @@ pub async fn run(source: ProjectSource, _backend: Option<&str>) {
     }
 }
 
-pub async fn run_http(source: ProjectSource, backend: Option<&str>, port: u16, workbench: bool) {
+pub async fn run_http(source: ProjectSource, backend: Option<&str>, port: u16) {
     let _ = backend;
     dotenvy::dotenv().ok();
     let (frontier, project_infos) = load_projects(&source);
@@ -409,7 +409,7 @@ pub async fn run_http(source: ProjectSource, backend: Option<&str>, port: u16, w
         source_path,
     };
 
-    let mut app = Router::new()
+    let app = Router::new()
         .route("/health", get(http_health))
         .route("/healthz", get(http_health))
         .route("/api/frontier", get(http_frontier))
@@ -455,22 +455,6 @@ pub async fn run_http(source: ProjectSource, backend: Option<&str>, port: u16, w
         .route("/mcp/tools", get(http_tools_list))
         .route("/api/tool", post(http_tool_call));
 
-    // When --workbench, also serve the static `web/` directory at /
-    // alongside the API. The canonical Workbench UI now lives in the
-    // Astro site (vela-site.fly.dev/workbench) and proxies /api/* here;
-    // --workbench remains for local development against any web/ tree.
-    if workbench {
-        let web_dir = workbench_web_dir();
-        if web_dir.exists() {
-            app = app.fallback_service(tower_http::services::ServeDir::new(web_dir));
-        } else {
-            eprintln!(
-                "{} --workbench: web/ directory not found at expected location; serving API only",
-                vela_protocol::cli_style::err_prefix()
-            );
-        }
-    }
-
     // v0.107.5: explicit request-body cap. Closes the integrity
     // half of THREAT_MODEL.md A13 (resource exhaustion via large
     // packets). axum's default body limit is 2MB; we raise to 8MB
@@ -486,30 +470,9 @@ pub async fn run_http(source: ProjectSource, backend: Option<&str>, port: u16, w
         .with_state(state);
 
     let addr = format!("0.0.0.0:{port}");
-    eprintln!(
-        "  {}",
-        if workbench {
-            format!("VELA · WORKBENCH :{port}").to_uppercase()
-        } else {
-            format!("VELA · SERVE · HTTP :{port}").to_uppercase()
-        }
-        .as_str()
-    );
+    eprintln!("  {}", format!("VELA · SERVE · HTTP :{port}").to_uppercase());
     eprintln!("  {}", vela_protocol::cli_style::tick_row(60));
     eprintln!("  listening on http://{addr}");
-    if workbench {
-        // v0.29: print the deep link the researcher actually opens.
-        // The deployed Astro page accepts ?api=… and bypasses the hub
-        // — same UI, local data. This was the v0.28 friction-pass
-        // forcing function (Friction #1: "researcher with a local
-        // frontier should not need to publish before reviewing in a
-        // browser"). Same banner works against `npm run dev` at
-        // localhost:4321 too.
-        eprintln!("  workbench UI: https://vela-site.fly.dev/frontiers/view?api=http://{addr}");
-        eprintln!(
-            "                (or  http://localhost:4321/frontiers/view?api=http://{addr}  for a local site)"
-        );
-    }
     // v0.91: full endpoint enumeration so a fresh user opening
     // `vela serve --http` knows what they can hit. Grouped by
     // function rather than alphabetically.
@@ -1672,27 +1635,6 @@ async fn http_from_carina(
     )
 }
 
-/// Phase R (v0.5): resolve the location of the `web/` directory for the
-/// Workbench static assets. Tries common paths: workspace root relative
-/// to the running binary, then current working directory, then a
-/// `VELA_WEB_DIR` env override.
-fn workbench_web_dir() -> PathBuf {
-    if let Ok(path) = std::env::var("VELA_WEB_DIR") {
-        return PathBuf::from(path);
-    }
-    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-    let candidates = [
-        cwd.join("web"),
-        PathBuf::from("./web"),
-        PathBuf::from("web"),
-    ];
-    for candidate in candidates {
-        if candidate.exists() {
-            return candidate;
-        }
-    }
-    cwd.join("web")
-}
 
 /// v0.51: Resolve the requesting actor's read-side access clearance
 /// from the `X-Vela-Actor` request header. The header value, if

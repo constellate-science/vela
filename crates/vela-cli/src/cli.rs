@@ -275,7 +275,6 @@ pub async fn run_command() {
             check_tools,
             adoption,
             json,
-            workbench,
         } => {
             if setup {
                 cmd_mcp_setup(frontier.as_deref(), frontiers.as_deref());
@@ -295,14 +294,8 @@ pub async fn run_command() {
             } else {
                 let source =
                     serve::ProjectSource::from_args(frontier.as_deref(), frontiers.as_deref());
-                // Phase R: --workbench implies HTTP and serves web/.
-                let resolved_port = if workbench {
-                    Some(http.unwrap_or(3848))
-                } else {
-                    http
-                };
-                if let Some(port) = resolved_port {
-                    serve::run_http(source, backend.as_deref(), port, workbench).await;
+                if let Some(port) = http {
+                    serve::run_http(source, backend.as_deref(), port).await;
                 } else {
                     serve::run(source, backend.as_deref()).await;
                 }
@@ -673,15 +666,6 @@ pub async fn run_command() {
         Commands::SourceAdapter { action } => cmd_source_adapter(action).await,
         Commands::RuntimeAdapter { action } => cmd_runtime_adapter(action),
         Commands::Link { action } => cmd_link(action),
-        Commands::Workbench {
-            path,
-            port,
-            no_open,
-        } => {
-            if let Err(e) = crate::workbench::run(path, port, !no_open).await {
-                fail(&e);
-            }
-        }
         Commands::Bridges { action } => cmd_bridges(action),
         Commands::Entity { action } => cmd_entity(action),
         Commands::Finding { command } => match command {
@@ -4113,7 +4097,7 @@ fn cmd_decision_brief(frontier: &Path, json_out: bool) {
 }
 
 fn cmd_review_work(frontier: &Path, json_out: bool) {
-    let payload = crate::workbench::build_review_work_json(frontier)
+    let payload = crate::review_work::build_review_work_json(frontier)
         .unwrap_or_else(|e| fail_return(&format!("review work failed: {e}")));
     if json_out {
         print_json(&payload);
@@ -9946,7 +9930,7 @@ pub(crate) fn cmd_frontier_audit(frontier: PathBuf, json_out: bool) {
     });
     let evidence = evidence_ci::run_frontier(&frontier).unwrap_or_else(|e| fail_return(&e));
     let health = frontier_health::analyze(&frontier).unwrap_or_else(|e| fail_return(&e));
-    let mut review_work = crate::workbench::build_review_work_json(&frontier)
+    let mut review_work = crate::review_work::build_review_work_json(&frontier)
         .map(Some)
         .unwrap_or_else(|e| {
             Some(json!({
@@ -16406,8 +16390,6 @@ const SCIENCE_SUBCOMMANDS: &[&str] = &[
     "ask",
     // v0.46: cross-frontier bridge runtime.
     "bridges",
-    // v0.48: local workbench web app.
-    "workbench",
     // v0.49: friendlier alias for `vela packet validate <path>`.
     "verify",
     // v0.74: top-level alias verbs that surface the daily flow

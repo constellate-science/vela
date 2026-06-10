@@ -32,7 +32,7 @@ mod cli_owner_rotate;
 mod cli_registry;
 mod cli_source_fetch;
 mod serve;
-mod workbench;
+mod review_work;
 
 pub fn run() {
     // Atlas R.2 intercept: read-only verifier subcommands for the
