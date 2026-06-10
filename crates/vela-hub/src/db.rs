@@ -87,6 +87,14 @@ struct FrontierObjectRow {
 }
 
 impl HubDb {
+    /// Local/SQLite mode: the database file IS the durable local store,
+    /// so inline substrate is acceptable without object storage (the
+    /// snapshot lands in materialized_snapshot_json). Production
+    /// Postgres still requires the blob tier.
+    pub fn is_sqlite(&self) -> bool {
+        matches!(self, Self::Sqlite(_))
+    }
+
     pub async fn health(&self) -> Result<(), String> {
         match self {
             Self::Postgres(p) => sqlx::query_scalar::<_, i32>("SELECT 1")

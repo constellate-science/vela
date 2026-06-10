@@ -2629,10 +2629,17 @@ async fn publish_entry(
                     );
                 }
             }
+        } else if state.db.is_sqlite() {
+            // Local/SQLite mode: the DB file IS the durable local store;
+            // the snapshot lands in materialized_snapshot_json and reads
+            // are served from it. This is what makes the restore drill
+            // (and offline hub stand-up) possible from repo contents
+            // alone. No blob URL exists in this mode.
+            None
         } else {
-            // Substrate provided but no storage configured. Don't accept
-            // it silently — the manifest would land referencing a
-            // snapshot that's nowhere to be found.
+            // Production without storage: don't accept inline substrate
+            // silently — the manifest would land referencing a snapshot
+            // that's nowhere to be found.
             return (
                 StatusCode::SERVICE_UNAVAILABLE,
                 Json(json!({

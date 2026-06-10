@@ -962,6 +962,17 @@ pub(crate) enum Commands {
         json: bool,
     },
 
+    /// Emit AGENTS.md + CLAUDE.md for a frontier workspace, regenerated
+    /// deterministically from the log: statements, banked do-not-regrind
+    /// routes, allowed outputs, and the named done-condition
+    /// ("done means `vela gate` passes"). Codex and Claude Code read
+    /// these natively — zero-integration onboarding.
+    Onboard {
+        frontier: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Lease an open obligation so other producers route around it.
     /// Signed event; one live lease per obligation; expiry = claimed_at
     /// + ttl, computed at read time.
