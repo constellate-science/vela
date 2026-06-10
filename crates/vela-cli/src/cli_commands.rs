@@ -2713,6 +2713,26 @@ pub(crate) enum QueueAction {
 
 #[derive(Subcommand)]
 pub(crate) enum RegistryAction {
+    /// Deprecate a published frontier on a hub: an owner-signed,
+    /// append-only lifecycle event. The entry vanishes from /entries and
+    /// /search but stays auditable at /entries/{vfr}/status — never a
+    /// silent deletion. Only the owner key that published the entry can
+    /// deprecate it (the re-publish continuity rule).
+    Deprecate {
+        /// The frontier to deprecate (vfr_…)
+        vfr_id: String,
+        /// Hub base URL (e.g. https://vela-hub.fly.dev)
+        #[arg(long)]
+        to: String,
+        /// Path to the owner's Ed25519 private key (hex seed)
+        #[arg(long)]
+        key: PathBuf,
+        /// Why this frontier is retired (recorded in the signed receipt)
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        json: bool,
+    },
     /// List all entries in a local registry
     List {
         /// Path or file:// URL of the registry; defaults to ~/.vela/registry/entries.json

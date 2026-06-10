@@ -752,6 +752,156 @@ impl HubDb {
     }
 
     /// Returns true on fresh insert, false on duplicate.
+    /// Append-only frontier deprecation (earliest-wins; a second
+    /// deprecation of the same vfr_id is a no-op). Also flips
+    /// `frontiers.status` to 'deprecated', which every live read
+    /// (`list_live_entries`, `get_live_entry`, search) already filters on.
+    pub async fn record_deprecation(
+        &self,
+        vfr_id: &str,
+        deprecated_at: &str,
+        reason: &str,
+        raw_json: &Value,
+    ) -> Result<bool, String> {
+        match self {
+            Self::Postgres(p) => {
+                let inserted = sqlx::query_scalar::<_, String>(
+                    r#"
+                    INSERT INTO frontier_deprecations (vfr_id, deprecated_at, reason, raw_json)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT (vfr_id) DO NOTHING
+                    RETURNING vfr_id
+                    "#,
+                )
+                .bind(vfr_id)
+                .bind(deprecated_at)
+                .bind(reason)
+                .bind(raw_json)
+                .fetch_optional(p)
+                .await
+                .map_err(|e| e.to_string())?
+                .is_some();
+                sqlx::query("UPDATE frontiers SET status = 'deprecated' WHERE vfr_id = $1")
+                    .bind(vfr_id)
+                    .execute(p)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                Ok(inserted)
+            }
+            Self::Sqlite(p) => {
+                let raw = serde_json::to_string(raw_json).map_err(|e| e.to_string())?;
+                let res = sqlx::query(
+                    r#"
+                    INSERT OR IGNORE INTO frontier_deprecations (vfr_id, deprecated_at, reason, raw_json)
+                    VALUES (?1, ?2, ?3, ?4)
+                    "#,
+                )
+                .bind(vfr_id)
+                .bind(deprecated_at)
+                .bind(reason)
+                .bind(raw)
+                .execute(p)
+                .await
+                .map_err(|e| e.to_string())?;
+                sqlx::query("UPDATE frontiers SET status = 'deprecated' WHERE vfr_id = ?1")
+                    .bind(vfr_id)
+                    .execute(p)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                Ok(res.rows_affected() > 0)
+            }
+        }
+    }
+
+    /// The deprecation record for a frontier, if any (the audit receipt).
+    pub async fn get_deprecation(&self, vfr_id: &str) -> Result<Option<Value>, String> {
+        match self {
+            Self::Postgres(p) => sqlx::query_scalar::<_, Value>(
+                "SELECT raw_json FROM frontier_deprecations WHERE vfr_id = $1",
+            )
+            .bind(vfr_id)
+            .fetch_optional(p)
+            .await
+            .map_err(|e| e.to_string()),
+            Self::Sqlite(p) => {
+                let row: Option<String> = sqlx::query_scalar(
+                    "SELECT raw_json FROM frontier_deprecations WHERE vfr_id = ?1",
+                )
+                .bind(vfr_id)
+                .fetch_optional(p)
+                .await
+                .map_err(|e| e.to_string())?;
+                row.map(|s| serde_json::from_str(&s).map_err(|e| e.to_string()))
+                    .transpose()
+            }
+        }
+    }
+
+    /// Record the object-storage URL of the archived signed manifest for
+    /// every entry row of this (vfr_id, signature) publish.
+    pub async fn set_manifest_blob_url(
+        &self,
+        vfr_id: &str,
+        signature: &str,
+        url: &str,
+    ) -> Result<(), String> {
+        match self {
+            Self::Postgres(p) => sqlx::query(
+                "UPDATE registry_entries SET manifest_blob_url = $1 WHERE vfr_id = $2 AND signature = $3",
+            )
+            .bind(url)
+            .bind(vfr_id)
+            .bind(signature)
+            .execute(p)
+            .await
+            .map(|_| ())
+            .map_err(|e| e.to_string()),
+            Self::Sqlite(p) => sqlx::query(
+                "UPDATE registry_entries SET manifest_blob_url = ?1 WHERE vfr_id = ?2 AND signature = ?3",
+            )
+            .bind(url)
+            .bind(vfr_id)
+            .bind(signature)
+            .execute(p)
+            .await
+            .map(|_| ())
+            .map_err(|e| e.to_string()),
+        }
+    }
+
+    /// Entries whose signed manifest has not yet been archived to object
+    /// storage. Drives the idempotent boot-time backfill.
+    pub async fn entries_missing_manifest_blob(
+        &self,
+    ) -> Result<Vec<(String, String, Value)>, String> {
+        match self {
+            Self::Postgres(p) => {
+                let rows: Vec<(String, String, Value)> = sqlx::query_as(
+                    "SELECT vfr_id, signature, raw_json FROM registry_entries WHERE manifest_blob_url IS NULL",
+                )
+                .fetch_all(p)
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok(rows)
+            }
+            Self::Sqlite(p) => {
+                let rows: Vec<(String, String, String)> = sqlx::query_as(
+                    "SELECT vfr_id, signature, raw_json FROM registry_entries WHERE manifest_blob_url IS NULL",
+                )
+                .fetch_all(p)
+                .await
+                .map_err(|e| e.to_string())?;
+                rows.into_iter()
+                    .map(|(v, s, r)| {
+                        serde_json::from_str(&r)
+                            .map(|j| (v, s, j))
+                            .map_err(|e| e.to_string())
+                    })
+                    .collect()
+            }
+        }
+    }
+
     pub async fn insert_entry(
         &self,
         entry: &RegistryEntry,
@@ -850,7 +1000,7 @@ impl HubDb {
     /// vfr_id has never been promoted. Used to enforce owner continuity on
     /// re-publish (an attacker cannot produce a valid signature for the
     /// original owner's key, so they cannot pass the continuity check).
-    async fn frontier_owner_pubkey(&self, vfr_id: &str) -> Result<Option<String>, String> {
+    pub async fn frontier_owner_pubkey(&self, vfr_id: &str) -> Result<Option<String>, String> {
         let row: Option<(String,)> = match self {
             Self::Postgres(p) => {
                 sqlx::query_as("SELECT owner_pubkey FROM frontiers WHERE vfr_id = $1")
@@ -2732,6 +2882,22 @@ pub const POSTGRES_EVENT_FIRST_SCHEMA: &[&str] = &[
         PRIMARY KEY (vfr_id, pubkey)
     )"#,
     "CREATE INDEX IF NOT EXISTS idx_frontier_revocations_vfr ON frontier_revocations (vfr_id)",
+    // Frontier lifecycle: append-only, earliest-wins deprecation log.
+    // Once deprecated a frontier never returns to 'live' (a successor is
+    // a new vfr_id). Mirrors the revocation pattern above. The signed
+    // DeprecationRecord rides in raw_json as the audit receipt.
+    r#"CREATE TABLE IF NOT EXISTS frontier_deprecations (
+        vfr_id TEXT NOT NULL PRIMARY KEY,
+        deprecated_at TEXT NOT NULL,
+        reason TEXT,
+        raw_json JSONB NOT NULL,
+        recorded_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )"#,
+    // Durable publish receipts: the signed manifest archived to object
+    // storage, content-addressed by sha256(canonical manifest bytes).
+    // Postgres becomes a queryable cache; the trust chain (manifest +
+    // snapshot blobs) is reconstructible from storage alone.
+    "ALTER TABLE registry_entries ADD COLUMN IF NOT EXISTS manifest_blob_url TEXT",
     // v0.201: federation handle for `vsd_*` Scientific Diff Packs.
     // Mirror of registry_entries but for the v0.193 primitive.
     r#"CREATE TABLE IF NOT EXISTS registry_diff_packs (
@@ -2784,6 +2950,7 @@ pub async fn ensure_sqlite_schema(pool: &SqlitePool) -> Result<(), String> {
             signed_publish_at TEXT NOT NULL,
             signature TEXT NOT NULL,
             raw_json TEXT NOT NULL,
+            manifest_blob_url TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now'))
         )"#,
         "CREATE INDEX IF NOT EXISTS idx_entries_vfr_id ON registry_entries (vfr_id)",
@@ -2915,6 +3082,13 @@ pub async fn ensure_sqlite_schema(pool: &SqlitePool) -> Result<(), String> {
             revoked_reason TEXT,
             recorded_at TEXT NOT NULL DEFAULT (datetime('now')),
             PRIMARY KEY (vfr_id, pubkey)
+        )"#,
+        r#"CREATE TABLE IF NOT EXISTS frontier_deprecations (
+            vfr_id TEXT NOT NULL PRIMARY KEY,
+            deprecated_at TEXT NOT NULL,
+            reason TEXT,
+            raw_json TEXT NOT NULL,
+            recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
         )"#,
         "CREATE INDEX IF NOT EXISTS idx_frontier_revocations_vfr ON frontier_revocations (vfr_id)",
     ] {

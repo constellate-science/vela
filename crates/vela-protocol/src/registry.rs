@@ -95,6 +95,65 @@ impl Default for Registry {
 /// `event_signing_bytes` and `proposal_signing_bytes`: a second
 /// implementation following only the canonical-JSON spec produces
 /// byte-identical signing bytes.
+/// A signed frontier-deprecation record: the registry-lifecycle analogue
+/// of actor revocation. Append-only, earliest-wins, never undone — once a
+/// frontier is deprecated it stays deprecated (a successor frontier is a
+/// new vfr_id, not a resurrection). Only the entry's owner key can sign a
+/// deprecation (the same continuity rule as re-publish).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct DeprecationRecord {
+    pub schema: String,
+    pub vfr_id: String,
+    pub deprecated_at: String,
+    pub reason: String,
+    pub signature: String,
+    pub signer_pubkey_hex: String,
+}
+
+pub const DEPRECATION_SCHEMA: &str = "vela.frontier-deprecation.v0.1";
+
+pub fn deprecation_signing_bytes(rec: &DeprecationRecord) -> Result<Vec<u8>, String> {
+    let preimage = serde_json::json!({
+        "schema": rec.schema,
+        "vfr_id": rec.vfr_id,
+        "deprecated_at": rec.deprecated_at,
+        "reason": rec.reason,
+    });
+    crate::canonical::to_canonical_bytes(&preimage)
+}
+
+pub fn sign_deprecation(
+    rec: &DeprecationRecord,
+    key: &ed25519_dalek::SigningKey,
+) -> Result<String, String> {
+    use ed25519_dalek::Signer;
+    let bytes = deprecation_signing_bytes(rec)?;
+    Ok(hex::encode(key.sign(&bytes).to_bytes()))
+}
+
+pub fn verify_deprecation(rec: &DeprecationRecord) -> Result<bool, String> {
+    use ed25519_dalek::Verifier;
+    if rec.schema != DEPRECATION_SCHEMA {
+        return Err(format!(
+            "deprecation schema must be {DEPRECATION_SCHEMA}, got {}",
+            rec.schema
+        ));
+    }
+    let bytes = deprecation_signing_bytes(rec)?;
+    let pk_bytes: [u8; 32] = hex::decode(&rec.signer_pubkey_hex)
+        .map_err(|e| format!("pubkey hex: {e}"))?
+        .try_into()
+        .map_err(|_| "pubkey must be 32 bytes".to_string())?;
+    let vk =
+        ed25519_dalek::VerifyingKey::from_bytes(&pk_bytes).map_err(|e| format!("pubkey: {e}"))?;
+    let sig_bytes: [u8; 64] = hex::decode(&rec.signature)
+        .map_err(|e| format!("signature hex: {e}"))?
+        .try_into()
+        .map_err(|_| "signature must be 64 bytes".to_string())?;
+    let sig = ed25519_dalek::Signature::from_bytes(&sig_bytes);
+    Ok(vk.verify(&bytes, &sig).is_ok())
+}
+
 pub fn entry_signing_bytes(entry: &RegistryEntry) -> Result<Vec<u8>, String> {
     let preimage = json!({
         "schema": entry.schema,

@@ -35,6 +35,67 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
             artifacts,
             json,
         } => cmd_verify_chain(frontier, artifacts, json),
+        RegistryAction::Deprecate {
+            vfr_id,
+            to,
+            key,
+            reason,
+            json,
+        } => {
+            let key_hex = std::fs::read_to_string(&key)
+                .map(|s| s.trim().to_string())
+                .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
+            let signing_key = parse_signing_key(&key_hex);
+            let signer_pubkey = hex::encode(signing_key.verifying_key().to_bytes());
+            let mut rec = vela_protocol::registry::DeprecationRecord {
+                schema: vela_protocol::registry::DEPRECATION_SCHEMA.to_string(),
+                vfr_id: vfr_id.clone(),
+                deprecated_at: chrono::Utc::now().to_rfc3339(),
+                reason: reason.clone(),
+                signature: String::new(),
+                signer_pubkey_hex: signer_pubkey,
+            };
+            rec.signature = vela_protocol::registry::sign_deprecation(&rec, &signing_key)
+                .unwrap_or_else(|e| fail_return(&format!("sign: {e}")));
+            let hub = to.trim_end_matches('/').to_string();
+            let url = format!("{hub}/entries/{vfr_id}/deprecate");
+            let body = serde_json::to_value(&rec)
+                .unwrap_or_else(|e| fail_return(&format!("serialize: {e}")));
+            let (status, text) = {
+                let u = url.clone();
+                std::thread::spawn(move || -> Result<(u16, String), String> {
+                    let resp = reqwest::blocking::Client::new()
+                        .post(&u)
+                        .json(&body)
+                        .send()
+                        .map_err(|e| format!("POST {u}: {e}"))?;
+                    let status = resp.status().as_u16();
+                    let text = resp.text().map_err(|e| format!("read response: {e}"))?;
+                    Ok((status, text))
+                })
+                .join()
+                .unwrap_or_else(|_| fail_return("deprecate request thread panicked"))
+                .unwrap_or_else(|e| fail_return(&e))
+            };
+            let payload: serde_json::Value =
+                serde_json::from_str(&text).unwrap_or_else(|_| serde_json::json!({"raw": text}));
+            if json {
+                print_json(&serde_json::json!({
+                    "ok": status < 300,
+                    "command": "registry.deprecate",
+                    "vfr_id": vfr_id,
+                    "status": status,
+                    "response": payload,
+                }));
+            } else if status < 300 {
+                println!(
+                    "{} deprecated {vfr_id} on {hub} (auditable at /entries/{vfr_id}/status)",
+                    style::ok("ok")
+                );
+            } else {
+                fail(&format!("deprecate failed ({status}): {payload}"));
+            }
+        }
         RegistryAction::Propose {
             vfr_id,
             to,

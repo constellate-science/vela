@@ -551,6 +551,49 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         accept_limiter: Arc::new(RwLock::new(HashMap::new())),
     };
 
+    // Boot-time backfill: archive any signed manifest that predates the
+    // durable-receipt path. Idempotent (content-addressed keys; rows are
+    // selected by manifest_blob_url IS NULL) and non-fatal — the hub
+    // serves regardless; the next boot retries what failed.
+    if let Some(storage) = state.storage.clone() {
+        let db = state.db.clone();
+        tokio::spawn(async move {
+            match db.entries_missing_manifest_blob().await {
+                Ok(rows) => {
+                    let total = rows.len();
+                    let mut archived = 0usize;
+                    for (vfr_id, signature, raw_json) in rows {
+                        let (Ok(bytes), Ok(mhash)) = (
+                            vela_protocol::canonical::to_canonical_bytes(&raw_json),
+                            vela_protocol::canonical::sha256_canonical(&raw_json),
+                        ) else {
+                            continue;
+                        };
+                        let key = format!("manifest/{mhash}");
+                        match storage.put(&key, bytes, "application/json").await {
+                            Ok(url) => {
+                                if db
+                                    .set_manifest_blob_url(&vfr_id, &signature, &url)
+                                    .await
+                                    .is_ok()
+                                {
+                                    archived += 1;
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(%vfr_id, error = %e, "manifest backfill put failed");
+                            }
+                        }
+                    }
+                    if total > 0 {
+                        tracing::info!(archived, total, "manifest receipt backfill complete");
+                    }
+                }
+                Err(e) => tracing::warn!(error = %e, "manifest backfill query failed"),
+            }
+        });
+    }
+
     let port: u16 = env::var("VELA_HUB_PORT")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -567,6 +610,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/entries/{vfr_id}/snapshot", get(get_entry_snapshot))
         .route("/entries/{vfr_id}/summary", get(get_entry_summary))
         .route("/entries/{vfr_id}/manifest", get(get_entry_manifest))
+        .route("/entries/{vfr_id}/status", get(get_entry_status))
+        .route(
+            "/entries/{vfr_id}/deprecate",
+            axum::routing::post(deprecate_entry),
+        )
         .route("/search", get(search_endpoint))
         .route("/entries/{vfr_id}/objects/{otype}", get(get_entry_objects))
         .route(
@@ -1071,6 +1119,137 @@ async fn get_entry_summary(State(state): State<AppState>, Path(vfr_id): Path<Str
 /// primitive — counts + log head + an index of object ids by type, WITHOUT the
 /// bulk raw_json. A client reads this, then pulls individual objects on demand
 /// (sparse / partial clone) rather than the whole multi-MB snapshot.
+/// Lifecycle status for a frontier: 'live' or 'deprecated', with the
+/// signed deprecation receipt when present. Deprecated entries vanish
+/// from /entries and /search, but stay auditable here — correction is
+/// first-class, never silent deletion.
+async fn get_entry_status(State(state): State<AppState>, Path(vfr_id): Path<String>) -> Response {
+    let deprecation = match state.db.get_deprecation(&vfr_id).await {
+        Ok(d) => d,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("query: {e}")})),
+            )
+                .into_response();
+        }
+    };
+    let known = match state.db.frontier_owner_pubkey(&vfr_id).await {
+        Ok(k) => k.is_some(),
+        Err(_) => false,
+    };
+    if !known && deprecation.is_none() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("{vfr_id} not found")})),
+        )
+            .into_response();
+    }
+    Json(json!({
+        "vfr_id": vfr_id,
+        "status": if deprecation.is_some() { "deprecated" } else { "live" },
+        "deprecation": deprecation,
+    }))
+    .into_response()
+}
+
+/// Owner-signed frontier deprecation. The request body is a
+/// `vela.frontier-deprecation.v0.1` record; the signature must verify
+/// over the canonical preimage AND the signer pubkey must equal the
+/// frontier's registered owner pubkey (the same continuity rule as
+/// re-publish — only the key that published an entry can retire it).
+/// Append-only and earliest-wins: a deprecation is never undone.
+async fn deprecate_entry(
+    State(state): State<AppState>,
+    Path(vfr_id): Path<String>,
+    Json(body): Json<serde_json::Value>,
+) -> Response {
+    let rec: vela_protocol::registry::DeprecationRecord = match serde_json::from_value(body.clone())
+    {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({"ok": false, "error": format!("deprecation parse: {e}")})),
+            )
+                .into_response();
+        }
+    };
+    if rec.vfr_id != vfr_id {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({"ok": false, "error": "record vfr_id does not match the path"})),
+        )
+            .into_response();
+    }
+    match vela_protocol::registry::verify_deprecation(&rec) {
+        Ok(true) => {}
+        Ok(false) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"ok": false, "error": "deprecation signature does not verify"})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({"ok": false, "error": format!("verify: {e}")})),
+            )
+                .into_response();
+        }
+    }
+    // Owner continuity: only the registered owner key can deprecate.
+    match state.db.frontier_owner_pubkey(&vfr_id).await {
+        Ok(Some(owner)) if owner.eq_ignore_ascii_case(&rec.signer_pubkey_hex) => {}
+        Ok(Some(_)) => {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(json!({"ok": false, "error": "signer is not the frontier's registered owner key"})),
+            )
+                .into_response();
+        }
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"ok": false, "error": format!("{vfr_id} not found")})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": format!("query: {e}")})),
+            )
+                .into_response();
+        }
+    }
+    match state
+        .db
+        .record_deprecation(&vfr_id, &rec.deprecated_at, &rec.reason, &body)
+        .await
+    {
+        Ok(inserted) => {
+            // The entry just vanished from every live read; drop the
+            // read caches so /entries and /search reflect it immediately.
+            state.db_cache.write().await.clear();
+            state.frontier_cache.write().await.clear();
+            Json(json!({
+                "ok": true,
+                "vfr_id": vfr_id,
+                "status": "deprecated",
+                "newly_recorded": inserted,
+            }))
+            .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": format!("db: {e}")})),
+        )
+            .into_response(),
+    }
+}
+
 async fn get_entry_manifest(State(state): State<AppState>, Path(vfr_id): Path<String>) -> Response {
     let entry = match state.db.get_live_entry(&vfr_id).await {
         Ok(Some(e)) => e,
@@ -2199,6 +2378,32 @@ async fn publish_entry(
             );
         }
     };
+
+    // Durable receipt: archive the canonical manifest bytes to object
+    // storage, content-addressed by their own sha256. The signed manifest
+    // is the publish receipt; after this it outlives the database.
+    if let Some(storage) = &state.storage {
+        if let (Ok(manifest_bytes), Ok(mhash)) = (
+            vela_protocol::canonical::to_canonical_bytes(&manifest_value),
+            vela_protocol::canonical::sha256_canonical(&manifest_value),
+        ) {
+            let key = format!("manifest/{mhash}");
+            match storage.put(&key, manifest_bytes, "application/json").await {
+                Ok(url) => {
+                    if let Err(e) = state
+                        .db
+                        .set_manifest_blob_url(&entry.vfr_id, &entry.signature, &url)
+                        .await
+                    {
+                        tracing::warn!(%entry.vfr_id, error = %e, "manifest archived but url not recorded");
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(%entry.vfr_id, error = %e, "manifest archive failed; receipt remains db-only");
+                }
+            }
+        }
+    }
 
     // Snapshot meta insert. Idempotent on snapshot_hash — safe to retry
     // even on a duplicate manifest publish (the meta row may have been
