@@ -551,6 +551,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         accept_limiter: Arc::new(RwLock::new(HashMap::new())),
     };
 
+    // Producer-index backfill: re-extract signer_pubkey for finding
+    // objects from stored snapshots (covers publishes that predate the
+    // event-actor extraction). Idempotent; non-fatal.
+    {
+        let db = state.db.clone();
+        tokio::spawn(async move {
+            match db.backfill_signer_pubkeys().await {
+                Ok(n) if n > 0 => tracing::info!(updated = n, "producer-index backfill complete"),
+                Ok(_) => {}
+                Err(e) => tracing::warn!(error = %e, "producer-index backfill failed"),
+            }
+        });
+    }
+
     // Boot-time backfill: archive any signed manifest that predates the
     // durable-receipt path. Idempotent (content-addressed keys; rows are
     // selected by manifest_blob_url IS NULL) and non-fatal — the hub

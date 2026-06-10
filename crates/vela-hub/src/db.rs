@@ -919,6 +919,51 @@ impl HubDb {
         }
     }
 
+    /// Boot-time producer-index backfill: for live frontiers whose
+    /// finding objects lack signer_pubkey, re-run extraction from the
+    /// stored materialized snapshot. Idempotent.
+    pub async fn backfill_signer_pubkeys(&self) -> Result<usize, String> {
+        let vfrs: Vec<(String, String)> = match self {
+            Self::Postgres(p) => sqlx::query_as(
+                "SELECT vfr_id, materialized_snapshot_json::text FROM frontiers WHERE status = 'live'",
+            )
+            .fetch_all(p)
+            .await
+            .map_err(|e| e.to_string())?,
+            Self::Sqlite(p) => sqlx::query_as(
+                "SELECT vfr_id, materialized_snapshot_json FROM frontiers WHERE status = 'live'",
+            )
+            .fetch_all(p)
+            .await
+            .map_err(|e| e.to_string())?,
+        };
+        let mut updated = 0usize;
+        for (vfr, snap_text) in vfrs {
+            let Ok(snapshot) = serde_json::from_str::<Value>(&snap_text) else {
+                continue;
+            };
+            for row in collect_frontier_objects(&snapshot) {
+                let Some(pk) = row.signer_pubkey else {
+                    continue;
+                };
+                let affected: u64 = match self {
+                    Self::Postgres(p) => sqlx::query(
+                        "UPDATE frontier_objects SET signer_pubkey = $1 WHERE vfr_id = $2 AND object_type = $3 AND object_id = $4 AND signer_pubkey IS NULL",
+                    )
+                    .bind(&pk).bind(&vfr).bind(&row.object_type).bind(&row.object_id)
+                    .execute(p).await.map(|r| r.rows_affected()).unwrap_or(0),
+                    Self::Sqlite(p) => sqlx::query(
+                        "UPDATE frontier_objects SET signer_pubkey = ?1 WHERE vfr_id = ?2 AND object_type = ?3 AND object_id = ?4 AND signer_pubkey IS NULL",
+                    )
+                    .bind(&pk).bind(&vfr).bind(&row.object_type).bind(&row.object_id)
+                    .execute(p).await.map(|r| r.rows_affected()).unwrap_or(0),
+                };
+                updated += affected as usize;
+            }
+        }
+        Ok(updated)
+    }
+
     /// Append-only frontier deprecation (earliest-wins; a second
     /// deprecation of the same vfr_id is a no-op). Also flips
     /// `frontiers.status` to 'deprecated', which every live read
@@ -3425,11 +3470,47 @@ fn collect_frontier_objects(snapshot: &Value) -> Vec<FrontierObjectRow> {
             }
         }
     }
-    // Producer index: derive the signing/authoring key where the object
-    // carries one. Findings: provenance actor pubkey (fallback: the
-    // registered actor matching the author id is resolved at query time,
-    // so absent pubkeys stay NULL rather than guessed). Attempts and
-    // transfers carry signer_pubkey_hex directly.
+    // Producer index: derive the signing/authoring key. Attempts,
+    // transfers, and endorsements carry signer_pubkey_hex directly.
+    // Findings carry no pubkey — signatures live on EVENTS, keyed by
+    // actor id, with pubkeys in the snapshot's actor table — so resolve
+    // finding -> asserting/accepting event actor -> registered pubkey.
+    let actor_pubkeys: std::collections::HashMap<String, String> = snapshot
+        .get("actors")
+        .and_then(Value::as_array)
+        .map(|actors| {
+            actors
+                .iter()
+                .filter_map(|a| {
+                    Some((
+                        a.get("id")?.as_str()?.to_string(),
+                        a.get("public_key")?.as_str()?.to_string(),
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let finding_actor: std::collections::HashMap<String, String> = snapshot
+        .get("events")
+        .and_then(Value::as_array)
+        .map(|events| {
+            events
+                .iter()
+                .filter(|e| {
+                    matches!(
+                        e.get("kind").and_then(Value::as_str),
+                        Some("finding.asserted") | Some("finding.reviewed")
+                    )
+                })
+                .filter_map(|e| {
+                    Some((
+                        e.get("target")?.get("id")?.as_str()?.to_string(),
+                        e.get("actor")?.get("id")?.as_str()?.to_string(),
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
     for row in &mut out {
         row.signer_pubkey = match row.object_type.as_str() {
             "attempt" | "transfer" | "endorsement" => row
@@ -3437,13 +3518,10 @@ fn collect_frontier_objects(snapshot: &Value) -> Vec<FrontierObjectRow> {
                 .get("signer_pubkey_hex")
                 .and_then(Value::as_str)
                 .map(str::to_string),
-            "finding" => row
-                .raw_json
-                .get("provenance")
-                .and_then(|p| p.get("actor_pubkey"))
-                .or_else(|| row.raw_json.get("actor_pubkey"))
-                .and_then(Value::as_str)
-                .map(str::to_string),
+            "finding" => finding_actor
+                .get(&row.object_id)
+                .and_then(|actor| actor_pubkeys.get(actor))
+                .cloned(),
             _ => None,
         };
     }
