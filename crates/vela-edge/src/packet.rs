@@ -357,9 +357,10 @@ fn validate_proof_trace(packet_dir: &Path, trace_path: &Path) -> Result<(), Stri
         return Err("Proof trace command must start with vela when present".to_string());
     }
     if let Some(generated_at) = &trace.generated_at
-        && generated_at.trim().is_empty() {
-            return Err("Proof trace generated_at must be non-empty when present".to_string());
-        }
+        && generated_at.trim().is_empty()
+    {
+        return Err("Proof trace generated_at must be non-empty when present".to_string());
+    }
     if trace.source.trim().is_empty() {
         return Err("Proof trace source must be non-empty".to_string());
     }
@@ -433,17 +434,20 @@ fn validate_proof_trace(packet_dir: &Path, trace_path: &Path) -> Result<(), Stri
         }
     }
     if let Some(packet_manifest) = &trace.packet_manifest
-        && !Path::new(packet_manifest).ends_with("manifest.json") {
-            return Err("Proof trace packet_manifest must point to manifest.json".to_string());
-        }
+        && !Path::new(packet_manifest).ends_with("manifest.json")
+    {
+        return Err("Proof trace packet_manifest must point to manifest.json".to_string());
+    }
     if let Some(packet_validation) = &trace.packet_validation
-        && !packet_validation.contains("status: ok") {
-            return Err("Proof trace packet_validation must include status: ok".to_string());
-        }
+        && !packet_validation.contains("status: ok")
+    {
+        return Err("Proof trace packet_validation must include status: ok".to_string());
+    }
     if let Some(trace_path_value) = &trace.trace_path
-        && !Path::new(trace_path_value).ends_with("proof-trace.json") {
-            return Err("Proof trace trace_path must point to proof-trace.json".to_string());
-        }
+        && !Path::new(trace_path_value).ends_with("proof-trace.json")
+    {
+        return Err("Proof trace trace_path must point to proof-trace.json".to_string());
+    }
     if !packet_dir.join("manifest.json").exists() {
         return Err("Proof trace validation requires packet manifest".to_string());
     }
@@ -772,12 +776,13 @@ fn validate_artifact_payloads(packet_dir: &Path) -> Result<(), String> {
             ));
         }
         if let Some(size) = blob["size_bytes"].as_u64()
-            && size != bytes.len() as u64 {
-                return Err(format!(
-                    "Artifact {id} blob size mismatch: expected {size}, found {}",
-                    bytes.len()
-                ));
-            }
+            && size != bytes.len() as u64
+        {
+            return Err(format!(
+                "Artifact {id} blob size mismatch: expected {size}, found {}",
+                bytes.len()
+            ));
+        }
     }
 
     if audit["checked_local_blobs"].as_u64().unwrap_or(0) != local_artifact_count {

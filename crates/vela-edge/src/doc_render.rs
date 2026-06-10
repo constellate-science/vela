@@ -234,7 +234,10 @@ fn render_findings_index(project: &Project) -> String {
     )
 }
 
-fn render_finding_detail(project: &Project, finding: &vela_protocol::bundle::FindingBundle) -> String {
+fn render_finding_detail(
+    project: &Project,
+    finding: &vela_protocol::bundle::FindingBundle,
+) -> String {
     let title = format!("{} · {}", finding.id, project.project.name);
     let related: Vec<&vela_protocol::events::StateEvent> = project
         .events

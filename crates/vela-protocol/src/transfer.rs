@@ -147,18 +147,25 @@ impl Transfer {
             return Err("transfer.target_claim cannot be empty".to_string());
         }
         if draft.target_premise_digest.trim().is_empty() {
-            return Err("transfer.target_premise_digest cannot be empty (T5: a transfer must \
-                        discharge a specific premise, not all of B)".to_string());
+            return Err(
+                "transfer.target_premise_digest cannot be empty (T5: a transfer must \
+                        discharge a specific premise, not all of B)"
+                    .to_string(),
+            );
         }
         let h = &draft.homomorphism;
         if h.map_decl.trim().is_empty() {
             return Err("transfer.homomorphism.map_decl cannot be empty".to_string());
         }
         if h.source_type.trim().is_empty() || h.target_type.trim().is_empty() {
-            return Err("transfer.homomorphism source_type/target_type cannot be empty".to_string());
+            return Err(
+                "transfer.homomorphism source_type/target_type cannot be empty".to_string(),
+            );
         }
         if h.kind == TransferKind::LeanHomomorphism && !h.theorem_verification.starts_with("vlv_") {
-            return Err("a LeanHomomorphism transfer requires a `vlv_` theorem_verification".to_string());
+            return Err(
+                "a LeanHomomorphism transfer requires a `vlv_` theorem_verification".to_string(),
+            );
         }
         let mut t = Transfer {
             schema: TRANSFER_SCHEMA.to_string(),
@@ -195,7 +202,10 @@ impl Transfer {
     /// `vtr_<16hex>` over the canonical content preimage.
     pub fn derive_id(&self) -> Result<String, String> {
         let bytes = self.id_preimage_bytes()?;
-        Ok(format!("vtr_{}", &hex::encode(Sha256::digest(&bytes))[..16]))
+        Ok(format!(
+            "vtr_{}",
+            &hex::encode(Sha256::digest(&bytes))[..16]
+        ))
     }
 
     /// Structural verify: re-derive the id, verify the signature over the
@@ -203,13 +213,23 @@ impl Transfer {
     /// the link is sound — is a separate read-time check, [`derive_transfer_status`].)
     pub fn verify(&self) -> Result<(), String> {
         if self.schema != TRANSFER_SCHEMA {
-            return Err(format!("transfer.schema must be `{TRANSFER_SCHEMA}`, got `{}`", self.schema));
+            return Err(format!(
+                "transfer.schema must be `{TRANSFER_SCHEMA}`, got `{}`",
+                self.schema
+            ));
         }
         if !self.transfer_id.starts_with("vtr_") {
-            return Err(format!("transfer id must start with `vtr_`, got `{}`", self.transfer_id));
+            return Err(format!(
+                "transfer id must start with `vtr_`, got `{}`",
+                self.transfer_id
+            ));
         }
         let preimage = self.id_preimage_bytes()?;
-        if !crate::sign::verify_action_signature(&preimage, &self.signature, &self.signer_pubkey_hex)? {
+        if !crate::sign::verify_action_signature(
+            &preimage,
+            &self.signature,
+            &self.signer_pubkey_hex,
+        )? {
             return Err("transfer signature does not verify under the declared pubkey".to_string());
         }
         let rederived = self.derive_id()?;
@@ -329,7 +349,9 @@ pub fn derive_transfer_status(
         GateStatus::Verified => {}
         GateStatus::Refuted => {
             rejected = true;
-            reasons.push("T1: source claim A is REFUTED — the transfer cannot discharge B".to_string());
+            reasons.push(
+                "T1: source claim A is REFUTED — the transfer cannot discharge B".to_string(),
+            );
         }
         GateStatus::NeedsVerification => {
             reasons.push("T1: source claim A is not gate-verified (NeedsVerification)".to_string());
@@ -340,7 +362,8 @@ pub fn derive_transfer_status(
     match transfer.homomorphism.kind {
         TransferKind::LeanHomomorphism => match theorem_verification {
             None => reasons.push(
-                "T2: LeanHomomorphism transfer has no resolved `vlv_` theorem verification".to_string(),
+                "T2: LeanHomomorphism transfer has no resolved `vlv_` theorem verification"
+                    .to_string(),
             ),
             Some(v) => {
                 if let Err(e) = v.verify() {
@@ -359,9 +382,8 @@ pub fn derive_transfer_status(
                                       (forbidden axiom — e.g. native_decide/sorry — or failed kernel re-check)"
                             .to_string());
                     }
-                    MethodIntegrity::Unattested => reasons.push(
-                        "T2: transfer theorem has no axiom audit (Unattested)".to_string(),
-                    ),
+                    MethodIntegrity::Unattested => reasons
+                        .push("T2: transfer theorem has no axiom audit (Unattested)".to_string()),
                 }
             }
         },
@@ -444,7 +466,9 @@ mod tests {
             source_gate_status_claimed: "verified".to_string(),
             source_attachments: vec!["vva_bbbbbbbbbbbbbbbb".to_string()],
             target_claim: "vfr_cccccccccccccccc".to_string(),
-            target_premise_digest: crate::verifier_attachment::claim_digest("a DNA code of size >= 12 exists"),
+            target_premise_digest: crate::verifier_attachment::claim_digest(
+                "a DNA code of size >= 12 exists",
+            ),
             homomorphism: lean_decl_descriptor(theorem_verification),
             provenance: crate::attempt::Provenance::default(),
             note: String::new(),
@@ -461,12 +485,24 @@ mod tests {
             lean_toolchain: "leanprover/lean4:v4.29.1".to_string(),
             mathlib_revision: "abc".to_string(),
             verifier_output_hash: "0".repeat(64),
-            status: if kernel_clean { "verified".to_string() } else { "failed_axiom_check".to_string() },
+            status: if kernel_clean {
+                "verified".to_string()
+            } else {
+                "failed_axiom_check".to_string()
+            },
             verified_at: "2026-06-09T00:00:00Z".to_string(),
             verifier_actor: "test".to_string(),
             tcb_id: "vtcb_dddddddddddddddd".to_string(),
-            axioms: vec!["propext".to_string(), "Classical.choice".to_string(), "Quot.sound".to_string()],
-            axiom_verdict: Some(if kernel_clean { AxiomVerdict::KernelClean } else { AxiomVerdict::ForbiddenAxiom }),
+            axioms: vec![
+                "propext".to_string(),
+                "Classical.choice".to_string(),
+                "Quot.sound".to_string(),
+            ],
+            axiom_verdict: Some(if kernel_clean {
+                AxiomVerdict::KernelClean
+            } else {
+                AxiomVerdict::ForbiddenAxiom
+            }),
             kernel_recheck: Some(KernelRecheck::Passed),
             axioms_output_hash: "0".repeat(64),
         };
@@ -474,7 +510,10 @@ mod tests {
     }
 
     fn verified_gate() -> GateOutcome {
-        GateOutcome { status: GateStatus::Verified, reasons: vec![] }
+        GateOutcome {
+            status: GateStatus::Verified,
+            reasons: vec![],
+        }
     }
 
     #[test]
@@ -495,16 +534,27 @@ mod tests {
     fn admits_when_all_clauses_pass() {
         let v = lean_v(true);
         let t = Transfer::build(draft(&v.verification_id), &key()).unwrap();
-        let tags = DomainTags { source: "constant_weight_code".into(), target: "dna_code".into() };
+        let tags = DomainTags {
+            source: "constant_weight_code".into(),
+            target: "dna_code".into(),
+        };
         let out = derive_transfer_status(&t, &verified_gate(), Some(&v), &tags);
-        assert_eq!(out.status, TransferStatus::Admitted, "reasons: {:?}", out.reasons);
+        assert_eq!(
+            out.status,
+            TransferStatus::Admitted,
+            "reasons: {:?}",
+            out.reasons
+        );
     }
 
     #[test]
     fn native_decide_theorem_cannot_admit() {
         let v = lean_v(false); // forbidden axiom -> Compromised integrity
         let t = Transfer::build(draft(&v.verification_id), &key()).unwrap();
-        let tags = DomainTags { source: "constant_weight_code".into(), target: "dna_code".into() };
+        let tags = DomainTags {
+            source: "constant_weight_code".into(),
+            target: "dna_code".into(),
+        };
         let out = derive_transfer_status(&t, &verified_gate(), Some(&v), &tags);
         assert_eq!(out.status, TransferStatus::Rejected);
     }
@@ -513,8 +563,14 @@ mod tests {
     fn refuted_source_drives_rejected() {
         let v = lean_v(true);
         let t = Transfer::build(draft(&v.verification_id), &key()).unwrap();
-        let tags = DomainTags { source: "constant_weight_code".into(), target: "dna_code".into() };
-        let refuted = GateOutcome { status: GateStatus::Refuted, reasons: vec!["probe refuted".into()] };
+        let tags = DomainTags {
+            source: "constant_weight_code".into(),
+            target: "dna_code".into(),
+        };
+        let refuted = GateOutcome {
+            status: GateStatus::Refuted,
+            reasons: vec!["probe refuted".into()],
+        };
         let out = derive_transfer_status(&t, &refuted, Some(&v), &tags);
         assert_eq!(out.status, TransferStatus::Rejected);
     }
@@ -523,7 +579,10 @@ mod tests {
     fn type_mismatch_is_not_admitted() {
         let v = lean_v(true);
         let t = Transfer::build(draft(&v.verification_id), &key()).unwrap();
-        let tags = DomainTags { source: "sidon".into(), target: "dna_code".into() }; // wrong source
+        let tags = DomainTags {
+            source: "sidon".into(),
+            target: "dna_code".into(),
+        }; // wrong source
         let out = derive_transfer_status(&t, &verified_gate(), Some(&v), &tags);
         assert_eq!(out.status, TransferStatus::NeedsVerification);
         assert!(out.reasons.iter().any(|r| r.starts_with("T3")));
@@ -533,8 +592,14 @@ mod tests {
     fn unverified_source_needs_verification() {
         let v = lean_v(true);
         let t = Transfer::build(draft(&v.verification_id), &key()).unwrap();
-        let tags = DomainTags { source: "constant_weight_code".into(), target: "dna_code".into() };
-        let needs = GateOutcome { status: GateStatus::NeedsVerification, reasons: vec![] };
+        let tags = DomainTags {
+            source: "constant_weight_code".into(),
+            target: "dna_code".into(),
+        };
+        let needs = GateOutcome {
+            status: GateStatus::NeedsVerification,
+            reasons: vec![],
+        };
         let out = derive_transfer_status(&t, &needs, Some(&v), &tags);
         assert_eq!(out.status, TransferStatus::NeedsVerification);
     }

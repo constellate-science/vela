@@ -231,7 +231,9 @@ impl ScientificDiffPack {
         }
         if let (Some(sig_hex), Some(pub_hex)) = (&self.signature, &self.signer_pubkey_hex) {
             if !crate::sign::verify_action_signature(&self.preimage_bytes(), sig_hex, pub_hex)? {
-                return Err("scientific_diff signature does not verify under signer_pubkey_hex".to_string());
+                return Err(
+                    "scientific_diff signature does not verify under signer_pubkey_hex".to_string(),
+                );
             }
         } else if self.signature.is_some() || self.signer_pubkey_hex.is_some() {
             return Err("signature and signer_pubkey_hex must be set together".to_string());

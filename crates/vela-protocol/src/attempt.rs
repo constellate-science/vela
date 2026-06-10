@@ -213,7 +213,10 @@ impl Attempt {
     /// `vat_<16hex>` over the canonical content preimage.
     pub fn derive_id(&self) -> Result<String, String> {
         let bytes = self.id_preimage_bytes()?;
-        Ok(format!("vat_{}", &hex::encode(Sha256::digest(&bytes))[..16]))
+        Ok(format!(
+            "vat_{}",
+            &hex::encode(Sha256::digest(&bytes))[..16]
+        ))
     }
 
     /// Build the canonical `attempt.deposited` event that persists this
@@ -226,7 +229,8 @@ impl Attempt {
         actor_type: &str,
         reason: &str,
     ) -> crate::events::StateEvent {
-        let payload = serde_json::json!({ "attempt": serde_json::to_value(self).unwrap_or_default() });
+        let payload =
+            serde_json::json!({ "attempt": serde_json::to_value(self).unwrap_or_default() });
         crate::events::new_attempt_deposited_event(
             &self.attempt_id,
             actor_id,
@@ -245,16 +249,26 @@ impl Attempt {
     /// the claim. Any hand-edit to the body fails here.
     pub fn verify(&self) -> Result<(), String> {
         if self.schema != ATTEMPT_SCHEMA {
-            return Err(format!("attempt.schema must be `{ATTEMPT_SCHEMA}`, got `{}`", self.schema));
+            return Err(format!(
+                "attempt.schema must be `{ATTEMPT_SCHEMA}`, got `{}`",
+                self.schema
+            ));
         }
         if !self.attempt_id.starts_with("vat_") {
-            return Err(format!("attempt id must start with `vat_`, got `{}`", self.attempt_id));
+            return Err(format!(
+                "attempt id must start with `vat_`, got `{}`",
+                self.attempt_id
+            ));
         }
         if self.claim_digest != claim_digest(&self.claim) {
             return Err("attempt.claim_digest does not match claim".to_string());
         }
         let preimage = self.id_preimage_bytes()?;
-        if !crate::sign::verify_action_signature(&preimage, &self.signature, &self.signer_pubkey_hex)? {
+        if !crate::sign::verify_action_signature(
+            &preimage,
+            &self.signature,
+            &self.signer_pubkey_hex,
+        )? {
             return Err("attempt signature does not verify under the declared pubkey".to_string());
         }
         let rederived = self.derive_id()?;
@@ -328,7 +342,9 @@ impl ResolutionEvent {
         note: &str,
     ) -> Result<Self, String> {
         if !attempt_id.starts_with("vat_") {
-            return Err(format!("resolution target must be a `vat_` id, got `{attempt_id}`"));
+            return Err(format!(
+                "resolution target must be a `vat_` id, got `{attempt_id}`"
+            ));
         }
         if actor.trim().is_empty() {
             return Err("resolution actor cannot be empty".to_string());
@@ -352,7 +368,10 @@ impl ResolutionEvent {
         preimage.resolution_id = String::new();
         let bytes = crate::canonical::to_canonical_bytes(&preimage)
             .map_err(|e| format!("canonicalize resolution preimage: {e}"))?;
-        Ok(format!("vre_{}", &hex::encode(Sha256::digest(&bytes))[..16]))
+        Ok(format!(
+            "vre_{}",
+            &hex::encode(Sha256::digest(&bytes))[..16]
+        ))
     }
 
     /// Build the canonical `attempt.resolved` event carrying this transition.
@@ -414,7 +433,10 @@ mod tests {
             claim: "a(8) >= 33".to_string(),
             detail: "witness of 33 binary vectors, pairwise sums distinct".to_string(),
             claimed_status: "verified_computationally".to_string(),
-            reproduction: Reproduction { successes: 3, total: 3 },
+            reproduction: Reproduction {
+                successes: 3,
+                total: 3,
+            },
             cost: AttemptCost {
                 total_attempts: 1200,
                 failed_attempts: 1199,
@@ -485,10 +507,17 @@ mod tests {
     #[test]
     fn rejects_impossible_reproduction_and_cost() {
         let mut d = ok_draft();
-        d.reproduction = Reproduction { successes: 5, total: 3 };
+        d.reproduction = Reproduction {
+            successes: 5,
+            total: 3,
+        };
         assert!(Attempt::build(d, &key()).is_err());
         let mut d2 = ok_draft();
-        d2.cost = AttemptCost { total_attempts: 2, failed_attempts: 9, compute_note: String::new() };
+        d2.cost = AttemptCost {
+            total_attempts: 2,
+            failed_attempts: 9,
+            compute_note: String::new(),
+        };
         assert!(Attempt::build(d2, &key()).is_err());
     }
 
@@ -497,7 +526,9 @@ mod tests {
         let a = Attempt::build(ok_draft(), &key()).unwrap();
         let ev = ResolutionEvent::new(
             &a.attempt_id,
-            AttemptResolution::Verified { gate_ref: "gate@vva_0123456789abcdef".to_string() },
+            AttemptResolution::Verified {
+                gate_ref: "gate@vva_0123456789abcdef".to_string(),
+            },
             "reviewer:will-blair",
             "2026-06-09T00:00:00Z",
             "two independent methods + surviving probe",
@@ -512,7 +543,9 @@ mod tests {
     fn resolution_rejects_non_vat_target() {
         let r = ResolutionEvent::new(
             "vf_not_an_attempt",
-            AttemptResolution::Refuted { by_probe: "case_b".to_string() },
+            AttemptResolution::Refuted {
+                by_probe: "case_b".to_string(),
+            },
             "reviewer:x",
             "2026-06-09T00:00:00Z",
             "",

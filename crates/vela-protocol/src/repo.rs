@@ -1293,7 +1293,7 @@ mod tests {
     #[test]
     fn verifier_attachment_events_materialize_on_load() {
         use crate::verifier_attachment::{
-            AttachmentDraft, AdversarialProbe, AttachmentOutcome, MatchToClaim, ProbeKind,
+            AdversarialProbe, AttachmentDraft, AttachmentOutcome, MatchToClaim, ProbeKind,
             ProbeResult, VerifierAttachment, VerifierMethod,
         };
         use serde_json::json;
@@ -1744,7 +1744,6 @@ name = "minimal"
         assert_eq!(loaded.project.name, "conv-repo");
         assert_eq!(loaded.findings.len(), 1);
     }
-
 
     // ── project file -> repo -> project file roundtrip ────────────
 

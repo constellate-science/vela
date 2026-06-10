@@ -33,8 +33,8 @@
 //! - Discord results are advisory. They do not block any gate.
 
 use crate::discord::{ContextId, DiscordAssignment, DiscordKind, DiscordSet};
-use vela_protocol::project::Project;
 use crate::provenance_compute::status_provenance_for_finding;
+use vela_protocol::project::Project;
 use vela_protocol::status_provenance::BelnapStatus;
 
 /// Detector: fires when a finding has no verified evidence spans
@@ -131,12 +131,12 @@ pub fn compute_discord_assignment(project: &Project) -> DiscordAssignment {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
     use vela_protocol::bundle::{
         Assertion, Author, Conditions, Confidence, ConfidenceKind, ConfidenceMethod, Evidence,
         FindingBundle, Flags, Provenance,
     };
     use vela_protocol::events::{StateActor, StateEvent, StateTarget};
-    use serde_json::json;
 
     fn make_assertion(text: &str) -> Assertion {
         Assertion {

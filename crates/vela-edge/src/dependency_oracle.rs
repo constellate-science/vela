@@ -22,8 +22,8 @@
 //! resolution), so the headline number is "verified state resting on this," not
 //! "mentions of this."
 
-use vela_protocol::project::Project;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use vela_protocol::project::Project;
 
 /// The dependency impact of one record: who rests on it, transitively.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -49,7 +49,9 @@ fn reverse_dep_map(project: &Project) -> BTreeMap<String, BTreeSet<String>> {
     let mut rev: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for a in &project.attempts {
         for dep in &a.depends_on {
-            rev.entry(dep.clone()).or_default().insert(a.attempt_id.clone());
+            rev.entry(dep.clone())
+                .or_default()
+                .insert(a.attempt_id.clone());
         }
     }
     for t in &project.transfers {
@@ -96,7 +98,10 @@ pub fn dependency_impact(project: &Project, record_id: &str) -> DependencyImpact
     seen.remove(record_id);
 
     let transitive: Vec<String> = seen.iter().cloned().collect();
-    let verified_weight = transitive.iter().filter(|id| is_verified(project, id)).count() as u64;
+    let verified_weight = transitive
+        .iter()
+        .filter(|id| is_verified(project, id))
+        .count() as u64;
     DependencyImpact {
         record: record_id.to_string(),
         direct_dependents: direct,
@@ -109,9 +114,9 @@ pub fn dependency_impact(project: &Project, record_id: &str) -> DependencyImpact
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vela_protocol::attempt::{Attempt, AttemptDraft, AttemptResolution, ResolutionEvent};
     use ed25519_dalek::SigningKey;
     use rand::rngs::OsRng;
+    use vela_protocol::attempt::{Attempt, AttemptDraft, AttemptResolution, ResolutionEvent};
 
     fn key() -> SigningKey {
         SigningKey::generate(&mut OsRng)
@@ -164,14 +169,18 @@ mod tests {
         let b = att(2, "mid", vec![a.attempt_id.clone()]);
         let (aid, bid) = (a.attempt_id.clone(), b.attempt_id.clone());
         p.attempts = vec![a, b];
-        p.attempt_resolutions = vec![ResolutionEvent::new(
-            &bid,
-            AttemptResolution::Verified { gate_ref: "gate@vva_x".into() },
-            "reviewer:test",
-            "2026-06-09T00:00:00Z",
-            "",
-        )
-        .unwrap()];
+        p.attempt_resolutions = vec![
+            ResolutionEvent::new(
+                &bid,
+                AttemptResolution::Verified {
+                    gate_ref: "gate@vva_x".into(),
+                },
+                "reviewer:test",
+                "2026-06-09T00:00:00Z",
+                "",
+            )
+            .unwrap(),
+        ];
         let impact = dependency_impact(&p, &aid);
         assert_eq!(impact.weight, 1);
         assert_eq!(impact.verified_weight, 1, "b is verified");

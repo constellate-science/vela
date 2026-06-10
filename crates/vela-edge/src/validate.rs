@@ -6,16 +6,16 @@ use std::path::Path;
 use chrono::DateTime;
 use colored::Colorize;
 
-use vela_protocol::cli_style as style;
 use serde::{Deserialize, Serialize};
+use vela_protocol::cli_style as style;
 
+use crate::lint;
+use crate::normalize;
+use crate::packet;
 use vela_protocol::bundle::{
     ConfidenceMethod, FindingBundle, VALID_ASSERTION_TYPES, VALID_ENTITY_TYPES,
     VALID_EVIDENCE_TYPES, VALID_LINK_TYPES, VALID_PROVENANCE_SOURCE_TYPES,
 };
-use crate::lint;
-use crate::normalize;
-use crate::packet;
 use vela_protocol::repo;
 
 const VALID_EXTRACT_METHODS: &[&str] = &[
@@ -903,10 +903,10 @@ pub fn run(source: &Path) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vela_protocol::bundle::*;
-    use vela_protocol::project;
     use chrono::Utc;
     use tempfile::TempDir;
+    use vela_protocol::bundle::*;
+    use vela_protocol::project;
 
     fn make_valid_finding(seed: &str) -> FindingBundle {
         let assertion = Assertion {

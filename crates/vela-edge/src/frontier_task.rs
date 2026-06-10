@@ -5,13 +5,13 @@
 //! unless later review emits canonical frontier events.
 
 use crate::frontier_health::{self, FrontierHealthReport};
-use vela_protocol::canonical;
-use vela_protocol::repo;
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use vela_protocol::canonical;
+use vela_protocol::repo;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]

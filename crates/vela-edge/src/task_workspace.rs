@@ -5,10 +5,10 @@
 
 use crate::frontier_task;
 
-use vela_protocol::repo;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
+use vela_protocol::repo;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TaskWorkspaceStatus {
@@ -258,8 +258,8 @@ fn safe_join(root: &Path, rel: &str) -> Result<PathBuf, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vela_protocol::frontier_repo::{self, InitOptions};
     use tempfile::tempdir;
+    use vela_protocol::frontier_repo::{self, InitOptions};
 
     #[test]
     fn workspace_root_rejects_path_escape() {

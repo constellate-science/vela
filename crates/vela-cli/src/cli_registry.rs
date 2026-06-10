@@ -1,20 +1,19 @@
 //! `cmd_registry` and its handler logic, split out of cli.rs.
 
 use crate::cli::{
-    cmd_checkpoint, cmd_governance, cmd_hub_federation, cmd_owner_rotate_governed, cmd_verify_all,
-    cmd_verify_chain, fail, fail_return, parse_signing_key, print_json,
+    cmd_verify_all, cmd_verify_chain, fail, fail_return, parse_signing_key, print_json,
 };
 use crate::cli_commands::*;
-use vela_protocol::cli_style as style;
-use vela_protocol::bundle;
-use vela_protocol::events;
-use vela_edge::incremental_ingest;
-use vela_protocol::repo;
-use vela_protocol::sign;
 use colored::Colorize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
+use vela_edge::incremental_ingest;
+use vela_protocol::bundle;
+use vela_protocol::cli_style as style;
+use vela_protocol::events;
+use vela_protocol::repo;
+use vela_protocol::sign;
 
 /// Phase S (v0.5): registry CLI — publish/pull a frontier through a
 /// signed manifest. Verifiable distribution: any third party can pull
@@ -30,11 +29,7 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
             .join("entries.json")
     };
     match action {
-        RegistryAction::Governance { action } => cmd_governance(action),
-        RegistryAction::OwnerRotateGoverned { action } => cmd_owner_rotate_governed(action),
-        RegistryAction::Checkpoint { action } => cmd_checkpoint(action),
         RegistryAction::VerifyAll { from, json } => cmd_verify_all(from, json),
-        RegistryAction::HubFederation { action } => cmd_hub_federation(action),
         RegistryAction::VerifyChain {
             frontier,
             artifacts,
@@ -157,123 +152,6 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
                 fail_return::<()>(&format!("hub rejected proposal (HTTP {status}): {text}"));
             }
         }
-        RegistryAction::DependsOn { vfr_id, from, json } => {
-            let base = from.trim_end_matches('/');
-            let url = format!("{base}/entries/{vfr_id}/depends-on");
-            let client = reqwest::blocking::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
-                .build()
-                .unwrap_or_else(|e| fail_return(&format!("http client init: {e}")));
-            let resp = client
-                .get(&url)
-                .send()
-                .unwrap_or_else(|e| fail_return(&format!("GET {url}: {e}")));
-            if !resp.status().is_success() {
-                fail(&format!("GET {url}: HTTP {}", resp.status()));
-            }
-            let body: serde_json::Value = resp
-                .json()
-                .unwrap_or_else(|e| fail_return(&format!("parse response: {e}")));
-            if json {
-                print_json(&body);
-            } else {
-                let dependents = body
-                    .get("dependents")
-                    .and_then(|v| v.as_array())
-                    .cloned()
-                    .unwrap_or_default();
-                let count = dependents.len();
-                println!(
-                    "{} {count} {} on {vfr_id}",
-                    style::ok("registry"),
-                    if count == 1 {
-                        "frontier depends"
-                    } else {
-                        "frontiers depend"
-                    },
-                );
-                for e in &dependents {
-                    let v = e.get("vfr_id").and_then(|v| v.as_str()).unwrap_or("?");
-                    let n = e.get("name").and_then(|v| v.as_str()).unwrap_or("?");
-                    let o = e
-                        .get("owner_actor_id")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("?");
-                    println!("  {v}  {n}  ({o})");
-                }
-            }
-        }
-        RegistryAction::Mirror {
-            vfr_id,
-            from,
-            to,
-            json,
-        } => {
-            let src_base = from.trim_end_matches('/');
-            let dst_base = to.trim_end_matches('/');
-            let src_url = format!("{src_base}/entries/{vfr_id}");
-            let dst_url = format!("{dst_base}/entries");
-            let client = reqwest::blocking::Client::builder()
-                .timeout(std::time::Duration::from_secs(30))
-                .build()
-                .unwrap_or_else(|e| fail_return(&format!("http client init: {e}")));
-
-            let entry: serde_json::Value = client
-                .get(&src_url)
-                .send()
-                .unwrap_or_else(|e| fail_return(&format!("GET {src_url}: {e}")))
-                .error_for_status()
-                .unwrap_or_else(|e| fail_return(&format!("GET {src_url}: {e}")))
-                .json()
-                .unwrap_or_else(|e| fail_return(&format!("parse {src_url}: {e}")));
-
-            let resp = client
-                .post(&dst_url)
-                .header("content-type", "application/json")
-                .body(
-                    serde_json::to_vec(&entry)
-                        .unwrap_or_else(|e| fail_return(&format!("serialize: {e}"))),
-                )
-                .send()
-                .unwrap_or_else(|e| fail_return(&format!("POST {dst_url}: {e}")));
-            let status = resp.status();
-            if !status.is_success() {
-                let body = resp.text().unwrap_or_default();
-                fail(&format!(
-                    "POST {dst_url}: HTTP {status}: {}",
-                    body.chars().take(300).collect::<String>()
-                ));
-            }
-            let body: serde_json::Value = resp
-                .json()
-                .unwrap_or_else(|e| fail_return(&format!("parse POST response: {e}")));
-            let duplicate = body
-                .get("duplicate")
-                .and_then(serde_json::Value::as_bool)
-                .unwrap_or(false);
-            let payload = json!({
-                "ok": true,
-                "command": "registry.mirror",
-                "vfr_id": vfr_id,
-                "from": src_base,
-                "to": dst_base,
-                "duplicate_on_destination": duplicate,
-                "destination_response": body,
-            });
-            if json {
-                print_json(&payload);
-            } else {
-                println!(
-                    "{} mirrored {vfr_id} from {src_base} → {dst_base}{}",
-                    style::ok("registry"),
-                    if duplicate {
-                        " (duplicate; signature already known)"
-                    } else {
-                        " (fresh insert)"
-                    }
-                );
-            }
-        }
         RegistryAction::WitnessCheck { vfr_id, hubs, json } => {
             // v0.129: A11 mitigation. Pull `vfr_id` from every named
             // hub, canonicalize each entry, compare. Reports per-hub
@@ -316,8 +194,11 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
                                 // canonical-bytes helper so hub-side
                                 // key ordering or whitespace
                                 // differences do not falsely split.
-                                let canonical = vela_protocol::canonical::to_canonical_bytes(&entry)
-                                    .unwrap_or_else(|e| fail_return(&format!("canonicalize: {e}")));
+                                let canonical =
+                                    vela_protocol::canonical::to_canonical_bytes(&entry)
+                                        .unwrap_or_else(|e| {
+                                            fail_return(&format!("canonicalize: {e}"))
+                                        });
                                 let hash =
                                     format!("sha256:{}", hex::encode(Sha256::digest(&canonical)));
                                 *hash_counts.entry(hash.clone()).or_insert(0) += 1;

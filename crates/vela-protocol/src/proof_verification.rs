@@ -139,7 +139,8 @@ impl ProofVerification {
             ));
         }
         let preimage = self.preimage_bytes()?;
-        if !crate::sign::verify_action_signature(&preimage, &self.signature, &self.verifier_pubkey)? {
+        if !crate::sign::verify_action_signature(&preimage, &self.signature, &self.verifier_pubkey)?
+        {
             return Err("verification signature does not verify under verifier_pubkey".to_string());
         }
         Ok(())

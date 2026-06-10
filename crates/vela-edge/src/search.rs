@@ -414,9 +414,9 @@ pub fn run_all(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
     use vela_protocol::bundle::*;
     use vela_protocol::project;
-    use tempfile::TempDir;
 
     fn make_finding(
         id: &str,

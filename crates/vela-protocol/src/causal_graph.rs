@@ -90,10 +90,7 @@ impl CausalGraph {
                     .entry(f.id.clone())
                     .or_default()
                     .insert(resolved.clone());
-                children
-                    .entry(resolved)
-                    .or_default()
-                    .insert(f.id.clone());
+                children.entry(resolved).or_default().insert(f.id.clone());
             }
         }
 

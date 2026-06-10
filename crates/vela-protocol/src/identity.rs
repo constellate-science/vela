@@ -95,7 +95,10 @@ impl IdentityBinding {
 
     pub fn derive_id(&self) -> Result<String, String> {
         let bytes = self.id_preimage_bytes()?;
-        Ok(format!("vib_{}", &hex::encode(Sha256::digest(&bytes))[..16]))
+        Ok(format!(
+            "vib_{}",
+            &hex::encode(Sha256::digest(&bytes))[..16]
+        ))
     }
 
     /// Verify: id re-derives, and the signature is valid under
@@ -103,15 +106,24 @@ impl IdentityBinding {
     /// equality (signer == bound key) is the proof of possession.
     pub fn verify(&self) -> Result<(), String> {
         if self.schema != IDENTITY_BINDING_SCHEMA {
-            return Err(format!("identity_binding.schema must be `{IDENTITY_BINDING_SCHEMA}`"));
+            return Err(format!(
+                "identity_binding.schema must be `{IDENTITY_BINDING_SCHEMA}`"
+            ));
         }
         if !self.binding_id.starts_with("vib_") {
-            return Err(format!("binding id must start with `vib_`, got `{}`", self.binding_id));
+            return Err(format!(
+                "binding id must start with `vib_`, got `{}`",
+                self.binding_id
+            ));
         }
         let preimage = self.id_preimage_bytes()?;
-        if !crate::sign::verify_action_signature(&preimage, &self.signature, &self.public_key_hex)? {
-            return Err("identity_binding signature does not verify under the bound key \
-                        (no proof of possession)".to_string());
+        if !crate::sign::verify_action_signature(&preimage, &self.signature, &self.public_key_hex)?
+        {
+            return Err(
+                "identity_binding signature does not verify under the bound key \
+                        (no proof of possession)"
+                    .to_string(),
+            );
         }
         let rederived = self.derive_id()?;
         if rederived != self.binding_id {
@@ -176,8 +188,11 @@ impl IdentityRevocation {
 
     pub fn verify(&self) -> Result<(), String> {
         let preimage = self.id_preimage_bytes()?;
-        if !crate::sign::verify_action_signature(&preimage, &self.signature, &self.public_key_hex)? {
-            return Err("identity_revocation signature does not verify under the declared key".to_string());
+        if !crate::sign::verify_action_signature(&preimage, &self.signature, &self.public_key_hex)?
+        {
+            return Err(
+                "identity_revocation signature does not verify under the declared key".to_string(),
+            );
         }
         Ok(())
     }
@@ -251,6 +266,9 @@ mod tests {
             &key(),
         )
         .unwrap();
-        assert!(!foreign.authoritatively_revokes(&b), "foreign key cannot revoke");
+        assert!(
+            !foreign.authoritatively_revokes(&b),
+            "foreign key cannot revoke"
+        );
     }
 }

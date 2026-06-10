@@ -532,7 +532,8 @@ mod v046_tests {
         }
         let bbb_text = fs::read_to_string(&bbb_path).expect("read bbb");
         let landscape_text = fs::read_to_string(&landscape_path).expect("read landscape");
-        let bbb: vela_protocol::project::Project = serde_json::from_str(&bbb_text).expect("parse bbb");
+        let bbb: vela_protocol::project::Project =
+            serde_json::from_str(&bbb_text).expect("parse bbb");
         let landscape: vela_protocol::project::Project =
             serde_json::from_str(&landscape_text).expect("parse landscape");
 

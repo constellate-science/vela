@@ -15,8 +15,8 @@ use std::path::PathBuf;
 use serde_json::Value;
 use vela_edge::deliverable_grade::grade_gate;
 use vela_protocol::verifier_attachment::{
-    claim_digest, derive_gate_status, AdversarialProbe, AttachmentDraft, AttachmentOutcome,
-    GateStatus, MatchToClaim, ProbeKind, ProbeResult, VerifierAttachment, VerifierMethod,
+    AdversarialProbe, AttachmentDraft, AttachmentOutcome, GateStatus, MatchToClaim, ProbeKind,
+    ProbeResult, VerifierAttachment, VerifierMethod, claim_digest, derive_gate_status,
 };
 
 fn vectors_path() -> PathBuf {

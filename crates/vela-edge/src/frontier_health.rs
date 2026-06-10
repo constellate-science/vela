@@ -10,15 +10,15 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::frontier_task::{self, FrontierTaskStatus};
+use crate::reviewer_identity;
+use crate::source_inbox::{self, SourceInboxState};
 use vela_protocol::evidence_ci::{self, EvidenceCiSeverity};
 use vela_protocol::frontier_policy;
-use crate::frontier_task::{self, FrontierTaskStatus};
 use vela_protocol::project::Project;
 use vela_protocol::released_diff_pack::ReleasedVerdict;
 use vela_protocol::repo::{self, VelaSource};
-use crate::reviewer_identity;
 use vela_protocol::scientific_diff::ScientificDiffPack;
-use crate::source_inbox::{self, SourceInboxState};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct FrontierHealthReport {

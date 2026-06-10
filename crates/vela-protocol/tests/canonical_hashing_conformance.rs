@@ -35,7 +35,9 @@ fn canonical_hashing_vectors_match_rust() {
     for v in vectors {
         let name = v["name"].as_str().unwrap_or("<unnamed>");
         let input = &v["input"];
-        let want_canon = v["canonical"].as_str().expect("vector has canonical string");
+        let want_canon = v["canonical"]
+            .as_str()
+            .expect("vector has canonical string");
         let want_sha = v["sha256"].as_str().expect("vector has sha256");
 
         let got_canon = to_canonical_string(input)
@@ -45,8 +47,8 @@ fn canonical_hashing_vectors_match_rust() {
             "vector {name}: canonical string diverged\n  want: {want_canon}\n  got:  {got_canon}"
         );
 
-        let got_sha = sha256_canonical(input)
-            .unwrap_or_else(|e| panic!("vector {name}: sha256 failed: {e}"));
+        let got_sha =
+            sha256_canonical(input).unwrap_or_else(|e| panic!("vector {name}: sha256 failed: {e}"));
         assert_eq!(
             got_sha, want_sha,
             "vector {name}: sha256 diverged (canonical bytes differ from the pinned form)"

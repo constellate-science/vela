@@ -1,4 +1,5 @@
 use serde_json::json;
+use vela_edge::state_integrity;
 use vela_protocol::bundle::{
     Assertion, Conditions, Confidence, ConfidenceKind, ConfidenceMethod, Evidence, Extraction,
     FindingBundle, Flags, Provenance,
@@ -9,7 +10,6 @@ use vela_protocol::proposals::{
     ProofPacketRecord, StateProposal, new_proposal, record_proof_export,
 };
 use vela_protocol::repo;
-use vela_edge::state_integrity;
 fn finding(id_text: &str) -> FindingBundle {
     let assertion = Assertion {
         text: format!("BBB integrity test finding {id_text}"),

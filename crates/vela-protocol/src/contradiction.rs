@@ -36,11 +36,23 @@ pub enum ContradictionStatus {
     /// A reviewer has taken it up but not yet adjudicated.
     UnderReview { by: String, at: String },
     /// A named expert confirms the contradiction is real.
-    ExpertConfirmed { by: String, at: String, note: String },
+    ExpertConfirmed {
+        by: String,
+        at: String,
+        note: String,
+    },
     /// Adjudicated with an outcome (one side scoped/retracted/reconciled).
-    Resolved { by: String, at: String, resolution: String },
+    Resolved {
+        by: String,
+        at: String,
+        resolution: String,
+    },
     /// Judged not a genuine contradiction (e.g. different conditions).
-    Dismissed { by: String, at: String, reason: String },
+    Dismissed {
+        by: String,
+        at: String,
+        reason: String,
+    },
 }
 
 impl ContradictionStatus {
@@ -409,7 +421,10 @@ mod tests {
     #[test]
     fn derive_candidates_matches_graph_pairs_with_basis() {
         let x = synth_finding(0, vec![]);
-        let mut y = synth_finding(1, vec![contradicts_to(&x.id, "opposite sign on shared entity")]);
+        let mut y = synth_finding(
+            1,
+            vec![contradicts_to(&x.id, "opposite sign on shared entity")],
+        );
         // Add the reverse edge too — still one candidate.
         y.links.push(contradicts_to(&x.id, ""));
         let (x_id, y_id) = (x.id.clone(), y.id.clone());
@@ -428,7 +443,10 @@ mod tests {
         } else {
             (y_id, x_id)
         };
-        assert_eq!((cands[0].finding_a.clone(), cands[0].finding_b.clone()), expected);
+        assert_eq!(
+            (cands[0].finding_a.clone(), cands[0].finding_b.clone()),
+            expected
+        );
         assert!(!cands[0].is_adjudicated());
     }
 
@@ -447,7 +465,10 @@ mod tests {
 
         crate::reducer::apply_event(&mut project, &event).unwrap();
         assert_eq!(project.contradictions.len(), 1);
-        assert_eq!(project.contradictions[0].contradiction_id, c.contradiction_id);
+        assert_eq!(
+            project.contradictions[0].contradiction_id,
+            c.contradiction_id
+        );
         assert!(project.contradictions[0].is_adjudicated());
 
         // Idempotent: re-applying the same event does not duplicate.
@@ -510,9 +531,18 @@ mod tests {
         assert!(!resolved.is_open(), "resolved is closed");
 
         // As-of queries answer against valid time, not log order:
-        assert!(!resolved.is_open_at("2026-01-01T00:00:00Z"), "before it opened");
-        assert!(resolved.is_open_at("2026-04-01T00:00:00Z"), "open mid-window");
-        assert!(!resolved.is_open_at("2026-06-01T00:00:00Z"), "after it closed");
+        assert!(
+            !resolved.is_open_at("2026-01-01T00:00:00Z"),
+            "before it opened"
+        );
+        assert!(
+            resolved.is_open_at("2026-04-01T00:00:00Z"),
+            "open mid-window"
+        );
+        assert!(
+            !resolved.is_open_at("2026-06-01T00:00:00Z"),
+            "after it closed"
+        );
     }
 
     #[test]

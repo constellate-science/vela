@@ -400,8 +400,8 @@ pub fn check_wrong_test(finding: &FindingBundle) -> Vec<Diagnostic> {
 /// Findings with `causal_claim = None` are skipped (the link may be
 /// fine; the kernel doesn't yet know).
 pub fn check_causal_mismatch_on_supports(frontier: &Project) -> Vec<Diagnostic> {
-    use vela_protocol::bundle::CausalClaim;
     use std::collections::HashMap;
+    use vela_protocol::bundle::CausalClaim;
 
     let claim_rank = |c: CausalClaim| -> u32 {
         match c {
@@ -853,8 +853,8 @@ mod tests {
     }
 
     fn make_frontier(findings: Vec<FindingBundle>) -> Project {
-        use vela_protocol::project::*;
         use std::collections::HashMap;
+        use vela_protocol::project::*;
         Project {
             vela_version: "0.1.0".into(),
             schema: "vela/finding-bundle/0.1.0".into(),

@@ -824,8 +824,7 @@ pub fn preview_in_frontier(
         .skip(events_before)
         .cloned()
         .collect::<Vec<_>>();
-    let changed_findings =
-        changed_finding_ids(&preview_state, &finding_ids_before, &new_events);
+    let changed_findings = changed_finding_ids(&preview_state, &finding_ids_before, &new_events);
     let changed_finding_details =
         build_changed_finding_details(frontier, &preview_state, &changed_findings);
     Ok(ProposalPreview {
@@ -1894,9 +1893,8 @@ fn validate_proposal_shape(frontier: &Project, proposal: &StateProposal) -> Resu
                 .get("attachment")
                 .ok_or("verifier.attach proposal missing payload.attachment")?
                 .clone();
-            let att: crate::verifier_attachment::VerifierAttachment =
-                serde_json::from_value(value)
-                    .map_err(|e| format!("Invalid verifier.attach payload: {e}"))?;
+            let att: crate::verifier_attachment::VerifierAttachment = serde_json::from_value(value)
+                .map_err(|e| format!("Invalid verifier.attach payload: {e}"))?;
             att.verify()
                 .map_err(|e| format!("verifier.attach attachment malformed: {e}"))?;
             if att.target != proposal.target.id {
@@ -5050,8 +5048,8 @@ mod tests {
     #[test]
     fn verifier_attach_accepts_and_derives_verified() {
         use crate::verifier_attachment::{
-            derive_gate_status, AdversarialProbe, AttachmentDraft, AttachmentOutcome, MatchToClaim,
-            ProbeKind, ProbeResult, VerifierAttachment, VerifierMethod,
+            AdversarialProbe, AttachmentDraft, AttachmentOutcome, MatchToClaim, ProbeKind,
+            ProbeResult, VerifierAttachment, VerifierMethod, derive_gate_status,
         };
         let tmp = TempDir::new().unwrap();
         let path = tmp.path().join("frontier.json");

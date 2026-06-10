@@ -98,7 +98,13 @@ pub fn verify_inclusion(leaf: &[u8], m: usize, n: usize, proof: &[Hash], root: &
     if m >= n {
         return false;
     }
-    fn recon(m: usize, n: usize, leaf_hash: &Hash, proof: &[Hash], idx: &mut usize) -> Option<Hash> {
+    fn recon(
+        m: usize,
+        n: usize,
+        leaf_hash: &Hash,
+        proof: &[Hash],
+        idx: &mut usize,
+    ) -> Option<Hash> {
         if n == 1 {
             return Some(*leaf_hash); // m == 0
         }
@@ -206,13 +212,17 @@ pub fn verify_consistency(m: usize, n: usize, first: &Hash, second: &Hash, proof
     while node > 0 {
         if node & 1 == 1 {
             // right child: sibling on the left, shared by both trees
-            let Some(p) = proof.get(idx) else { return false };
+            let Some(p) = proof.get(idx) else {
+                return false;
+            };
             idx += 1;
             hash1 = hash_node(p, &hash1);
             hash2 = hash_node(p, &hash2);
         } else if node < last {
             // left child with a right sibling that exists only in the new tree
-            let Some(p) = proof.get(idx) else { return false };
+            let Some(p) = proof.get(idx) else {
+                return false;
+            };
             idx += 1;
             hash2 = hash_node(&hash2, p);
         }
@@ -221,7 +231,9 @@ pub fn verify_consistency(m: usize, n: usize, first: &Hash, second: &Hash, proof
     }
     // Finish the new tree's remaining upper-right spine.
     while last > 0 {
-        let Some(p) = proof.get(idx) else { return false };
+        let Some(p) = proof.get(idx) else {
+            return false;
+        };
         idx += 1;
         hash2 = hash_node(&hash2, p);
         last >>= 1;
@@ -303,7 +315,13 @@ mod tests {
         bad[0][0] ^= 0xff;
         assert!(!verify_inclusion(&ls[3], 3, 7, &bad, &root));
         // truncated / extra proof
-        assert!(!verify_inclusion(&ls[3], 3, 7, &proof[..proof.len() - 1], &root));
+        assert!(!verify_inclusion(
+            &ls[3],
+            3,
+            7,
+            &proof[..proof.len() - 1],
+            &root
+        ));
         let mut extra = proof.clone();
         extra.push([0u8; 32]);
         assert!(!verify_inclusion(&ls[3], 3, 7, &extra, &root));
@@ -365,7 +383,13 @@ mod tests {
         bad[0][0] ^= 0xff;
         assert!(!verify_consistency(m, n, &root_m, &root_n, &bad));
         // truncated / extra proof
-        assert!(!verify_consistency(m, n, &root_m, &root_n, &proof[..proof.len() - 1]));
+        assert!(!verify_consistency(
+            m,
+            n,
+            &root_m,
+            &root_n,
+            &proof[..proof.len() - 1]
+        ));
         let mut extra = proof.clone();
         extra.push([0u8; 32]);
         assert!(!verify_consistency(m, n, &root_m, &root_n, &extra));

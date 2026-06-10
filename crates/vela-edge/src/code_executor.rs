@@ -65,9 +65,10 @@ fn find_entrypoint(workspace: &Path) -> Option<PathBuf> {
             let p = e.path();
             if p.is_file() {
                 if let Some(name) = p.file_name().and_then(|s| s.to_str())
-                    && is_entrypoint(name) {
-                        return Some(p);
-                    }
+                    && is_entrypoint(name)
+                {
+                    return Some(p);
+                }
             } else if p.is_dir() {
                 subdirs.push(p);
             }
@@ -79,9 +80,10 @@ fn find_entrypoint(workspace: &Path) -> Option<PathBuf> {
                     let p = e.path();
                     if p.is_file()
                         && let Some(name) = p.file_name().and_then(|s| s.to_str())
-                            && is_entrypoint(name) {
-                                return Some(p);
-                            }
+                        && is_entrypoint(name)
+                    {
+                        return Some(p);
+                    }
                 }
             }
         }

@@ -73,10 +73,16 @@ impl Endorsement {
             return Err("endorsement.target_record cannot be empty".to_string());
         }
         if draft.endorser.trim().is_empty() {
-            return Err("endorsement.endorser cannot be empty (significance must be attributed)".to_string());
+            return Err(
+                "endorsement.endorser cannot be empty (significance must be attributed)"
+                    .to_string(),
+            );
         }
         if draft.rationale.trim().is_empty() {
-            return Err("endorsement.rationale cannot be empty (the reason is what the signer stakes)".to_string());
+            return Err(
+                "endorsement.rationale cannot be empty (the reason is what the signer stakes)"
+                    .to_string(),
+            );
         }
         let mut e = Endorsement {
             schema: ENDORSEMENT_SCHEMA.to_string(),
@@ -107,20 +113,35 @@ impl Endorsement {
     /// `ven_<16hex>` over the canonical content preimage.
     pub fn derive_id(&self) -> Result<String, String> {
         let bytes = self.id_preimage_bytes()?;
-        Ok(format!("ven_{}", &hex::encode(Sha256::digest(&bytes))[..16]))
+        Ok(format!(
+            "ven_{}",
+            &hex::encode(Sha256::digest(&bytes))[..16]
+        ))
     }
 
     /// Verify: re-derive id + Ed25519 signature.
     pub fn verify(&self) -> Result<(), String> {
         if self.schema != ENDORSEMENT_SCHEMA {
-            return Err(format!("endorsement.schema must be `{ENDORSEMENT_SCHEMA}`, got `{}`", self.schema));
+            return Err(format!(
+                "endorsement.schema must be `{ENDORSEMENT_SCHEMA}`, got `{}`",
+                self.schema
+            ));
         }
         if !self.endorsement_id.starts_with("ven_") {
-            return Err(format!("endorsement id must start with `ven_`, got `{}`", self.endorsement_id));
+            return Err(format!(
+                "endorsement id must start with `ven_`, got `{}`",
+                self.endorsement_id
+            ));
         }
         let preimage = self.id_preimage_bytes()?;
-        if !crate::sign::verify_action_signature(&preimage, &self.signature, &self.signer_pubkey_hex)? {
-            return Err("endorsement signature does not verify under the declared pubkey".to_string());
+        if !crate::sign::verify_action_signature(
+            &preimage,
+            &self.signature,
+            &self.signer_pubkey_hex,
+        )? {
+            return Err(
+                "endorsement signature does not verify under the declared pubkey".to_string(),
+            );
         }
         let rederived = self.derive_id()?;
         if rederived != self.endorsement_id {
@@ -134,7 +155,12 @@ impl Endorsement {
 
     /// Build the canonical `endorsement.deposited` event.
     #[must_use]
-    pub fn deposit_event(&self, actor_id: &str, actor_type: &str, reason: &str) -> crate::events::StateEvent {
+    pub fn deposit_event(
+        &self,
+        actor_id: &str,
+        actor_type: &str,
+        reason: &str,
+    ) -> crate::events::StateEvent {
         let payload =
             serde_json::json!({ "endorsement": serde_json::to_value(self).unwrap_or_default() });
         crate::events::new_endorsement_deposited_event(

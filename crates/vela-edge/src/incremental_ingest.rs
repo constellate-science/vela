@@ -158,7 +158,9 @@ pub fn append_batch(dir: &Path, batch: &[AppendRecord]) -> Result<AppendReport, 
     //    invalid event so a malformed deposit never lands a partial batch.
     for record in batch {
         let event = record.event();
-        if let Err(reason) = vela_protocol::events::validate_event_payload(&event.kind, &event.payload) {
+        if let Err(reason) =
+            vela_protocol::events::validate_event_payload(&event.kind, &event.payload)
+        {
             return Err(AppendError::InvalidEvent {
                 event_id: event.id.clone(),
                 reason,
@@ -262,11 +264,11 @@ fn write_event(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tempfile::TempDir;
     use vela_protocol::bundle::*;
     use vela_protocol::events::{self, FindingEventInput, NULL_HASH};
     use vela_protocol::project;
     use vela_protocol::repo;
-    use tempfile::TempDir;
 
     fn make_finding(id: &str, score: f64) -> FindingBundle {
         FindingBundle {

@@ -207,9 +207,19 @@ pub fn analyze(frontier: &Project) -> StateIntegrityReport {
         // (extraction.model — e.g. an OpenAI/API/agent run), an author, or a
         // reviewer who attests it. A finding attributable to none of these came
         // from nowhere and cannot carry provenance.
-        let has_source_id = [&prov.doi, &prov.pmid, &prov.pmc, &prov.openalex_id, &prov.url]
-            .iter()
-            .any(|field| field.as_deref().is_some_and(|value| !value.trim().is_empty()));
+        let has_source_id = [
+            &prov.doi,
+            &prov.pmid,
+            &prov.pmc,
+            &prov.openalex_id,
+            &prov.url,
+        ]
+        .iter()
+        .any(|field| {
+            field
+                .as_deref()
+                .is_some_and(|value| !value.trim().is_empty())
+        });
         let has_adapter = prov
             .extraction
             .model
@@ -418,7 +428,11 @@ mod tests {
         let inflated = finding_inflation_issue("review/canonical-accounting.v2.json", 5531, 647)
             .expect("claim above accepted must flag");
         assert_eq!(inflated.rule_id, "accounting_finding_inflation");
-        assert!(inflated.message.contains("4884"), "surplus stated: {}", inflated.message);
+        assert!(
+            inflated.message.contains("4884"),
+            "surplus stated: {}",
+            inflated.message
+        );
 
         // honest, separated accounting: claim == accepted → no issue.
         assert!(finding_inflation_issue("a", 647, 647).is_none());
@@ -435,7 +449,10 @@ mod tests {
         assert!(!is_unreviewed_llm_finding("llm_extraction", true));
         // non-LLM origins are out of scope regardless of review.
         assert!(!is_unreviewed_llm_finding("manual_curation", false));
-        assert!(!is_unreviewed_llm_finding("artifact_to_state_import", false));
+        assert!(!is_unreviewed_llm_finding(
+            "artifact_to_state_import",
+            false
+        ));
     }
 
     #[test]

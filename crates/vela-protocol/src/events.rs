@@ -589,8 +589,14 @@ fn new_attempt_event(
         schema: EVENT_SCHEMA.to_string(),
         id: String::new(),
         kind: kind.to_string(),
-        target: StateTarget { r#type: "attempt".to_string(), id: attempt_id.to_string() },
-        actor: StateActor { id: actor_id.to_string(), r#type: actor_type.to_string() },
+        target: StateTarget {
+            r#type: "attempt".to_string(),
+            id: attempt_id.to_string(),
+        },
+        actor: StateActor {
+            id: actor_id.to_string(),
+            r#type: actor_type.to_string(),
+        },
         timestamp: Utc::now().to_rfc3339(),
         reason: reason.to_string(),
         before_hash: NULL_HASH.to_string(),
@@ -615,7 +621,15 @@ pub fn new_attempt_deposited_event(
     payload: Value,
     caveats: Vec<String>,
 ) -> StateEvent {
-    new_attempt_event(EVENT_KIND_ATTEMPT_DEPOSITED, attempt_id, actor_id, actor_type, reason, payload, caveats)
+    new_attempt_event(
+        EVENT_KIND_ATTEMPT_DEPOSITED,
+        attempt_id,
+        actor_id,
+        actor_type,
+        reason,
+        payload,
+        caveats,
+    )
 }
 
 /// Build a `transfer.deposited` event. The full signed [`crate::transfer::Transfer`]
@@ -633,8 +647,14 @@ pub fn new_transfer_deposited_event(
         schema: EVENT_SCHEMA.to_string(),
         id: String::new(),
         kind: EVENT_KIND_TRANSFER_DEPOSITED.to_string(),
-        target: StateTarget { r#type: "transfer".to_string(), id: transfer_id.to_string() },
-        actor: StateActor { id: actor_id.to_string(), r#type: actor_type.to_string() },
+        target: StateTarget {
+            r#type: "transfer".to_string(),
+            id: transfer_id.to_string(),
+        },
+        actor: StateActor {
+            id: actor_id.to_string(),
+            r#type: actor_type.to_string(),
+        },
         timestamp: Utc::now().to_rfc3339(),
         reason: reason.to_string(),
         before_hash: NULL_HASH.to_string(),
@@ -663,8 +683,14 @@ pub fn new_endorsement_deposited_event(
         schema: EVENT_SCHEMA.to_string(),
         id: String::new(),
         kind: EVENT_KIND_ENDORSEMENT_DEPOSITED.to_string(),
-        target: StateTarget { r#type: "endorsement".to_string(), id: endorsement_id.to_string() },
-        actor: StateActor { id: actor_id.to_string(), r#type: actor_type.to_string() },
+        target: StateTarget {
+            r#type: "endorsement".to_string(),
+            id: endorsement_id.to_string(),
+        },
+        actor: StateActor {
+            id: actor_id.to_string(),
+            r#type: actor_type.to_string(),
+        },
         timestamp: Utc::now().to_rfc3339(),
         reason: reason.to_string(),
         before_hash: NULL_HASH.to_string(),
@@ -689,7 +715,15 @@ pub fn new_attempt_resolved_event(
     payload: Value,
     caveats: Vec<String>,
 ) -> StateEvent {
-    new_attempt_event(EVENT_KIND_ATTEMPT_RESOLVED, attempt_id, actor_id, actor_type, reason, payload, caveats)
+    new_attempt_event(
+        EVENT_KIND_ATTEMPT_RESOLVED,
+        attempt_id,
+        actor_id,
+        actor_type,
+        reason,
+        payload,
+        caveats,
+    )
 }
 
 /// Canonical hash of one evidence atom. Mirrors `finding_hash` for the
@@ -1824,7 +1858,9 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
         "verifier_attachment.added" => {
             require_str("proposal_id")?;
             if !object.get("attachment").is_some_and(|v| v.is_object()) {
-                return Err("verifier_attachment.added payload.attachment must be an object".to_string());
+                return Err(
+                    "verifier_attachment.added payload.attachment must be an object".to_string(),
+                );
             }
         }
 

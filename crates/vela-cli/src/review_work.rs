@@ -2,7 +2,6 @@
 //! retired local Workbench UI module. Pure data: builds the JSON queues a
 //! frontier's reviewers act on, with no HTML/serving.
 
-
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::Path;
@@ -12,10 +11,9 @@ use serde::Serialize;
 use vela_edge::frontier_health;
 use vela_edge::frontier_task;
 use vela_edge::index_db_schema;
+use vela_edge::source_inbox;
 use vela_protocol::project::Project;
 use vela_protocol::repo;
-use vela_edge::source_inbox;
-
 
 #[derive(Debug, Clone, Serialize)]
 struct ReviewWorkPayload {
@@ -826,4 +824,3 @@ pub(crate) fn build_review_work_json(repo_path: &Path) -> Result<serde_json::Val
     let payload = build_review_work_payload(repo_path)?;
     serde_json::to_value(payload).map_err(|e| format!("serialize review work: {e}"))
 }
-

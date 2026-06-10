@@ -348,7 +348,12 @@ pub fn import_packet_at_path(
         .iter()
         .map(|finding| finding.id.clone())
         .chain(before_frontier.artifacts.iter().map(|a| a.id.clone()))
-        .chain(before_frontier.proposals.iter().map(|p| p.target.id.clone()))
+        .chain(
+            before_frontier
+                .proposals
+                .iter()
+                .map(|p| p.target.id.clone()),
+        )
         .collect::<BTreeSet<_>>();
     let mut proposal_ids = Vec::new();
     let mut applied_event_ids = Vec::new();

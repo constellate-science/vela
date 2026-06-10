@@ -147,7 +147,10 @@ impl TcbPolicy {
         kernel_checker_version: &str,
     ) -> Result<Self, String> {
         Self::build(TcbDraft {
-            allowed_axioms: DEFAULT_ALLOWED_AXIOMS.iter().map(|s| (*s).to_string()).collect(),
+            allowed_axioms: DEFAULT_ALLOWED_AXIOMS
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect(),
             forbidden_axioms: FORBIDDEN_AXIOMS.iter().map(|s| (*s).to_string()).collect(),
             kernel_checker: kernel_checker.to_string(),
             kernel_checker_version: kernel_checker_version.to_string(),
@@ -170,10 +173,16 @@ impl TcbPolicy {
     /// Schema, id prefix, and id integrity.
     pub fn verify(&self) -> Result<(), String> {
         if self.schema != TCB_SCHEMA {
-            return Err(format!("tcb.schema must be `{TCB_SCHEMA}`, got `{}`", self.schema));
+            return Err(format!(
+                "tcb.schema must be `{TCB_SCHEMA}`, got `{}`",
+                self.schema
+            ));
         }
         if !self.tcb_id.starts_with("vtcb_") {
-            return Err(format!("tcb id must start with `vtcb_`, got `{}`", self.tcb_id));
+            return Err(format!(
+                "tcb id must start with `vtcb_`, got `{}`",
+                self.tcb_id
+            ));
         }
         let derived = self.derive_id()?;
         if derived != self.tcb_id {
@@ -214,8 +223,13 @@ mod tests {
     use super::*;
 
     fn default_policy() -> TcbPolicy {
-        TcbPolicy::default_for("leanprover/lean4:v4.29.1", "v4.29.1", "lean4checker", "lean4checker@v4.29.1")
-            .expect("build default policy")
+        TcbPolicy::default_for(
+            "leanprover/lean4:v4.29.1",
+            "v4.29.1",
+            "lean4checker",
+            "lean4checker@v4.29.1",
+        )
+        .expect("build default policy")
     }
 
     #[test]
@@ -250,14 +264,20 @@ mod tests {
         // The load-bearing reject-vector: native_decide surfaces as
         // Lean.ofReduceBool (+ Lean.trustCompiler) and must be ForbiddenAxiom.
         let p = default_policy();
-        let observed = vec!["Lean.ofReduceBool".to_string(), "Lean.trustCompiler".to_string()];
+        let observed = vec![
+            "Lean.ofReduceBool".to_string(),
+            "Lean.trustCompiler".to_string(),
+        ];
         assert_eq!(p.classify(&observed), AxiomVerdict::ForbiddenAxiom);
     }
 
     #[test]
     fn classify_rejects_sorry() {
         let p = default_policy();
-        assert_eq!(p.classify(&["sorryAx".to_string()]), AxiomVerdict::ForbiddenAxiom);
+        assert_eq!(
+            p.classify(&["sorryAx".to_string()]),
+            AxiomVerdict::ForbiddenAxiom
+        );
     }
 
     #[test]
@@ -270,7 +290,10 @@ mod tests {
     #[test]
     fn classify_unlisted() {
         let p = default_policy();
-        assert_eq!(p.classify(&["MyDev.customAxiom".to_string()]), AxiomVerdict::UnlistedAxiom);
+        assert_eq!(
+            p.classify(&["MyDev.customAxiom".to_string()]),
+            AxiomVerdict::UnlistedAxiom
+        );
     }
 
     #[test]

@@ -299,13 +299,12 @@ impl HubDb {
                 .fetch_all(p)
                 .await
                 .map_err(|e| e.to_string())?;
-                let events: i64 = sqlx::query_scalar(
-                    "SELECT COUNT(*) FROM frontier_events WHERE vfr_id = ?",
-                )
-                .bind(vfr_id)
-                .fetch_one(p)
-                .await
-                .map_err(|e| e.to_string())?;
+                let events: i64 =
+                    sqlx::query_scalar("SELECT COUNT(*) FROM frontier_events WHERE vfr_id = ?")
+                        .bind(vfr_id)
+                        .fetch_one(p)
+                        .await
+                        .map_err(|e| e.to_string())?;
                 let flags: FlagAgg = sqlx::query_as(
                     "SELECT \
                        COUNT(CASE WHEN json_extract(raw_json,'$.flags.review_state') = 'contested' THEN 1 END), \
@@ -381,7 +380,9 @@ impl HubDb {
     ) -> Result<Vec<Value>, String> {
         let pattern = format!(
             "%{}%",
-            q.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
+            q.replace('\\', "\\\\")
+                .replace('%', "\\%")
+                .replace('_', "\\_")
         );
         type Row = (String, String);
         let rows: Vec<Row> = match self {
@@ -439,8 +440,13 @@ impl HubDb {
                     "SELECT raw_json::text FROM frontier_objects \
                      WHERE vfr_id = $1 AND object_type = $2 ORDER BY seq LIMIT $3 OFFSET $4",
                 )
-                .bind(vfr_id).bind(object_type).bind(limit).bind(offset)
-                .fetch_all(p).await.map_err(|e| e.to_string())?;
+                .bind(vfr_id)
+                .bind(object_type)
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(p)
+                .await
+                .map_err(|e| e.to_string())?;
                 let total: i64 = sqlx::query_scalar(
                     "SELECT COUNT(*)::bigint FROM frontier_objects WHERE vfr_id = $1 AND object_type = $2",
                 )
@@ -452,12 +458,21 @@ impl HubDb {
                     "SELECT raw_json FROM frontier_objects \
                      WHERE vfr_id = ? AND object_type = ? ORDER BY seq LIMIT ? OFFSET ?",
                 )
-                .bind(vfr_id).bind(object_type).bind(limit).bind(offset)
-                .fetch_all(p).await.map_err(|e| e.to_string())?;
+                .bind(vfr_id)
+                .bind(object_type)
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(p)
+                .await
+                .map_err(|e| e.to_string())?;
                 let total: i64 = sqlx::query_scalar(
                     "SELECT COUNT(*) FROM frontier_objects WHERE vfr_id = ? AND object_type = ?",
                 )
-                .bind(vfr_id).bind(object_type).fetch_one(p).await.map_err(|e| e.to_string())?;
+                .bind(vfr_id)
+                .bind(object_type)
+                .fetch_one(p)
+                .await
+                .map_err(|e| e.to_string())?;
                 (rows, total)
             }
         };
@@ -481,17 +496,27 @@ impl HubDb {
                 "SELECT raw_json::text FROM frontier_objects \
                  WHERE vfr_id = $1 AND object_type = $2 AND object_id = $3 LIMIT 1",
             )
-            .bind(vfr_id).bind(object_type).bind(object_id)
-            .fetch_optional(p).await.map_err(|e| e.to_string())?,
+            .bind(vfr_id)
+            .bind(object_type)
+            .bind(object_id)
+            .fetch_optional(p)
+            .await
+            .map_err(|e| e.to_string())?,
             Self::Sqlite(p) => sqlx::query_scalar(
                 "SELECT raw_json FROM frontier_objects \
                  WHERE vfr_id = ? AND object_type = ? AND object_id = ? LIMIT 1",
             )
-            .bind(vfr_id).bind(object_type).bind(object_id)
-            .fetch_optional(p).await.map_err(|e| e.to_string())?,
+            .bind(vfr_id)
+            .bind(object_type)
+            .bind(object_id)
+            .fetch_optional(p)
+            .await
+            .map_err(|e| e.to_string())?,
         };
         match row {
-            Some(s) => serde_json::from_str::<Value>(&s).map(Some).map_err(|e| e.to_string()),
+            Some(s) => serde_json::from_str::<Value>(&s)
+                .map(Some)
+                .map_err(|e| e.to_string()),
             None => Ok(None),
         }
     }
@@ -509,7 +534,10 @@ impl HubDb {
             .await
             .map_err(|e| e.to_string())?
             .into_iter()
-            .map(|row| row.try_get::<Value, _>("raw_json").map_err(|e| e.to_string()))
+            .map(|row| {
+                row.try_get::<Value, _>("raw_json")
+                    .map_err(|e| e.to_string())
+            })
             .collect(),
             Self::Sqlite(p) => {
                 let rows: Vec<String> = sqlx::query_scalar(
@@ -958,13 +986,14 @@ impl HubDb {
         // could overwrite any published frontier (and rewrite its actor /
         // revocation list) with their own self-signed manifest.
         if let Some(existing_owner) = self.frontier_owner_pubkey(&entry.vfr_id).await?
-            && existing_owner != entry.owner_pubkey {
-                return Err(format!(
-                    "owner continuity: vfr {} already belongs to a different owner key; a \
+            && existing_owner != entry.owner_pubkey
+        {
+            return Err(format!(
+                "owner continuity: vfr {} already belongs to a different owner key; a \
                      re-publish must be signed by the original owner_pubkey",
-                    entry.vfr_id
-                ));
-            }
+                entry.vfr_id
+            ));
+        }
 
         // Monotonic anti-replay guard. A re-publish must not carry an OLDER
         // `signed_publish_at` than the live row. Without this, a captured old
@@ -1439,8 +1468,7 @@ impl HubDb {
         let mut to_add_events: Vec<StateEvent> = Vec::new();
         let mut skipped_events = 0i64;
         for e in new_events {
-            if existing_events.contains(e.id.as_str())
-                || to_add_events.iter().any(|x| x.id == e.id)
+            if existing_events.contains(e.id.as_str()) || to_add_events.iter().any(|x| x.id == e.id)
             {
                 skipped_events += 1;
             } else {
@@ -2420,8 +2448,8 @@ impl HubDb {
         let snapshot_value =
             serde_json::to_value(project).map_err(|e| format!("serialize project: {e}"))?;
         let snapshot_skeleton = frontier_skeleton(&snapshot_value);
-        let snapshot_skeleton_json = serde_json::to_string(&snapshot_skeleton)
-            .map_err(|e| format!("project json: {e}"))?;
+        let snapshot_skeleton_json =
+            serde_json::to_string(&snapshot_skeleton).map_err(|e| format!("project json: {e}"))?;
         let objects = collect_frontier_objects(&snapshot_value);
         let findings_count = project.findings.len() as i64;
         let events_count = project.events.len() as i64;
@@ -3294,7 +3322,9 @@ mod tests {
         let mut newer = entry.clone();
         newer.signed_publish_at = "2026-05-06T00:00:00Z".to_string();
         let raw_newer = serde_json::to_value(&newer).expect("entry json");
-        db.insert_entry(&newer, &raw_newer).await.expect("insert newer");
+        db.insert_entry(&newer, &raw_newer)
+            .await
+            .expect("insert newer");
         db.promote_frontier_snapshot(&newer, &project, None, "manifest_snapshot")
             .await
             .expect("strictly newer promote should succeed");

@@ -206,7 +206,9 @@ fn phrase_present(lower: &str, phrase: &str) -> bool {
     if !is_single_word {
         return lower.contains(phrase);
     }
-    lower.split(|c: char| !c.is_ascii_alphabetic()).any(|w| w == phrase)
+    lower
+        .split(|c: char| !c.is_ascii_alphabetic())
+        .any(|w| w == phrase)
 }
 
 /// L5 anti-inflation: require a grade, and block solve-language unless
@@ -233,10 +235,7 @@ pub fn grade_gate(claim: &str, grade: Option<&str>) -> GradeGate {
         triggers.sort_by_key(|p| p.bytes().all(|b| b.is_ascii_alphabetic()));
         for phrase in triggers {
             if phrase_present(&lower, phrase) {
-                return GradeGate::SolveLanguageMismatch {
-                    phrase,
-                    grade,
-                };
+                return GradeGate::SolveLanguageMismatch { phrase, grade };
             }
         }
     }
@@ -309,16 +308,16 @@ mod tests {
             "The compound dissolves in water at the measured rate.",
             Some("extends_prior_work"),
         );
-        assert!(ok.passed(), "bare 'solve' should not match inside 'dissolves'");
+        assert!(
+            ok.passed(),
+            "bare 'solve' should not match inside 'dissolves'"
+        );
     }
 
     #[test]
     fn matching_is_case_insensitive() {
         let gate = grade_gate("FIRST TO SOLVE this open problem", Some("partial_proof"));
-        assert!(matches!(
-            gate,
-            GradeGate::SolveLanguageMismatch { .. }
-        ));
+        assert!(matches!(gate, GradeGate::SolveLanguageMismatch { .. }));
     }
 
     #[test]

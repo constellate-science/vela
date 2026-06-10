@@ -4,16 +4,16 @@
 //! evidence. Records live under `.vela/source-inbox/`; accepted frontier truth
 //! still requires reviewed events.
 
-use vela_protocol::frontier_policy::{self, OperationReviewRequirement};
 use crate::frontier_task::{self, FrontierTask, FrontierTaskStatus};
-use vela_protocol::canonical;
-use vela_protocol::repo;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use vela_protocol::canonical;
+use vela_protocol::frontier_policy::{self, OperationReviewRequirement};
+use vela_protocol::repo;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]

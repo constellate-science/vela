@@ -260,7 +260,11 @@ impl FrontierGraph {
         let mut seen = BTreeSet::new();
         let mut stack = vec![start.to_string()];
         while let Some(node) = stack.pop() {
-            for e in self.edges.iter().filter(|e| e.kind == kind && e.source == node) {
+            for e in self
+                .edges
+                .iter()
+                .filter(|e| e.kind == kind && e.source == node)
+            {
                 if seen.insert(e.target.clone()) {
                     stack.push(e.target.clone());
                 }
@@ -456,8 +460,14 @@ mod tests {
 
         // a improves base, b supersedes a — closure of `improves` from
         // `a` reaches base; supersedes is a different kind.
-        assert!(g.closure_of_kind(&a_id, EdgeKind::Improves).contains(&base_id));
-        assert!(g.closure_of_kind(&b_id, EdgeKind::Supersedes).contains(&a_id));
+        assert!(
+            g.closure_of_kind(&a_id, EdgeKind::Improves)
+                .contains(&base_id)
+        );
+        assert!(
+            g.closure_of_kind(&b_id, EdgeKind::Supersedes)
+                .contains(&a_id)
+        );
     }
 
     #[test]
@@ -497,13 +507,20 @@ mod tests {
         let g = FrontierGraph::from_project(&project);
         let pairs = g.contradiction_pairs();
         assert_eq!(pairs.len(), 1);
-        let expected = if x_id <= y_id { (x_id, y_id) } else { (y_id, x_id) };
+        let expected = if x_id <= y_id {
+            (x_id, y_id)
+        } else {
+            (y_id, x_id)
+        };
         assert_eq!(pairs[0], expected);
     }
 
     #[test]
     fn cross_frontier_target_is_flagged_out_of_frontier() {
-        let f = synth_finding(0, vec![link_typed("vf_abcdef0123456789@vfr_remote", "supports")]);
+        let f = synth_finding(
+            0,
+            vec![link_typed("vf_abcdef0123456789@vfr_remote", "supports")],
+        );
         let mut project = assemble("fg-xf", vec![], 0, 0, "test");
         project.findings = vec![f];
 

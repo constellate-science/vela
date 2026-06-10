@@ -52,7 +52,6 @@ use tower_http::cors::CorsLayer;
 use vela_hub::db;
 use vela_hub::storage::Storage;
 use vela_protocol::canonical;
-use vela_edge::counterfactual::{CounterfactualQuery, answer_counterfactual};
 use vela_protocol::events::{event_log_hash, snapshot_hash};
 use vela_protocol::project::Project;
 use vela_protocol::registry::{RegistryEntry as ProtocolEntry, verify_entry};
@@ -570,10 +569,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/entries/{vfr_id}/manifest", get(get_entry_manifest))
         .route("/search", get(search_endpoint))
         .route("/entries/{vfr_id}/objects/{otype}", get(get_entry_objects))
-        .route("/entries/{vfr_id}/objects/{otype}/{object_id}", get(get_entry_object))
+        .route(
+            "/entries/{vfr_id}/objects/{otype}/{object_id}",
+            get(get_entry_object),
+        )
         .route("/entries/{vfr_id}/log/sth", get(get_log_sth))
         .route("/entries/{vfr_id}/log/proof/{event_id}", get(get_log_proof))
-        .route("/entries/{vfr_id}/log/consistency", get(get_log_consistency))
+        .route(
+            "/entries/{vfr_id}/log/consistency",
+            get(get_log_consistency),
+        )
         .route(
             "/entries/{vfr_id}/events",
             get(get_entry_events).post(post_entry_event),
@@ -617,10 +622,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route(
             "/entries/{vfr_id}/proof/download",
             get(get_proof_packet_download),
-        )
-        .route(
-            "/api/counterfactual/{vfr_id}",
-            axum::routing::post(api_counterfactual),
         )
         .route("/static/tokens.css", get(static_tokens_css))
         .route("/static/workbench.css", get(static_workbench_css))
@@ -680,7 +681,6 @@ fn root_json() -> Value {
             "GET  /entries/{vfr_id}/proof - browse the proof packet (HTML or JSON)",
             "GET  /entries/{vfr_id}/proof/download - proof packet as .tar.gz",
             "POST /entries       - publish a signed manifest (open, signature-gated)",
-            "POST /api/counterfactual/{vfr_id} - Pearl level 3 counterfactual over a registered frontier",
         ],
         "api": {
             "counterfactual": {
@@ -1046,10 +1046,7 @@ async fn get_entry(
 /// Lightweight per-frontier counts for list/dashboard views. Computed by cheap
 /// projection-table aggregates (never the multi-MB snapshot), so the catalogue
 /// can render real numbers without downloading whole frontiers. JSON only.
-async fn get_entry_summary(
-    State(state): State<AppState>,
-    Path(vfr_id): Path<String>,
-) -> Response {
+async fn get_entry_summary(State(state): State<AppState>, Path(vfr_id): Path<String>) -> Response {
     match state.db.frontier_summary(&vfr_id).await {
         Ok(Some(value)) => (
             StatusCode::OK,
@@ -1074,10 +1071,7 @@ async fn get_entry_summary(
 /// primitive — counts + log head + an index of object ids by type, WITHOUT the
 /// bulk raw_json. A client reads this, then pulls individual objects on demand
 /// (sparse / partial clone) rather than the whole multi-MB snapshot.
-async fn get_entry_manifest(
-    State(state): State<AppState>,
-    Path(vfr_id): Path<String>,
-) -> Response {
+async fn get_entry_manifest(State(state): State<AppState>, Path(vfr_id): Path<String>) -> Response {
     let entry = match state.db.get_live_entry(&vfr_id).await {
         Ok(Some(e)) => e,
         Ok(None) => {
@@ -1133,7 +1127,10 @@ async fn search_endpoint(
     State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Response {
-    let q = params.get("q").map(|s| s.trim().to_string()).unwrap_or_default();
+    let q = params
+        .get("q")
+        .map(|s| s.trim().to_string())
+        .unwrap_or_default();
     let object_type = params
         .get("type")
         .cloned()
@@ -1853,7 +1850,10 @@ async fn get_frontier_gate_status(
     type Att = vela_protocol::verifier_attachment::VerifierAttachment;
     let mut by_target: HashMap<&str, Vec<Att>> = HashMap::new();
     for a in &project.verifier_attachments {
-        by_target.entry(a.target.as_str()).or_default().push(a.clone());
+        by_target
+            .entry(a.target.as_str())
+            .or_default()
+            .push(a.clone());
     }
     let empty: Vec<Att> = Vec::new();
     let rows: Vec<Value> = project
@@ -1914,10 +1914,14 @@ fn gate_status_value(
     let digest = claim_digest(&bundle.assertion.text);
     let outcome = derive_gate_status(&digest, attachments);
 
-    let distinct_actors: BTreeSet<&str> =
-        attachments.iter().map(|a| a.verifier_actor.as_str()).collect();
-    let distinct_methods: BTreeSet<&str> =
-        attachments.iter().map(|a| a.verifier_method.as_str()).collect();
+    let distinct_actors: BTreeSet<&str> = attachments
+        .iter()
+        .map(|a| a.verifier_actor.as_str())
+        .collect();
+    let distinct_methods: BTreeSet<&str> = attachments
+        .iter()
+        .map(|a| a.verifier_method.as_str())
+        .collect();
     let reviewer_accepted = matches!(bundle.flags.review_state, Some(ReviewState::Accepted));
     let machine_sealed = outcome.status == GateStatus::Verified;
 
@@ -2056,85 +2060,6 @@ async fn get_proof_packet_download(
             ),
         ],
         buf,
-    )
-        .into_response()
-}
-
-/// v0.45.1: hub-level counterfactual endpoint. Pearl level 3 over a
-/// network frontier. Body is the same `CounterfactualQuery` shape the
-/// CLI produces; the hub fetches the frontier (cached), runs
-/// `answer_counterfactual` byte-for-byte against the in-memory
-/// `Project`, and returns the verdict as JSON.
-///
-/// Doctrine: the hub does not invent answers. It runs the same kernel
-/// algorithm a local CLI would run, against the frontier the registry
-/// declares. Same input → same output, regardless of whether the query
-/// originates from a local repo or a network client.
-async fn api_counterfactual(
-    State(state): State<AppState>,
-    Path(vfr_id): Path<String>,
-    Json(query): Json<CounterfactualQuery>,
-) -> Response {
-    let row = match state.db.get_live_entry(&vfr_id).await {
-        Ok(Some(v)) => v,
-        Ok(None) => {
-            if let Ok(Some(audit)) = state.db.latest_audit_status(&vfr_id).await
-                && audit.status == "failed"
-            {
-                return (
-                    StatusCode::FAILED_DEPENDENCY,
-                    Json(json!({
-                        "ok": false,
-                        "status": "unavailable",
-                        "vfr_id": vfr_id,
-                        "error": audit.error.unwrap_or_else(|| "frontier failed verification".to_string()),
-                        "authority_mode": audit.authority_mode,
-                    })),
-                )
-                    .into_response();
-            }
-            return (
-                StatusCode::NOT_FOUND,
-                Json(json!({"error": format!("{vfr_id} not found")})),
-            )
-                .into_response();
-        }
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("query: {e}")})),
-            )
-                .into_response();
-        }
-    };
-
-    let signed_at = row
-        .get("signed_publish_at")
-        .and_then(|v| v.as_str())
-        .unwrap_or("");
-    let project = match load_substrate(&state, &vfr_id, signed_at).await {
-        Some(p) => p,
-        None => {
-            return (
-                StatusCode::FAILED_DEPENDENCY,
-                Json(json!({
-                    "error": "frontier projection unavailable",
-                    "vfr_id": vfr_id,
-                })),
-            )
-                .into_response();
-        }
-    };
-
-    let verdict = answer_counterfactual(project.as_ref(), &query);
-    (
-        StatusCode::OK,
-        Json(json!({
-            "ok": true,
-            "vfr_id": vfr_id,
-            "query": query,
-            "verdict": verdict,
-        })),
     )
         .into_response()
 }
@@ -2841,7 +2766,10 @@ fn parse_sig_headers(headers: &HeaderMap) -> Result<(String, String), (StatusCod
             ));
         }
     };
-    let signature_hex = match headers.get("X-Vela-Signature").and_then(|v| v.to_str().ok()) {
+    let signature_hex = match headers
+        .get("X-Vela-Signature")
+        .and_then(|v| v.to_str().ok())
+    {
         Some(s) if s.trim().len() == 128 => s.trim().to_string(),
         _ => {
             return Err((
@@ -2964,7 +2892,9 @@ fn check_proposal_freshness(
 ) -> Result<(), String> {
     let ts = chrono::DateTime::parse_from_rfc3339(created_at)
         .map_err(|e| {
-            format!("proposal created_at {created_at:?} is not RFC3339 ({e}); cannot verify freshness")
+            format!(
+                "proposal created_at {created_at:?} is not RFC3339 ({e}); cannot verify freshness"
+            )
         })?
         .with_timezone(&chrono::Utc);
     let age = now.signed_duration_since(ts).num_seconds();
@@ -3311,7 +3241,14 @@ async fn accept_proposal(
 
     // Rate limit per (reviewer, frontier) — keyed on the resolved actor
     // id, independent bucket from submission.
-    if !rate_limit_check(&state.accept_limiter, &reviewer_id, &vfr_id, ACCEPT_RATE_LIMIT).await {
+    if !rate_limit_check(
+        &state.accept_limiter,
+        &reviewer_id,
+        &vfr_id,
+        ACCEPT_RATE_LIMIT,
+    )
+    .await
+    {
         return (
             StatusCode::TOO_MANY_REQUESTS,
             Json(json!({
@@ -3597,17 +3534,17 @@ async fn append_to_frontier_endpoint(
                 "snapshot_hash": outcome.new_snapshot_hash,
             })),
         ),
-        Err(e) if e.starts_with("conflict:") => (
-            StatusCode::CONFLICT,
-            Json(json!({"ok": false, "error": e})),
-        ),
+        Err(e) if e.starts_with("conflict:") => {
+            (StatusCode::CONFLICT, Json(json!({"ok": false, "error": e})))
+        }
         Err(e) if e.contains("owner continuity") => (
             StatusCode::FORBIDDEN,
             Json(json!({"ok": false, "error": e})),
         ),
-        Err(e) if e.contains("not found") => {
-            (StatusCode::NOT_FOUND, Json(json!({"ok": false, "error": e})))
-        }
+        Err(e) if e.contains("not found") => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"ok": false, "error": e})),
+        ),
         Err(e) => (
             StatusCode::UNPROCESSABLE_ENTITY,
             Json(json!({"ok": false, "error": e})),
@@ -6372,7 +6309,7 @@ mod gate_status_tests {
 
 #[cfg(test)]
 mod proposal_freshness_tests {
-    use super::{check_proposal_freshness, PROPOSAL_FUTURE_SKEW_SECS};
+    use super::{PROPOSAL_FUTURE_SKEW_SECS, check_proposal_freshness};
 
     fn now() -> chrono::DateTime<chrono::Utc> {
         chrono::DateTime::parse_from_rfc3339("2026-06-07T12:00:00Z")
@@ -6383,16 +6320,25 @@ mod proposal_freshness_tests {
     #[test]
     fn fresh_signature_passes() {
         // created 5 min ago, window 15 min -> OK.
-        assert!(check_proposal_freshness(
-            "2026-06-07T11:55:00Z", now(), 900, PROPOSAL_FUTURE_SKEW_SECS
-        ).is_ok());
+        assert!(
+            check_proposal_freshness(
+                "2026-06-07T11:55:00Z",
+                now(),
+                900,
+                PROPOSAL_FUTURE_SKEW_SECS
+            )
+            .is_ok()
+        );
     }
 
     #[test]
     fn stale_signature_rejected() {
         // created 20 min ago, window 15 min -> stale.
         let r = check_proposal_freshness(
-            "2026-06-07T11:40:00Z", now(), 900, PROPOSAL_FUTURE_SKEW_SECS
+            "2026-06-07T11:40:00Z",
+            now(),
+            900,
+            PROPOSAL_FUTURE_SKEW_SECS,
         );
         assert!(r.is_err());
         assert!(r.unwrap_err().contains("stale"));
@@ -6402,7 +6348,10 @@ mod proposal_freshness_tests {
     fn future_dated_beyond_skew_rejected() {
         // created 5 min in the future, skew tolerance 120s -> rejected.
         let r = check_proposal_freshness(
-            "2026-06-07T12:05:00Z", now(), 900, PROPOSAL_FUTURE_SKEW_SECS
+            "2026-06-07T12:05:00Z",
+            now(),
+            900,
+            PROPOSAL_FUTURE_SKEW_SECS,
         );
         assert!(r.is_err());
         assert!(r.unwrap_err().contains("future"));
@@ -6411,9 +6360,15 @@ mod proposal_freshness_tests {
     #[test]
     fn small_future_skew_tolerated() {
         // 60s ahead, within 120s tolerance -> OK.
-        assert!(check_proposal_freshness(
-            "2026-06-07T12:01:00Z", now(), 900, PROPOSAL_FUTURE_SKEW_SECS
-        ).is_ok());
+        assert!(
+            check_proposal_freshness(
+                "2026-06-07T12:01:00Z",
+                now(),
+                900,
+                PROPOSAL_FUTURE_SKEW_SECS
+            )
+            .is_ok()
+        );
     }
 
     #[test]

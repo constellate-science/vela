@@ -8,12 +8,12 @@ use chrono::Utc;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-use vela_protocol::bundle::{Artifact, FindingBundle};
-use vela_protocol::project::Project;
-use vela_protocol::events;
 use crate::packet;
-use vela_protocol::repo;
 use crate::signals;
+use vela_protocol::bundle::{Artifact, FindingBundle};
+use vela_protocol::events;
+use vela_protocol::project::Project;
+use vela_protocol::repo;
 use vela_protocol::sources;
 use vela_protocol::state;
 

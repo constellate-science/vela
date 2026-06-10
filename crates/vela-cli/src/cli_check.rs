@@ -4,15 +4,15 @@ use crate::cli::{
     check_json_payload, fail, load_frontier_or_fail, print_json, print_signal_summary,
     scan_for_sensitive_paths,
 };
-use vela_protocol::cli_style as style;
-use vela_edge::conformance;
-use vela_protocol::events;
-use vela_edge::lint;
-use vela_protocol::sign;
-use vela_edge::signals;
-use vela_edge::validate;
 use serde_json::Value;
 use std::path::Path;
+use vela_edge::conformance;
+use vela_edge::lint;
+use vela_edge::signals;
+use vela_edge::validate;
+use vela_protocol::cli_style as style;
+use vela_protocol::events;
+use vela_protocol::sign;
 
 pub(crate) fn cmd_check(
     source: Option<&Path>,

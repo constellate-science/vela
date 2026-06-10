@@ -10,10 +10,10 @@ use colored::Colorize;
 
 use vela_protocol::cli_style as style;
 
+use crate::observer;
 use vela_protocol::bundle::*;
 use vela_protocol::confidence;
 use vela_protocol::link;
-use crate::observer;
 use vela_protocol::project;
 use vela_protocol::propagate::{self, PropagationAction};
 
@@ -729,7 +729,9 @@ fn run_retraction_propagation(
             .events
             .iter()
             .filter_map(|e| match &e.action {
-                vela_protocol::bundle::ReviewAction::Flagged { flag_type } => Some(flag_type.clone()),
+                vela_protocol::bundle::ReviewAction::Flagged { flag_type } => {
+                    Some(flag_type.clone())
+                }
                 _ => None,
             })
             .collect();
@@ -1129,8 +1131,8 @@ fn run_registry_publish_pull(
     input: &serde_json::Value,
     expected: &serde_json::Value,
 ) -> Result<(), String> {
-    use vela_protocol::registry::{RegistryEntry, entry_signing_bytes};
     use sha2::{Digest, Sha256};
+    use vela_protocol::registry::{RegistryEntry, entry_signing_bytes};
     let entry: RegistryEntry = serde_json::from_value({
         let mut v = input.clone();
         v["signature"] = serde_json::Value::String(String::new());

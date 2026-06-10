@@ -1,10 +1,10 @@
 use tempfile::tempdir;
-use vela_protocol::frontier_repo::{self, InitOptions};
 use vela_edge::frontier_task::FrontierTaskStatus;
 use vela_edge::source_inbox::{
     SourceInboxAddOptions, SourceInboxState, add_record, create_task_from_record,
     derive_source_inbox_id, list_records, verify_record,
 };
+use vela_protocol::frontier_repo::{self, InitOptions};
 
 fn init_frontier() -> tempfile::TempDir {
     let tmp = tempdir().unwrap();

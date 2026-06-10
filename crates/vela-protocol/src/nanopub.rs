@@ -76,11 +76,11 @@ pub fn finding_to_nanopub_trig(finding: &FindingBundle, frontier_id: &str) -> St
     // Assertion: the claim itself.
     s.push_str("sub:assertion {\n");
     s.push_str("  sub:finding a vela:Finding ;\n");
-    s.push_str(&format!("    rdfs:label \"{}\" ;\n", lit(&finding.assertion.text)));
     s.push_str(&format!(
-        "    vela:findingId \"{}\" ;\n",
-        lit(&finding.id)
+        "    rdfs:label \"{}\" ;\n",
+        lit(&finding.assertion.text)
     ));
+    s.push_str(&format!("    vela:findingId \"{}\" ;\n", lit(&finding.id)));
     s.push_str(&format!(
         "    vela:assertionType \"{}\" ;\n",
         lit(&finding.assertion.assertion_type)
@@ -93,7 +93,9 @@ pub fn finding_to_nanopub_trig(finding: &FindingBundle, frontier_id: &str) -> St
 
     // Provenance: how the assertion came to be.
     s.push_str("sub:provenance {\n");
-    s.push_str(&format!("  sub:assertion prov:wasDerivedFrom {derived_from} ;\n"));
+    s.push_str(&format!(
+        "  sub:assertion prov:wasDerivedFrom {derived_from} ;\n"
+    ));
     s.push_str(&format!(
         "    vela:method \"{}\" ;\n",
         lit(&finding.evidence.method)
@@ -163,8 +165,7 @@ mod tests {
 
     #[test]
     fn falls_back_to_pubmed_then_title_for_provenance() {
-        let mut f =
-            finding_with_provenance("vf_2222222222222222", "claim", None);
+        let mut f = finding_with_provenance("vf_2222222222222222", "claim", None);
         f.provenance.pmid = Some("12345".into());
         let trig = finding_to_nanopub_trig(&f, "vfr_x");
         assert!(trig.contains("<https://pubmed.ncbi.nlm.nih.gov/12345/>"));
@@ -172,11 +173,8 @@ mod tests {
 
     #[test]
     fn escapes_quotes_in_literals() {
-        let f = finding_with_provenance(
-            "vf_3333333333333333",
-            "a \"quoted\" claim",
-            Some("10.1/q"),
-        );
+        let f =
+            finding_with_provenance("vf_3333333333333333", "a \"quoted\" claim", Some("10.1/q"));
         let trig = finding_to_nanopub_trig(&f, "vfr_x");
         assert!(trig.contains("a \\\"quoted\\\" claim"));
     }

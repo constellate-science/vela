@@ -1,8 +1,8 @@
 //! `cmd_lean` and its handler logic, split out of cli.rs.
 
 use crate::cli::{fail, fail_return, print_json};
-use vela_protocol::cli_style as style;
 use std::path::PathBuf;
+use vela_protocol::cli_style as style;
 
 use serde_json::json;
 use sha2::Digest;
@@ -170,7 +170,7 @@ pub(crate) fn cmd_lean(action: LeanAction) {
                 KernelRecheck, LeanVerification, VerificationDraft,
             };
             use vela_protocol::tcb_policy::{
-                TcbDraft, TcbPolicy, DEFAULT_ALLOWED_AXIOMS, FORBIDDEN_AXIOMS,
+                DEFAULT_ALLOWED_AXIOMS, FORBIDDEN_AXIOMS, TcbDraft, TcbPolicy,
             };
 
             let key_hex = std::fs::read_to_string(&key)
@@ -235,7 +235,9 @@ pub(crate) fn cmd_lean(action: LeanAction) {
                 Some(p) => match std::fs::read_to_string(p) {
                     Ok(t) if t.contains("KERNEL_RECHECK_FAILED") => KernelRecheck::Failed,
                     Ok(_) => KernelRecheck::Passed,
-                    Err(e) => fail_return(&format!("read kernel re-check log {}: {e}", p.display())),
+                    Err(e) => {
+                        fail_return(&format!("read kernel re-check log {}: {e}", p.display()))
+                    }
                 },
             };
 
@@ -255,7 +257,10 @@ pub(crate) fn cmd_lean(action: LeanAction) {
             let tcb_path = out_tcb.unwrap_or_else(|| out.join("policy.vtcb.json"));
             std::fs::write(
                 &tcb_path,
-                format!("{}\n", serde_json::to_string_pretty(&policy).expect("serialize tcb")),
+                format!(
+                    "{}\n",
+                    serde_json::to_string_pretty(&policy).expect("serialize tcb")
+                ),
             )
             .unwrap_or_else(|e| fail_return(&format!("write {}: {e}", tcb_path.display())));
 
@@ -414,9 +419,8 @@ pub(crate) fn cmd_lean(action: LeanAction) {
             // Independently re-classify the record's axioms against the policy.
             if let Some(tcb_path) = tcb {
                 use vela_protocol::tcb_policy::TcbPolicy;
-                let tbody = std::fs::read_to_string(&tcb_path).unwrap_or_else(|e| {
-                    fail_return(&format!("read {}: {e}", tcb_path.display()))
-                });
+                let tbody = std::fs::read_to_string(&tcb_path)
+                    .unwrap_or_else(|e| fail_return(&format!("read {}: {e}", tcb_path.display())));
                 let policy: TcbPolicy = serde_json::from_str(&tbody)
                     .unwrap_or_else(|e| fail_return(&format!("parse tcb policy: {e}")));
                 policy
@@ -706,7 +710,12 @@ pub(crate) fn cmd_transfer(action: TransferAction) {
             let json_out = serde_json::to_string_pretty(&t).unwrap_or_default();
             std::fs::write(&out, format!("{json_out}\n"))
                 .unwrap_or_else(|e| fail_return(&format!("write {}: {e}", out.display())));
-            println!("{} {} -> {}", style::ok("transfer.mint"), t.transfer_id, out.display());
+            println!(
+                "{} {} -> {}",
+                style::ok("transfer.mint"),
+                t.transfer_id,
+                out.display()
+            );
         }
     }
 }
@@ -715,7 +724,7 @@ pub(crate) fn cmd_transfer(action: TransferAction) {
 mod tests {
     use super::*;
     use vela_protocol::lean_verification::KernelRecheck;
-    use vela_protocol::tcb_policy::{TcbPolicy, AxiomVerdict};
+    use vela_protocol::tcb_policy::{AxiomVerdict, TcbPolicy};
 
     fn policy() -> TcbPolicy {
         TcbPolicy::default_for("leanprover/lean4:v4.29.1", "v4.29.1", "none", "").unwrap()
@@ -728,7 +737,10 @@ mod tests {
             AXIOMS Vela.Foo.baz | \n\
             AXIOMS Vela.Foo.qux | Lean.ofReduceBool, Lean.trustCompiler\n";
         let m = parse_axioms_report(text);
-        assert_eq!(m.get("Vela.Foo.bar").unwrap(), &vec!["Classical.choice", "propext"]);
+        assert_eq!(
+            m.get("Vela.Foo.bar").unwrap(),
+            &vec!["Classical.choice", "propext"]
+        );
         assert!(m.get("Vela.Foo.baz").unwrap().is_empty());
         assert_eq!(
             m.get("Vela.Foo.qux").unwrap(),
@@ -738,32 +750,53 @@ mod tests {
 
     #[test]
     fn native_decide_is_compiler_checked_not_failed() {
-        let axioms = vec!["Lean.ofReduceBool".to_string(), "Lean.trustCompiler".to_string()];
+        let axioms = vec![
+            "Lean.ofReduceBool".to_string(),
+            "Lean.trustCompiler".to_string(),
+        ];
         let verdict = policy().classify(&axioms);
         assert_eq!(verdict, AxiomVerdict::ForbiddenAxiom);
-        assert_eq!(axiom_status(verdict, &axioms, KernelRecheck::NotRun), "compiler_checked");
+        assert_eq!(
+            axiom_status(verdict, &axioms, KernelRecheck::NotRun),
+            "compiler_checked"
+        );
     }
 
     #[test]
     fn sorry_is_failed_axiom_check() {
         let axioms = vec!["sorryAx".to_string()];
         let verdict = policy().classify(&axioms);
-        assert_eq!(axiom_status(verdict, &axioms, KernelRecheck::NotRun), "failed_axiom_check");
+        assert_eq!(
+            axiom_status(verdict, &axioms, KernelRecheck::NotRun),
+            "failed_axiom_check"
+        );
     }
 
     #[test]
     fn kernel_clean_verified_unless_recheck_failed() {
         let axioms = vec!["propext".to_string()];
         let verdict = policy().classify(&axioms);
-        assert_eq!(axiom_status(verdict, &axioms, KernelRecheck::Passed), "verified");
-        assert_eq!(axiom_status(verdict, &axioms, KernelRecheck::NotRun), "verified");
-        assert_eq!(axiom_status(verdict, &axioms, KernelRecheck::Failed), "failed_axiom_check");
+        assert_eq!(
+            axiom_status(verdict, &axioms, KernelRecheck::Passed),
+            "verified"
+        );
+        assert_eq!(
+            axiom_status(verdict, &axioms, KernelRecheck::NotRun),
+            "verified"
+        );
+        assert_eq!(
+            axiom_status(verdict, &axioms, KernelRecheck::Failed),
+            "failed_axiom_check"
+        );
     }
 
     #[test]
     fn unlisted_axiom_is_failed() {
         let axioms = vec!["MyDev.customAxiom".to_string()];
         let verdict = policy().classify(&axioms);
-        assert_eq!(axiom_status(verdict, &axioms, KernelRecheck::NotRun), "failed_axiom_check");
+        assert_eq!(
+            axiom_status(verdict, &axioms, KernelRecheck::NotRun),
+            "failed_axiom_check"
+        );
     }
 }

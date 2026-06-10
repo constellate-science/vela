@@ -364,7 +364,10 @@ impl VerifierAttachment {
             ));
         }
         if !self.id.starts_with("vva_") {
-            return Err(format!("attachment id must start with `vva_`, got `{}`", self.id));
+            return Err(format!(
+                "attachment id must start with `vva_`, got `{}`",
+                self.id
+            ));
         }
         let derived = self.derive_id()?;
         if derived != self.id {
@@ -380,8 +383,7 @@ impl VerifierAttachment {
     /// claim digest with `outcome = passed`, `match_to_claim`, and an
     /// integrity that is not `Compromised` (G5).
     fn is_passing_match(&self, current_digest: &str) -> bool {
-        self.is_base_match(current_digest)
-            && self.method_integrity != MethodIntegrity::Compromised
+        self.is_base_match(current_digest) && self.method_integrity != MethodIntegrity::Compromised
     }
 
     /// Well-formed, passed, claim-matched — everything but the integrity check.
@@ -397,8 +399,7 @@ impl VerifierAttachment {
     /// Whether this attachment would have matched the claim but is excluded
     /// solely because its method integrity is `Compromised` (G5 reason).
     fn is_compromised_match(&self, current_digest: &str) -> bool {
-        self.is_base_match(current_digest)
-            && self.method_integrity == MethodIntegrity::Compromised
+        self.is_base_match(current_digest) && self.method_integrity == MethodIntegrity::Compromised
     }
 }
 
@@ -634,7 +635,12 @@ mod tests {
             vec![surviving_probe()],
         );
         let outcome = derive_gate_status(&digest, &[a1, a2]);
-        assert_eq!(outcome.status, GateStatus::Verified, "{:?}", outcome.reasons);
+        assert_eq!(
+            outcome.status,
+            GateStatus::Verified,
+            "{:?}",
+            outcome.reasons
+        );
         assert!(outcome.reasons.is_empty());
     }
 
@@ -657,10 +663,12 @@ mod tests {
         );
         let outcome = derive_gate_status(&digest, &[a1, a2]);
         assert_eq!(outcome.status, GateStatus::NeedsVerification);
-        assert!(outcome
-            .reasons
-            .iter()
-            .any(|r| r.contains("same") || r.contains("one method/solver")));
+        assert!(
+            outcome
+                .reasons
+                .iter()
+                .any(|r| r.contains("same") || r.contains("one method/solver"))
+        );
     }
 
     #[test]
@@ -818,7 +826,12 @@ mod tests {
         .with_method_integrity(MethodIntegrity::Sound)
         .unwrap();
         let outcome = derive_gate_status(&digest, &[a1, a2]);
-        assert_eq!(outcome.status, GateStatus::Verified, "{:?}", outcome.reasons);
+        assert_eq!(
+            outcome.status,
+            GateStatus::Verified,
+            "{:?}",
+            outcome.reasons
+        );
     }
 
     #[test]
@@ -835,7 +848,10 @@ mod tests {
             vec![surviving_probe()],
         );
         let json = serde_json::to_string(&a).unwrap();
-        assert!(!json.contains("method_integrity"), "default must serialize absent: {json}");
+        assert!(
+            !json.contains("method_integrity"),
+            "default must serialize absent: {json}"
+        );
         a.verify().unwrap();
     }
 

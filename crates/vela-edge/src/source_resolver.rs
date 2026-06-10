@@ -987,8 +987,8 @@ fn clean_import_text(value: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use vela_protocol::frontier_repo::{self, InitOptions};
     use tempfile::TempDir;
+    use vela_protocol::frontier_repo::{self, InitOptions};
 
     #[test]
     fn normalizes_source_identifiers() {

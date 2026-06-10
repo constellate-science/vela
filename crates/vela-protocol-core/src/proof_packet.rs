@@ -221,8 +221,7 @@ impl ProofPacket {
             .packet_hash
             .strip_prefix("sha256:")
             .ok_or("packet_hash must start with sha256:")?;
-        let hash_bytes = hex::decode(hash_bytes_hex)
-            .map_err(|e| format!("decode hash: {e}"))?;
+        let hash_bytes = hex::decode(hash_bytes_hex).map_err(|e| format!("decode hash: {e}"))?;
         let sig = key.sign(&hash_bytes);
         packet.packet_signature = hex::encode(sig.to_bytes());
         Ok(packet)
@@ -232,8 +231,7 @@ impl ProofPacket {
     /// listed in the doctrine above. Two implementations producing
     /// the same packet body must produce the same hash.
     pub fn compute_hash(&self) -> Result<String, String> {
-        let value = serde_json::to_value(self)
-            .map_err(|e| format!("serialize packet: {e}"))?;
+        let value = serde_json::to_value(self).map_err(|e| format!("serialize packet: {e}"))?;
         let mut obj = value
             .as_object()
             .ok_or("packet must serialize to an object")?
@@ -267,17 +265,16 @@ impl ProofPacket {
             .packet_hash
             .strip_prefix("sha256:")
             .ok_or("packet_hash must start with sha256:")?;
-        let hash_bytes = hex::decode(hash_bytes_hex)
-            .map_err(|e| format!("decode hash: {e}"))?;
-        let pubkey_bytes = hex::decode(&self.signer_pubkey_hex)
-            .map_err(|e| format!("decode pubkey: {e}"))?;
+        let hash_bytes = hex::decode(hash_bytes_hex).map_err(|e| format!("decode hash: {e}"))?;
+        let pubkey_bytes =
+            hex::decode(&self.signer_pubkey_hex).map_err(|e| format!("decode pubkey: {e}"))?;
         let pubkey_arr: [u8; 32] = pubkey_bytes
             .try_into()
             .map_err(|_| "pubkey must be 32 bytes".to_string())?;
-        let verifying = VerifyingKey::from_bytes(&pubkey_arr)
-            .map_err(|e| format!("verifying key: {e}"))?;
-        let sig_bytes = hex::decode(&self.packet_signature)
-            .map_err(|e| format!("decode signature: {e}"))?;
+        let verifying =
+            VerifyingKey::from_bytes(&pubkey_arr).map_err(|e| format!("verifying key: {e}"))?;
+        let sig_bytes =
+            hex::decode(&self.packet_signature).map_err(|e| format!("decode signature: {e}"))?;
         let sig_arr: [u8; 64] = sig_bytes
             .try_into()
             .map_err(|_| "signature must be 64 bytes".to_string())?;
@@ -302,8 +299,7 @@ impl ProofPacket {
             .packet_hash
             .strip_prefix("sha256:")
             .ok_or("packet_hash must start with sha256:")?;
-        let hash_bytes = hex::decode(hash_bytes_hex)
-            .map_err(|e| format!("decode hash: {e}"))?;
+        let hash_bytes = hex::decode(hash_bytes_hex).map_err(|e| format!("decode hash: {e}"))?;
         let sig = key.sign(&hash_bytes);
         self.external_verifications.push(ExternalVerification {
             actor_id: verifier_actor_id.to_string(),
@@ -321,8 +317,7 @@ impl ProofPacket {
             .packet_hash
             .strip_prefix("sha256:")
             .ok_or("packet_hash must start with sha256:")?;
-        let hash_bytes = hex::decode(hash_bytes_hex)
-            .map_err(|e| format!("decode hash: {e}"))?;
+        let hash_bytes = hex::decode(hash_bytes_hex).map_err(|e| format!("decode hash: {e}"))?;
         let mut n = 0;
         for v in &self.external_verifications {
             let pubkey_bytes = hex::decode(&v.signer_pubkey_hex)
@@ -330,8 +325,8 @@ impl ProofPacket {
             let pubkey_arr: [u8; 32] = pubkey_bytes
                 .try_into()
                 .map_err(|_| "pubkey must be 32 bytes".to_string())?;
-            let verifying = VerifyingKey::from_bytes(&pubkey_arr)
-                .map_err(|e| format!("verifying key: {e}"))?;
+            let verifying =
+                VerifyingKey::from_bytes(&pubkey_arr).map_err(|e| format!("verifying key: {e}"))?;
             let sig_bytes = hex::decode(&v.signature)
                 .map_err(|e| format!("decode signature for {}: {e}", v.actor_id))?;
             let sig_arr: [u8; 64] = sig_bytes
@@ -354,8 +349,9 @@ fn canonicalize_value(v: &serde_json::Value) -> String {
         serde_json::Value::Null => "null".to_string(),
         serde_json::Value::Bool(b) => b.to_string(),
         serde_json::Value::Number(n) => n.to_string(),
-        serde_json::Value::String(s) => serde_json::to_string(s)
-            .unwrap_or_else(|_| String::from("\"\"")),
+        serde_json::Value::String(s) => {
+            serde_json::to_string(s).unwrap_or_else(|_| String::from("\"\""))
+        }
         serde_json::Value::Array(arr) => {
             let parts: Vec<String> = arr.iter().map(canonicalize_value).collect();
             format!("[{}]", parts.join(","))
@@ -366,8 +362,7 @@ fn canonicalize_value(v: &serde_json::Value) -> String {
             let parts: Vec<String> = keys
                 .iter()
                 .map(|k| {
-                    let kstr = serde_json::to_string(k)
-                        .unwrap_or_else(|_| String::from("\"\""));
+                    let kstr = serde_json::to_string(k).unwrap_or_else(|_| String::from("\"\""));
                     let vstr = canonicalize_value(&obj[*k]);
                     format!("{kstr}:{vstr}")
                 })

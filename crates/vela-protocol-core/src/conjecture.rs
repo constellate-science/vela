@@ -433,8 +433,7 @@ fn verify_one(preimage: &[u8], sig: &ConjectureSignature) -> Result<(), String> 
         .map_err(|_| "pubkey must be 32 bytes".to_string())?;
     let verifying =
         VerifyingKey::from_bytes(&pubkey_arr).map_err(|e| format!("verifying key: {e}"))?;
-    let sig_bytes =
-        hex::decode(&sig.signature).map_err(|e| format!("decode signature: {e}"))?;
+    let sig_bytes = hex::decode(&sig.signature).map_err(|e| format!("decode signature: {e}"))?;
     let sig_arr: [u8; 64] = sig_bytes
         .try_into()
         .map_err(|_| "signature must be 64 bytes".to_string())?;
@@ -457,8 +456,7 @@ fn validate_draft(d: &ConjectureDraft) -> Result<(), String> {
     }
     if d.falsifies_if.is_empty() {
         return Err(
-            "conjecture must declare at least one falsifies_if condition (Popper)"
-                .to_string(),
+            "conjecture must declare at least one falsifies_if condition (Popper)".to_string(),
         );
     }
     if d.witness_actor_id.is_empty() {
@@ -493,8 +491,7 @@ mod tests {
             }],
             falsifies_if: vec![FalsifiesIf {
                 kind: FalsificationKind::ExperimentResult,
-                description: "energy density below 250 Wh/kg in 5+ replications"
-                    .to_string(),
+                description: "energy density below 250 Wh/kg in 5+ replications".to_string(),
                 trigger: Some(serde_json::json!({
                     "metric": "energy_density_wh_kg",
                     "below": 250,

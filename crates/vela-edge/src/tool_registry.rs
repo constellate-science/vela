@@ -168,7 +168,9 @@ pub fn all_tools() -> Vec<ToolDefinition> {
             }}),
             PermissionLevel::ReadOnly,
             false,
-            vec!["Derived view over declared links; edges are candidate relations, not adjudicated truth."],
+            vec![
+                "Derived view over declared links; edges are candidate relations, not adjudicated truth.",
+            ],
         ),
         tool(
             "contradictions",
@@ -211,7 +213,9 @@ pub fn all_tools() -> Vec<ToolDefinition> {
             }}),
             PermissionLevel::ReadOnly,
             false,
-            vec!["A structured side-by-side of declared properties, not a ranking or adjudication."],
+            vec![
+                "A structured side-by-side of declared properties, not a ranking or adjudication.",
+            ],
         ),
         // Nanopublication export: interchange with the FAIR /
         // semantic-web science ecosystem.

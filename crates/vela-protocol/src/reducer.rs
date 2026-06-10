@@ -762,9 +762,8 @@ fn apply_verifier_attachment_added(state: &mut Project, event: &StateEvent) -> R
         .payload
         .get("attachment")
         .ok_or("reducer: verifier_attachment.added missing payload.attachment")?;
-    let att: crate::verifier_attachment::VerifierAttachment =
-        serde_json::from_value(value.clone())
-            .map_err(|e| format!("reducer: invalid verifier_attachment.added payload: {e}"))?;
+    let att: crate::verifier_attachment::VerifierAttachment = serde_json::from_value(value.clone())
+        .map_err(|e| format!("reducer: invalid verifier_attachment.added payload: {e}"))?;
     if state.verifier_attachments.iter().any(|a| a.id == att.id) {
         return Ok(());
     }
@@ -1325,13 +1324,15 @@ fn apply_attempt_deposited(state: &mut Project, event: &StateEvent) -> Result<()
         .get("attempt")
         .ok_or("attempt.deposited event missing payload.attempt")?
         .clone();
-    let attempt: Attempt =
-        serde_json::from_value(value).map_err(|e| format!("attempt.deposited payload parse: {e}"))?;
+    let attempt: Attempt = serde_json::from_value(value)
+        .map_err(|e| format!("attempt.deposited payload parse: {e}"))?;
     attempt
         .verify()
         .map_err(|e| format!("attempt.deposited rejected: {e}"))?;
 
-    upsert_by(&mut state.attempts, attempt, |a, b| a.attempt_id == b.attempt_id);
+    upsert_by(&mut state.attempts, attempt, |a, b| {
+        a.attempt_id == b.attempt_id
+    });
     Ok(())
 }
 
@@ -1349,13 +1350,15 @@ fn apply_transfer_deposited(state: &mut Project, event: &StateEvent) -> Result<(
         .get("transfer")
         .ok_or("transfer.deposited event missing payload.transfer")?
         .clone();
-    let transfer: Transfer =
-        serde_json::from_value(value).map_err(|e| format!("transfer.deposited payload parse: {e}"))?;
+    let transfer: Transfer = serde_json::from_value(value)
+        .map_err(|e| format!("transfer.deposited payload parse: {e}"))?;
     transfer
         .verify()
         .map_err(|e| format!("transfer.deposited rejected: {e}"))?;
 
-    upsert_by(&mut state.transfers, transfer, |a, b| a.transfer_id == b.transfer_id);
+    upsert_by(&mut state.transfers, transfer, |a, b| {
+        a.transfer_id == b.transfer_id
+    });
     Ok(())
 }
 
@@ -2029,7 +2032,9 @@ mod tests {
 
         let res = ResolutionEvent::new(
             &att.attempt_id,
-            AttemptResolution::Verified { gate_ref: "gate@vva_x".to_string() },
+            AttemptResolution::Verified {
+                gate_ref: "gate@vva_x".to_string(),
+            },
             "reviewer:will-blair",
             "2026-06-09T00:00:00Z",
             "two independent methods",
@@ -2037,14 +2042,20 @@ mod tests {
         .unwrap();
         apply_event(&mut state, &res.to_state_event("reviewer", "verified")).unwrap();
         assert_eq!(
-            state.head_resolution(&att.attempt_id).unwrap().resolution.as_str(),
+            state
+                .head_resolution(&att.attempt_id)
+                .unwrap()
+                .resolution
+                .as_str(),
             "verified"
         );
 
         // A later refutation becomes the head (latest by `at`); history kept.
         let res2 = ResolutionEvent::new(
             &att.attempt_id,
-            AttemptResolution::Refuted { by_probe: "case_b".to_string() },
+            AttemptResolution::Refuted {
+                by_probe: "case_b".to_string(),
+            },
             "reviewer:skeptic",
             "2026-06-10T00:00:00Z",
             "Case B breaks it",
@@ -2052,7 +2063,11 @@ mod tests {
         .unwrap();
         apply_event(&mut state, &res2.to_state_event("reviewer", "refuted")).unwrap();
         assert_eq!(
-            state.head_resolution(&att.attempt_id).unwrap().resolution.as_str(),
+            state
+                .head_resolution(&att.attempt_id)
+                .unwrap()
+                .resolution
+                .as_str(),
             "refuted"
         );
         assert_eq!(state.attempt_resolutions.len(), 2);

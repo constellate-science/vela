@@ -1,8 +1,8 @@
 use tempfile::tempdir;
-use vela_protocol::frontier_repo::{self, InitOptions};
 use vela_edge::frontier_task::{
     FrontierTaskDraft, FrontierTaskStatus, create_task, derive_task_id, list_tasks,
 };
+use vela_protocol::frontier_repo::{self, InitOptions};
 
 fn init_frontier() -> tempfile::TempDir {
     let tmp = tempdir().unwrap();

@@ -161,7 +161,8 @@ impl LeanVerification {
             }
             if draft.kernel_recheck == Some(KernelRecheck::Failed) {
                 return Err(
-                    "status `verified` cannot accompany a failed external kernel re-check".to_string(),
+                    "status `verified` cannot accompany a failed external kernel re-check"
+                        .to_string(),
                 );
             }
         }
@@ -237,11 +238,17 @@ impl LeanVerification {
             out.extend_from_slice(self.axioms.join(",").as_bytes());
             out.push(b'|');
             out.extend_from_slice(
-                self.axiom_verdict.map(AxiomVerdict::as_str).unwrap_or("").as_bytes(),
+                self.axiom_verdict
+                    .map(AxiomVerdict::as_str)
+                    .unwrap_or("")
+                    .as_bytes(),
             );
             out.push(b'|');
             out.extend_from_slice(
-                self.kernel_recheck.map(KernelRecheck::as_str).unwrap_or("").as_bytes(),
+                self.kernel_recheck
+                    .map(KernelRecheck::as_str)
+                    .unwrap_or("")
+                    .as_bytes(),
             );
             out.push(b'|');
             out.extend_from_slice(self.axioms_output_hash.as_bytes());
@@ -285,7 +292,9 @@ impl LeanVerification {
             &self.signature_hex,
             &self.verifier_pubkey_hex,
         )? {
-            return Err("lean verification signature does not verify under the declared pubkey".to_string());
+            return Err(
+                "lean verification signature does not verify under the declared pubkey".to_string(),
+            );
         }
         let rederived = self.derive_id();
         if rederived != self.verification_id {
@@ -402,7 +411,10 @@ mod tests {
         let mut r = LeanVerification::build(ok_draft(), &key()).expect("build");
         assert!(r.verify().is_ok());
         r.axiom_verdict = Some(AxiomVerdict::ForbiddenAxiom);
-        assert!(r.verify().is_err(), "axiom_verdict must be inside the signed preimage");
+        assert!(
+            r.verify().is_err(),
+            "axiom_verdict must be inside the signed preimage"
+        );
     }
 
     #[test]
@@ -444,18 +456,24 @@ mod tests {
     #[test]
     fn native_decide_record_cannot_gate_verified_end_to_end() {
         use crate::verifier_attachment::{
-            derive_gate_status, claim_digest, AdversarialProbe, AttachmentDraft, AttachmentOutcome,
-            GateStatus, MatchToClaim, MethodIntegrity, ProbeKind, ProbeResult, VerifierAttachment,
-            VerifierMethod,
+            AdversarialProbe, AttachmentDraft, AttachmentOutcome, GateStatus, MatchToClaim,
+            MethodIntegrity, ProbeKind, ProbeResult, VerifierAttachment, VerifierMethod,
+            claim_digest, derive_gate_status,
         };
 
         // 1. The native_decide Lean record tiers as compiler_checked.
         let mut d = ok_draft();
         d.status = "compiler_checked".to_string();
         d.axiom_verdict = Some(AxiomVerdict::ForbiddenAxiom);
-        d.axioms = vec!["Lean.ofReduceBool".to_string(), "Lean.trustCompiler".to_string()];
+        d.axioms = vec![
+            "Lean.ofReduceBool".to_string(),
+            "Lean.trustCompiler".to_string(),
+        ];
         let lean_rec = LeanVerification::build(d, &key()).expect("build compiler_checked");
-        assert_eq!(lean_rec.to_attachment_integrity(), MethodIntegrity::Compromised);
+        assert_eq!(
+            lean_rec.to_attachment_integrity(),
+            MethodIntegrity::Compromised
+        );
 
         let digest = claim_digest("a(8) >= 33 (OEIS A309370)");
         let probe = AdversarialProbe {
@@ -470,7 +488,10 @@ mod tests {
                 verifier_method: method,
                 solver_id: solver.to_string(),
                 independent_of: indep,
-                match_to_claim: MatchToClaim { matches: true, checker_actor: "ci".to_string() },
+                match_to_claim: MatchToClaim {
+                    matches: true,
+                    checker_actor: "ci".to_string(),
+                },
                 adversarial_probes: vec![probe.clone()],
                 outcome: AttachmentOutcome::Passed,
                 verifier_actor: "ci".to_string(),
@@ -484,9 +505,13 @@ mod tests {
         let lean_att = mk(VerifierMethod::LeanKernel, "lean4@4.29.1", vec![])
             .with_method_integrity(lean_rec.to_attachment_integrity())
             .unwrap();
-        let rust_att = mk(VerifierMethod::ComputationalSearch, "vela-verify", vec![lean_att.id.clone()])
-            .with_method_integrity(MethodIntegrity::Sound)
-            .unwrap();
+        let rust_att = mk(
+            VerifierMethod::ComputationalSearch,
+            "vela-verify",
+            vec![lean_att.id.clone()],
+        )
+        .with_method_integrity(MethodIntegrity::Sound)
+        .unwrap();
 
         // Only one SOUND matched attachment remains -> G1 unmet, G5 explains
         // the exclusion. Never Verified on a native_decide proof.

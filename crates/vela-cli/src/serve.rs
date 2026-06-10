@@ -19,17 +19,16 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
 
-use vela_protocol::bundle::FindingBundle;
-use vela_protocol::project::{self, ConfidenceDistribution, Project, ProjectStats};
 use vela_edge::bridge;
-use vela_edge::decision;
-use vela_protocol::events;
 use vela_edge::observer;
-use vela_protocol::repo;
 use vela_edge::signals;
+use vela_edge::tool_registry;
+use vela_protocol::bundle::FindingBundle;
+use vela_protocol::events;
+use vela_protocol::project::{self, ConfidenceDistribution, Project, ProjectStats};
+use vela_protocol::repo;
 use vela_protocol::sources;
 use vela_protocol::state;
-use vela_edge::tool_registry;
 pub enum ProjectSource {
     Single(PathBuf),
     Directory(PathBuf),
@@ -425,10 +424,6 @@ pub async fn run_http(source: ProjectSource, backend: Option<&str>, port: u16) {
         .route("/api/artifacts", get(http_artifacts))
         .route("/api/artifact-audit", get(http_artifact_audit))
         .route("/api/proof", get(http_proof))
-        .route("/api/decision-brief", get(http_decision_brief))
-        .route("/api/trials", get(http_trials))
-        .route("/api/source-verification", get(http_source_verification))
-        .route("/api/source-ingest-plan", get(http_source_ingest_plan))
         .route("/api/observer/{policy}", get(http_observer))
         .route("/api/propagate/{id}", get(http_propagate))
         .route("/api/hypotheses", get(http_bridges))
@@ -470,7 +465,10 @@ pub async fn run_http(source: ProjectSource, backend: Option<&str>, port: u16) {
         .with_state(state);
 
     let addr = format!("0.0.0.0:{port}");
-    eprintln!("  {}", format!("VELA · SERVE · HTTP :{port}").to_uppercase());
+    eprintln!(
+        "  {}",
+        format!("VELA · SERVE · HTTP :{port}").to_uppercase()
+    );
     eprintln!("  {}", vela_protocol::cli_style::tick_row(60));
     eprintln!("  listening on http://{addr}");
     // v0.91: full endpoint enumeration so a fresh user opening
@@ -533,7 +531,11 @@ pub fn check_tools(source: ProjectSource, adoption: bool) -> Result<Value, Strin
             tool_frontier_graph(&json!({"kind": "contradicts"}), &frontier),
             started,
         ),
-        check_tool_result("contradictions", tool_contradictions(&json!({}), &frontier), started),
+        check_tool_result(
+            "contradictions",
+            tool_contradictions(&json!({}), &frontier),
+            started,
+        ),
         check_tool_result(
             "frontier_compare",
             tool_frontier_compare(&json!({"limit": 10}), &frontier),
@@ -1032,7 +1034,9 @@ async fn execute_tool(
         "vela_agent_get_pack" => (vela_edge::vela_agent_mcp::get_pack(args), None),
         "vela_agent_list_packs" => (vela_edge::vela_agent_mcp::list_packs(args), None),
         "vela_agent_get_attestation" => (vela_edge::vela_agent_mcp::get_attestation(args), None),
-        "vela_agent_list_trajectories" => (vela_edge::vela_agent_mcp::list_trajectories(args), None),
+        "vela_agent_list_trajectories" => {
+            (vela_edge::vela_agent_mcp::list_trajectories(args), None)
+        }
         "vela_agent_frontier_summary" => (vela_edge::vela_agent_mcp::frontier_summary(args), None),
         // v0.220: parity read tools.
         "vela_agent_get_tool_descriptor" => {
@@ -1180,8 +1184,8 @@ where
         .map_err(|e| format!("create_or_apply failed: {e}"))?;
 
     // Refresh the in-memory state from disk so subsequent reads see the write.
-    let fresh =
-        vela_protocol::repo::load_from_path(path).map_err(|e| format!("reload after write failed: {e}"))?;
+    let fresh = vela_protocol::repo::load_from_path(path)
+        .map_err(|e| format!("reload after write failed: {e}"))?;
     let mut project = frontier.lock().await;
     *project = fresh;
 
@@ -1249,7 +1253,8 @@ async fn write_tool_decision(
             .ok_or_else(|| format!("reviewer '{reviewer_id}' is not registered"))?
     };
 
-    let valid = vela_protocol::sign::verify_action_signature(&signing_bytes, signature_hex, &pubkey)?;
+    let valid =
+        vela_protocol::sign::verify_action_signature(&signing_bytes, signature_hex, &pubkey)?;
     if !valid {
         return Err(format!(
             "Signature does not verify for reviewer '{reviewer_id}' on {action} of {proposal_id}"
@@ -1258,8 +1263,9 @@ async fn write_tool_decision(
 
     let outcome = match action {
         "accept" => {
-            let event_id = vela_protocol::proposals::accept_at_path(path, proposal_id, reviewer_id, reason)
-                .map_err(|e| format!("accept failed: {e}"))?;
+            let event_id =
+                vela_protocol::proposals::accept_at_path(path, proposal_id, reviewer_id, reason)
+                    .map_err(|e| format!("accept failed: {e}"))?;
             json!({
                 "proposal_id": proposal_id,
                 "applied_event_id": event_id,
@@ -1279,8 +1285,8 @@ async fn write_tool_decision(
     };
 
     // Refresh in-memory state.
-    let fresh =
-        vela_protocol::repo::load_from_path(path).map_err(|e| format!("reload after write failed: {e}"))?;
+    let fresh = vela_protocol::repo::load_from_path(path)
+        .map_err(|e| format!("reload after write failed: {e}"))?;
     let mut project = frontier.lock().await;
     *project = fresh;
 
@@ -1409,7 +1415,8 @@ async fn http_events(
         .collect();
     let total_filtered = filtered.len();
     let take_n = limit.min(total_filtered);
-    let slice: Vec<&vela_protocol::events::StateEvent> = filtered.into_iter().take(take_n).collect();
+    let slice: Vec<&vela_protocol::events::StateEvent> =
+        filtered.into_iter().take(take_n).collect();
     let next_cursor = if take_n < total_filtered {
         slice.last().map(|event| event.id.clone())
     } else {
@@ -1634,7 +1641,6 @@ async fn http_from_carina(
         })),
     )
 }
-
 
 /// v0.51: Resolve the requesting actor's read-side access clearance
 /// from the `X-Vela-Actor` request header. The header value, if
@@ -1941,78 +1947,6 @@ async fn http_proof(State(state): State<AppState>) -> Json<Value> {
         },
         "boundary": "Proof verifies replay and hashes. It does not prove clinical actionability.",
     }))
-}
-
-async fn http_decision_brief(State(state): State<AppState>) -> Json<Value> {
-    let source_path = state.source_path.clone();
-    let project = state.project.lock().await;
-    let Some(path) = source_path else {
-        return Json(json!({
-            "ok": false,
-            "available": false,
-            "projection": null,
-            "issues": [],
-            "error": "decision projections require a single frontier source",
-        }));
-    };
-    Json(
-        serde_json::to_value(decision::load_decision_brief(&path, &project))
-            .unwrap_or_else(|_| json!({"ok": false, "error": "serialization failed"})),
-    )
-}
-
-async fn http_trials(State(state): State<AppState>) -> Json<Value> {
-    let source_path = state.source_path.clone();
-    let project = state.project.lock().await;
-    let Some(path) = source_path else {
-        return Json(json!({
-            "ok": false,
-            "available": false,
-            "projection": null,
-            "issues": [],
-            "error": "trial projections require a single frontier source",
-        }));
-    };
-    Json(
-        serde_json::to_value(decision::load_trial_outcomes(&path, &project))
-            .unwrap_or_else(|_| json!({"ok": false, "error": "serialization failed"})),
-    )
-}
-
-async fn http_source_verification(State(state): State<AppState>) -> Json<Value> {
-    let source_path = state.source_path.clone();
-    let project = state.project.lock().await;
-    let Some(path) = source_path else {
-        return Json(json!({
-            "ok": false,
-            "available": false,
-            "projection": null,
-            "issues": [],
-            "error": "source verification requires a single frontier source",
-        }));
-    };
-    Json(
-        serde_json::to_value(decision::load_source_verification(&path, &project))
-            .unwrap_or_else(|_| json!({"ok": false, "error": "serialization failed"})),
-    )
-}
-
-async fn http_source_ingest_plan(State(state): State<AppState>) -> Json<Value> {
-    let source_path = state.source_path.clone();
-    let project = state.project.lock().await;
-    let Some(path) = source_path else {
-        return Json(json!({
-            "ok": false,
-            "available": false,
-            "projection": null,
-            "issues": [],
-            "error": "source ingest plan requires a single frontier source",
-        }));
-    };
-    Json(
-        serde_json::to_value(decision::load_source_ingest_plan(&path, &project))
-            .unwrap_or_else(|_| json!({"ok": false, "error": "serialization failed"})),
-    )
 }
 
 async fn http_gaps(State(state): State<AppState>) -> Json<Value> {
@@ -2482,11 +2416,12 @@ fn tool_propagate_retraction(args: &Value, frontier: &Project) -> Result<String,
     // "depends" semantics are preserved.
     let reverse_idx = frontier.build_reverse_dep_index();
     let dependent_ids = reverse_idx.dependents_of(&target.id);
-    let id_to_finding: std::collections::HashMap<&str, &vela_protocol::bundle::FindingBundle> = frontier
-        .findings
-        .iter()
-        .map(|f| (f.id.as_str(), f))
-        .collect();
+    let id_to_finding: std::collections::HashMap<&str, &vela_protocol::bundle::FindingBundle> =
+        frontier
+            .findings
+            .iter()
+            .map(|f| (f.id.as_str(), f))
+            .collect();
 
     let mut affected = Vec::new();
     for dep_id in dependent_ids {
@@ -2538,11 +2473,12 @@ fn tool_list_dependents(args: &Value, frontier: &Project) -> Result<String, Stri
     // regardless of link type, so we re-read each dependent's links to
     // report which relation points at the target.
     let reverse_idx = frontier.build_reverse_dep_index();
-    let id_to_finding: std::collections::HashMap<&str, &vela_protocol::bundle::FindingBundle> = frontier
-        .findings
-        .iter()
-        .map(|f| (f.id.as_str(), f))
-        .collect();
+    let id_to_finding: std::collections::HashMap<&str, &vela_protocol::bundle::FindingBundle> =
+        frontier
+            .findings
+            .iter()
+            .map(|f| (f.id.as_str(), f))
+            .collect();
 
     let mut direct = Vec::new();
     for dep_id in reverse_idx.dependents_of(&target.id) {
@@ -2614,11 +2550,12 @@ fn tool_frontier_context(args: &Value, frontier: &Project) -> Result<String, Str
         .find(|finding| finding.id == id || finding.id.starts_with(id))
         .ok_or_else(|| format!("Finding '{id}' not found"))?;
 
-    let id_to_finding: std::collections::HashMap<&str, &vela_protocol::bundle::FindingBundle> = frontier
-        .findings
-        .iter()
-        .map(|f| (f.id.as_str(), f))
-        .collect();
+    let id_to_finding: std::collections::HashMap<&str, &vela_protocol::bundle::FindingBundle> =
+        frontier
+            .findings
+            .iter()
+            .map(|f| (f.id.as_str(), f))
+            .collect();
     let assertion_of = |fid: &str| {
         id_to_finding
             .get(fid)
@@ -2633,13 +2570,12 @@ fn tool_frontier_context(args: &Value, frontier: &Project) -> Result<String, Str
     for link in &target.links {
         use vela_protocol::frontier_graph::EdgeKind;
         match EdgeKind::from_link_type(&link.link_type) {
-            Some(EdgeKind::Supports | EdgeKind::DependsOn | EdgeKind::DerivedFrom) => {
-                rests_on.push(json!({
+            Some(EdgeKind::Supports | EdgeKind::DependsOn | EdgeKind::DerivedFrom) => rests_on
+                .push(json!({
                     "id": link.target,
                     "assertion": assertion_of(&link.target),
                     "link_type": link.link_type,
-                }))
-            }
+                })),
             Some(EdgeKind::Contradicts) => contradictions.push(json!({
                 "id": link.target,
                 "assertion": assertion_of(&link.target),
@@ -2673,7 +2609,10 @@ fn tool_frontier_context(args: &Value, frontier: &Project) -> Result<String, Str
                 "direction": "contradicted_by",
             }));
         }
-        let non_contra: Vec<&str> = inbound.into_iter().filter(|t| *t != "contradicts").collect();
+        let non_contra: Vec<&str> = inbound
+            .into_iter()
+            .filter(|t| *t != "contradicts")
+            .collect();
         if !non_contra.is_empty() {
             dependents.push(json!({
                 "id": dep.id,
@@ -2857,9 +2796,18 @@ fn tool_frontier_compare(args: &Value, frontier: &Project) -> Result<String, Str
     // The generic comparison properties (ORKG's "comparison
     // properties"): applicable across any contribution on the problem.
     let properties = json!([
-        "assertion_type", "confidence", "evidence_type", "method",
-        "model_system", "replicated", "replication_count",
-        "human_data", "clinical_trial", "contested", "gap", "year"
+        "assertion_type",
+        "confidence",
+        "evidence_type",
+        "method",
+        "model_system",
+        "replicated",
+        "replication_count",
+        "human_data",
+        "clinical_trial",
+        "contested",
+        "gap",
+        "year"
     ]);
 
     let rows: Vec<Value> = selected
@@ -3295,7 +3243,9 @@ mod list_dependents_tests {
     #[test]
     fn unknown_finding_is_an_error() {
         let (project, _ids) = chain_project();
-        assert!(tool_list_dependents(&json!({"finding_id": "vf_does_not_exist"}), &project).is_err());
+        assert!(
+            tool_list_dependents(&json!({"finding_id": "vf_does_not_exist"}), &project).is_err()
+        );
     }
 
     fn contradicts_to(target: &str) -> vela_protocol::bundle::Link {
@@ -3341,9 +3291,18 @@ mod list_dependents_tests {
             serde_json::from_str(&tool_contradictions(&json!({}), &project).unwrap()).unwrap();
         assert_eq!(after["total"], 1);
         assert_eq!(after["reviewed_contradictions"], 1);
-        assert_eq!(after["contradictions"][0]["status"]["state"], "expert_confirmed");
-        assert_eq!(after["contradictions"][0]["claim_boundary"]["authoritative"], false);
-        assert_eq!(after["contradictions"][0]["claim_boundary"]["reviewed"], true);
+        assert_eq!(
+            after["contradictions"][0]["status"]["state"],
+            "expert_confirmed"
+        );
+        assert_eq!(
+            after["contradictions"][0]["claim_boundary"]["authoritative"],
+            false
+        );
+        assert_eq!(
+            after["contradictions"][0]["claim_boundary"]["reviewed"],
+            true
+        );
     }
 
     #[test]
@@ -3359,8 +3318,7 @@ mod list_dependents_tests {
         let mut project = assemble("xf-trace", vec![], 0, 0, "test");
         project.findings = vec![remote, local];
 
-        let out =
-            tool_trace_evidence_chain(&json!({"finding_id": local_id}), &project).unwrap();
+        let out = tool_trace_evidence_chain(&json!({"finding_id": local_id}), &project).unwrap();
         let v: Value = serde_json::from_str(&out).unwrap();
         let link = &v["links"][0];
         assert_eq!(link["target_in_frontier"], true);
@@ -3389,11 +3347,13 @@ mod list_dependents_tests {
         let all: Value =
             serde_json::from_str(&tool_frontier_compare(&json!({}), &project).unwrap()).unwrap();
         assert_eq!(all["compared"], 2);
-        assert!(all["properties"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .any(|p| p == "confidence"));
+        assert!(
+            all["properties"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|p| p == "confidence")
+        );
 
         // Scoped by assertion_type: only the mechanism finding.
         let scoped: Value = serde_json::from_str(
@@ -3411,8 +3371,12 @@ mod list_dependents_tests {
         let target = synth_finding(1, vec![link_to(&base.id)]);
         let a = synth_finding(2, vec![link_to(&target.id)]);
         let b = synth_finding(3, vec![contradicts_to(&target.id)]);
-        let (base_id, target_id, a_id, b_id) =
-            (base.id.clone(), target.id.clone(), a.id.clone(), b.id.clone());
+        let (base_id, target_id, a_id, b_id) = (
+            base.id.clone(),
+            target.id.clone(),
+            a.id.clone(),
+            b.id.clone(),
+        );
 
         let mut project = assemble("ctx", vec![], 0, 0, "test");
         project.findings = vec![base, target, a, b];
@@ -3428,6 +3392,9 @@ mod list_dependents_tests {
 
         assert_eq!(v["contradictions"]["count"], 1);
         assert_eq!(v["contradictions"]["edges"][0]["id"], b_id);
-        assert_eq!(v["contradictions"]["edges"][0]["direction"], "contradicted_by");
+        assert_eq!(
+            v["contradictions"]["edges"][0]["direction"],
+            "contradicted_by"
+        );
     }
 }

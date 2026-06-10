@@ -11,20 +11,16 @@ use colored::Colorize;
 // before; they now live here and reach into the substrate via
 // `vela_protocol::*`.
 pub mod cli;
-mod cli_bridge_kit;
-mod cli_causal;
 mod cli_check;
 mod cli_commands;
-mod cli_diff_pack;
-mod cli_federation;
 mod cli_finding;
 mod cli_frontier;
 mod cli_lean;
 mod cli_owner_rotate;
 mod cli_registry;
 mod cli_source_fetch;
-mod serve;
 mod review_work;
+mod serve;
 
 pub fn run() {
     // Atlas R.2 intercept: read-only verifier subcommands for the
@@ -108,10 +104,7 @@ fn handle_proof_packet_verify(args: &[String]) {
     let path = match args.first() {
         Some(p) => p,
         None => {
-            eprintln!(
-                "{} usage: vela proof-packet verify <path>",
-                "err ·".red()
-            );
+            eprintln!("{} usage: vela proof-packet verify <path>", "err ·".red());
             std::process::exit(2);
         }
     };
@@ -122,14 +115,13 @@ fn handle_proof_packet_verify(args: &[String]) {
             std::process::exit(1);
         }
     };
-    let packet: vela_edge::proof_packet::ProofPacket =
-        match serde_json::from_str(&body) {
-            Ok(p) => p,
-            Err(e) => {
-                eprintln!("{} parse {path}: {e}", "err ·".red());
-                std::process::exit(1);
-            }
-        };
+    let packet: vela_edge::proof_packet::ProofPacket = match serde_json::from_str(&body) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{} parse {path}: {e}", "err ·".red());
+            std::process::exit(1);
+        }
+    };
     if let Err(e) = packet.verify() {
         eprintln!("{} packet invalid: {e}", "err ·".red());
         std::process::exit(1);
@@ -161,14 +153,13 @@ fn handle_proof_packet_verify_external(args: &[String]) {
             std::process::exit(1);
         }
     };
-    let packet: vela_edge::proof_packet::ProofPacket =
-        match serde_json::from_str(&body) {
-            Ok(p) => p,
-            Err(e) => {
-                eprintln!("{} parse {path}: {e}", "err ·".red());
-                std::process::exit(1);
-            }
-        };
+    let packet: vela_edge::proof_packet::ProofPacket = match serde_json::from_str(&body) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("{} parse {path}: {e}", "err ·".red());
+            std::process::exit(1);
+        }
+    };
     if let Err(e) = packet.verify() {
         eprintln!("{} packet invalid: {e}", "err ·".red());
         std::process::exit(1);

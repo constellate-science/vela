@@ -14,12 +14,12 @@
 //! submissions.**
 
 use crate::agent_attestation::{AgentAttestation, AttestationDraft, ToolCall};
-use vela_protocol::bundle::{Trajectory, TrajectoryStep, TrajectoryStepKind};
-use vela_protocol::scientific_diff::{PackDraft, ScientificDiffPack};
 use ed25519_dalek::SigningKey;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
+use vela_protocol::bundle::{Trajectory, TrajectoryStep, TrajectoryStepKind};
+use vela_protocol::scientific_diff::{PackDraft, ScientificDiffPack};
 
 const AGENT_KEY_ENV: &str = "VELA_AGENT_KEY_HEX";
 
