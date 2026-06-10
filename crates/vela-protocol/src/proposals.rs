@@ -5273,6 +5273,8 @@ mod tests {
             AcceptOptions {
                 strict: true,
                 force: false,
+                signing_key: None,
+                custody_verified: false,
             },
         );
         assert!(blocked.is_err(), "strict accept should be gated");
@@ -5297,6 +5299,8 @@ mod tests {
             AcceptOptions {
                 strict: true,
                 force: true,
+                signing_key: None,
+                custody_verified: false,
             },
         )
         .unwrap();
@@ -5415,6 +5419,8 @@ mod tests {
             AcceptOptions {
                 strict: true,
                 force: false,
+                signing_key: None,
+                custody_verified: false,
             },
             false,
         )
@@ -5440,6 +5446,8 @@ mod tests {
             AcceptOptions {
                 strict: true,
                 force: true,
+                signing_key: None,
+                custody_verified: false,
             },
             false,
         )
