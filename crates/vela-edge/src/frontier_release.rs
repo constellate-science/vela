@@ -31,6 +31,11 @@ pub struct FrontierRelease {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub previous_release: Option<String>,
     pub released_at: String,
+    /// Archived-deposit DOI (e.g. Zenodo), recorded AFTER the deposit is
+    /// minted. Optional and outside the release id derivation: the DOI
+    /// names the archive of this release, it is not part of its content.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub doi: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -72,6 +77,7 @@ impl FrontierRelease {
             governance_policy_id: draft.governance_policy_id,
             previous_release: draft.previous_release,
             released_at: draft.released_at,
+            doi: None,
         };
         release.release_id = release.derive_id()?;
         Ok(release)
@@ -80,6 +86,10 @@ impl FrontierRelease {
     pub fn derive_id(&self) -> Result<String, String> {
         let mut preimage = self.clone();
         preimage.release_id = String::new();
+        // The DOI names the archive of this release after the fact; it is
+        // never part of the content address (recording it must not
+        // change the vfrr_ id).
+        preimage.doi = None;
         let bytes = vela_protocol::canonical::to_canonical_bytes(&preimage)
             .map_err(|e| format!("canonicalize release: {e}"))?;
         let digest = Sha256::digest(&bytes);
