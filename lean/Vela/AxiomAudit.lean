@@ -1,4 +1,5 @@
 import Vela.CoreTheorems
+import Vela.TransferBinaryCodeToCWC
 
 /-!
 # Axiom audit
@@ -58,7 +59,10 @@ def theoremsToAudit : List Name :=
    ``Vela.VerdictConflictAccumulation.theorem32_verdict_conflict_accumulation,
    ``Vela.ReleasedDiffPackReplay.theorem33_released_pack_replay,
    ``Vela.EvaluationDescriptorComposition.theorem34_eval_descriptor_composition_eval_first,
-   ``Vela.transfer_sound]
+   ``Vela.transfer_sound,
+   ``Vela.TransferBinaryCodeToCWC.bincode_to_cwc_sound,
+   ``Vela.TransferCWCtoDNA.cwc_to_dna_sound,
+   ``Vela.TransferBinaryCodeToCWC.binCodeToDNA]
 
 run_cmd do
   for declName in theoremsToAudit do
