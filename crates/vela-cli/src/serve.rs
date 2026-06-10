@@ -584,6 +584,11 @@ pub fn check_tools(source: ProjectSource, adoption: bool) -> Result<Value, Strin
             started,
         ));
         checks.push(check_tool_result(
+            "frontier_explore",
+            tool_frontier_explore(&json!({"problem": id}), &frontier),
+            started,
+        ));
+        checks.push(check_tool_result(
             "deep_trace",
             tool_deep_trace(&json!({"finding_id": id, "max_hops": 3}), &frontier),
             started,
@@ -874,6 +879,13 @@ async fn execute_tool(
             let project = frontier.lock().await;
             (
                 tool_frontier_context(args, &project),
+                Some(clone_project(&project)),
+            )
+        }
+        "frontier_explore" => {
+            let project = frontier.lock().await;
+            (
+                tool_frontier_explore(args, &project),
                 Some(clone_project(&project)),
             )
         }
@@ -2646,6 +2658,135 @@ fn tool_frontier_context(args: &Value, frontier: &Project) -> Result<String, Str
         "related": {"count": related_total, "edges": related},
         "contradictions": {"count": contradictions_total, "edges": contradictions},
         "caveat": "Local graph view over declared links; relations are candidates, not adjudicated truth.",
+    }))
+    .map_err(|e| format!("Serialization error: {e}"))
+}
+
+/// Resolve a `problem` argument to one finding: a `#<num>` problem number
+/// (the digit run must not extend, so `#617` ≠ `#6170`), a `vf_…` id or
+/// prefix, or a case-insensitive substring of the statement.
+fn resolve_problem<'a>(
+    arg: &str,
+    frontier: &'a Project,
+) -> Option<&'a vela_protocol::bundle::FindingBundle> {
+    let arg = arg.trim();
+    if arg.starts_with("vf_") {
+        return frontier
+            .findings
+            .iter()
+            .find(|f| f.id == arg || f.id.starts_with(arg));
+    }
+    if arg.chars().all(|c| c.is_ascii_digit()) && !arg.is_empty() {
+        let needle = format!("#{arg}");
+        if let Some(f) = frontier.findings.iter().find(|f| {
+            let t = &f.assertion.text;
+            t.match_indices(&needle).any(|(i, _)| {
+                t[i + needle.len()..]
+                    .chars()
+                    .next()
+                    .is_none_or(|c| !c.is_ascii_digit())
+            })
+        }) {
+            return Some(f);
+        }
+    }
+    let lc = arg.to_lowercase();
+    frontier
+        .findings
+        .iter()
+        .find(|f| f.assertion.text.to_lowercase().contains(&lc))
+}
+
+/// One-call problem briefing: statement, gate status, open obligations
+/// (gap-flagged findings linked to it), rests-on, dependents, and
+/// staleness — the CodeGraph one-shot context call for frontier state.
+fn tool_frontier_explore(args: &Value, frontier: &Project) -> Result<String, String> {
+    use vela_protocol::verifier_attachment::{claim_digest, derive_gate_status};
+    let arg = args["problem"]
+        .as_str()
+        .or_else(|| args["id"].as_str())
+        .ok_or("Missing 'problem' argument")?;
+    let target = resolve_problem(arg, frontier)
+        .ok_or_else(|| format!("No finding resolves problem '{arg}'"))?;
+
+    let id_to = |fid: &str| -> String {
+        frontier
+            .findings
+            .iter()
+            .find(|f| f.id == fid)
+            .map(|f| trunc(&f.assertion.text, 120))
+            .unwrap_or_default()
+    };
+
+    // Gate status: derive over this finding's verifier attachments.
+    let digest = claim_digest(&target.assertion.text);
+    let atts: Vec<_> = frontier
+        .verifier_attachments
+        .iter()
+        .filter(|a| a.target == target.id)
+        .cloned()
+        .collect();
+    let gate = derive_gate_status(&digest, &atts);
+
+    // Obligations: gap-flagged findings linked to this finding in either
+    // direction — what is unproven / the bottleneck / the next step.
+    let mut obligations = Vec::new();
+    for f in &frontier.findings {
+        if !f.flags.gap || f.id == target.id {
+            continue;
+        }
+        let links_to_target = f.links.iter().any(|l| l.target == target.id);
+        let target_links_here = target.links.iter().any(|l| l.target == f.id);
+        if links_to_target || target_links_here {
+            obligations.push(json!({
+                "id": f.id,
+                "statement": trunc(&f.assertion.text, 200),
+                "review_state": f.flags.review_state.as_ref().map(|s| format!("{s:?}")),
+            }));
+        }
+    }
+
+    // rests_on / dependents from declared links.
+    let mut rests_on = Vec::new();
+    for l in &target.links {
+        use vela_protocol::frontier_graph::EdgeKind;
+        if matches!(
+            EdgeKind::from_link_type(&l.link_type),
+            Some(EdgeKind::Supports | EdgeKind::DependsOn | EdgeKind::DerivedFrom)
+        ) {
+            rests_on.push(
+                json!({"id": l.target, "assertion": id_to(&l.target), "link_type": l.link_type}),
+            );
+        }
+    }
+    let mut dependents = Vec::new();
+    for f in &frontier.findings {
+        if f.links.iter().any(|l| l.target == target.id) {
+            dependents.push(json!({"id": f.id, "assertion": trunc(&f.assertion.text, 120)}));
+        }
+    }
+
+    // Staleness: the latest event touching this finding.
+    let events = vela_protocol::events::events_for_finding(frontier, &target.id);
+    let latest = events
+        .iter()
+        .max_by(|a, b| a.timestamp.cmp(&b.timestamp))
+        .map(|e| json!({"at": e.timestamp, "kind": e.kind}));
+
+    serde_json::to_string_pretty(&json!({
+        "tool": "frontier_explore",
+        "resolved": {"id": target.id, "from": arg},
+        "statement": target.assertion.text,
+        "gate_status": {
+            "status": format!("{:?}", gate.status),
+            "reasons": gate.reasons,
+            "attachments": atts.len(),
+        },
+        "obligations": {"count": obligations.len(), "items": obligations},
+        "rests_on": {"count": rests_on.len(), "edges": rests_on},
+        "dependents": {"count": dependents.len(), "edges": dependents},
+        "staleness": {"latest_event": latest, "event_count": events.len()},
+        "caveat": "Obligations are stated work items, not adjudicated truth; gate status reflects only verified attachments.",
     }))
     .map_err(|e| format!("Serialization error: {e}"))
 }

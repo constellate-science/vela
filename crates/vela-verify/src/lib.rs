@@ -155,6 +155,28 @@ pub enum Witness {
         k_max: u64,
         exceptions: Vec<(u64, u64)>,
     },
+    /// An UNSAT certificate: a CNF formula plus an LRAT-style clausal
+    /// proof. Each proof step adds a clause justified by reverse unit
+    /// propagation (RUP) over named antecedent clauses; the proof is
+    /// accepted only if it derives the empty clause. A propositional
+    /// claim (e.g. an Erdős finite case reduced to SAT) is verified by
+    /// replaying this proof — the solver is untrusted, the certificate
+    /// is checked. RUP only: a proof whose hints carry RAT structure is
+    /// refused, never guessed.
+    UnsatCert {
+        cnf: Vec<Vec<i64>>,
+        proof: Vec<LratStep>,
+    },
+}
+
+/// One addition step of an LRAT proof: clause `id` is the listed
+/// `literals` (empty = the empty clause = the proof goal), justified by
+/// reverse unit propagation over the antecedent clause `hints` in order.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct LratStep {
+    pub id: u64,
+    pub literals: Vec<i64>,
+    pub hints: Vec<u64>,
 }
 
 /// One prime row of an Erdős #203 partial-cover certificate.
@@ -214,6 +236,7 @@ impl Witness {
             Witness::MinBinomGcd { .. } => "min_binom_gcd",
             Witness::BinomDeficiency { .. } => "binom_deficiency",
             Witness::BinomExceptionEnum { .. } => "binom_exception_enum",
+            Witness::UnsatCert { .. } => "unsat_cert",
         }
     }
 }
@@ -248,6 +271,7 @@ pub fn verify_witness(witness: &Witness) -> VerifyResult {
         Witness::BinomExceptionEnum { k_max, exceptions } => {
             verify_binom_exception_enum(*k_max, exceptions)
         }
+        Witness::UnsatCert { cnf, proof } => verify_unsat_cert(cnf, proof),
         Witness::ConstantWeight {
             n,
             d,
@@ -849,6 +873,112 @@ pub fn verify_binom_exception_enum(k_max: u64, exceptions: &[(u64, u64)]) -> Ver
     ))
 }
 
+// --- UNSAT certificate (LRAT / RUP) ----------------------------------------
+
+/// Check that adding clause `c` is justified by reverse unit propagation
+/// over the antecedent `hints` (in order) against `db`. Returns true iff
+/// propagating `¬c` through the hinted clauses reaches a conflict — i.e.
+/// `c` is RUP-implied by the current clause set. Hints that are satisfied,
+/// non-unit, or unknown are rejected (a malformed proof never passes).
+fn rup_checks(c: &[i64], hints: &[u64], db: &std::collections::HashMap<u64, Vec<i64>>) -> bool {
+    // Falsify every literal of c: var |l| takes the value that makes l false.
+    let mut assign: std::collections::HashMap<i64, bool> = std::collections::HashMap::new();
+    for &l in c {
+        if l == 0 {
+            return false;
+        }
+        let v = l.abs();
+        let want = l < 0; // l<0 ⇒ var true makes l false
+        if let Some(&prev) = assign.get(&v)
+            && prev != want
+        {
+            return false; // c is a tautology (l and ¬l) — not a real clause
+        }
+        assign.insert(v, want);
+    }
+    for &h in hints {
+        let Some(cl) = db.get(&h) else {
+            return false; // unknown antecedent
+        };
+        let mut unassigned: Vec<i64> = Vec::new();
+        let mut satisfied = false;
+        for &l in cl {
+            if l == 0 {
+                continue;
+            }
+            match assign.get(&l.abs()) {
+                None => unassigned.push(l),
+                Some(&val) => {
+                    // l true under assign? l>0 wants var true; l<0 wants var false.
+                    if (l > 0) == val {
+                        satisfied = true;
+                    }
+                }
+            }
+        }
+        if satisfied {
+            return false; // a satisfied antecedent can neither propagate nor conflict
+        }
+        match unassigned.len() {
+            0 => return true, // all literals falsified ⇒ conflict ⇒ c is RUP
+            1 => {
+                let l = unassigned[0];
+                assign.insert(l.abs(), l > 0); // propagate the forced literal
+            }
+            _ => return false, // not unit ⇒ this hint cannot fire
+        }
+    }
+    false // ran out of hints without a conflict
+}
+
+/// Verify an UNSAT certificate: replay the LRAT proof over the CNF and
+/// confirm it derives the empty clause. Each step's added clause must be
+/// RUP-implied by the clauses available so far (original + previously
+/// added). Deterministic and total; bounded by explicit guards.
+pub fn verify_unsat_cert(cnf: &[Vec<i64>], proof: &[LratStep]) -> VerifyResult {
+    if cnf.is_empty() {
+        return VerifyResult::fail("empty CNF: nothing to refute");
+    }
+    if cnf.len() > 5_000_000 || proof.len() > 20_000_000 {
+        return VerifyResult::fail("certificate exceeds the size guard");
+    }
+    let mut db: std::collections::HashMap<u64, Vec<i64>> = std::collections::HashMap::new();
+    for (i, clause) in cnf.iter().enumerate() {
+        let id = (i + 1) as u64; // original clauses are 1-indexed
+        if db.insert(id, clause.clone()).is_some() {
+            return VerifyResult::fail(format!("duplicate clause id {id}"));
+        }
+    }
+    let mut derived_empty = false;
+    for step in proof {
+        if step.id == 0 {
+            return VerifyResult::fail("proof clause id 0 is reserved");
+        }
+        if !rup_checks(&step.literals, &step.hints, &db) {
+            return VerifyResult::fail(format!(
+                "LRAT step {} is not RUP-implied by its antecedents",
+                step.id
+            ));
+        }
+        let empty = step.literals.is_empty();
+        if db.insert(step.id, step.literals.clone()).is_some() {
+            return VerifyResult::fail(format!("clause id {} added twice", step.id));
+        }
+        if empty {
+            derived_empty = true;
+            break;
+        }
+    }
+    if !derived_empty {
+        return VerifyResult::fail("proof never derives the empty clause (UNSAT not established)");
+    }
+    VerifyResult::ok(format!(
+        "UNSAT certificate: {} clause(s), {} LRAT step(s), empty clause derived by RUP",
+        cnf.len(),
+        proof.len()
+    ))
+}
+
 pub fn verify_golomb(marks: &[i64]) -> VerifyResult {
     let set: HashSet<&i64> = marks.iter().collect();
     if set.len() != marks.len() {
@@ -1245,6 +1375,50 @@ mod tests {
         // sums include 000,100,010,001 (i=j) and 110,101,011 (i<j) — all
         // distinct. A valid (small) Sidon set.
         vec![vec![0, 0, 0], vec![1, 0, 0], vec![0, 1, 0], vec![0, 0, 1]]
+    }
+
+    #[test]
+    fn unsat_cert_accepts_rup_proofs_and_rejects_corruption() {
+        // (x) ∧ (¬x): the empty clause is RUP from clauses 1, 2.
+        let w = Witness::UnsatCert {
+            cnf: vec![vec![1], vec![-1]],
+            proof: vec![LratStep {
+                id: 3,
+                literals: vec![],
+                hints: vec![1, 2],
+            }],
+        };
+        assert!(verify_witness(&w).ok);
+        // (a) ∧ (b) ∧ (¬a ∨ ¬b): empty clause RUP from 1, 2, 3.
+        let w2 = Witness::UnsatCert {
+            cnf: vec![vec![1], vec![2], vec![-1, -2]],
+            proof: vec![LratStep {
+                id: 4,
+                literals: vec![],
+                hints: vec![1, 2, 3],
+            }],
+        };
+        assert!(verify_witness(&w2).ok);
+        // Drop the conflict-producing antecedent → no conflict → rejected.
+        let bad = Witness::UnsatCert {
+            cnf: vec![vec![1], vec![2], vec![-1, -2]],
+            proof: vec![LratStep {
+                id: 4,
+                literals: vec![],
+                hints: vec![1, 2],
+            }],
+        };
+        assert!(!verify_witness(&bad).ok);
+        // A satisfiable CNF cannot derive the empty clause with any RUP step.
+        let sat = Witness::UnsatCert {
+            cnf: vec![vec![1, 2]],
+            proof: vec![LratStep {
+                id: 2,
+                literals: vec![],
+                hints: vec![1],
+            }],
+        };
+        assert!(!verify_witness(&sat).ok);
     }
 
     #[test]

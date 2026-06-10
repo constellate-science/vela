@@ -157,6 +157,24 @@ pub fn all_tools() -> Vec<ToolDefinition> {
             false,
             vec!["Neighborhood relations are declared links, not adjudicated truth."],
         ),
+        // The one-call problem briefing (the CodeGraph lesson for
+        // frontier state): everything an agent needs to pick up a
+        // problem without re-deriving it from prose — statement, gate
+        // status, open obligations (gap-flagged findings), attempts,
+        // dependents, and staleness — resolvable by problem number.
+        tool(
+            "frontier_explore",
+            "One-call briefing for a single problem: resolve it by problem number (e.g. \"617\") or finding id, and return its statement, verification gate status, open obligations (gap-flagged findings — what is unproven / the current bottleneck / the next step), what it rests on, what depends on it, and staleness (the age of its most recent event). Built so an agent can pick up where the frontier left off without re-reading handoff notes. Read-only.",
+            json!({"type": "object", "properties": {
+                "problem": {"type": "string", "description": "Problem number, finding id, or a substring of the statement"}
+            }, "required": ["problem"]}),
+            PermissionLevel::ReadOnly,
+            false,
+            vec![
+                "Obligations and routes are stated work items, not adjudicated truth; the gate status reflects only what has been verified.",
+                "Staleness is the age of the latest event on this finding, not a guarantee the state is current.",
+            ],
+        ),
         // T7: the typed claim-level edge layer (the FrontierGraph
         // substrate) and the first-class Contradiction object.
         tool(
