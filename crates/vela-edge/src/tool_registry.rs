@@ -175,6 +175,19 @@ pub fn all_tools() -> Vec<ToolDefinition> {
                 "Staleness is the age of the latest event on this finding, not a guarantee the state is current.",
             ],
         ),
+        tool(
+            "task_packet",
+            "The agent ENTRY CONTRACT for a problem, in one call: statement, frontier state hashes, gate status, the ALLOWED OUTPUT TYPES (each mapped to the frozen verifier kind that checks it), failed-route memory (banked/exhausted channels — do not re-grind), open targets, the signed attempt ledger, and how to submit. An output is acceptable only if it is one of the allowed types with its verifier passing; strategy prose is not a state transition. Read-only.",
+            json!({"type": "object", "properties": {
+                "problem": {"type": "string", "description": "Problem number (e.g. \"617\"), finding id, or a statement substring"}
+            }, "required": ["problem"]}),
+            PermissionLevel::ReadOnly,
+            false,
+            vec![
+                "Closure routes are curated statements of what WOULD close the problem, not promises that it is closable.",
+                "The failed-route rule is absolute: a banked obstruction is only reopened by a new counterexample or proof against the obstruction itself.",
+            ],
+        ),
         // T7: the typed claim-level edge layer (the FrontierGraph
         // substrate) and the first-class Contradiction object.
         tool(

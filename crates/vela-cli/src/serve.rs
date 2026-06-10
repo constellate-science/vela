@@ -589,6 +589,18 @@ pub fn check_tools(source: ProjectSource, adoption: bool) -> Result<Value, Strin
             started,
         ));
         checks.push(check_tool_result(
+            "task_packet",
+            tool_task_packet(
+                &json!({"problem": id}),
+                &frontier,
+                match &source {
+                    ProjectSource::Single(p) => Some(p.as_path()),
+                    ProjectSource::Directory(p) => Some(p.as_path()),
+                },
+            ),
+            started,
+        ));
+        checks.push(check_tool_result(
             "deep_trace",
             tool_deep_trace(&json!({"finding_id": id, "max_hops": 3}), &frontier),
             started,
@@ -886,6 +898,13 @@ async fn execute_tool(
             let project = frontier.lock().await;
             (
                 tool_frontier_explore(args, &project),
+                Some(clone_project(&project)),
+            )
+        }
+        "task_packet" => {
+            let project = frontier.lock().await;
+            (
+                tool_task_packet(args, &project, source_path),
                 Some(clone_project(&project)),
             )
         }
@@ -2700,6 +2719,173 @@ fn resolve_problem<'a>(
 /// One-call problem briefing: statement, gate status, open obligations
 /// (gap-flagged findings linked to it), rests-on, dependents, and
 /// staleness — the CodeGraph one-shot context call for frontier state.
+/// The agent entry contract: everything needed to start work on a
+/// problem cold, in one call. Statement + state hashes + gate status +
+/// ALLOWED OUTPUTS (each mapped to the frozen verifier kind that would
+/// check it) + failed-route memory (the BANKED clauses of the linked
+/// obligations — what is provably exhausted, do not re-grind) + open
+/// targets + the attempt ledger for this problem. An agent's output is
+/// acceptable only if it is one of the allowed output types with its
+/// verifier passing; prose strategy is not a state transition.
+fn tool_task_packet(
+    args: &Value,
+    frontier: &Project,
+    source_path: Option<&std::path::Path>,
+) -> Result<String, String> {
+    use vela_protocol::verifier_attachment::{claim_digest, derive_gate_status};
+    let arg = args["problem"]
+        .as_str()
+        .or_else(|| args["id"].as_str())
+        .ok_or("Missing 'problem' argument")?;
+    let target = resolve_problem(arg, frontier)
+        .ok_or_else(|| format!("No finding resolves problem '{arg}'"))?;
+
+    // Problem number: from the arg (e.g. "#617" / "617") or the text.
+    let num_from = |t: &str| -> Option<u64> {
+        let i = t.find('#')?;
+        t[i + 1..]
+            .chars()
+            .take_while(|c| c.is_ascii_digit())
+            .collect::<String>()
+            .parse()
+            .ok()
+    };
+    let problem_number = num_from(arg)
+        .or_else(|| arg.parse().ok())
+        .or_else(|| num_from(&target.assertion.text));
+
+    let digest = claim_digest(&target.assertion.text);
+    let atts: Vec<_> = frontier
+        .verifier_attachments
+        .iter()
+        .filter(|a| a.target == target.id)
+        .cloned()
+        .collect();
+    let gate = derive_gate_status(&digest, &atts);
+
+    // Curated closure routes: `closure-routes.json` in the frontier dir
+    // maps each problem to the artifact types that would close it and
+    // the frozen verifier kind that checks each. Absent file -> only the
+    // universal outputs are advertised.
+    let mut allowed_outputs: Vec<Value> = Vec::new();
+    if let (Some(p), Some(n)) = (source_path, problem_number) {
+        // Single-file serves point at frontier.json; the curated routes
+        // live next to it (or in the served directory).
+        let dir = if p.is_dir() {
+            p
+        } else {
+            p.parent().unwrap_or(p)
+        };
+        let routes_path = dir.join("closure-routes.json");
+        if let Ok(txt) = std::fs::read_to_string(&routes_path)
+            && let Ok(routes) = serde_json::from_str::<Value>(&txt)
+            && let Some(entry) = routes["problems"][n.to_string()].as_object()
+            && let Some(types) = entry.get("closure_types").and_then(Value::as_array)
+        {
+            allowed_outputs.extend(types.iter().cloned());
+        }
+    }
+    // Universal outputs: every frontier accepts these regardless of the
+    // problem-specific routes (skipped when the curated routes already
+    // name the same type).
+    let has = |t: &str| allowed_outputs.iter().any(|o| o["type"] == t);
+    if !has("obstruction_report") {
+        allowed_outputs.push(json!({
+        "type": "obstruction_report",
+        "verifier_kind": "review",
+        "note": "A gap-flagged finding through the Frontier PR flow: a precise, checkable reason a route cannot work. Prevents duplicate wasted passes.",
+        }));
+    }
+    allowed_outputs.push(json!({
+        "type": "attempt_deposit",
+        "verifier_kind": "signature",
+        "note": "A signed vat_ attempt record (banked or failed) so the pass itself becomes part of the ledger.",
+    }));
+
+    // Obligations carry the route memory: BANKED = exhausted channels
+    // (failed-route memory; do not re-grind), OPEN = the live targets.
+    let mut failed_routes: Vec<Value> = Vec::new();
+    let mut open_targets: Vec<Value> = Vec::new();
+    for f in &frontier.findings {
+        if !f.flags.gap || f.id == target.id {
+            continue;
+        }
+        let linked = f.links.iter().any(|l| l.target == target.id)
+            || target.links.iter().any(|l| l.target == f.id);
+        if !linked {
+            continue;
+        }
+        let text = &f.assertion.text;
+        if let Some(b) = text.find("BANKED:") {
+            let end = text.find("OPEN:").unwrap_or(text.len());
+            failed_routes.push(json!({
+                "obligation": f.id,
+                "banked": text[b + 7..end].trim().trim_end_matches('.'),
+            }));
+        }
+        if let Some(o) = text.find("OPEN:") {
+            open_targets.push(json!({
+                "obligation": f.id,
+                "open": text[o + 5..].trim(),
+            }));
+        }
+    }
+
+    // Attempt ledger: every signed pass on this problem, banked or
+    // failed — the run history the next agent starts from.
+    let attempts: Vec<Value> = frontier
+        .attempts
+        .iter()
+        .filter(|a| Some(a.problem as u64) == problem_number)
+        .map(|a| {
+            let resolution = frontier
+                .attempt_resolutions
+                .iter()
+                .filter(|r| r.attempt_id == a.attempt_id)
+                .max_by(|x, y| x.at.cmp(&y.at))
+                .map(|r| format!("{:?}", r.resolution));
+            json!({
+                "attempt_id": a.attempt_id,
+                "kind": a.kind,
+                "claim": trunc(&a.claim, 120),
+                "claimed_status": a.claimed_status,
+                "verifier_attachments": a.verifier_attachments.len(),
+                "resolution": resolution,
+            })
+        })
+        .collect();
+
+    serde_json::to_string_pretty(&json!({
+        "tool": "task_packet",
+        "resolved": {"id": target.id, "problem": problem_number, "from": arg},
+        "statement": target.assertion.text,
+        "state": {
+            "snapshot_hash": vela_protocol::events::snapshot_hash(frontier),
+            "event_log_hash": vela_protocol::events::event_log_hash(&frontier.events),
+        },
+        "gate_status": {
+            "status": format!("{:?}", gate.status),
+            "reasons": gate.reasons,
+            "attachments": atts.len(),
+        },
+        "allowed_outputs": allowed_outputs,
+        "failed_routes": {
+            "count": failed_routes.len(),
+            "items": failed_routes,
+            "rule": "Do not re-attempt a banked route unless you produce a NEW counterexample or proof against the banked obstruction itself.",
+        },
+        "open_targets": {"count": open_targets.len(), "items": open_targets},
+        "attempts": {"count": attempts.len(), "items": attempts},
+        "submission": {
+            "witness": "write the artifact as <frontier>/witnesses/<name>.witness.json and run `vela reproduce <frontier>` — the frozen verifier must pass",
+            "finding": "propose via `vela note`/`vela finding add` WITHOUT --apply; a keyed reviewer accepts with --key (key custody is the accept authority)",
+            "attempt": "deposit a signed vat_ attempt; failed passes are ledger entries, not noise",
+        },
+        "caveat": "Allowed outputs are the only state-changing submissions; strategy prose without an artifact does not move the frontier.",
+    }))
+    .map_err(|e| e.to_string())
+}
+
 fn tool_frontier_explore(args: &Value, frontier: &Project) -> Result<String, String> {
     use vela_protocol::verifier_attachment::{claim_digest, derive_gate_status};
     let arg = args["problem"]
