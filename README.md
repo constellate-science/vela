@@ -96,7 +96,23 @@ confidence. A finding can be reviewer-accepted and still gate
 ```sh
 cargo build --release
 ./target/release/vela --help
+vela completions zsh > ~/.zfunc/_vela   # shell completions (bash/zsh/fish)
 ```
+
+## The working loop
+
+```sh
+vela status <frontier>          # one screen: replay verdict, proposals, leases, judgment
+vela serve <frontier>           # MCP tools incl. task_packet (the agent entry contract)
+vela claim <frontier> <id> ...  # lease an obligation before long work
+vela reproduce <frontier>       # frozen verifiers re-check every witness
+vela accept <frontier> <vpr> --key ...        # keyed authority lands state
+vela attest-statement ...       # signed human faithfulness verdict (vsa_)
+vela export --venue oeis|nanopub <frontier>   # venue-native projections
+```
+
+An agent may propose; only a key-holding human accepts. Failures are
+signed ledger entries, not noise.
 
 The Rust reducer is the normative reference; the Python and TypeScript reducers
 track it against the conformance vectors in `conformance/`.
