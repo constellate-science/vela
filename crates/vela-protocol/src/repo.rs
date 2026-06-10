@@ -732,6 +732,13 @@ fn load_vela_repo(dir: &Path) -> Result<Project, String> {
     // This closes the v0.222 consumer-migration prerequisite.
     materialize_released_diff_packs_from_events(&mut c);
     materialize_verdict_conflicts_from_events(&mut c);
+    // Same class of bug as above: `verifier_attachment.added` events were
+    // accepted and written to `.vela/events/`, but `load_vela_repo` never
+    // folded them into `Project.verifier_attachments`. So `vela attach`
+    // evidence survived exactly until the next `frontier materialize`, after
+    // which the trust gate saw zero attachments and could never derive
+    // `verified` from persisted state. Mirror the reducer arm here.
+    materialize_verifier_attachments_from_events(&mut c);
 
     // v0.56: replay evidence_atom.locator_repaired events into the
     // loaded evidence_atoms array. `project::assemble` derives atoms
@@ -925,6 +932,37 @@ fn materialize_verdict_conflicts_from_events(p: &mut Project) {
             continue;
         }
         p.verdict_conflicts.push(conflict);
+    }
+}
+
+/// Walk the event log to populate `Project.verifier_attachments` from
+/// canonical `verifier_attachment.added` events. Mirrors the reducer arm
+/// `apply_verifier_attachment_added`. `load_vela_repo` materializes each
+/// field via a dedicated helper and this one was never wired in, so an
+/// attached `vva_` (which the trust gate needs to derive `verified`) was
+/// dropped on the next materialize. Idempotent on attachment id; malformed
+/// payloads are skipped (the reducer-side validator already rejected them
+/// at emit time).
+fn materialize_verifier_attachments_from_events(p: &mut Project) {
+    use crate::verifier_attachment::VerifierAttachment;
+
+    for ev in &p.events {
+        if ev.kind != "verifier_attachment.added" {
+            continue;
+        }
+        let Some(att_value) = ev.payload.get("attachment") else {
+            continue;
+        };
+        let Ok(att) = serde_json::from_value::<VerifierAttachment>(att_value.clone()) else {
+            continue;
+        };
+        if att.verify().is_err() {
+            continue;
+        }
+        if p.verifier_attachments.iter().any(|a| a.id == att.id) {
+            continue;
+        }
+        p.verifier_attachments.push(att);
     }
 }
 
@@ -1244,6 +1282,71 @@ mod tests {
     use tempfile::TempDir;
 
     use crate::test_support::{make_finding, make_project};
+
+    // ── regression: verifier attachments survive load/materialize ────
+    // A `verifier_attachment.added` event must fold into
+    // `Project.verifier_attachments` on load, exactly like the reducer arm
+    // does on replay. Before the fix, `load_vela_repo` materialized every
+    // other field individually but never this one, so `vela attach` evidence
+    // vanished on the next `frontier materialize` and the trust gate could
+    // never derive `verified` from persisted state.
+    #[test]
+    fn verifier_attachment_events_materialize_on_load() {
+        use crate::verifier_attachment::{
+            AttachmentDraft, AdversarialProbe, AttachmentOutcome, MatchToClaim, ProbeKind,
+            ProbeResult, VerifierAttachment, VerifierMethod,
+        };
+        use serde_json::json;
+
+        let att = VerifierAttachment::build(AttachmentDraft {
+            target: "vf_0000000000000000".to_string(),
+            claim_digest: "deadbeefdeadbeef".to_string(),
+            verifier_method: VerifierMethod::ExactArithmeticRecompute,
+            solver_id: "test-solver".to_string(),
+            independent_of: vec![],
+            match_to_claim: MatchToClaim {
+                matches: true,
+                checker_actor: "reviewer:test".to_string(),
+            },
+            adversarial_probes: vec![AdversarialProbe {
+                kind: ProbeKind::CounterexampleSearch,
+                result: ProbeResult::Survived,
+                note: String::new(),
+            }],
+            outcome: AttachmentOutcome::Passed,
+            verifier_actor: "reviewer:test".to_string(),
+            note: String::new(),
+        })
+        .expect("build attachment");
+
+        let ev: crate::events::StateEvent = serde_json::from_value(json!({
+            "schema": "vela.state_event.v0.1",
+            "id": "vev_test000000000000",
+            "kind": "verifier_attachment.added",
+            "target": {"type": "finding", "id": "vf_0000000000000000"},
+            "actor": {"id": "reviewer:test", "type": "reviewer"},
+            "timestamp": "2026-01-01T00:00:00Z",
+            "reason": "test",
+            "before_hash": "",
+            "after_hash": "",
+            "payload": {"attachment": att},
+        }))
+        .expect("deserialize state event");
+
+        let mut p = make_project("t", vec![]);
+        p.events.push(ev);
+        assert!(p.verifier_attachments.is_empty());
+        materialize_verifier_attachments_from_events(&mut p);
+        assert_eq!(
+            p.verifier_attachments.len(),
+            1,
+            "verifier_attachment.added must fold into verifier_attachments on load"
+        );
+        assert_eq!(p.verifier_attachments[0].id, att.id);
+        // idempotent
+        materialize_verifier_attachments_from_events(&mut p);
+        assert_eq!(p.verifier_attachments.len(), 1);
+    }
 
     // ── detect tests ────────────────────────────────────────────────
 
