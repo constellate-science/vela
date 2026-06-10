@@ -3,32 +3,26 @@ members = [
     "crates/vela-protocol",
     "crates/vela-edge",
     "crates/vela-protocol-core",
-    "crates/vela-protocol-wasm",
-    "crates/vela-scientist",
     "crates/vela-cli",
     "crates/vela-hub",
     # v0.78.2: vela-atlas carved out as a real crate. The
     # namespace-stubs/vela-atlas package stays in place (it's
     # not in this list) and `cargo publish` of crates/vela-atlas
     # at 0.78.0 supersedes the 0.0.0 stub.
-    "crates/vela-atlas",
     # v0.81.1: vela-constellation carved out as a real crate.
     # The namespace-stubs/vela-constellation isn't a thing yet
     # (we never reserved it; this is a fresh publish slot for
     # later cycles).
-    "crates/vela-constellation",
     # v0.123: vela-relay carved out as a real crate + binary.
     # The namespace-stubs/vela-relay v0.0.0 publish stays in the
     # repo history; cargo publish of crates/vela-relay at 0.123.0
     # supersedes the stub. Library re-exports source_adapters /
     # runtime_adapters from vela-protocol; binary lists the four
     # adapter shapes (see docs/RELAY.md).
-    "crates/vela-relay",
     # v0.149: vela-search ships the build-time index over
     # registered frontiers. Pure derived view, not authority;
     # the canonical state stays in registry + frontier event
     # logs. See docs/SEARCH.md.
-    "crates/vela-search",
     # vela-verify: frozen, dependency-light exact verifiers for
     # combinatorial / coding-theory witnesses. The reference verifier
     # registry the gate and `vela reproduce` build on.
@@ -92,11 +86,6 @@ tempfile = "3"
 # the dep against crates.io; `path` is used for in-workspace builds.
 vela-protocol = { path = "crates/vela-protocol", version = "0.691.0" }
 vela-protocol-core = { path = "crates/vela-protocol-core", version = "0.691.0" }
-vela-scientist = { path = "crates/vela-scientist", version = "0.691.0" }
-vela-atlas = { path = "crates/vela-atlas", version = "0.691.0" }
-vela-constellation = { path = "crates/vela-constellation", version = "0.691.0" }
-vela-relay = { path = "crates/vela-relay", version = "0.691.0" }
-vela-search = { path = "crates/vela-search", version = "0.691.0" }
 vela-verify = { path = "crates/vela-verify", version = "0.691.0" }
 
 [workspace.lints.rust]

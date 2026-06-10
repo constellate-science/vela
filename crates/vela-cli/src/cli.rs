@@ -17,7 +17,6 @@ use vela_edge::frontier_incident;
 use vela_protocol::frontier_repo;
 use vela_edge::frontier_task;
 use vela_edge::impact;
-use vela_edge::index_db;
 use vela_edge::lint;
 use vela_edge::normalize;
 use vela_edge::packet;
@@ -85,107 +84,6 @@ pub async fn run_command() {
     dotenvy::dotenv().ok();
 
     match Cli::parse().command {
-        Commands::Scout {
-            folder,
-            frontier,
-            backend,
-            dry_run,
-            json,
-        } => {
-            cmd_scout(&folder, &frontier, backend.as_deref(), dry_run, json).await;
-        }
-        Commands::CompileNotes {
-            vault,
-            frontier,
-            backend,
-            max_files,
-            max_items_per_category,
-            dry_run,
-            json,
-        } => {
-            cmd_compile_notes(
-                &vault,
-                &frontier,
-                backend.as_deref(),
-                max_files,
-                max_items_per_category,
-                dry_run,
-                json,
-            )
-            .await;
-        }
-        Commands::CompileCode {
-            root,
-            frontier,
-            backend,
-            max_files,
-            dry_run,
-            json,
-        } => {
-            cmd_compile_code(
-                &root,
-                &frontier,
-                backend.as_deref(),
-                max_files,
-                dry_run,
-                json,
-            )
-            .await;
-        }
-        Commands::CompileData {
-            root,
-            frontier,
-            backend,
-            sample_rows,
-            dry_run,
-            json,
-        } => {
-            cmd_compile_data(
-                &root,
-                &frontier,
-                backend.as_deref(),
-                sample_rows,
-                dry_run,
-                json,
-            )
-            .await;
-        }
-        Commands::ReviewPending {
-            frontier,
-            backend,
-            max_proposals,
-            batch_size,
-            dry_run,
-            json,
-        } => {
-            cmd_review_pending(
-                &frontier,
-                backend.as_deref(),
-                max_proposals,
-                batch_size,
-                dry_run,
-                json,
-            )
-            .await;
-        }
-        Commands::FindTensions {
-            frontier,
-            backend,
-            max_findings,
-            dry_run,
-            json,
-        } => {
-            cmd_find_tensions(&frontier, backend.as_deref(), max_findings, dry_run, json).await;
-        }
-        Commands::PlanExperiments {
-            frontier,
-            backend,
-            max_findings,
-            dry_run,
-            json,
-        } => {
-            cmd_plan_experiments(&frontier, backend.as_deref(), max_findings, dry_run, json).await;
-        }
         Commands::Check {
             source,
             schema,
@@ -585,8 +483,6 @@ pub async fn run_command() {
             }
         }
         Commands::Proposals { action } => cmd_proposals(action),
-        Commands::SearchIndex { action } => cmd_search_index(action).await,
-        Commands::Index { action } => cmd_index(action).await,
         Commands::Citation {
             target,
             frontier,
@@ -1914,106 +1810,11 @@ pub async fn run_command() {
 
         Commands::Carina { action } => cmd_carina(action),
 
-        Commands::Atlas { action } => cmd_atlas(action).await,
 
-        Commands::Constellation { action } => cmd_constellation(action).await,
     }
 }
 
-/// v0.78: handler for `vela atlas <action>`. Routes through the
-/// binary-installed handlers (registered in `vela-cli/src/main.rs`)
-/// so the substrate library stays free of the `vela-atlas`
-/// dependency.
-async fn cmd_atlas(action: AtlasAction) {
-    match action {
-        AtlasAction::Init {
-            name,
-            frontiers,
-            domain,
-            scope_note,
-            atlases_root,
-            json,
-        } => match ATLAS_INIT_HANDLER.get() {
-            Some(handler) => {
-                handler(atlases_root, name, domain, scope_note, frontiers, json).await;
-            }
-            None => fail("vela atlas init: handler not registered (built without vela-atlas)"),
-        },
-        AtlasAction::Materialize {
-            name,
-            atlases_root,
-            json,
-        } => match ATLAS_MATERIALIZE_HANDLER.get() {
-            Some(handler) => handler(atlases_root, name, json).await,
-            None => fail("vela atlas materialize: handler not registered"),
-        },
-        AtlasAction::Serve {
-            name,
-            atlases_root,
-            port,
-            no_open,
-        } => {
-            // v0.78 stub: route to the per-frontier Workbench for
-            // the first composing frontier in the manifest.
-            // Atlas-level Workbench page lands in v0.79+.
-            match ATLAS_SERVE_HANDLER.get() {
-                Some(handler) => handler(atlases_root, name, port, !no_open).await,
-                None => fail("vela atlas serve: handler not registered"),
-            }
-        }
-        AtlasAction::Update {
-            name,
-            add_frontier,
-            remove_vfr_id,
-            atlases_root,
-            json,
-        } => match ATLAS_UPDATE_HANDLER.get() {
-            Some(handler) => {
-                handler(atlases_root, name, add_frontier, remove_vfr_id, json).await;
-            }
-            None => fail("vela atlas update: handler not registered"),
-        },
-    }
-}
 
-/// v0.82: handler for `vela constellation <action>`. Routes
-/// through binary-installed handlers calling into the
-/// `vela-constellation` crate.
-async fn cmd_constellation(action: ConstellationAction) {
-    match action {
-        ConstellationAction::Init {
-            name,
-            atlases,
-            scope_note,
-            constellations_root,
-            json,
-        } => match CONSTELLATION_INIT_HANDLER.get() {
-            Some(handler) => {
-                handler(constellations_root, name, scope_note, atlases, json).await;
-            }
-            None => fail(
-                "vela constellation init: handler not registered (built without vela-constellation)",
-            ),
-        },
-        ConstellationAction::Materialize {
-            name,
-            constellations_root,
-            json,
-        } => match CONSTELLATION_MATERIALIZE_HANDLER.get() {
-            Some(handler) => handler(constellations_root, name, json).await,
-            None => fail("vela constellation materialize: handler not registered"),
-        },
-        ConstellationAction::Serve {
-            name,
-            constellations_root,
-            port,
-            no_open,
-        } => match CONSTELLATION_SERVE_HANDLER.get() {
-            Some(handler) => handler(constellations_root, name, port, !no_open).await,
-            None => fail("vela constellation serve: handler not registered"),
-        },
-    }
-}
 
 /// v0.75: handler for `vela carina <action>`. Each branch reaches
 /// into the bundled schemas under `embedded/carina-schemas/`.
@@ -4861,35 +4662,27 @@ fn cmd_replications(frontier: &Path, target: Option<&str>, json: bool) {
     }
 }
 
-/// v0.74: file-extension dispatcher for `vela ingest`. Routes one
-/// path or stable identifier URI to the right backing path.
+/// File-extension dispatcher for `vela ingest`. Routes one path or
+/// stable identifier URI to the right deterministic backing path:
 ///
-/// - `doi:` / `pmid:` / `nct:` URI -> `cmd_source_fetch`.
-/// - JSON file (Carina-shaped artifact packet) -> `cmd_artifact_to_state`.
-/// - PDF file or folder of PDFs -> `cmd_scout`. Folder is the
-///   supported shape today; single-file mode lands in v0.74.2.
-/// - Markdown file or folder -> `cmd_compile_notes`.
-/// - CSV / TSV file or folder -> `cmd_compile_data`.
-/// - Other directory -> `cmd_compile_code`.
+/// - `doi:` / `pmid:` / `nct:` URI -> `cmd_source_fetch` (metadata only).
+/// - JSON file or folder of JSON (Carina-shaped artifact packet) ->
+///   `cmd_artifact_to_state`.
 ///
-/// No new substrate logic; just routing under one verb.
+/// The LLM compile routes (.pdf/.md/.csv/code-dir) were removed with the
+/// agent layer: ingest is a deterministic verb, not a model call.
 async fn cmd_ingest(
     path: &str,
     frontier: &Path,
-    backend: Option<&str>,
+    _backend: Option<&str>,
     actor: Option<&str>,
-    dry_run: bool,
+    _dry_run: bool,
     json: bool,
 ) {
     // Stable identifier URI: dispatch to source-fetch.
     let lowered = path.trim().to_lowercase();
     if lowered.starts_with("doi:") || lowered.starts_with("pmid:") || lowered.starts_with("nct:") {
         cmd_source_fetch(path.trim(), None, None, false, json).await;
-        // v0.102: source-fetch only retrieves metadata into a local
-        // cache; it does not create frontier state. Without this hint,
-        // a fresh user thinks `vela ingest doi:...` "ingested the
-        // paper" because the success-shaped output looks like a
-        // proposal landed. It didn't. Tell them what to do next.
         if !json {
             eprintln!();
             eprintln!(
@@ -4910,147 +4703,44 @@ async fn cmd_ingest(
         ));
     }
 
-    // Single-file vs folder + extension routing.
-    let ext = p
-        .extension()
-        .and_then(|s| s.to_str())
-        .map(|s| s.to_ascii_lowercase());
-
+    let actor_id = actor.unwrap_or("agent:vela-ingest-bot");
     if p.is_file() {
-        match ext.as_deref() {
-            Some("pdf") => {
-                // v0.74.2: discover_files now accepts a single file
-                // and returns a one-element vec, so we can pass
-                // the PDF path itself directly to scout.
-                cmd_scout(&p, frontier, backend, dry_run, json).await;
-            }
-            Some("md") | Some("markdown") => {
-                // compile-notes also routes through discover_files
-                // which handles the single-file case as of v0.74.2.
-                cmd_compile_notes(&p, frontier, backend, None, None, dry_run, json).await;
-            }
-            Some("csv") | Some("tsv") => {
-                // compile-data routes through discover_files; pass
-                // the file path directly (v0.74.2).
-                cmd_compile_data(&p, frontier, backend, None, dry_run, json).await;
-            }
-            Some("json") => {
-                // Carina artifact packet path. Requires an actor id.
-                let actor_id = actor.unwrap_or("agent:vela-ingest-bot");
-                cmd_artifact_to_state(frontier, &p, actor_id, false, json);
-            }
-            other => {
-                fail(&format!(
-                    "ingest: unsupported file type '{}' (expected .pdf, .md, .csv, .tsv, .json, or a doi:/pmid:/nct: URI)",
-                    other.unwrap_or("(none)")
-                ));
-            }
+        let is_json = p
+            .extension()
+            .and_then(|s| s.to_str())
+            .map(|s| s.eq_ignore_ascii_case("json"))
+            .unwrap_or(false);
+        if !is_json {
+            fail(
+                "ingest: only .json artifact packets and doi:/pmid:/nct: URIs are ingestable; \
+                 the LLM compile routes (.pdf/.md/.csv) were removed with the agent layer",
+            );
         }
+        cmd_artifact_to_state(frontier, &p, actor_id, false, json);
         return;
     }
 
     if p.is_dir() {
-        // v0.99: count files per handlable extension across the
-        // first level. If multiple content types are present,
-        // dispatch each handler in sequence rather than dropping
-        // the non-dominant types silently. The previous v0.74
-        // behavior picked one dominant type and ignored the rest,
-        // which silently dropped mixed-source folders.
-        let mut pdf_count = 0usize;
-        let mut md_count = 0usize;
-        let mut data_count = 0usize;
         let mut json_count = 0usize;
-        let mut unhandled_exts: std::collections::BTreeSet<String> =
-            std::collections::BTreeSet::new();
         if let Ok(entries) = std::fs::read_dir(&p) {
             for entry in entries.flatten() {
                 let path = entry.path();
-                if !path.is_file() {
-                    continue;
-                }
-                if let Some(name) = entry.file_name().to_str()
-                    && let Some(dot) = name.rfind('.')
+                if path.is_file()
+                    && path
+                        .extension()
+                        .and_then(|s| s.to_str())
+                        .map(|s| s.eq_ignore_ascii_case("json"))
+                        .unwrap_or(false)
                 {
-                    let ext = name[dot + 1..].to_ascii_lowercase();
-                    match ext.as_str() {
-                        "pdf" => pdf_count += 1,
-                        "md" | "markdown" => md_count += 1,
-                        "csv" | "tsv" => data_count += 1,
-                        "json" => json_count += 1,
-                        other => {
-                            // Track the unhandled extensions so we can
-                            // report them at the end. Skip dotfiles.
-                            if !name.starts_with('.') {
-                                unhandled_exts.insert(other.to_string());
-                            }
-                        }
-                    }
+                    cmd_artifact_to_state(frontier, &path, actor_id, false, json);
+                    json_count += 1;
                 }
             }
         }
-
-        let dispatched_types = (pdf_count > 0) as usize
-            + (md_count > 0) as usize
-            + (data_count > 0) as usize
-            + (json_count > 0) as usize;
-
-        if dispatched_types == 0 {
-            // No handlable content; treat as a code repo (the
-            // pre-v0.99 fallback path).
-            cmd_compile_code(&p, frontier, backend, None, dry_run, json).await;
-            return;
-        }
-
-        if dispatched_types > 1 {
-            eprintln!(
-                "  vela ingest · folder has multiple handlable types; running each in sequence"
-            );
-            eprintln!(
-                "    pdf:{pdf_count}  md:{md_count}  csv/tsv:{data_count}  json:{json_count}"
-            );
-        }
-
-        // Dispatch in a stable order: PDFs first (richest content),
-        // then notes, then data, then carina packets. Each handler
-        // only opens files matching its own extension via
-        // discover_files; non-matching files are silently skipped
-        // by the inner handler, so dispatching all four against the
-        // same folder is safe and idempotent on per-extension subsets.
-        if pdf_count > 0 {
-            cmd_scout(&p, frontier, backend, dry_run, json).await;
-        }
-        if md_count > 0 {
-            cmd_compile_notes(&p, frontier, backend, None, None, dry_run, json).await;
-        }
-        if data_count > 0 {
-            cmd_compile_data(&p, frontier, backend, None, dry_run, json).await;
-        }
-        if json_count > 0 {
-            // Carina artifact packets are file-at-a-time. Walk the
-            // directory and import each .json individually.
-            let actor_id = actor.unwrap_or("agent:vela-ingest-bot");
-            if let Ok(entries) = std::fs::read_dir(&p) {
-                for entry in entries.flatten() {
-                    let path = entry.path();
-                    if path.is_file()
-                        && path
-                            .extension()
-                            .and_then(|s| s.to_str())
-                            .map(|s| s.eq_ignore_ascii_case("json"))
-                            .unwrap_or(false)
-                    {
-                        cmd_artifact_to_state(frontier, &path, actor_id, false, json);
-                    }
-                }
-            }
-        }
-
-        if !unhandled_exts.is_empty() {
-            let kinds: Vec<String> = unhandled_exts.into_iter().collect();
-            eprintln!(
-                "  vela ingest · skipped {} file extension(s) with no handler: {}",
-                kinds.len(),
-                kinds.join(", ")
+        if json_count == 0 {
+            fail(
+                "ingest: no .json artifact packets in folder; only JSON packets and \
+                 doi:/pmid:/nct: URIs are ingestable",
             );
         }
         return;
@@ -5061,231 +4751,12 @@ async fn cmd_ingest(
     ));
 }
 
-#[allow(clippy::too_many_arguments)]
-/// v0.25 Agent Inbox: dispatches the registered datasets handler.
-async fn cmd_compile_data(
-    root: &Path,
-    frontier: &Path,
-    backend: Option<&str>,
-    sample_rows: Option<usize>,
-    dry_run: bool,
-    json_out: bool,
-) {
-    match DATASETS_HANDLER.get() {
-        Some(handler) => {
-            handler(
-                root.to_path_buf(),
-                frontier.to_path_buf(),
-                backend.map(String::from),
-                sample_rows,
-                dry_run,
-                json_out,
-            )
-            .await;
-        }
-        None => {
-            eprintln!(
-                "{} `vela compile-data` requires the vela CLI binary; the library is unwired without a registered datasets handler.",
-                style::err_prefix()
-            );
-            std::process::exit(1);
-        }
-    }
-}
 
-/// v0.28 Agent Inbox: dispatches the registered reviewer-agent
-/// handler.
-async fn cmd_review_pending(
-    frontier: &Path,
-    backend: Option<&str>,
-    max_proposals: Option<usize>,
-    batch_size: usize,
-    dry_run: bool,
-    json_out: bool,
-) {
-    match REVIEWER_HANDLER.get() {
-        Some(handler) => {
-            handler(
-                frontier.to_path_buf(),
-                backend.map(String::from),
-                max_proposals,
-                batch_size,
-                dry_run,
-                json_out,
-            )
-            .await;
-        }
-        None => {
-            eprintln!(
-                "{} `vela review-pending` requires the vela CLI binary; the library is unwired without a registered reviewer handler.",
-                style::err_prefix()
-            );
-            std::process::exit(1);
-        }
-    }
-}
 
-/// v0.28 Agent Inbox: dispatches the registered contradiction-finder
-/// handler.
-async fn cmd_find_tensions(
-    frontier: &Path,
-    backend: Option<&str>,
-    max_findings: Option<usize>,
-    dry_run: bool,
-    json_out: bool,
-) {
-    match TENSIONS_HANDLER.get() {
-        Some(handler) => {
-            handler(
-                frontier.to_path_buf(),
-                backend.map(String::from),
-                max_findings,
-                dry_run,
-                json_out,
-            )
-            .await;
-        }
-        None => {
-            eprintln!(
-                "{} `vela find-tensions` requires the vela CLI binary; the library is unwired without a registered tensions handler.",
-                style::err_prefix()
-            );
-            std::process::exit(1);
-        }
-    }
-}
 
-/// v0.28 Agent Inbox: dispatches the registered experiment-planner
-/// handler.
-async fn cmd_plan_experiments(
-    frontier: &Path,
-    backend: Option<&str>,
-    max_findings: Option<usize>,
-    dry_run: bool,
-    json_out: bool,
-) {
-    match EXPERIMENTS_HANDLER.get() {
-        Some(handler) => {
-            handler(
-                frontier.to_path_buf(),
-                backend.map(String::from),
-                max_findings,
-                dry_run,
-                json_out,
-            )
-            .await;
-        }
-        None => {
-            eprintln!(
-                "{} `vela plan-experiments` requires the vela CLI binary; the library is unwired without a registered experiments handler.",
-                style::err_prefix()
-            );
-            std::process::exit(1);
-        }
-    }
-}
 
-/// v0.24 Agent Inbox: dispatches the registered code-analyst
-/// handler.
-async fn cmd_compile_code(
-    root: &Path,
-    frontier: &Path,
-    backend: Option<&str>,
-    max_files: Option<usize>,
-    dry_run: bool,
-    json_out: bool,
-) {
-    match CODE_HANDLER.get() {
-        Some(handler) => {
-            handler(
-                root.to_path_buf(),
-                frontier.to_path_buf(),
-                backend.map(String::from),
-                max_files,
-                dry_run,
-                json_out,
-            )
-            .await;
-        }
-        None => {
-            eprintln!(
-                "{} `vela compile-code` requires the vela CLI binary; the library is unwired without a registered code handler.",
-                style::err_prefix()
-            );
-            std::process::exit(1);
-        }
-    }
-}
 
-/// v0.23 Agent Inbox: dispatches the registered notes-compiler
-/// handler. Same rationale as `cmd_scout` — the substrate stays
-/// agent-free; the `vela` CLI binary registers the handler at
-/// startup.
-async fn cmd_compile_notes(
-    vault: &Path,
-    frontier: &Path,
-    backend: Option<&str>,
-    max_files: Option<usize>,
-    max_items_per_category: Option<usize>,
-    dry_run: bool,
-    json_out: bool,
-) {
-    match NOTES_HANDLER.get() {
-        Some(handler) => {
-            handler(
-                vault.to_path_buf(),
-                frontier.to_path_buf(),
-                backend.map(String::from),
-                max_files,
-                max_items_per_category,
-                dry_run,
-                json_out,
-            )
-            .await;
-        }
-        None => {
-            eprintln!(
-                "{} `vela compile-notes` requires the vela CLI binary; the library is unwired without a registered notes handler.",
-                style::err_prefix()
-            );
-            std::process::exit(1);
-        }
-    }
-}
 
-/// v0.22 Agent Inbox: dispatches the registered scout handler. The
-/// substrate library does not import `vela-scientist` (it would induce
-/// a Cargo cycle); the `vela` CLI binary in `crates/vela-cli`
-/// registers a handler at startup that calls into the scientist
-/// crate. Running the lib directly without that registration prints
-/// a clear error.
-async fn cmd_scout(
-    folder: &Path,
-    frontier: &Path,
-    backend: Option<&str>,
-    dry_run: bool,
-    json_out: bool,
-) {
-    match SCOUT_HANDLER.get() {
-        Some(handler) => {
-            handler(
-                folder.to_path_buf(),
-                frontier.to_path_buf(),
-                backend.map(String::from),
-                dry_run,
-                json_out,
-            )
-            .await;
-        }
-        None => {
-            eprintln!(
-                "{} `vela scout` requires the vela CLI binary; the library is unwired without a registered scout handler.",
-                style::err_prefix()
-            );
-            std::process::exit(1);
-        }
-    }
-}
 
 #[allow(clippy::too_many_arguments)]
 /// v0.113: walk a frontier path and return any files whose names
@@ -5873,10 +5344,8 @@ fn cmd_proof(
     json_output: bool,
 ) {
     // The template is a label on the exported packet; the packet content is
-    // derived from frontier state and is domain-neutral. `generic` exists so
-    // a non-biomedical frontier (e.g. the Erdős open-problem frontier) gets a
-    // domain-appropriate label rather than being forced under `bbb-alzheimer`.
-    const SUPPORTED_TEMPLATES: &[&str] = &["bbb-alzheimer", "generic"];
+    // derived from frontier state and is domain-neutral.
+    const SUPPORTED_TEMPLATES: &[&str] = &["generic"];
     if !SUPPORTED_TEMPLATES.contains(&template) {
         fail(&format!(
             "Unsupported proof template '{template}'. Supported: {}",
@@ -12922,119 +12391,8 @@ fn cmd_citation(
     }
 }
 
-/// v0.149: handle `vela search-index {build|query}` via
-/// registered handlers (the substrate-side vela-search crate
-/// is wired in from vela-cli's main.rs).
-async fn cmd_search_index(action: SearchAction) {
-    match action {
-        SearchAction::Build {
-            frontiers,
-            out,
-            include_bootstrap,
-            include_broken,
-            json,
-        } => match SEARCH_BUILD_HANDLER.get() {
-            Some(handler) => {
-                handler(frontiers, out, include_bootstrap, include_broken, json).await;
-            }
-            None => fail("search build handler not registered"),
-        },
-        SearchAction::Query {
-            query,
-            index,
-            kind,
-            entity,
-            status,
-            frontier_id,
-            source_id,
-            chain_status,
-            limit,
-            json,
-        } => match SEARCH_QUERY_HANDLER.get() {
-            Some(handler) => {
-                handler(
-                    query,
-                    index,
-                    kind,
-                    entity,
-                    status,
-                    frontier_id,
-                    source_id,
-                    chain_status,
-                    limit,
-                    json,
-                )
-                .await;
-            }
-            None => fail("search query handler not registered"),
-        },
-    }
-}
 
-async fn cmd_index(action: IndexAction) {
-    match action {
-        IndexAction::Build { frontier, json } => {
-            let report = index_db::build(&frontier)
-                .await
-                .unwrap_or_else(|e| fail_return(&e));
-            print_index_payload("index build", &report, json);
-        }
-        IndexAction::Status { frontier, json } => {
-            let report = index_db::status(&frontier)
-                .await
-                .unwrap_or_else(|e| fail_return(&e));
-            print_index_payload("index status", &report, json);
-        }
-        IndexAction::Query {
-            frontier,
-            kind,
-            q,
-            limit,
-            json,
-        } => {
-            let report = index_db::query(&frontier, &kind, &q, limit)
-                .await
-                .unwrap_or_else(|e| fail_return(&e));
-            print_index_payload("index query", &report, json);
-        }
-    }
-}
 
-fn print_index_payload(label: &str, payload: &Value, json_output: bool) {
-    if json_output {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(payload).expect("failed to serialize index payload")
-        );
-        return;
-    }
-    println!("vela {label}");
-    if let Some(path) = payload.pointer("/database/path").and_then(Value::as_str) {
-        println!("  database: {path}");
-    }
-    if let Some(ok) = payload.pointer("/integrity/ok").and_then(Value::as_bool) {
-        println!("  integrity: {}", if ok { "ok" } else { "needs repair" });
-    }
-    if let Some(counts) = payload.get("counts").and_then(Value::as_object) {
-        for key in ["findings", "sources", "evidence_atoms", "links", "events"] {
-            if let Some(count) = counts.get(key).and_then(Value::as_i64) {
-                println!("  {key}: {count}");
-            }
-        }
-    }
-    if let Some(results) = payload.get("results").and_then(Value::as_array) {
-        println!("  results: {}", results.len());
-        for result in results.iter().take(10) {
-            let id = result.get("id").and_then(Value::as_str).unwrap_or("");
-            let label = result
-                .get("assertion")
-                .or_else(|| result.get("title"))
-                .and_then(Value::as_str)
-                .unwrap_or("");
-            println!("  - {id} {label}");
-        }
-    }
-}
 
 /// v0.148: handle `vela registry hub-federation status`.
 pub(crate) fn cmd_hub_federation(action: HubFederationAction) {
@@ -16562,278 +15920,6 @@ Publish your own frontier (see docs/PUBLISHING.md):
     );
 }
 
-/// v0.22 Agent Inbox: pluggable handler for `vela scout`.
-///
-/// The substrate library can't import `vela-scientist` (cyclic
-/// dependency), so the scout dispatch in this module looks up a
-/// handler installed by the binary at startup. The `vela` CLI in
-/// `crates/vela-cli` registers a real handler via
-/// `register_scout_handler`. Library callers that want scout
-/// behaviour install their own.
-pub type ScoutHandler = fn(
-    folder: PathBuf,
-    frontier: PathBuf,
-    backend: Option<String>,
-    dry_run: bool,
-    json: bool,
-) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-
-static SCOUT_HANDLER: OnceLock<ScoutHandler> = OnceLock::new();
-
-/// Install the scout handler. Idempotent — second registrations are
-/// silently ignored so a misbehaving consumer can't unseat the
-/// binary's wiring mid-run.
-pub fn register_scout_handler(handler: ScoutHandler) {
-    let _ = SCOUT_HANDLER.set(handler);
-}
-
-/// v0.78: pluggable handler for `vela atlas init`. The binary in
-/// `vela-cli/src/main.rs` installs a real handler that calls into
-/// the `vela-atlas` crate.
-pub type AtlasInitHandler = fn(
-    atlases_root: PathBuf,
-    name: String,
-    domain: String,
-    scope_note: Option<String>,
-    frontiers: Vec<PathBuf>,
-    json: bool,
-) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-
-static ATLAS_INIT_HANDLER: OnceLock<AtlasInitHandler> = OnceLock::new();
-
-pub fn register_atlas_init_handler(handler: AtlasInitHandler) {
-    let _ = ATLAS_INIT_HANDLER.set(handler);
-}
-
-/// v0.149: pluggable handler for `vela search build`.
-pub type SearchBuildHandler = fn(
-    frontiers: Vec<PathBuf>,
-    out: PathBuf,
-    include_bootstrap: bool,
-    include_broken: bool,
-    json: bool,
-) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-
-static SEARCH_BUILD_HANDLER: OnceLock<SearchBuildHandler> = OnceLock::new();
-
-pub fn register_search_build_handler(handler: SearchBuildHandler) {
-    let _ = SEARCH_BUILD_HANDLER.set(handler);
-}
-
-/// v0.149: pluggable handler for `vela search query`.
-#[allow(clippy::too_many_arguments)]
-pub type SearchQueryHandler = fn(
-    query: String,
-    index: Option<PathBuf>,
-    kind: Option<String>,
-    entity: Option<String>,
-    status: Option<String>,
-    frontier_id: Option<String>,
-    source_id: Option<String>,
-    chain_status: Option<String>,
-    limit: Option<usize>,
-    json: bool,
-) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-
-static SEARCH_QUERY_HANDLER: OnceLock<SearchQueryHandler> = OnceLock::new();
-
-pub fn register_search_query_handler(handler: SearchQueryHandler) {
-    let _ = SEARCH_QUERY_HANDLER.set(handler);
-}
-
-/// v0.78: pluggable handler for `vela atlas materialize`.
-pub type AtlasMaterializeHandler =
-    fn(atlases_root: PathBuf, name: String, json: bool) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-
-static ATLAS_MATERIALIZE_HANDLER: OnceLock<AtlasMaterializeHandler> = OnceLock::new();
-
-pub fn register_atlas_materialize_handler(handler: AtlasMaterializeHandler) {
-    let _ = ATLAS_MATERIALIZE_HANDLER.set(handler);
-}
-
-/// v0.78: pluggable handler for `vela atlas serve`. v0.78 stub
-/// delegates to the per-frontier Workbench for the first
-/// composing frontier. Dedicated Atlas-level Workbench page is
-/// v0.79+.
-pub type AtlasServeHandler = fn(
-    atlases_root: PathBuf,
-    name: String,
-    port: u16,
-    open_browser: bool,
-) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-
-static ATLAS_SERVE_HANDLER: OnceLock<AtlasServeHandler> = OnceLock::new();
-
-pub fn register_atlas_serve_handler(handler: AtlasServeHandler) {
-    let _ = ATLAS_SERVE_HANDLER.set(handler);
-}
-
-/// v0.81.2: pluggable handler for `vela atlas update`. Lets the
-/// binary update an Atlas's composing-frontier list without the
-/// rm-and-init dance. The handler re-computes the Atlas's
-/// content-addressed id and writes the updated manifest.
-pub type AtlasUpdateHandler = fn(
-    atlases_root: PathBuf,
-    name: String,
-    add_frontier: Vec<PathBuf>,
-    remove_vfr_id: Vec<String>,
-    json: bool,
-) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-
-static ATLAS_UPDATE_HANDLER: OnceLock<AtlasUpdateHandler> = OnceLock::new();
-
-pub fn register_atlas_update_handler(handler: AtlasUpdateHandler) {
-    let _ = ATLAS_UPDATE_HANDLER.set(handler);
-}
-
-/// v0.82: Constellation-level handlers. Mirror the Atlas
-/// pattern one layer up. The binary registers handlers that
-/// call into the `vela-constellation` crate.
-pub type ConstellationInitHandler = fn(
-    constellations_root: PathBuf,
-    name: String,
-    scope_note: Option<String>,
-    atlases: Vec<PathBuf>,
-    json: bool,
-) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-
-static CONSTELLATION_INIT_HANDLER: OnceLock<ConstellationInitHandler> = OnceLock::new();
-
-pub fn register_constellation_init_handler(handler: ConstellationInitHandler) {
-    let _ = CONSTELLATION_INIT_HANDLER.set(handler);
-}
-
-pub type ConstellationMaterializeHandler = fn(
-    constellations_root: PathBuf,
-    name: String,
-    json: bool,
-) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-
-static CONSTELLATION_MATERIALIZE_HANDLER: OnceLock<ConstellationMaterializeHandler> =
-    OnceLock::new();
-
-pub fn register_constellation_materialize_handler(handler: ConstellationMaterializeHandler) {
-    let _ = CONSTELLATION_MATERIALIZE_HANDLER.set(handler);
-}
-
-pub type ConstellationServeHandler = fn(
-    constellations_root: PathBuf,
-    name: String,
-    port: u16,
-    open_browser: bool,
-) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-
-static CONSTELLATION_SERVE_HANDLER: OnceLock<ConstellationServeHandler> = OnceLock::new();
-
-pub fn register_constellation_serve_handler(handler: ConstellationServeHandler) {
-    let _ = CONSTELLATION_SERVE_HANDLER.set(handler);
-}
-
-/// v0.23 Agent Inbox: pluggable handler for `vela compile-notes`.
-/// Same OnceLock pattern as the scout handler; the binary
-/// registers it at startup.
-pub type NotesHandler = fn(
-    vault: PathBuf,
-    frontier: PathBuf,
-    backend: Option<String>,
-    max_files: Option<usize>,
-    max_items_per_category: Option<usize>,
-    dry_run: bool,
-    json: bool,
-) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-
-static NOTES_HANDLER: OnceLock<NotesHandler> = OnceLock::new();
-
-/// Install the notes-compiler handler. Idempotent.
-pub fn register_notes_handler(handler: NotesHandler) {
-    let _ = NOTES_HANDLER.set(handler);
-}
-
-/// v0.24 Agent Inbox: pluggable handler for `vela compile-code`.
-pub type CodeHandler = fn(
-    root: PathBuf,
-    frontier: PathBuf,
-    backend: Option<String>,
-    max_files: Option<usize>,
-    dry_run: bool,
-    json: bool,
-) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-
-static CODE_HANDLER: OnceLock<CodeHandler> = OnceLock::new();
-
-/// Install the code-analyst handler. Idempotent.
-pub fn register_code_handler(handler: CodeHandler) {
-    let _ = CODE_HANDLER.set(handler);
-}
-
-/// v0.25 Agent Inbox: pluggable handler for `vela compile-data`.
-pub type DatasetsHandler = fn(
-    root: PathBuf,
-    frontier: PathBuf,
-    backend: Option<String>,
-    sample_rows: Option<usize>,
-    dry_run: bool,
-    json: bool,
-) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-
-static DATASETS_HANDLER: OnceLock<DatasetsHandler> = OnceLock::new();
-
-/// Install the datasets handler. Idempotent.
-pub fn register_datasets_handler(handler: DatasetsHandler) {
-    let _ = DATASETS_HANDLER.set(handler);
-}
-
-/// v0.28 Agent Inbox: handler for `vela review-pending`.
-pub type ReviewerHandler = fn(
-    frontier: PathBuf,
-    backend: Option<String>,
-    max_proposals: Option<usize>,
-    batch_size: usize,
-    dry_run: bool,
-    json: bool,
-) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-
-static REVIEWER_HANDLER: OnceLock<ReviewerHandler> = OnceLock::new();
-
-/// Install the reviewer-agent handler. Idempotent.
-pub fn register_reviewer_handler(handler: ReviewerHandler) {
-    let _ = REVIEWER_HANDLER.set(handler);
-}
-
-/// v0.28 Agent Inbox: handler for `vela find-tensions`.
-pub type TensionsHandler = fn(
-    frontier: PathBuf,
-    backend: Option<String>,
-    max_findings: Option<usize>,
-    dry_run: bool,
-    json: bool,
-) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-
-static TENSIONS_HANDLER: OnceLock<TensionsHandler> = OnceLock::new();
-
-/// Install the contradiction-finder handler. Idempotent.
-pub fn register_tensions_handler(handler: TensionsHandler) {
-    let _ = TENSIONS_HANDLER.set(handler);
-}
-
-/// v0.28 Agent Inbox: handler for `vela plan-experiments`.
-pub type ExperimentsHandler = fn(
-    frontier: PathBuf,
-    backend: Option<String>,
-    max_findings: Option<usize>,
-    dry_run: bool,
-    json: bool,
-) -> Pin<Box<dyn Future<Output = ()> + Send>>;
-
-static EXPERIMENTS_HANDLER: OnceLock<ExperimentsHandler> = OnceLock::new();
-
-/// Install the experiment-planner handler. Idempotent.
-pub fn register_experiments_handler(handler: ExperimentsHandler) {
-    let _ = EXPERIMENTS_HANDLER.set(handler);
-}
-
-// ── v0.47: session entry ─────────────────────────────────────────────
-//
 // Bare `vela` (no args) opens a session against the nearest `.vela/`
 // repo, walking up from cwd. The session prints a one-screen
 // dashboard, then accepts single-letter verb shortcuts or

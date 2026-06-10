@@ -30,10 +30,6 @@ path = "src/main.rs"
 [dependencies]
 vela-protocol = { workspace = true }
 vela-edge = { path = "../vela-edge" }
-vela-scientist = { workspace = true }
-vela-atlas = { workspace = true }
-vela-constellation = { workspace = true }
-vela-search = { workspace = true }
 vela-verify = { workspace = true }
 tokio = { workspace = true }
 serde = { workspace = true }
