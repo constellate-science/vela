@@ -2382,25 +2382,25 @@ async fn publish_entry(
     // Durable receipt: archive the canonical manifest bytes to object
     // storage, content-addressed by their own sha256. The signed manifest
     // is the publish receipt; after this it outlives the database.
-    if let Some(storage) = &state.storage {
-        if let (Ok(manifest_bytes), Ok(mhash)) = (
+    if let Some(storage) = &state.storage
+        && let (Ok(manifest_bytes), Ok(mhash)) = (
             vela_protocol::canonical::to_canonical_bytes(&manifest_value),
             vela_protocol::canonical::sha256_canonical(&manifest_value),
-        ) {
-            let key = format!("manifest/{mhash}");
-            match storage.put(&key, manifest_bytes, "application/json").await {
-                Ok(url) => {
-                    if let Err(e) = state
-                        .db
-                        .set_manifest_blob_url(&entry.vfr_id, &entry.signature, &url)
-                        .await
-                    {
-                        tracing::warn!(%entry.vfr_id, error = %e, "manifest archived but url not recorded");
-                    }
+        )
+    {
+        let key = format!("manifest/{mhash}");
+        match storage.put(&key, manifest_bytes, "application/json").await {
+            Ok(url) => {
+                if let Err(e) = state
+                    .db
+                    .set_manifest_blob_url(&entry.vfr_id, &entry.signature, &url)
+                    .await
+                {
+                    tracing::warn!(%entry.vfr_id, error = %e, "manifest archived but url not recorded");
                 }
-                Err(e) => {
-                    tracing::warn!(%entry.vfr_id, error = %e, "manifest archive failed; receipt remains db-only");
-                }
+            }
+            Err(e) => {
+                tracing::warn!(%entry.vfr_id, error = %e, "manifest archive failed; receipt remains db-only");
             }
         }
     }
