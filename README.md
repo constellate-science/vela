@@ -3,6 +3,18 @@
 Version control for scientific state, with a gate on what counts as verified.
 An open protocol and reference implementation.
 
+Sixty seconds, no trust required:
+
+```sh
+cargo build --release
+./target/release/vela reproduce examples/sidon-a309370
+```
+
+That command re-verifies every stored witness from scratch with frozen exact
+verifiers — same input, same answer, on any machine, forever. No model, no
+judgment, no reputation. Everything else in this repository exists to make
+results that pass that bar durable, signed, and composable.
+
 Vela compiles research artifacts (papers, notes, runs, proofs) into a versioned
 *frontier*: a signed, content-addressed, replayable record of what a field
 currently holds to be true. The unit it tracks is the *change* to that state,
@@ -70,9 +82,8 @@ confidence. A finding can be reviewer-accepted and still gate
 |------|------------|
 | `crates/vela-protocol` | The reference reducer — the normative state-transition function. |
 | `crates/vela-cli` | The `vela` command-line tool. |
-| `crates/vela-verify` | Frozen, independent exact verifiers (Sidon, Golomb, cap, B_h, covering, constant-weight, Costas, linear codes) — the reference verifier registry behind the gate and `vela reproduce`. |
+| `crates/vela-verify` | Frozen, independent exact verifiers (Sidon, Golomb, cap, B_h, covering, constant-weight, Costas, linear codes, and the Erdős certificate kinds: interval-product #1056, CRT partial cover #203, Kummer no-carry #684, min-binom-gcd #700, binomial deficiency #1093, exception enumeration #1094) — the reference verifier registry behind the gate and `vela reproduce`. |
 | `crates/vela-hub` | The federation hub: registry plus signed propose / accept. |
-| `crates/vela-atlas` `-constellation` `-relay` `-scientist` `-search` | Composition, federation, ingest adapters, and query. |
 | `clients/` | Standalone Python + TypeScript reducers — the second and third conformance implementations of the reference reducer. |
 | `bindings/` | Python HTTP SDK: a client for `vela serve --http` (read endpoints + signed write tools). Not a reducer. |
 | `conformance/` | The cross-implementation test-vector suite (reducer fixtures + gate reject-vectors). |

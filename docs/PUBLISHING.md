@@ -625,8 +625,8 @@ jq -e '.release_artifact_format == "vela.v0.release-assets"' RELEASE_MANIFEST.js
 Then validate the proof packet:
 
 ```bash
-tar -xzf anti-amyloid-translation-proof-packet.tar.gz
-vela packet validate anti-amyloid-translation-proof-packet
+tar -xzf sidon-a309370-proof-packet.tar.gz
+vela verify sidon-a309370-proof-packet   # replay + hash + signature check
 ```
 
 This proves that the packet is internally replayable and hash-bound.

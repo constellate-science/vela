@@ -1,5 +1,13 @@
 # Vela protocol specification v0.105.0
 
+> **CLI-surface note (v0.700).** The command surface was cut to a ~60-command
+> core in v0.700. Event kinds and reducer semantics in this spec remain
+> normative — the reducer still replays every historical event — but some CLI
+> invocations referenced below (`vela trace`, `vela bridge`, `vela federation`,
+> `vela discord`, `vela impact`) describe commands that were removed from the
+> binary. The events they minted are still valid state.
+
+
 This document defines the shipped v0 language kernel for portable,
 correctable frontier state. It is normative for finding bundles, typed links,
 proposal records, canonical events, proof freshness, content addressing,
