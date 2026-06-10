@@ -289,6 +289,7 @@ pub async fn run_command() {
                     after_hash: "sha256:null",
                     payload: serde_json::json!({ "attestation": att }),
                     caveats: Vec::new(),
+                    timestamp: None,
                 },
             );
             vela_protocol::reducer::apply_event(&mut project, &event)

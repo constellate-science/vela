@@ -1952,6 +1952,7 @@ mod tests {
             after_hash: NULL_HASH,
             payload: json!({"status": "contested"}),
             caveats: vec![],
+            timestamp: None,
         });
         apply_event(&mut state, &event).unwrap();
         assert!(state.findings[0].flags.contested);

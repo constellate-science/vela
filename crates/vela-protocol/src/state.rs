@@ -1050,6 +1050,7 @@ pub fn set_causal(
             "after": after,
         }),
         caveats: Vec::new(),
+        timestamp: None,
     });
     let event_id = event.id.clone();
     frontier.events.push(event);

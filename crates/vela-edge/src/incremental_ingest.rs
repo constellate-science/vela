@@ -364,6 +364,7 @@ mod tests {
             after_hash: &after_hash,
             payload: serde_json::json!({ "proposal_id": proposal_id }),
             caveats: vec![],
+            timestamp: None,
         })
     }
 

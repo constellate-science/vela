@@ -96,6 +96,7 @@ fn frontier_with_one_finding() -> Project {
             after_hash: &events::finding_hash(&finding),
             payload: json!({"proposal_id": "vpr_fixture", "finding": finding}),
             caveats: Vec::new(),
+            timestamp: None,
         }));
     frontier
 }
@@ -182,6 +183,7 @@ fn state_integrity_reports_stale_proof_after_accepted_event() {
             after_hash: &events::finding_hash(&frontier.findings[0]),
             payload: json!({"proposal_id": "vpr_after_proof", "status": "accepted"}),
             caveats: Vec::new(),
+            timestamp: None,
         }));
 
     let report = state_integrity::analyze(&frontier);

@@ -359,6 +359,13 @@ pub struct FindingEventInput<'a> {
     pub after_hash: &'a str,
     pub payload: Value,
     pub caveats: Vec<String>,
+    /// When the writer has already stamped a clock into the FINDING
+    /// (annotation timestamp, confidence updated_at), it MUST pass that
+    /// same instant here — the reducer reconstructs those fields from
+    /// `event.timestamp`, and two clock reads diverge the replay hash
+    /// by microseconds (caught live by verify_replay on the first
+    /// replayed finding.noted events). None = stamp now.
+    pub timestamp: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -388,7 +395,10 @@ fn default_schema() -> String {
 }
 
 pub fn new_finding_event(input: FindingEventInput<'_>) -> StateEvent {
-    let timestamp = Utc::now().to_rfc3339();
+    let timestamp = input
+        .timestamp
+        .map(|t| t.to_string())
+        .unwrap_or_else(|| Utc::now().to_rfc3339());
     let mut event = StateEvent {
         schema: EVENT_SCHEMA.to_string(),
         id: String::new(),
@@ -2097,6 +2107,7 @@ mod tests {
             after_hash: "sha256:abc",
             payload: json!({"status": "accepted", "proposal_id": "vpr_test"}),
             caveats: vec![],
+            timestamp: None,
         });
         let mut same = event.clone();
         same.id = String::new();
@@ -2131,6 +2142,7 @@ mod tests {
             after_hash: &after_hash,
             payload: json!({"status": "accepted", "proposal_id": "vpr_test"}),
             caveats: vec![],
+            timestamp: None,
         });
         let mut frontier = project::assemble("test", vec![finding], 0, 0, "test");
         frontier.events = vec![event.clone(), event];
@@ -2154,6 +2166,7 @@ mod tests {
             after_hash: "sha256:abc",
             payload: json!({"status": "accepted", "proposal_id": "vpr_test"}),
             caveats: vec![],
+            timestamp: None,
         }));
 
         let report = replay_report(&frontier);
@@ -2175,6 +2188,7 @@ mod tests {
             after_hash: &hash,
             payload: json!({"status": "accepted", "proposal_id": "vpr_test"}),
             caveats: vec![],
+            timestamp: None,
         });
         let mut frontier = project::assemble("test", vec![finding], 0, 0, "test");
         frontier.events.push(event);

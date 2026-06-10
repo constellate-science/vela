@@ -283,6 +283,7 @@ fn build_event_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<event
             after_hash: NULL_HASH,
             payload: json!({"proposal_id": proposal_id}),
             caveats: vec![],
+            timestamp: None,
         }));
         log.push(events::new_finding_event(FindingEventInput {
             kind: "finding.reviewed",
@@ -294,6 +295,7 @@ fn build_event_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<event
             after_hash: NULL_HASH,
             payload: json!({"proposal_id": proposal_id, "status": "accepted"}),
             caveats: vec![],
+            timestamp: None,
         }));
     }
     let root = &findings[0];
@@ -311,6 +313,7 @@ fn build_event_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<event
             "affected": CASCADE_DEPTH,
         }),
         caveats: vec![],
+        timestamp: None,
     });
     let retract_event_id = retract.id.clone();
     let root_id = root.id.clone();
@@ -337,6 +340,7 @@ fn build_event_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<event
                 "depth": depth as u64,
             }),
             caveats: vec![],
+            timestamp: None,
         }));
     }
     log
@@ -373,6 +377,7 @@ fn build_review_branches_log(
             after_hash: NULL_HASH,
             payload: json!({"proposal_id": proposal_id}),
             caveats: vec![],
+            timestamp: None,
         }));
         // Rotate through every status so all four arms in
         // apply_finding_reviewed land at least once.
@@ -387,6 +392,7 @@ fn build_review_branches_log(
             after_hash: NULL_HASH,
             payload: json!({"proposal_id": proposal_id, "status": status}),
             caveats: vec![],
+            timestamp: None,
         }));
         // Alternate integer vs fractional new_score to stress the
         // basis-string formatting (Rust {:.3}, Python :.3f, JS
@@ -411,6 +417,7 @@ fn build_review_branches_log(
                 "new_score": new,
             }),
             caveats: vec![],
+            timestamp: None,
         }));
     }
     log
@@ -437,6 +444,7 @@ fn build_annotations_log(
             after_hash: NULL_HASH,
             payload: json!({"proposal_id": proposal_id}),
             caveats: vec![],
+            timestamp: None,
         }));
         // First half get a noted; second half a caveated. Both go
         // through apply_finding_annotation but are dispatched on
@@ -467,6 +475,7 @@ fn build_annotations_log(
                 },
             }),
             caveats: vec![],
+            timestamp: None,
         }));
     }
     // Reject the last finding — the only event kind that's not
@@ -483,6 +492,7 @@ fn build_annotations_log(
             after_hash: NULL_HASH,
             payload: json!({"proposal_id": proposal_id}),
             caveats: vec![],
+            timestamp: None,
         }));
     }
     log
@@ -520,6 +530,7 @@ fn build_negative_results_log(
             after_hash: NULL_HASH,
             payload: json!({"proposal_id": proposal_id}),
             caveats: vec![],
+            timestamp: None,
         }));
     }
     // First null: registered trial against findings[0] — adequately
@@ -765,6 +776,7 @@ fn build_trajectories_log(
             after_hash: NULL_HASH,
             payload: json!({"proposal_id": proposal_id}),
             caveats: vec![],
+            timestamp: None,
         }));
     }
 
@@ -968,6 +980,7 @@ fn build_artifacts_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<e
             after_hash: NULL_HASH,
             payload: json!({"proposal_id": proposal_id}),
             caveats: vec![],
+            timestamp: None,
         }));
     }
 
@@ -1194,6 +1207,7 @@ fn build_tier_set_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<ev
             after_hash: NULL_HASH,
             payload: json!({"proposal_id": proposal_id}),
             caveats: vec![],
+            timestamp: None,
         }));
     }
 

@@ -1020,6 +1020,42 @@ mod tests {
 
     use crate::test_support::{make_finding, make_project};
 
+    /// The microsecond-skew regression: a writer that stamps a clock into
+    /// the FINDING (annotation timestamp) and lets the event constructor
+    /// take a second clock read produces a state the reducer cannot
+    /// reproduce (caught live by verify_replay on the first replayed
+    /// finding.noted events — materialized vs replayed hashes diverged by
+    /// ~30 microseconds). Writers must share one instant with the event.
+    #[test]
+    fn annotation_timestamps_survive_replay() {
+        use crate::proposals;
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join("note-skew");
+        let original = make_project(
+            "note-skew",
+            vec![make_finding("vf_note_skew", 0.5, "theoretical")],
+        );
+        init_repo(&dir, &original).unwrap();
+        let fid = original.findings[0].id.clone();
+        let proposal = proposals::new_proposal(
+            "finding.note",
+            crate::events::StateTarget {
+                r#type: "finding".to_string(),
+                id: fid,
+            },
+            "reviewer:skew-test",
+            "human",
+            "note for the skew regression",
+            serde_json::json!({"text": "the annotation and its event must share one clock read"}),
+            vec![],
+            vec![],
+        );
+        proposals::create_or_apply(&dir, proposal, true).unwrap();
+        let loaded = load(&VelaSource::VelaRepo(dir)).unwrap();
+        let v = crate::reducer::verify_replay(&loaded);
+        assert!(v.ok, "replay diverged after a note: {:?}", v.diffs);
+    }
+
     /// attempts / transfers / endorsements / contradictions have reducer
     /// arms but NO directory storage: the event log is their only
     /// persistence. Before the replay loader, `load_vela_repo` had no path

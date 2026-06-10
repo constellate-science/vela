@@ -3394,6 +3394,7 @@ fn apply_supersede(
             "new_finding_id": new_finding_id,
         }),
         caveats: proposal.caveats.clone(),
+        timestamp: None,
     }))
 }
 
@@ -3434,6 +3435,7 @@ fn apply_add(
             "proposal_id": proposal.id,
         }),
         caveats: proposal.caveats.clone(),
+        timestamp: None,
     }))
 }
 
@@ -3538,6 +3540,7 @@ fn apply_verifier_attach(
         after_hash: NULL_HASH,
         payload: json!({ "proposal_id": proposal.id, "attachment": att }),
         caveats: proposal.caveats.clone(),
+        timestamp: None,
     }))
 }
 
@@ -3579,6 +3582,7 @@ fn apply_review(
             "proposal_id": proposal.id,
         }),
         caveats: proposal.caveats.clone(),
+        timestamp: None,
     }))
 }
 
@@ -3603,7 +3607,7 @@ fn apply_caveat(
         id: annotation_id.clone(),
         text: text.to_string(),
         author: reviewer.to_string(),
-        timestamp: now,
+        timestamp: now.clone(),
         provenance: provenance.clone(),
     });
     let after_hash = events::finding_hash(&frontier.findings[idx]);
@@ -3625,6 +3629,7 @@ fn apply_caveat(
         after_hash: &after_hash,
         payload,
         caveats: proposal.caveats.clone(),
+        timestamp: Some(&now),
     }))
 }
 
@@ -3649,7 +3654,7 @@ fn apply_note(
         id: annotation_id.clone(),
         text: text.to_string(),
         author: reviewer.to_string(),
-        timestamp: now,
+        timestamp: now.clone(),
         provenance: provenance.clone(),
     });
     let after_hash = events::finding_hash(&frontier.findings[idx]);
@@ -3671,6 +3676,7 @@ fn apply_note(
         after_hash: &after_hash,
         payload,
         caveats: proposal.caveats.clone(),
+        timestamp: Some(&now),
     }))
 }
 
@@ -3784,6 +3790,7 @@ fn apply_finding_entity_resolve(
         after_hash: &after_hash,
         payload,
         caveats: proposal.caveats.clone(),
+        timestamp: None,
     }))
 }
 
@@ -3863,6 +3870,7 @@ fn apply_finding_entity_add(
         after_hash: &after_hash,
         payload,
         caveats: proposal.caveats.clone(),
+        timestamp: None,
     }))
 }
 
@@ -3924,6 +3932,7 @@ fn apply_finding_span_repair(
         after_hash: &after_hash,
         payload,
         caveats: proposal.caveats.clone(),
+        timestamp: None,
     }))
 }
 
@@ -4171,6 +4180,7 @@ fn apply_confidence_revise(
             "affected": cascade.as_ref().map(|c| c.affected).unwrap_or(0),
         }),
         caveats: proposal.caveats.clone(),
+        timestamp: Some(&now),
     });
 
     let source_event_id = source_event.id.clone();
@@ -4207,6 +4217,7 @@ fn apply_confidence_revise(
                         "proposal_id": proposal.id,
                     }),
                     caveats: vec![],
+                    timestamp: None,
                 }));
             }
         }
@@ -4239,6 +4250,7 @@ fn apply_reject(
             "status": "rejected",
         }),
         caveats: proposal.caveats.clone(),
+        timestamp: None,
     }))
 }
 
@@ -4281,6 +4293,7 @@ fn apply_retract(
             "cascade": cascade.cascade,
         }),
         caveats: vec!["Retraction impact is simulated over declared dependency links.".to_string()],
+        timestamp: None,
     });
     let source_event_id = source_event.id.clone();
 
@@ -4313,6 +4326,7 @@ fn apply_retract(
                     "proposal_id": proposal.id,
                 }),
                 caveats: vec![],
+                timestamp: None,
             }));
         }
     }

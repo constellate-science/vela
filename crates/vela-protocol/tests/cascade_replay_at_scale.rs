@@ -225,6 +225,7 @@ fn build_event_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<State
             after_hash: NULL_HASH,
             payload: json!({"proposal_id": proposal_id}),
             caveats: vec![],
+            timestamp: None,
         }));
         log.push(events::new_finding_event(FindingEventInput {
             kind: "finding.reviewed",
@@ -236,6 +237,7 @@ fn build_event_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<State
             after_hash: NULL_HASH,
             payload: json!({"proposal_id": proposal_id, "status": "accepted"}),
             caveats: vec![],
+            timestamp: None,
         }));
     }
 
@@ -256,6 +258,7 @@ fn build_event_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<State
             "affected": CASCADE_DEPTH,
         }),
         caveats: vec![],
+        timestamp: None,
     });
     let retract_event_id = retract_event.id.clone();
     let root_id = root.id.clone();
@@ -285,6 +288,7 @@ fn build_event_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<State
                 "depth": depth as u64,
             }),
             caveats: vec![],
+            timestamp: None,
         }));
     }
 

@@ -266,6 +266,7 @@ pub fn expire_overdue_predictions(project: &mut Project, now: DateTime<Utc>) -> 
                 "expired_at": now_str,
             }),
             caveats: Vec::new(),
+            timestamp: None,
         });
         project.events.push(event);
         report.newly_expired.push(pred_id);
