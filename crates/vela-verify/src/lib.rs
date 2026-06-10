@@ -477,7 +477,7 @@ pub fn verify_crt_partial_cover(m: &str, rows: &[CrtCoverRow]) -> VerifyResult {
     }
     for row in rows {
         let p = row.p;
-        if p < 5 || p > 1_000_000 || !is_prime(p) {
+        if !(5..=1_000_000).contains(&p) || !is_prime(p) {
             return VerifyResult::fail(format!("row p={p} must be a prime in [5, 10^6]"));
         }
         let ord2 = match multiplicative_order(2, p) {
@@ -524,8 +524,8 @@ pub fn verify_crt_partial_cover(m: &str, rows: &[CrtCoverRow]) -> VerifyResult {
         let (al, be, ga) = (row.line[0], row.line[1], row.line[2]);
         for k in 0..h {
             for l in 0..h {
-                let lhs = (mod_pow(2, k, p) * mod_pow(3, l, p) % p * mm % p + 1) % p == 0;
-                let rhs = (al * k + be * l) % h == ga % h;
+                let lhs = (mod_pow(2, k, p) * mod_pow(3, l, p) % p * mm % p + 1).is_multiple_of(p);
+                let rhs = (al * k + be * l) % h == ga % h; // affine line mod h
                 if lhs != rhs {
                     return VerifyResult::fail(format!(
                         "row p={p}: congruence line fails at (k, l) = ({k}, {l})"
@@ -651,7 +651,7 @@ fn divides_smooth(mut x: u128, i: u64, k: u64) -> bool {
         }
         let pp = u128::from(p);
         let mut e = 0u64;
-        while x % pp == 0 {
+        while x.is_multiple_of(pp) {
             x /= pp;
             e += 1;
         }
