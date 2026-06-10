@@ -109,6 +109,10 @@ pub enum Witness {
         claimed_d: usize,
         generator: Vec<Vec<i64>>,
     },
+    /// An Erdős #1056 cut-equality certificate: a prime `p` and strictly
+    /// increasing cuts `c_0 < ... < c_k` such that every consecutive
+    /// interval `(c_{i-1}, c_i]` has integer product `== 1 (mod p)`.
+    IntervalProduct { p: u64, cuts: Vec<u64> },
 }
 
 impl Witness {
@@ -123,6 +127,7 @@ impl Witness {
             Witness::ConstantWeight { .. } => "constant_weight",
             Witness::Costas { .. } => "costas",
             Witness::LinearCode { .. } => "linear_code",
+            Witness::IntervalProduct { .. } => "interval_product",
         }
     }
 }
@@ -142,6 +147,7 @@ pub fn verify_witness(witness: &Witness) -> VerifyResult {
             with_size(verify_bh(points, *n, *h), points.len(), *claimed_size)
         }
         Witness::Covering { v, k, t, blocks } => verify_covering(blocks, *v, *k, *t),
+        Witness::IntervalProduct { p, cuts } => verify_interval_product(*p, cuts),
         Witness::ConstantWeight { n, d, w, words, claimed_size } => {
             with_size(verify_constant_weight(words, *n, *d, *w), words.len(), *claimed_size)
         }
@@ -208,6 +214,40 @@ pub fn verify_sidon(points: &[Vec<i64>], n: usize) -> VerifyResult {
 
 /// A Golomb ruler: integer marks with all `C(m,2)` pairwise differences
 /// distinct.
+/// Verify an Erdős #1056 cut-equality certificate: a prime `p` and
+/// strictly increasing cuts `c_0 < ... < c_k` such that every consecutive
+/// interval `(c_{i-1}, c_i]` has integer product `== 1 (mod p)`. Pure
+/// modular arithmetic — deterministic and total, no search.
+pub fn verify_interval_product(p: u64, cuts: &[u64]) -> VerifyResult {
+    if !is_prime(p) {
+        return VerifyResult::fail(format!("modulus p={p} must be prime"));
+    }
+    if cuts.len() < 2 {
+        return VerifyResult::fail("need at least two cuts (one interval)");
+    }
+    for w in cuts.windows(2) {
+        if w[0] >= w[1] {
+            return VerifyResult::fail("cuts must be strictly increasing");
+        }
+    }
+    for w in cuts.windows(2) {
+        let mut prod: u64 = 1;
+        for m in (w[0] + 1)..=w[1] {
+            prod = ((prod as u128 * (m % p) as u128) % p as u128) as u64;
+        }
+        if prod != 1 {
+            return VerifyResult::fail(format!(
+                "interval ({}, {}] has product {prod} mod {p} != 1",
+                w[0], w[1]
+            ));
+        }
+    }
+    VerifyResult::ok(format!(
+        "Erdos #1056 certificate: prime p={p}, {} consecutive interval(s) each with product 1 mod p",
+        cuts.len() - 1
+    ))
+}
+
 pub fn verify_golomb(marks: &[i64]) -> VerifyResult {
     let set: HashSet<&i64> = marks.iter().collect();
     if set.len() != marks.len() {
@@ -604,6 +644,19 @@ mod tests {
             vec![0, 1, 0],
             vec![0, 0, 1],
         ]
+    }
+
+    #[test]
+    fn interval_product_accepts_erdos1056_example_and_rejects_corruption() {
+        // erdosproblems.com/1056 example: p=11, cuts [2,4,7].
+        // (3·4)=12≡1, (5·6·7)=210≡1 (mod 11).
+        assert!(verify_interval_product(11, &[2, 4, 7]).ok);
+        // A non-prime modulus is rejected.
+        assert!(!verify_interval_product(12, &[2, 4, 7]).ok);
+        // Perturb a cut so an interval product is no longer 1 mod p.
+        assert!(!verify_interval_product(11, &[2, 4, 8]).ok);
+        // Non-increasing cuts are rejected.
+        assert!(!verify_interval_product(11, &[4, 4, 7]).ok);
     }
 
     #[test]
