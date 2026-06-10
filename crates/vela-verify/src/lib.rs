@@ -121,6 +121,16 @@ pub enum Witness {
     /// increasing cuts `c_0 < ... < c_k` such that every consecutive
     /// interval `(c_{i-1}, c_i]` has integer product `== 1 (mod p)`.
     IntervalProduct { p: u64, cuts: Vec<u64> },
+    /// A balanced r-coloring of K_n (Erdős #617 shape): every
+    /// (r+1)-vertex subset must see all r colors among its internal
+    /// edges. `edge_colors` keys are "i,j" with i<j, 0-indexed; colors
+    /// are 1..=r. For K_26 r=5 this is C(26,6)=230,230 subset checks —
+    /// instant.
+    BalancedColoring {
+        n: usize,
+        r: usize,
+        edge_colors: std::collections::BTreeMap<String, u32>,
+    },
     /// An Erdős #203 partial CRT covering certificate: a modulus `m`
     /// (decimal string, coprime to 6) and prime rows, each pinning the
     /// multiplicative orders of 2 and 3 mod `p` and an affine line
@@ -177,6 +187,13 @@ pub struct LratStep {
     pub id: u64,
     pub literals: Vec<i64>,
     pub hints: Vec<u64>,
+    /// RAT justification, used only when the direct RUP check fails:
+    /// for EVERY db clause containing the negated pivot (the step's
+    /// FIRST literal), a `(clause_id, resolvent_hints)` pair whose
+    /// resolvent must itself be RUP. Tautological resolvents are
+    /// vacuously fine. Deletion lines remain unsupported.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rat_hints: Vec<(u64, Vec<u64>)>,
 }
 
 /// One prime row of an Erdős #203 partial-cover certificate.
@@ -231,6 +248,7 @@ impl Witness {
             Witness::Costas { .. } => "costas",
             Witness::LinearCode { .. } => "linear_code",
             Witness::IntervalProduct { .. } => "interval_product",
+            Witness::BalancedColoring { .. } => "balanced_coloring",
             Witness::CrtPartialCover { .. } => "crt_partial_cover",
             Witness::KummerNoCarry { .. } => "kummer_no_carry",
             Witness::MinBinomGcd { .. } => "min_binom_gcd",
@@ -265,6 +283,12 @@ pub fn dominates(new: &Witness, prior: &Witness) -> Result<bool, String> {
             Ok(p1.len() > p2.len())
         }
         (Golomb { marks: m1, .. }, Golomb { marks: m2, .. }) => Ok(m1.len() > m2.len()),
+        (BalancedColoring { n: n1, r: r1, .. }, BalancedColoring { n: n2, r: r2, .. }) => {
+            if r1 != r2 {
+                return Err(format!("different r ({r1} vs {r2}); not comparable"));
+            }
+            Ok(n1 > n2)
+        }
         (IntervalProduct { p: p1, cuts: c1 }, IntervalProduct { p: p2, cuts: c2 }) => {
             if p1 == p2 {
                 Ok(c1.len() > c2.len())
@@ -302,6 +326,9 @@ pub fn verify_witness(witness: &Witness) -> VerifyResult {
         } => with_size(verify_bh(points, *n, *h), points.len(), *claimed_size),
         Witness::Covering { v, k, t, blocks } => verify_covering(blocks, *v, *k, *t),
         Witness::IntervalProduct { p, cuts } => verify_interval_product(*p, cuts),
+        Witness::BalancedColoring { n, r, edge_colors } => {
+            verify_balanced_coloring(*n, *r, edge_colors)
+        }
         Witness::CrtPartialCover { m, rows } => verify_crt_partial_cover(m, rows),
         Witness::KummerNoCarry { entries } => verify_kummer_no_carry(entries),
         Witness::MinBinomGcd { cases } => verify_min_binom_gcd(cases),
@@ -391,6 +418,77 @@ pub fn verify_sidon(points: &[Vec<i64>], n: usize) -> VerifyResult {
 /// strictly increasing cuts `c_0 < ... < c_k` such that every consecutive
 /// interval `(c_{i-1}, c_i]` has integer product `== 1 (mod p)`. Pure
 /// modular arithmetic — deterministic and total, no search.
+/// Erdős #617 witness shape: a balanced r-coloring of K_n. Checks that
+/// every edge {i,j} (i<j, 0-indexed) is colored in 1..=r and that every
+/// (r+1)-subset of vertices sees ALL r colors among its internal edges.
+pub fn verify_balanced_coloring(
+    n: usize,
+    r: usize,
+    edge_colors: &std::collections::BTreeMap<String, u32>,
+) -> VerifyResult {
+    if r < 2 || n < r + 1 {
+        return VerifyResult::fail(format!("need r >= 2 and n >= r+1 (got n={n}, r={r})"));
+    }
+    // Dense lookup table from the string-keyed map.
+    let mut color = vec![vec![0u32; n]; n];
+    for (key, &c) in edge_colors {
+        let Some((a, b)) = key.split_once(',') else {
+            return VerifyResult::fail(format!("bad edge key '{key}' (want \"i,j\")"));
+        };
+        let (Ok(i), Ok(j)) = (a.trim().parse::<usize>(), b.trim().parse::<usize>()) else {
+            return VerifyResult::fail(format!("bad edge key '{key}'"));
+        };
+        if i >= n || j >= n || i >= j {
+            return VerifyResult::fail(format!("edge '{key}' out of range or not i<j for n={n}"));
+        }
+        if c == 0 || c as usize > r {
+            return VerifyResult::fail(format!("edge '{key}' color {c} outside 1..={r}"));
+        }
+        color[i][j] = c;
+    }
+    for (i, row) in color.iter().enumerate() {
+        for (j, &c) in row.iter().enumerate().skip(i + 1) {
+            if c == 0 {
+                return VerifyResult::fail(format!("edge {i},{j} is uncolored"));
+            }
+        }
+    }
+    // Every (r+1)-subset must see all r colors. Iterate subsets via a
+    // simple combinations walker (k = r+1).
+    let k = r + 1;
+    let mut idx: Vec<usize> = (0..k).collect();
+    let mut checked = 0u64;
+    loop {
+        let mut seen = vec![false; r + 1];
+        for x in 0..k {
+            for y in (x + 1)..k {
+                seen[color[idx[x]][idx[y]] as usize] = true;
+            }
+        }
+        if let Some(missing) = (1..=r).find(|&c| !seen[c]) {
+            return VerifyResult::fail(format!("subset {:?} sees no edge of color {missing}", idx));
+        }
+        checked += 1;
+        // next combination
+        let mut pos = k;
+        while pos > 0 {
+            pos -= 1;
+            if idx[pos] != pos + n - k {
+                idx[pos] += 1;
+                for q in (pos + 1)..k {
+                    idx[q] = idx[q - 1] + 1;
+                }
+                break;
+            }
+            if pos == 0 {
+                return VerifyResult::ok(format!(
+                    "balanced {r}-coloring of K_{n} verified: {checked} {k}-subsets each see all {r} colors"
+                ));
+            }
+        }
+    }
+}
+
 pub fn verify_interval_product(p: u64, cuts: &[u64]) -> VerifyResult {
     if !is_prime(p) {
         return VerifyResult::fail(format!("modulus p={p} must be prime"));
@@ -918,6 +1016,41 @@ pub fn verify_binom_exception_enum(k_max: u64, exceptions: &[(u64, u64)]) -> Ver
 /// propagating `¬c` through the hinted clauses reaches a conflict — i.e.
 /// `c` is RUP-implied by the current clause set. Hints that are satisfied,
 /// non-unit, or unknown are rejected (a malformed proof never passes).
+/// RAT check on the step's FIRST literal (the LRAT convention): the
+/// step is a Resolution Asymmetric Tautology iff for every db clause D
+/// containing the negated pivot, the resolvent (step ∪ D minus the
+/// pivot pair) is RUP using the hints the step supplies for D's id.
+/// Tautological resolvents pass vacuously. A clause with -pivot that
+/// has no supplied hints fails the whole step — nothing is guessed.
+fn rat_check(step: &LratStep, db: &std::collections::HashMap<u64, Vec<i64>>) -> bool {
+    let Some(&pivot) = step.literals.first() else {
+        return false; // the empty clause can never be RAT
+    };
+    let supplied: std::collections::HashMap<u64, &Vec<u64>> =
+        step.rat_hints.iter().map(|(id, h)| (*id, h)).collect();
+    for (&cid, clause) in db {
+        if !clause.contains(&-pivot) {
+            continue;
+        }
+        let mut resolvent: Vec<i64> = step.literals.clone();
+        for &l in clause {
+            if l != -pivot && l != 0 && !resolvent.contains(&l) {
+                resolvent.push(l);
+            }
+        }
+        if resolvent.iter().any(|&l| resolvent.contains(&-l) && l > 0) {
+            continue; // tautological resolvent: vacuously implied
+        }
+        let Some(hints) = supplied.get(&cid) else {
+            return false;
+        };
+        if !rup_checks(&resolvent, hints, db) {
+            return false;
+        }
+    }
+    true
+}
+
 fn rup_checks(c: &[i64], hints: &[u64], db: &std::collections::HashMap<u64, Vec<i64>>) -> bool {
     // Falsify every literal of c: var |l| takes the value that makes l false.
     let mut assign: std::collections::HashMap<i64, bool> = std::collections::HashMap::new();
@@ -992,9 +1125,9 @@ pub fn verify_unsat_cert(cnf: &[Vec<i64>], proof: &[LratStep]) -> VerifyResult {
         if step.id == 0 {
             return VerifyResult::fail("proof clause id 0 is reserved");
         }
-        if !rup_checks(&step.literals, &step.hints, &db) {
+        if !rup_checks(&step.literals, &step.hints, &db) && !rat_check(step, &db) {
             return VerifyResult::fail(format!(
-                "LRAT step {} is not RUP-implied by its antecedents",
+                "LRAT step {} is neither RUP-implied nor RAT on its first literal",
                 step.id
             ));
         }
@@ -1424,6 +1557,7 @@ mod tests {
                 id: 3,
                 literals: vec![],
                 hints: vec![1, 2],
+                rat_hints: vec![],
             }],
         };
         assert!(verify_witness(&w).ok);
@@ -1434,6 +1568,7 @@ mod tests {
                 id: 4,
                 literals: vec![],
                 hints: vec![1, 2, 3],
+                rat_hints: vec![],
             }],
         };
         assert!(verify_witness(&w2).ok);
@@ -1444,6 +1579,7 @@ mod tests {
                 id: 4,
                 literals: vec![],
                 hints: vec![1, 2],
+                rat_hints: vec![],
             }],
         };
         assert!(!verify_witness(&bad).ok);
@@ -1454,6 +1590,7 @@ mod tests {
                 id: 2,
                 literals: vec![],
                 hints: vec![1],
+                rat_hints: vec![],
             }],
         };
         assert!(!verify_witness(&sat).ok);
@@ -1688,5 +1825,120 @@ mod tests {
         let back: Witness = serde_json::from_str(&json).unwrap();
         assert_eq!(back, w);
         assert!(verify_witness(&back).ok);
+    }
+}
+
+#[cfg(test)]
+mod balanced_coloring_tests {
+    use super::*;
+    use std::collections::BTreeMap;
+
+    fn pentagon_k5() -> BTreeMap<String, u32> {
+        let pent = [(0, 1), (1, 2), (2, 3), (3, 4), (0, 4)];
+        let mut ec = BTreeMap::new();
+        for i in 0..5usize {
+            for j in (i + 1)..5 {
+                let c = if pent.contains(&(i, j)) { 1 } else { 2 };
+                ec.insert(format!("{i},{j}"), c);
+            }
+        }
+        ec
+    }
+
+    #[test]
+    fn pentagon_coloring_is_balanced() {
+        let r = verify_balanced_coloring(5, 2, &pentagon_k5());
+        assert!(r.ok, "{}", r.message);
+    }
+
+    #[test]
+    fn flipped_edge_breaks_balance() {
+        let mut ec = pentagon_k5();
+        ec.insert("0,1".to_string(), 2);
+        let r = verify_balanced_coloring(5, 2, &ec);
+        assert!(!r.ok);
+    }
+
+    #[test]
+    fn dominates_orders_by_n_at_same_r() {
+        let w5 = Witness::BalancedColoring {
+            n: 5,
+            r: 2,
+            edge_colors: pentagon_k5(),
+        };
+        let w4 = Witness::BalancedColoring {
+            n: 4,
+            r: 2,
+            edge_colors: BTreeMap::new(),
+        };
+        assert_eq!(dominates(&w5, &w4), Ok(true));
+        assert_eq!(dominates(&w4, &w5), Ok(false));
+    }
+}
+
+#[cfg(test)]
+mod rat_tests {
+    use super::*;
+
+    /// cnf: (1 2)(-1 3)(2)(-2) — UNSAT via the unit pair. Step 5 adds
+    /// the blocked clause (-1 -2): NOT RUP (clause (2) is satisfied
+    /// under the falsifying assignment, blocking propagation) but RAT
+    /// on pivot -1 — the only clause containing 1 is (1 2), whose
+    /// resolvent {-1,-2,2} is tautological. Step 6 derives empty.
+    fn rat_cert() -> (Vec<Vec<i64>>, Vec<LratStep>) {
+        let cnf = vec![vec![1, 2], vec![-1, 3], vec![2], vec![-2]];
+        let proof = vec![
+            LratStep {
+                id: 5,
+                literals: vec![-1, -2],
+                hints: vec![],
+                rat_hints: vec![],
+            },
+            LratStep {
+                id: 6,
+                literals: vec![],
+                hints: vec![3, 4],
+                rat_hints: vec![],
+            },
+        ];
+        (cnf, proof)
+    }
+
+    #[test]
+    fn blocked_clause_step_verifies_as_rat() {
+        let (cnf, proof) = rat_cert();
+        let r = verify_unsat_cert(&cnf, &proof);
+        assert!(r.ok, "{}", r.message);
+    }
+
+    #[test]
+    fn rat_step_with_unhinted_resolvent_is_rejected() {
+        // Add (1 -3) to the cnf: now clauses containing pivot-negation 1
+        // are (1 2) [tautological resolvent, fine] AND (1 -3), whose
+        // resolvent (-1 -2 -3) is NOT tautological and has no supplied
+        // hints — the step must be refused, never guessed through.
+        let (mut cnf, proof) = rat_cert();
+        cnf.push(vec![1, -3]);
+        let r = verify_unsat_cert(&cnf, &proof);
+        assert!(!r.ok);
+        assert!(
+            r.message.contains("neither RUP-implied nor RAT"),
+            "{}",
+            r.message
+        );
+    }
+
+    #[test]
+    fn rat_with_supplied_resolvent_hints_verifies() {
+        // Same extended cnf, but the step now supplies hints proving the
+        // (1 -3) resolvent (-1 -2 -3) is RUP: falsify 1=T,2=T,3=T; then
+        // clause (-2) [id 4] conflicts immediately.
+        let (mut cnf, mut proof) = rat_cert();
+        cnf.push(vec![1, -3]); // becomes clause id 5
+        proof[0].id = 6;
+        proof[0].rat_hints = vec![(5, vec![4])];
+        proof[1].id = 7;
+        let r = verify_unsat_cert(&cnf, &proof);
+        assert!(r.ok, "{}", r.message);
     }
 }

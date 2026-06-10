@@ -923,23 +923,35 @@ impl HubDb {
     /// finding objects lack signer_pubkey, re-run extraction from the
     /// stored materialized snapshot. Idempotent.
     pub async fn backfill_signer_pubkeys(&self) -> Result<usize, String> {
-        let vfrs: Vec<(String, String)> = match self {
+        // The DB's materialized_snapshot_json is a stripped projection
+        // (no actors array), so signer resolution MUST come from the
+        // full content-addressed snapshot blob in object storage —
+        // which is the signed substrate and always carries actors.
+        let vfrs: Vec<(String, Option<String>)> = match self {
             Self::Postgres(p) => sqlx::query_as(
-                "SELECT vfr_id, materialized_snapshot_json::text FROM frontiers WHERE status = 'live'",
+                "SELECT vfr_id, snapshot_blob_url FROM frontiers WHERE status = 'live' AND snapshot_blob_url IS NOT NULL",
             )
             .fetch_all(p)
             .await
             .map_err(|e| e.to_string())?,
             Self::Sqlite(p) => sqlx::query_as(
-                "SELECT vfr_id, materialized_snapshot_json FROM frontiers WHERE status = 'live'",
+                "SELECT vfr_id, snapshot_blob_url FROM frontiers WHERE status = 'live' AND snapshot_blob_url IS NOT NULL",
             )
             .fetch_all(p)
             .await
             .map_err(|e| e.to_string())?,
         };
+        let client = reqwest::Client::new();
         let mut updated = 0usize;
-        for (vfr, snap_text) in vfrs {
-            let Ok(snapshot) = serde_json::from_str::<Value>(&snap_text) else {
+        for (vfr, blob_url) in vfrs {
+            let Some(url) = blob_url else { continue };
+            let Ok(resp) = client.get(&url).send().await else {
+                continue;
+            };
+            let Ok(text) = resp.text().await else {
+                continue;
+            };
+            let Ok(snapshot) = serde_json::from_str::<Value>(&text) else {
                 continue;
             };
             for row in collect_frontier_objects(&snapshot) {

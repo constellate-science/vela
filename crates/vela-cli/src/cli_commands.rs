@@ -248,6 +248,15 @@ pub(crate) enum Commands {
         format: String,
         #[arg(short, long)]
         output: Option<PathBuf>,
+        /// Venue-native projection: oeis (a %H comment block + b-file
+        /// fragment from sidon witnesses) or nanopub (one TriG document
+        /// per verified finding). Rides existing registries; never
+        /// invents a destination.
+        #[arg(long)]
+        venue: Option<String>,
+        /// For --venue oeis: the OEIS A-number to format against.
+        #[arg(long, default_value = "A309370")]
+        sequence: String,
     },
     /// Recompute SHA-256 over every file in a proof packet, compare to
     /// the manifest, and validate the proof-trace chain. Friendlier
@@ -919,6 +928,12 @@ pub(crate) enum Commands {
         key: PathBuf,
         #[arg(long)]
         json: bool,
+    },
+
+    /// Emit shell completions for bash, zsh, or fish.
+    Completions {
+        /// bash | zsh | fish
+        shell: String,
     },
 
     /// Park bytes in the hub's UNTRUSTED scratch tier; returns a vsx_

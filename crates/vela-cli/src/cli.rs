@@ -214,7 +214,16 @@ pub async fn run_command() {
             frontier,
             format,
             output,
-        } => export::run(&frontier, &format, output.as_deref()),
+            venue,
+            sequence,
+        } => match venue.as_deref() {
+            None => export::run(&frontier, &format, output.as_deref()),
+            Some("oeis") => cmd_export_oeis(&frontier, &sequence),
+            Some("nanopub") => cmd_export_nanopub(&frontier),
+            Some(other) => fail(&format!(
+                "unsupported venue '{other}'. Valid: oeis, nanopub"
+            )),
+        },
         Commands::Verify { path, json } => cmd_verify(&path, json),
         Commands::Conformance { dir } => {
             let _ = conformance::run(&dir);
@@ -275,6 +284,21 @@ pub async fn run_command() {
             }
         }
 
+        Commands::Completions { shell } => {
+            use clap::CommandFactory;
+            let mut cmd = Cli::command();
+            let name = cmd.get_name().to_string();
+            let shell_kind: clap_complete::Shell = match shell.as_str() {
+                "bash" => clap_complete::Shell::Bash,
+                "zsh" => clap_complete::Shell::Zsh,
+                "fish" => clap_complete::Shell::Fish,
+                other => fail_return(&format!(
+                    "unsupported shell '{other}'. Valid: bash, zsh, fish"
+                )),
+            };
+            clap_complete::generate(shell_kind, &mut cmd, name, &mut std::io::stdout());
+        }
+
         Commands::Stash {
             file,
             to,
@@ -311,7 +335,9 @@ pub async fn run_command() {
                     );
                 }
             } else {
-                fail(&format!("stash failed ({status}): {payload}"));
+                fail(&format!(
+                    "stash failed ({status}): {payload}. Check the hub URL (--to), that your pubkey is hex, and that the file is under 10 MiB"
+                ));
             }
         }
 
@@ -377,7 +403,11 @@ pub async fn run_command() {
             let signing_key = parse_signing_key(&key_hex);
             let mut project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
             if !project.proposals.iter().any(|p| p.id == proposal_id) {
-                fail(&format!("proposal {proposal_id} not found"));
+                fail(&format!(
+                    "proposal {proposal_id} not found in {} — run `vela status {}` to list pending proposals, or check the frontier path",
+                    frontier.display(),
+                    frontier.display()
+                ));
             }
             let target = project
                 .proposals
@@ -1664,7 +1694,10 @@ fn cmd_carina(action: CarinaAction) {
         }
         CarinaAction::Schema { primitive } => match carina_validate::schema_text(&primitive) {
             Some(text) => print!("{text}"),
-            None => fail(&format!("carina: unknown primitive '{primitive}'")),
+            None => fail(&format!(
+                "carina: unknown primitive '{primitive}'. Valid: {}",
+                carina_validate::PRIMITIVE_NAMES.join(", ")
+            )),
         },
         CarinaAction::Validate {
             path,
@@ -3034,6 +3067,32 @@ fn next_non_ws(raw: &str, start: usize) -> Option<usize> {
 fn cmd_status(path: &Path, json: bool) {
     let project = repo::load_from_path(path).unwrap_or_else(|e| fail_return(&e));
 
+    // Replay integrity: the one-line truth a stranger checks first.
+    let replay = vela_protocol::reducer::verify_replay(&project);
+    let replay_line = if replay.ok {
+        "reproduced".to_string()
+    } else {
+        format!("DIVERGED ({} diff(s))", replay.diffs.len())
+    };
+
+    // Production state: live leases, attestations, registrations.
+    let now_iso = chrono::Utc::now().to_rfc3339();
+    let live_leases: Vec<&vela_protocol::project::AttemptClaim> = project
+        .attempt_claims
+        .iter()
+        .filter(|c| {
+            chrono::DateTime::parse_from_rfc3339(&c.claimed_at)
+                .map(|t| {
+                    (t + chrono::Duration::seconds(c.lease_ttl_seconds as i64)).to_rfc3339()
+                        > now_iso
+                })
+                .unwrap_or(false)
+        })
+        .collect();
+    let attestation_count = project.statement_attestations.len();
+    let registration_count = project.statement_registrations.len();
+    let last_event_ts = project.events.iter().map(|e| e.timestamp.as_str()).max();
+
     // Inbox counts.
     let mut pending_total = 0usize;
     let mut pending_by_kind: std::collections::BTreeMap<String, usize> =
@@ -3137,6 +3196,29 @@ fn cmd_status(path: &Path, json: bool) {
     println!();
     println!("  frontier:    {}", frontier_label(&project));
     println!("  vfr_id:      {}", project.frontier_id());
+    println!(
+        "  replay:      {}",
+        if replay.ok {
+            style::ok(&replay_line)
+        } else {
+            style::warn(&replay_line)
+        }
+    );
+    println!("  last event:  {}", last_event_ts.unwrap_or("none"));
+    if !live_leases.is_empty() {
+        println!("  leases:      {} live", live_leases.len());
+        for l in live_leases.iter().take(5) {
+            println!(
+                "    · {} by {} (ttl {}s from {})",
+                l.obligation_id, l.claimant_actor, l.lease_ttl_seconds, l.claimed_at
+            );
+        }
+    }
+    if attestation_count + registration_count > 0 {
+        println!(
+            "  judgment:    {attestation_count} statement attestation(s), {registration_count} registration(s)"
+        );
+    }
     println!(
         "  findings:    {}    events: {}    peers: {}    actors: {}",
         project.findings.len(),
@@ -6974,6 +7056,131 @@ fn cmd_gate(action: GateAction) {
 
 /// `vela reproduce` — re-verify stored witnesses from scratch with the
 /// frozen exact verifiers. Trust is never self-reported.
+/// Venue export, OEIS shape: project sidon witnesses into the exact
+/// comment + b-file form the A309370 adoptions used. Rides the existing
+/// registry's subsidy; the witness repo URL is the %H line.
+fn cmd_export_oeis(path: &Path, sequence: &str) {
+    let files = collect_witness_files(path);
+    let mut rows: Vec<(usize, usize)> = Vec::new();
+    for file in &files {
+        let Ok(raw) = std::fs::read_to_string(file) else {
+            continue;
+        };
+        let Ok(w) = parse_witness(&raw) else { continue };
+        if let vela_verify::Witness::Sidon { n, points, .. } = &w {
+            let r = vela_verify::verify_witness(&w);
+            if r.ok {
+                rows.push((*n, points.len()));
+            }
+        }
+    }
+    if rows.is_empty() {
+        fail(&format!(
+            "no verified sidon witnesses under {} — venue oeis currently projects sidon sets only",
+            path.display()
+        ));
+    }
+    rows.sort();
+    rows.dedup();
+    println!("%% OEIS {sequence} update material (generated by `vela export --venue oeis`)");
+    println!("%% Every value below is backed by an explicit witness re-verified by a frozen");
+    println!("%% deterministic checker. Witnesses + verifier:");
+    println!(
+        "%H {sequence} W. Blair, <a href=\"https://github.com/willblair0708/verified-combinatorics\">Verified witnesses and verification script</a>"
+    );
+    for (n, size) in &rows {
+        println!(
+            "%% a({n}) >= {size}  [witness verified: {size} points, all pairwise sums distinct]"
+        );
+    }
+    println!("%% b-file fragment (lower bounds):");
+    for (n, size) in &rows {
+        println!("{n} {size}");
+    }
+}
+
+/// Venue export, nanopub shape: one TriG document per verified finding
+/// with a verifier attachment — assertion graph carries the claim,
+/// provenance carries the verifier + witness hash + replay command,
+/// pubinfo carries the signing key. Pure projection of signed state.
+fn cmd_export_nanopub(path: &Path) {
+    let project = repo::load_from_path(path).unwrap_or_else(|e| fail_return(&e));
+    let mut emitted = 0usize;
+    for f in &project.findings {
+        let atts: Vec<_> = project
+            .verifier_attachments
+            .iter()
+            .filter(|a| a.target == f.id && format!("{:?}", a.outcome).contains("Passed"))
+            .collect();
+        let attestations: Vec<_> = project
+            .statement_attestations
+            .iter()
+            .filter(|a| a.target == f.id)
+            .collect();
+        // Emit only for findings carrying machine receipts (passing
+        // attachments) or signed human judgment (statement attestations)
+        // — a nanopub with neither would be assertion-only noise.
+        if atts.is_empty() && attestations.is_empty() {
+            continue;
+        }
+        let np = format!("http://purl.org/vela/np/{}", f.id);
+        println!("@prefix np: <http://www.nanopub.org/nschema#> .");
+        println!("@prefix prov: <http://www.w3.org/ns/prov#> .");
+        println!("@prefix vela: <http://purl.org/vela/ns#> .");
+        println!();
+        println!("<{np}#head> {{");
+        println!("  <{np}> a np:Nanopublication ;");
+        println!("    np:hasAssertion <{np}#assertion> ;");
+        println!("    np:hasProvenance <{np}#provenance> ;");
+        println!("    np:hasPublicationInfo <{np}#pubinfo> .");
+        println!("}}");
+        println!("<{np}#assertion> {{");
+        println!(
+            "  <{np}#claim> vela:assertionText {} .",
+            serde_json::to_string(&f.assertion.text).unwrap_or_default()
+        );
+        println!("}}");
+        println!("<{np}#provenance> {{");
+        for at in &attestations {
+            println!(
+                "  <{np}#claim> vela:statementAttestation [ vela:verdict {:?} ; vela:attestedBy {:?} ; vela:attestationId {:?} ] .",
+                format!("{:?}", at.verdict).to_lowercase(),
+                at.attested_by,
+                at.id
+            );
+        }
+        for a in &atts {
+            println!(
+                "  <{np}#claim> prov:wasGeneratedBy [ vela:verifierMethod {:?} ; vela:solverId {:?} ; vela:attachmentId {:?} ] ;",
+                format!("{:?}", a.verifier_method),
+                a.solver_id,
+                a.id
+            );
+            println!(
+                "    vela:replayCommand \"vela reproduce {}\" .",
+                path.display()
+            );
+        }
+        println!("}}");
+        println!("<{np}#pubinfo> {{");
+        println!(
+            "  <{np}> prov:wasAttributedTo \"{}\" ; vela:frontier {:?} .",
+            f.provenance
+                .review
+                .as_ref()
+                .and_then(|r| r.reviewer.as_deref())
+                .unwrap_or("unattributed"),
+            project.frontier_id()
+        );
+        println!("}}");
+        println!();
+        emitted += 1;
+    }
+    eprintln!(
+        "nanopub: emitted {emitted} TriG document(s) (findings with machine receipts or signed statement attestations)"
+    );
+}
+
 fn cmd_reproduce(path: &Path, json_output: bool) {
     let files = collect_witness_files(path);
     if files.is_empty() {
@@ -8557,6 +8764,7 @@ const SCIENCE_SUBCOMMANDS: &[&str] = &[
     "attest-statement",
     "claim",
     "stash",
+    "completions",
     "onboard",
     "events",
     "recommend",
@@ -8591,8 +8799,9 @@ Core flow (v0.74):
   ingest        Ingest a paper, dataset, or Carina packet (dispatches by file type)
   propose       Create a finding.review proposal
   diff          Preview a `vpr_*` proposal, or compare two frontier files
-  accept        Apply a proposal under reviewer authority
+  accept        Apply a proposal under reviewer authority (keyed reviewers: --key)
   attest        Sign findings under your private key
+  status        One-screen frontier state (replay, proposals, leases, attestations)
   log           Recent canonical state events
   lineage       State-transition replay for one finding
   serve         Local Workbench (findings, evidence, diff, lineage)
@@ -8630,6 +8839,16 @@ Advanced (proposal-creation, agent inboxes, federation):
   conformance   Run protocol conformance vectors
   gate          Verification gate: deliverable-grade + verifier-attachment checks
   reproduce     Re-verify stored witnesses from scratch (frozen exact verifiers)
+
+Production (multi-producer coordination, signed judgment):
+  claim              Lease an open obligation (TTL; one live lease per target)
+  register-statement Register a statement hash as a priority timestamp
+  attest-statement   Sign a statement-faithfulness verdict (faithful/variant/unfaithful)
+  recommend          Record a reviewer-tier recommend-accept on a pending proposal
+  onboard            Write AGENTS.md + CLAUDE.md for a frontier (regenerated from the log)
+  stash              Park bytes in the hub's untrusted vsx_ scratch tier
+  events             Follow a frontier's hub event stream (--follow)
+  completions        Emit shell completions (bash, zsh, fish)
   sign          Optional signing and signature verification
   runtime-adapter
                 Normalize external runtime exports into reviewable proposals
@@ -8663,7 +8882,7 @@ Advanced (proposal-creation, agent inboxes, federation):
   entity        Resolve unresolved entities against a bundled common-entity table (v0.19)
   frontier      Scaffold (`new`), materialize, and manage frontier metadata + deps
   actor         Register Ed25519 publisher identities in a frontier
-  registry      Publish, list, or pull frontiers (open hub at https://vela-hub.fly.dev)
+  registry      Publish, pull, list; maintainer add/remove, deprecate, rotate-owner
   review        Create a review proposal or review interactively
   note          Add a lightweight note to a finding
   caveat        Create an explicit caveat proposal

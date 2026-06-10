@@ -37,7 +37,7 @@ members = [
 resolver = "3"
 
 [workspace.package]
-version = "0.691.0"
+version = "0.700.0"
 edition = "2024"
 license = "Apache-2.0 OR MIT"
 repository = "https://github.com/vela-science/vela"
@@ -51,6 +51,7 @@ publish = false
 # Shared dependencies
 dotenvy = "0.15"
 clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
 ctrlc = { version = "3", features = ["termination"] }
 libc = "0.2"
 # rustls-tls (not the default native-tls) so the tree builds a single
@@ -84,9 +85,9 @@ tempfile = "3"
 
 # Internal crates. `version` is required so cargo publish can resolve
 # the dep against crates.io; `path` is used for in-workspace builds.
-vela-protocol = { path = "crates/vela-protocol", version = "0.691.0" }
-vela-protocol-core = { path = "crates/vela-protocol-core", version = "0.691.0" }
-vela-verify = { path = "crates/vela-verify", version = "0.691.0" }
+vela-protocol = { path = "crates/vela-protocol", version = "0.700.0" }
+vela-protocol-core = { path = "crates/vela-protocol-core", version = "0.700.0" }
+vela-verify = { path = "crates/vela-verify", version = "0.700.0" }
 
 [workspace.lints.rust]
 unsafe_code = "deny"
