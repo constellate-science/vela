@@ -225,6 +225,65 @@ pub const EVENT_KIND_ENDORSEMENT_DEPOSITED: &str = "endorsement.deposited";
 /// `vre_` id; the head per attempt is the latest by `at`).
 pub const EVENT_KIND_ATTEMPT_RESOLVED: &str = "attempt.resolved";
 
+/// The complete registry of event kinds the protocol can emit or store.
+/// This is the writer-side universe; the reducer must handle every kind
+/// here (a real arm or an explicit no-op) — `reducer::every_known_kind_reduces`
+/// pins that invariant, so a new kind added to a writer without a reducer
+/// arm fails CI instead of erroring on the next replay. If you add a kind
+/// anywhere, add it here.
+pub const KNOWN_EVENT_KINDS: &[&str] = &[
+    "frontier.created",
+    "finding.asserted",
+    "finding.reviewed",
+    "finding.noted",
+    "finding.caveated",
+    "finding.confidence_revised",
+    "finding.rejected",
+    "finding.retracted",
+    "finding.superseded",
+    "finding.dependency_invalidated",
+    "finding.span_repaired",
+    "finding.entity_resolved",
+    "finding.entity_added",
+    "finding.threshold_set",
+    "finding.threshold_met",
+    "assertion.reinterpreted_causal",
+    "source_text.reviewed",
+    "negative_result.asserted",
+    "negative_result.reviewed",
+    "negative_result.retracted",
+    "trajectory.created",
+    "trajectory.step_appended",
+    "trajectory.reviewed",
+    "trajectory.retracted",
+    "artifact.asserted",
+    "artifact.reviewed",
+    "artifact.retracted",
+    "verifier_attachment.added",
+    "tier.set",
+    "evidence_atom.locator_repaired",
+    "attestation.recorded",
+    "frontier.synced_with_peer",
+    "frontier.conflict_detected",
+    "frontier.conflict_resolved",
+    "frontier.observation_reviewed",
+    "bridge.reviewed",
+    "replication.deposited",
+    "prediction.deposited",
+    "prediction.expired_unresolved",
+    "diff_pack.released",
+    "diff_pack.reviewed",
+    "verdict_conflict.resolved",
+    "contradiction.resolved",
+    "attempt.deposited",
+    "attempt.resolved",
+    "transfer.deposited",
+    "endorsement.deposited",
+    "correction_return.review",
+    "research_trace.review",
+    "key.revoke",
+];
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StateTarget {
     pub r#type: String,

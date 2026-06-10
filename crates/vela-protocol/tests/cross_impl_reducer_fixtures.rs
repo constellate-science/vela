@@ -1659,6 +1659,80 @@ fn build_bridge_reviewed_log(
     }]
 }
 
+/// `finding.superseded` builder. The event targets the OLD finding and
+/// flips `flags.superseded` (the replacement's body lives in the
+/// accepted proposal and enters via loader genesis seeding, never via
+/// the reducer — the payload is deliberately thin). `superseded` is not
+/// part of the finding-effects digest, so expected_states pins that the
+/// digested fields stay untouched and that no reducer ERRORS on the
+/// kind; the flag-flip semantics are pinned by the Rust unit tests.
+fn build_superseded_log(
+    frontier_idx: usize,
+    findings: &[FindingBundle],
+) -> Vec<events::StateEvent> {
+    let target = &findings[0];
+    vec![StateEvent {
+        schema: events::EVENT_SCHEMA.to_string(),
+        id: String::new(),
+        kind: "finding.superseded".to_string(),
+        target: StateTarget {
+            r#type: "finding".to_string(),
+            id: target.id.clone(),
+        },
+        actor: StateActor {
+            id: format!("reviewer:supersede-fixture-{frontier_idx}"),
+            r#type: "human".to_string(),
+        },
+        timestamp: fixture_timestamp(frontier_idx, 0),
+        reason: "Fixture supersession for cross-impl coverage".to_string(),
+        before_hash: NULL_HASH.to_string(),
+        after_hash: NULL_HASH.to_string(),
+        payload: json!({
+            "proposal_id": format!("vpr_fixture_{frontier_idx:08x}"),
+            "new_finding_id": format!("vf_fixture_new_{frontier_idx:08x}"),
+        }),
+        caveats: vec![],
+        signature: None,
+        schema_artifact_id: None,
+    }]
+}
+
+/// `assertion.reinterpreted_causal` builder. Replays the causal
+/// re-grading from `payload.after` ({claim, grade}). Causal fields are
+/// not part of the finding-effects digest; coverage proves no reducer
+/// errors on the kind.
+fn build_reinterpreted_causal_log(
+    frontier_idx: usize,
+    findings: &[FindingBundle],
+) -> Vec<events::StateEvent> {
+    let target = &findings[1 % findings.len()];
+    vec![StateEvent {
+        schema: events::EVENT_SCHEMA.to_string(),
+        id: String::new(),
+        kind: "assertion.reinterpreted_causal".to_string(),
+        target: StateTarget {
+            r#type: "finding".to_string(),
+            id: target.id.clone(),
+        },
+        actor: StateActor {
+            id: format!("reviewer:causal-fixture-{frontier_idx}"),
+            r#type: "human".to_string(),
+        },
+        timestamp: fixture_timestamp(frontier_idx, 1),
+        reason: "Fixture causal re-grading for cross-impl coverage".to_string(),
+        before_hash: NULL_HASH.to_string(),
+        after_hash: NULL_HASH.to_string(),
+        payload: json!({
+            "proposal_id": format!("vpr_fixture_causal_{frontier_idx:08x}"),
+            "before": {"claim": null, "grade": null},
+            "after": {"claim": "correlation", "grade": "observational"},
+        }),
+        caveats: vec![],
+        signature: None,
+        schema_artifact_id: None,
+    }]
+}
+
 /// v0.220: diff_pack.released / diff_pack.reviewed /
 /// verdict_conflict.resolved fixture builders. These three reducer
 /// arms write to side tables (`released_diff_packs`,
@@ -2466,6 +2540,30 @@ fn export_cross_impl_reducer_fixtures() {
         );
     }
 
+    // Fixture 13 — supersession + causal re-grading (v0.701). Both
+    // kinds are no-ops on the finding-effects digest (superseded and
+    // causal fields are outside it), so the expected_* arrays are the
+    // untouched genesis findings; a reducer that ERRORS on either kind
+    // fails this fixture. The replacement finding of a supersession
+    // deliberately does NOT appear: the event is thin and the body
+    // enters via loader genesis seeding, which is outside the
+    // genesis-only replay scaffold.
+    {
+        let frontier_idx = FIXTURE_FRONTIER_COUNT + 10;
+        let findings: Vec<FindingBundle> = (0..FINDINGS_PER_FRONTIER)
+            .map(|i| make_finding(frontier_idx, i))
+            .collect();
+        let mut event_log = build_superseded_log(frontier_idx, &findings);
+        event_log.extend(build_reinterpreted_causal_log(frontier_idx, &findings));
+        export_one(
+            &out_dir,
+            frontier_idx,
+            "supersede_and_causal",
+            findings,
+            event_log,
+        );
+    }
+
     // v0.107.4: write fixtures.manifest.json with SHA-256 of every
     // exported fixture. THREAT_MODEL.md A12 names tampered fixtures
     // as a real attack surface; the manifest closes the integrity
@@ -2583,6 +2681,12 @@ fn fixture_coverage_includes_every_reducer_arm() {
         all_kinds.insert(ev.kind);
     }
     for ev in build_contradiction_resolved_log(frontier_idx, &findings) {
+        all_kinds.insert(ev.kind);
+    }
+    for ev in build_superseded_log(frontier_idx, &findings) {
+        all_kinds.insert(ev.kind);
+    }
+    for ev in build_reinterpreted_causal_log(frontier_idx, &findings) {
         all_kinds.insert(ev.kind);
     }
 

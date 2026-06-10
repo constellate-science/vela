@@ -135,6 +135,13 @@ pub const REDUCER_MUTATION_KINDS: &[&str] = &[
     // T7: a reviewer's decision on a Contradiction object. Upserts the
     // resolved Contradiction into state.contradictions (latest per id).
     "contradiction.resolved",
+    // Supersession flips `flags.superseded` on the *old* finding (the
+    // replacement enters via genesis seeding from the accepted proposal's
+    // payload — the event itself is thin).
+    "finding.superseded",
+    // Causal re-grading replays `assertion.causal_claim` /
+    // `causal_evidence_grade` from the event's `payload.after`.
+    "assertion.reinterpreted_causal",
 ];
 
 /// Apply one canonical event to `state`, mutating it in place.
@@ -270,6 +277,31 @@ pub fn apply_event_indexed(
         "transfer.deposited" => apply_transfer_deposited(state, event),
         "endorsement.deposited" => apply_endorsement_deposited(state, event),
         "attempt.resolved" => apply_attempt_resolved(state, event),
+        // Supersession: the event targets the *old* finding and flips its
+        // `flags.superseded`. The replacement finding's body lives in the
+        // accepted proposal's `payload.new_finding` and enters replay via
+        // genesis seeding (`repo::seed_genesis`), not via this arm — the
+        // event payload is deliberately thin ({proposal_id, new_finding_id}).
+        "finding.superseded" => apply_finding_superseded(state, event, idx),
+        // Causal re-grading (`vela finding causal-set`): replays the
+        // claim/grade mutation from the event's `payload.after`.
+        "assertion.reinterpreted_causal" => apply_assertion_reinterpreted_causal(state, event, idx),
+        // Audit-only / writerless kinds. Each is validated at emit time and
+        // appended to the log, but mutates no projected state on replay:
+        // their consumers read the events directly. The threshold,
+        // correction-return, research-trace, and prediction-expiry kinds had
+        // their CLI writers removed in the v0.700 surface cut (zero such
+        // events exist in any live log); `frontier.observation_reviewed` and
+        // `key.revoke` are audit records (authoritative revocation lives in
+        // the hub's append-only revocation table). Explicit arms so a
+        // historical log containing any of them replays instead of erroring.
+        "prediction.expired_unresolved"
+        | "finding.threshold_set"
+        | "finding.threshold_met"
+        | "frontier.observation_reviewed"
+        | "correction_return.review"
+        | "research_trace.review"
+        | "key.revoke" => Ok(()),
         other => Err(format!("reducer: unsupported event kind '{other}'")),
     }
 }
@@ -351,42 +383,264 @@ pub fn replay_from_genesis(
     Ok(state)
 }
 
-/// Verify that `state.events`, when replayed from `state.findings_at_genesis`
-/// (or a derived genesis if absent), produces a frontier whose finding
-/// states match the materialized `state`. Returns the diff if any.
+/// Canonical replay order: (timestamp, id). This is the same order
+/// `events::replay_report` uses for chain verification. Timestamps are
+/// RFC3339 with microseconds; the content-addressed id is the
+/// deterministic tiebreak.
+pub fn sorted_for_replay(events: &[StateEvent]) -> Vec<StateEvent> {
+    let mut sorted: Vec<StateEvent> = events.to_vec();
+    sorted.sort_by(|a, b| a.timestamp.cmp(&b.timestamp).then_with(|| a.id.cmp(&b.id)));
+    sorted
+}
+
+/// Synthesize the genesis finding set from the event log plus the
+/// proposal payload store. The protocol's `finding.asserted` events are
+/// deliberately thin (`{proposal_id}`); the asserted body lives in the
+/// accepted proposal's `payload.finding` (or `payload.new_finding` for a
+/// supersession) and is cryptographically pinned: the assert event's
+/// `after_hash` is `finding_hash` of the body pushed at accept time.
+/// Every hydration is verified against that hash — a tampered or missing
+/// proposal becomes a diagnostic, never a silently wrong finding.
+///
+/// Events whose payload carries `finding` inline (v0.3 genesis form) are
+/// NOT seeded here: the reducer's `finding.asserted` arm applies them
+/// during replay.
+pub fn seed_genesis(
+    events_sorted: &[StateEvent],
+    proposals: &[crate::proposals::StateProposal],
+) -> (Vec<crate::bundle::FindingBundle>, Vec<String>) {
+    use crate::bundle::FindingBundle;
+    let by_id: HashMap<&str, &crate::proposals::StateProposal> =
+        proposals.iter().map(|p| (p.id.as_str(), p)).collect();
+    let mut genesis: Vec<FindingBundle> = Vec::new();
+    let mut diagnostics: Vec<String> = Vec::new();
+    for ev in events_sorted {
+        let (payload_key, is_supersede) = match ev.kind.as_str() {
+            "finding.asserted" => ("finding", false),
+            "finding.superseded" => ("new_finding", true),
+            _ => continue,
+        };
+        if !is_supersede && ev.payload.get("finding").is_some() {
+            // Inline (v0.3 genesis) form: the reducer arm applies it.
+            continue;
+        }
+        let Some(pid) = ev.payload.get("proposal_id").and_then(Value::as_str) else {
+            diagnostics.push(format!(
+                "{}: {} carries neither an inline body nor a proposal_id",
+                ev.id, ev.kind
+            ));
+            continue;
+        };
+        let Some(proposal) = by_id.get(pid) else {
+            diagnostics.push(format!(
+                "{}: {} references proposal {pid}, which is not in the proposal store",
+                ev.id, ev.kind
+            ));
+            continue;
+        };
+        let Some(body) = proposal.payload.get(payload_key) else {
+            diagnostics.push(format!(
+                "{}: proposal {pid} has no payload.{payload_key} to hydrate from",
+                ev.id
+            ));
+            continue;
+        };
+        let finding: FindingBundle = match serde_json::from_value(body.clone()) {
+            Ok(f) => f,
+            Err(e) => {
+                diagnostics.push(format!(
+                    "{}: proposal {pid} payload.{payload_key} does not deserialize: {e}",
+                    ev.id
+                ));
+                continue;
+            }
+        };
+        // The pin: the assert event's after_hash is finding_hash of the
+        // body as pushed (links excluded from the hash, so the writer's
+        // auto-injected supersedes link cannot break it). For
+        // finding.superseded the after_hash covers the OLD finding, so
+        // the new body is hydrated unverified-by-hash but is still
+        // confined to the signed, content-addressed proposal store.
+        if !is_supersede {
+            let h = events::finding_hash(&finding);
+            if h != ev.after_hash {
+                diagnostics.push(format!(
+                    "{}: hydrated body hash {h} != event after_hash {} (proposal {pid} tampered or stale)",
+                    ev.id, ev.after_hash
+                ));
+                continue;
+            }
+        }
+        if genesis.iter().any(|g| g.id == finding.id) {
+            continue; // idempotent under duplicate asserts
+        }
+        genesis.push(finding);
+    }
+    (genesis, diagnostics)
+}
+
+/// One full reducer replay of a loaded project's own event log: sort a
+/// copy of the events into canonical replay order, seed genesis from the
+/// proposal payload store, and run `replay_from_genesis`. The loader
+/// grafts every event-derived collection from the result — this is the
+/// single code path that makes "loader = reducer" true. Hydration
+/// diagnostics are not fatal here (a finding that fails to hydrate is
+/// simply absent from the replayed copy); `verify_replay` is where they
+/// become check failures.
+pub fn replayed_projection(state: &Project) -> Result<Project, String> {
+    let sorted = sorted_for_replay(&state.events);
+    let (genesis, _diagnostics, _remnants) = seed_genesis_with_remnants(state, &sorted);
+    replay_from_genesis(
+        genesis,
+        sorted,
+        &state.project.name,
+        &state.project.description,
+        &state.project.compiled_at,
+        &state.project.compiler,
+    )
+}
+
+/// Genesis = hydrated asserts (from the proposal payload store) plus
+/// *genesis remnants*: cached findings with no assert/supersede event
+/// anywhere in the log. Remnants predate the event-first discipline (or
+/// were assembled directly, as in tests); they cannot be replayed into
+/// existence, but later events may target them, so both the loader and
+/// the verifier must seed them or replay would reject their own log.
+/// Returns (genesis, hydration diagnostics, remnant count).
+pub fn seed_genesis_with_remnants(
+    state: &Project,
+    events_sorted: &[StateEvent],
+) -> (Vec<crate::bundle::FindingBundle>, Vec<String>, usize) {
+    let (mut genesis, diagnostics) = seed_genesis(events_sorted, &state.proposals);
+    let evented_ids: std::collections::HashSet<&str> = events_sorted
+        .iter()
+        .filter(|e| matches!(e.kind.as_str(), "finding.asserted" | "finding.superseded"))
+        .flat_map(|e| {
+            let mut ids = vec![e.target.id.as_str()];
+            if let Some(nid) = e.payload.get("new_finding_id").and_then(Value::as_str) {
+                ids.push(nid);
+            }
+            ids
+        })
+        .collect();
+    let mut remnants = 0usize;
+    for f in &state.findings {
+        if !evented_ids.contains(f.id.as_str()) && !genesis.iter().any(|g| g.id == f.id) {
+            genesis.push(f.clone());
+            remnants += 1;
+        }
+    }
+    (genesis, diagnostics, remnants)
+}
+
+/// Order-independent digest over a finding set (ids sorted, links
+/// excluded via `finding_hash`). This is the comparison surface of
+/// `verify_replay`: the full `snapshot_hash` covers loader-only state
+/// (proposals, actors, stats) that a pure replay can never reproduce,
+/// so replayed-vs-materialized equality is only meaningful over the
+/// findings themselves.
+fn findings_digest(findings: &[crate::bundle::FindingBundle]) -> String {
+    let mut pairs: Vec<(String, String)> = findings
+        .iter()
+        .map(|f| (f.id.clone(), events::finding_hash(f)))
+        .collect();
+    pairs.sort();
+    let joined = pairs
+        .iter()
+        .map(|(id, h)| format!("{id}:{h}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    use sha2::Digest;
+    hex::encode(sha2::Sha256::digest(joined.as_bytes()))
+}
+
+/// Verify that the materialized `state` is reproducible from its own
+/// event log: seed genesis from the proposal payload store, replay every
+/// event through the one reducer, and compare per-finding
+/// `finding_hash` between the replayed and materialized findings.
 ///
 /// This is the load-bearing check that turns Vela's replay claim into a
-/// verifiable invariant.
+/// verifiable invariant — the loader and the reducer can no longer
+/// drift apart silently.
 pub fn verify_replay(state: &Project) -> ReplayVerification {
-    // Genesis derivation rule: a v0.3-aware frontier may carry an explicit
-    // `findings_at_genesis` field (added in Phase C). Until that lands as
-    // a stored field, we infer genesis as: the materialized findings
-    // *with all event-induced mutations rolled back* — which is only safe
-    // when there are zero events. For frontiers with non-empty event
-    // logs, the right answer is to require findings_at_genesis to be
-    // stored explicitly.
     if state.events.is_empty() {
-        // Trivially replayable: no events means materialized == genesis.
+        let d = findings_digest(&state.findings);
         return ReplayVerification {
             ok: true,
-            replayed_snapshot_hash: events::snapshot_hash(state),
-            materialized_snapshot_hash: events::snapshot_hash(state),
+            replayed_snapshot_hash: d.clone(),
+            materialized_snapshot_hash: d,
             diffs: Vec::new(),
             note: "no events; replay is identity".to_string(),
         };
     }
-
-    // Frontiers with events must store findings_at_genesis to allow
-    // pure replay verification. Until Phase C also lands the storage
-    // field, this branch reports "needs genesis snapshot" rather than
-    // attempting an unsafe inverse.
+    let sorted = sorted_for_replay(&state.events);
+    let (genesis, mut diffs, remnants) = seed_genesis_with_remnants(state, &sorted);
+    let replayed = match replay_from_genesis(
+        genesis,
+        sorted,
+        &state.project.name,
+        &state.project.description,
+        &state.project.compiled_at,
+        &state.project.compiler,
+    ) {
+        Ok(p) => p,
+        Err(e) => {
+            return ReplayVerification {
+                ok: false,
+                replayed_snapshot_hash: String::new(),
+                materialized_snapshot_hash: findings_digest(&state.findings),
+                diffs: vec![format!("replay failed: {e}")],
+                note: "event log does not replay through the reducer".to_string(),
+            };
+        }
+    };
+    let replayed_by_id: HashMap<&str, &crate::bundle::FindingBundle> = replayed
+        .findings
+        .iter()
+        .map(|f| (f.id.as_str(), f))
+        .collect();
+    for cached in &state.findings {
+        match replayed_by_id.get(cached.id.as_str()) {
+            None => diffs.push(format!(
+                "finding {} is materialized but absent from replay (no assert event hydrates it)",
+                cached.id
+            )),
+            Some(rep) => {
+                let ch = events::finding_hash(cached);
+                let rh = events::finding_hash(rep);
+                if ch != rh {
+                    diffs.push(format!(
+                        "finding {} diverges: materialized {ch} vs replayed {rh}",
+                        cached.id
+                    ));
+                }
+            }
+        }
+    }
+    for rep in &replayed.findings {
+        if !state.findings.iter().any(|c| c.id == rep.id) {
+            diffs.push(format!(
+                "finding {} is replayable from the log but absent from the materialized state",
+                rep.id
+            ));
+        }
+    }
+    let ok = diffs.is_empty();
     ReplayVerification {
-        ok: true,
-        replayed_snapshot_hash: events::snapshot_hash(state),
-        materialized_snapshot_hash: events::snapshot_hash(state),
-        diffs: Vec::new(),
-        note: "events present but findings_at_genesis not stored; replay verified structurally"
-            .to_string(),
+        ok,
+        replayed_snapshot_hash: findings_digest(&replayed.findings),
+        materialized_snapshot_hash: findings_digest(&state.findings),
+        diffs,
+        note: if ok {
+            format!(
+                "replayed {} event(s) over {} seeded finding(s) ({} genesis remnant(s)); materialized state reproduced",
+                state.events.len(),
+                replayed.findings.len(),
+                remnants
+            )
+        } else {
+            "materialized state is NOT reproducible from the event log".to_string()
+        },
     }
 }
 
@@ -555,6 +809,71 @@ fn apply_finding_retracted(
         .get(id)
         .ok_or_else(|| format!("reducer: finding.retracted targets unknown finding {id}"))?;
     state.findings[idx].flags.retracted = true;
+    Ok(())
+}
+
+/// `finding.superseded` targets the OLD finding and flips its
+/// `flags.superseded` (idempotent). The replacement finding is NOT
+/// applied here: the event payload is thin (`{proposal_id,
+/// new_finding_id}`) and the replacement's body lives in the accepted
+/// proposal's `payload.new_finding`, entering replay as a genesis seed.
+/// Note: the writer (`proposals::apply_supersede`) also auto-injects a
+/// `supersedes` link into the replacement; links are excluded from
+/// `finding_hash`, so replay verification is unaffected by that
+/// injection.
+fn apply_finding_superseded(
+    state: &mut Project,
+    event: &StateEvent,
+    index: &mut FindingIndex,
+) -> Result<(), String> {
+    let id = event.target.id.as_str();
+    let idx = *index
+        .get(id)
+        .ok_or_else(|| format!("reducer: finding.superseded targets unknown finding {id}"))?;
+    state.findings[idx].flags.superseded = true;
+    Ok(())
+}
+
+/// `assertion.reinterpreted_causal` replays the causal re-grading from
+/// the event's `payload.after` (`{claim, grade}`), mirroring the writer
+/// in `state::causal_set`. Invalid vocabulary is an error — the payload
+/// was validated at emit time, so a mismatch here means a corrupted log.
+fn apply_assertion_reinterpreted_causal(
+    state: &mut Project,
+    event: &StateEvent,
+    index: &mut FindingIndex,
+) -> Result<(), String> {
+    use crate::bundle::{CausalClaim, CausalEvidenceGrade};
+    let id = event.target.id.as_str();
+    let idx = *index.get(id).ok_or_else(|| {
+        format!("reducer: assertion.reinterpreted_causal targets unknown finding {id}")
+    })?;
+    let after = event
+        .payload
+        .get("after")
+        .ok_or("reducer: assertion.reinterpreted_causal missing payload.after")?;
+    let claim = after
+        .get("claim")
+        .and_then(Value::as_str)
+        .ok_or("reducer: assertion.reinterpreted_causal missing payload.after.claim")?;
+    let parsed_claim = match claim {
+        "correlation" => CausalClaim::Correlation,
+        "mediation" => CausalClaim::Mediation,
+        "intervention" => CausalClaim::Intervention,
+        other => return Err(format!("reducer: invalid causal claim '{other}'")),
+    };
+    let parsed_grade = match after.get("grade").and_then(Value::as_str) {
+        None => None,
+        Some("rct") => Some(CausalEvidenceGrade::Rct),
+        Some("quasi_experimental") => Some(CausalEvidenceGrade::QuasiExperimental),
+        Some("observational") => Some(CausalEvidenceGrade::Observational),
+        Some("theoretical") => Some(CausalEvidenceGrade::Theoretical),
+        Some(other) => return Err(format!("reducer: invalid causal evidence grade '{other}'")),
+    };
+    state.findings[idx].assertion.causal_claim = Some(parsed_claim);
+    if let Some(g) = parsed_grade {
+        state.findings[idx].assertion.causal_evidence_grade = Some(g);
+    }
     Ok(())
 }
 
@@ -1582,7 +1901,7 @@ mod tests {
     fn replay_with_no_events_is_identity() {
         let state = project::assemble("test", vec![finding("a")], 0, 0, "test");
         let v = verify_replay(&state);
-        assert!(v.ok);
+        assert!(v.ok, "diffs: {:?} note: {}", v.diffs, v.note);
         assert_eq!(v.replayed_snapshot_hash, v.materialized_snapshot_hash);
     }
 
@@ -1750,6 +2069,48 @@ mod tests {
                     !e.contains("unsupported event kind"),
                     "kind {kind:?} declared in REDUCER_MUTATION_KINDS \
                      but rejected by apply_event dispatch: {e}"
+                );
+            }
+        }
+    }
+
+    /// The writer/reducer seam invariant: every kind the protocol can
+    /// emit or store (`events::KNOWN_EVENT_KINDS` — the writer-side
+    /// universe) must be handled by the dispatch, either with a real arm
+    /// or an explicit no-op. A new writer kind without a reducer arm
+    /// fails here instead of erroring on the next replay of a live log.
+    /// (This is the test that would have caught `finding.superseded`
+    /// being emittable-but-unreplayable.)
+    #[test]
+    fn every_known_kind_reduces() {
+        for kind in events::KNOWN_EVENT_KINDS {
+            let mut state = project::assemble("test", vec![], 0, 0, "test");
+            let event = StateEvent {
+                schema: events::EVENT_SCHEMA.to_string(),
+                id: "vev_known_kind_check".to_string(),
+                kind: (*kind).to_string(),
+                target: StateTarget {
+                    r#type: "finding".to_string(),
+                    id: "vf_x".to_string(),
+                },
+                actor: StateActor {
+                    id: "x".to_string(),
+                    r#type: "human".to_string(),
+                },
+                timestamp: Utc::now().to_rfc3339(),
+                reason: String::new(),
+                before_hash: NULL_HASH.to_string(),
+                after_hash: NULL_HASH.to_string(),
+                payload: Value::Null,
+                caveats: vec![],
+                signature: None,
+                schema_artifact_id: None,
+            };
+            if let Err(e) = apply_event(&mut state, &event) {
+                assert!(
+                    !e.contains("unsupported event kind"),
+                    "kind {kind:?} is in events::KNOWN_EVENT_KINDS (a writer \
+                     can emit it) but the reducer dispatch rejects it: {e}"
                 );
             }
         }

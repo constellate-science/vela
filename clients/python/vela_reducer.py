@@ -732,6 +732,33 @@ def apply_event(state: dict, event: dict) -> None:
     # reducer.
     elif kind == "contradiction.resolved":
         return
+    # Supersession: flip flags.superseded on the OLD finding (target).
+    # The replacement's body lives in the accepted proposal and enters
+    # via loader genesis seeding, never via the reducer — the event
+    # payload is deliberately thin. The Rust mirror is
+    # reducer.rs::apply_finding_superseded. `superseded` is outside the
+    # cross-impl finding-effects digest.
+    elif kind == "finding.superseded":
+        apply_finding_superseded(state["findings"], event)
+    # Causal re-grading: replay assertion.causal_claim /
+    # causal_evidence_grade from payload.after. Outside the
+    # finding-effects digest. Rust mirror:
+    # reducer.rs::apply_assertion_reinterpreted_causal.
+    elif kind == "assertion.reinterpreted_causal":
+        apply_assertion_reinterpreted_causal(state["findings"], event)
+    # Audit-only / writerless kinds (validated at emit, no projected
+    # state on replay). Rust mirror: the explicit no-op arms in
+    # reducer.rs.
+    elif kind in (
+        "prediction.expired_unresolved",
+        "finding.threshold_set",
+        "finding.threshold_met",
+        "frontier.observation_reviewed",
+        "correction_return.review",
+        "research_trace.review",
+        "key.revoke",
+    ):
+        return
     else:
         raise ValueError(f"reducer: unsupported event kind {kind!r}")
 
@@ -1210,6 +1237,47 @@ def main(argv: list[str] | None = None) -> int:
         print(render_text(results))
 
     return 0 if all(r.ok for r in results) else 1
+
+
+def apply_finding_superseded(findings: list, event: dict) -> None:
+    """Flip flags.superseded on the targeted (old) finding. Idempotent.
+    The replacement finding does NOT enter here (thin payload; loader
+    genesis seeding owns it). Rust mirror:
+    reducer.rs::apply_finding_superseded."""
+    finding_id = (event.get("target") or {}).get("id")
+    for f in findings:
+        if f.get("id") == finding_id:
+            f.setdefault("flags", {})["superseded"] = True
+            return
+    raise ValueError(f"finding.superseded targets unknown finding {finding_id}")
+
+
+def apply_assertion_reinterpreted_causal(findings: list, event: dict) -> None:
+    """Replay the causal re-grading from payload.after ({claim, grade}).
+    Rust mirror: reducer.rs::apply_assertion_reinterpreted_causal."""
+    finding_id = (event.get("target") or {}).get("id")
+    after = (event.get("payload") or {}).get("after") or {}
+    claim = after.get("claim")
+    if claim not in ("correlation", "mediation", "intervention"):
+        raise ValueError(f"invalid causal claim {claim!r}")
+    grade = after.get("grade")
+    if grade is not None and grade not in (
+        "rct",
+        "quasi_experimental",
+        "observational",
+        "theoretical",
+    ):
+        raise ValueError(f"invalid causal evidence grade {grade!r}")
+    for f in findings:
+        if f.get("id") == finding_id:
+            assertion = f.setdefault("assertion", {})
+            assertion["causal_claim"] = claim
+            if grade is not None:
+                assertion["causal_evidence_grade"] = grade
+            return
+    raise ValueError(
+        f"assertion.reinterpreted_causal targets unknown finding {finding_id}"
+    )
 
 
 if __name__ == "__main__":

@@ -688,6 +688,29 @@ function applyEvent(state: ReducerState, event: Event): void {
   // verifier_attachments sidecar; no-op on the findings digest. Rust mirror
   // is reducer.rs::apply_verifier_attachment_added.
   else if (kind === "verifier_attachment.added") return;
+  // Supersession: flip flags.superseded on the OLD (target) finding.
+  // The replacement's body enters via loader genesis seeding, never the
+  // reducer (thin payload). Rust mirror: reducer.rs::apply_finding_superseded.
+  else if (kind === "finding.superseded") {
+    applyFindingSuperseded(state.findings, event);
+  }
+  // Causal re-grading from payload.after ({claim, grade}). Rust mirror:
+  // reducer.rs::apply_assertion_reinterpreted_causal.
+  else if (kind === "assertion.reinterpreted_causal") {
+    applyAssertionReinterpretedCausal(state.findings, event);
+  }
+  // Audit-only / writerless kinds: validated at emit, no projected
+  // state on replay (explicit no-op arms in the Rust reducer).
+  else if (
+    kind === "prediction.expired_unresolved" ||
+    kind === "finding.threshold_set" ||
+    kind === "finding.threshold_met" ||
+    kind === "frontier.observation_reviewed" ||
+    kind === "correction_return.review" ||
+    kind === "research_trace.review" ||
+    kind === "key.revoke"
+  )
+    return;
   else
     throw new Error(`reducer: unsupported event kind ${JSON.stringify(kind)}`);
 }
@@ -1171,3 +1194,53 @@ function main(args: string[]): number {
 }
 
 exit(main(argv.slice(2)));
+
+function applyFindingSuperseded(findings: Finding[], event: StateEvent): void {
+  const findingId = event.target?.id;
+  const f = findings.find((x) => x.id === findingId);
+  if (!f) {
+    throw new Error(`finding.superseded targets unknown finding ${findingId}`);
+  }
+  if (!f.flags) f.flags = {} as Finding["flags"];
+  (f.flags as { superseded?: boolean }).superseded = true;
+}
+
+function applyAssertionReinterpretedCausal(
+  findings: Finding[],
+  event: StateEvent,
+): void {
+  const findingId = event.target?.id;
+  const payload = (event.payload ?? {}) as {
+    after?: { claim?: string; grade?: string | null };
+  };
+  const claim = payload.after?.claim;
+  if (
+    claim !== "correlation" &&
+    claim !== "mediation" &&
+    claim !== "intervention"
+  ) {
+    throw new Error(`invalid causal claim ${JSON.stringify(claim)}`);
+  }
+  const grade = payload.after?.grade ?? null;
+  if (
+    grade !== null &&
+    grade !== "rct" &&
+    grade !== "quasi_experimental" &&
+    grade !== "observational" &&
+    grade !== "theoretical"
+  ) {
+    throw new Error(`invalid causal evidence grade ${JSON.stringify(grade)}`);
+  }
+  const f = findings.find((x) => x.id === findingId);
+  if (!f) {
+    throw new Error(
+      `assertion.reinterpreted_causal targets unknown finding ${findingId}`,
+    );
+  }
+  const assertion = f.assertion as unknown as {
+    causal_claim?: string;
+    causal_evidence_grade?: string;
+  };
+  assertion.causal_claim = claim;
+  if (grade !== null) assertion.causal_evidence_grade = grade;
+}

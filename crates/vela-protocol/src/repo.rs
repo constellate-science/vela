@@ -10,6 +10,7 @@ use crate::bundle::{ConfidenceUpdate, FindingBundle, Link, ReviewEvent};
 use crate::events::StateEvent;
 use crate::project::{self, Project};
 use crate::proposals::{ProofState, StateProposal};
+use crate::reducer;
 
 // ── Source detection ──────────────────────────────────────────────────
 
@@ -712,324 +713,59 @@ fn load_vela_repo(dir: &Path) -> Result<Project, String> {
     c.resolutions = resolutions;
     c.peers = peers;
 
-    // v0.55: materialize trajectories and negative_results from the
-    // event log. Pre-v0.55 these primitives existed in the canonical
-    // event stream but never populated `Project.trajectories` or
-    // `Project.negative_results` on load, which meant every downstream
-    // consumer (CLI listing commands like `vela negative-results .`,
-    // `vela trajectory-step`, the export reducer, the Workbench
-    // /trajectories and /negative-results pages, and the marketing
-    // site's render_findings_constellation SVG) saw empty arrays even
-    // though the events were intact in `.vela/events/`.
-    materialize_trajectories_and_nulls_from_events(&mut c);
-
-    // v0.221: materialize `Project.released_diff_packs` and
-    // `Project.verdict_conflicts` from the canonical event log.
-    // The v0.213 + v0.218 reducer arms append to these fields on
-    // replay; pre-v0.221 `load_vela_repo` never replayed the
-    // canonical event arms, so downstream consumers saw empty
-    // vectors even when `.vela/events/` carried the right events.
-    // This closes the v0.222 consumer-migration prerequisite.
-    materialize_released_diff_packs_from_events(&mut c);
-    materialize_verdict_conflicts_from_events(&mut c);
-    // Same class of bug as above: `verifier_attachment.added` events were
-    // accepted and written to `.vela/events/`, but `load_vela_repo` never
-    // folded them into `Project.verifier_attachments`. So `vela attach`
-    // evidence survived exactly until the next `frontier materialize`, after
-    // which the trust gate saw zero attachments and could never derive
-    // `verified` from persisted state. Mirror the reducer arm here.
-    materialize_verifier_attachments_from_events(&mut c);
-
-    // v0.56: replay evidence_atom.locator_repaired events into the
-    // loaded evidence_atoms array. `project::assemble` derives atoms
-    // from findings, which produces atoms with `locator: None` for
-    // findings whose evidence_spans are empty. The repair events in
-    // `.vela/events/` carry the resolved locator and the parent
-    // source id. Without this step, every load erases the curation
-    // work the canonical events recorded.
-    materialize_evidence_atom_locators_from_events(&mut c);
+    // The loader IS the reducer. Every event-derived collection is
+    // grafted from one full replay of the canonical log through
+    // `reducer::apply_event` — there is no second, hand-maintained
+    // dispatch table to forget. (The per-field `materialize_*_from_events`
+    // helpers this replaces caused the same silent-drop bug four separate
+    // times: trajectories at v0.55, diff-packs/verdict-conflicts at
+    // v0.221, verifier attachments after the v0.700 cut, and attempts/
+    // transfers/endorsements/contradictions — which had reducer arms but
+    // NO loader path at all, so they vanished on every load.)
+    //
+    // `findings/` stays the assembly-order cache: cached findings feed
+    // `snapshot_hash` and the locks byte-stably; the replayed findings
+    // are the verification copy (`reducer::verify_replay`). A replay
+    // failure degrades to the cache-only load with empty side tables —
+    // a broken log must stay loadable for repair; `vela check` surfaces
+    // the failure.
+    match reducer::replayed_projection(&c) {
+        Ok(replayed) => {
+            c.trajectories = replayed.trajectories;
+            c.negative_results = replayed.negative_results;
+            c.released_diff_packs = replayed.released_diff_packs;
+            c.verdict_conflicts = replayed.verdict_conflicts;
+            c.verifier_attachments = replayed.verifier_attachments;
+            c.contradictions = replayed.contradictions;
+            c.attempts = replayed.attempts;
+            c.attempt_resolutions = replayed.attempt_resolutions;
+            c.transfers = replayed.transfers;
+            c.endorsements = replayed.endorsements;
+            // Locator repairs land on the replayed atoms (the reducer
+            // arm); copy them onto the cache-derived atoms by id so the
+            // curation work the canonical events recorded survives load.
+            for atom in &mut c.evidence_atoms {
+                if atom.locator.is_none()
+                    && let Some(rep) = replayed
+                        .evidence_atoms
+                        .iter()
+                        .find(|r| r.id == atom.id && r.locator.is_some())
+                {
+                    atom.locator = rep.locator.clone();
+                    atom.caveats.retain(|cv| cv != "missing evidence locator");
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!(
+                "warn · event-log replay failed during load (side tables empty until repaired): {e}"
+            );
+        }
+    }
 
     project::recompute_stats(&mut c);
 
     Ok(c)
-}
-
-/// v0.56: Walk the event log and apply
-/// `evidence_atom.locator_repaired` events into the materialized
-/// `evidence_atoms` array. Each event names a single atom by id and
-/// sets its `locator`. Idempotent: applying twice with the same
-/// payload is a no-op. Divergent locator overwrites are silently
-/// dropped here because the reducer-side validator already rejected
-/// them at event-emit time; if a stale chain ever made it past the
-/// emit boundary the integrity report flags the divergence.
-fn materialize_evidence_atom_locators_from_events(p: &mut Project) {
-    for ev in &p.events {
-        if ev.kind != "evidence_atom.locator_repaired" {
-            continue;
-        }
-        if ev.target.r#type != "evidence_atom" {
-            continue;
-        }
-        let atom_id = ev.target.id.as_str();
-        let locator = match ev.payload.get("locator").and_then(|v| v.as_str()) {
-            Some(value) if !value.is_empty() => value.to_string(),
-            _ => continue,
-        };
-        if let Some(atom) = p.evidence_atoms.iter_mut().find(|a| a.id == atom_id)
-            && atom.locator.is_none()
-        {
-            atom.locator = Some(locator);
-            atom.caveats.retain(|c| c != "missing evidence locator");
-        }
-    }
-}
-
-/// v0.221: walk the event log to populate
-/// `Project.released_diff_packs` from canonical `diff_pack.released`
-/// and `diff_pack.reviewed` events. Mirrors the v0.213 + v0.205
-/// reducer arms in `apply_diff_pack_released` and
-/// `apply_diff_pack_reviewed`. Idempotent: re-applying the same
-/// event leaves the field unchanged.
-fn materialize_released_diff_packs_from_events(p: &mut Project) {
-    use crate::released_diff_pack::{ReleasedDiffPackRecord, ReleasedVerdict};
-
-    for ev in &p.events {
-        match ev.kind.as_str() {
-            "diff_pack.released" => {
-                let Some(pack_id) = ev.payload.get("pack_id").and_then(|v| v.as_str()) else {
-                    continue;
-                };
-                if !pack_id.starts_with("vsd_") {
-                    continue;
-                }
-                if p.released_diff_packs.iter().any(|r| r.pack_id == pack_id) {
-                    continue;
-                }
-                let frontier_id = ev
-                    .payload
-                    .get("frontier_id")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                let summary = ev
-                    .payload
-                    .get("summary")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                let aggregate_kind = ev
-                    .payload
-                    .get("aggregate_kind")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                p.released_diff_packs
-                    .push(ReleasedDiffPackRecord::from_released_event(
-                        pack_id.to_string(),
-                        frontier_id,
-                        summary,
-                        aggregate_kind,
-                        ev.timestamp.clone(),
-                        ev.id.clone(),
-                    ));
-            }
-            "diff_pack.reviewed" => {
-                let Some(pack_id) = ev.payload.get("pack_id").and_then(|v| v.as_str()) else {
-                    continue;
-                };
-                let Some(verdict_str) = ev.payload.get("verdict").and_then(|v| v.as_str()) else {
-                    continue;
-                };
-                let Some(verdict) = ReleasedVerdict::from_str_ci(verdict_str) else {
-                    continue;
-                };
-                let reviewer_actor = ev
-                    .payload
-                    .get("reviewer_actor")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or(&ev.actor.id)
-                    .to_string();
-                let applied: Vec<String> = ev
-                    .payload
-                    .get("applied_members")
-                    .and_then(|v| v.as_array())
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(|v| v.as_str().map(String::from))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                let sdk_only: Vec<String> = ev
-                    .payload
-                    .get("sdk_only_members")
-                    .and_then(|v| v.as_array())
-                    .map(|a| {
-                        a.iter()
-                            .filter_map(|v| v.as_str().map(String::from))
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                if let Some(rec) = p
-                    .released_diff_packs
-                    .iter_mut()
-                    .find(|r| r.pack_id == pack_id)
-                {
-                    rec.verdict = Some(verdict);
-                    rec.verdict_event_id = Some(ev.id.clone());
-                    rec.reviewer_actor = Some(reviewer_actor);
-                    rec.applied_members = applied;
-                    rec.sdk_only_members = sdk_only;
-                } else {
-                    let mut rec = ReleasedDiffPackRecord::from_released_event(
-                        pack_id.to_string(),
-                        ev.payload
-                            .get("frontier_id")
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("")
-                            .to_string(),
-                        String::new(),
-                        String::new(),
-                        ev.timestamp.clone(),
-                        String::new(),
-                    );
-                    rec.verdict = Some(verdict);
-                    rec.verdict_event_id = Some(ev.id.clone());
-                    rec.reviewer_actor = Some(reviewer_actor);
-                    rec.applied_members = applied;
-                    rec.sdk_only_members = sdk_only;
-                    p.released_diff_packs.push(rec);
-                }
-            }
-            _ => {}
-        }
-    }
-}
-
-/// v0.221: walk the event log to populate `Project.verdict_conflicts`
-/// from canonical `verdict_conflict.resolved` events. Mirrors the
-/// v0.218 reducer arm `apply_verdict_conflict_resolved`. Idempotent
-/// on conflict_id.
-fn materialize_verdict_conflicts_from_events(p: &mut Project) {
-    use crate::verdict_conflict::VerdictConflict;
-
-    for ev in &p.events {
-        if ev.kind != "verdict_conflict.resolved" {
-            continue;
-        }
-        let Some(conflict_value) = ev.payload.get("conflict") else {
-            continue;
-        };
-        let Ok(conflict) = serde_json::from_value::<VerdictConflict>(conflict_value.clone()) else {
-            continue;
-        };
-        if conflict.verify().is_err() {
-            continue;
-        }
-        if p.verdict_conflicts
-            .iter()
-            .any(|c| c.conflict_id == conflict.conflict_id)
-        {
-            continue;
-        }
-        p.verdict_conflicts.push(conflict);
-    }
-}
-
-/// Walk the event log to populate `Project.verifier_attachments` from
-/// canonical `verifier_attachment.added` events. Mirrors the reducer arm
-/// `apply_verifier_attachment_added`. `load_vela_repo` materializes each
-/// field via a dedicated helper and this one was never wired in, so an
-/// attached `vva_` (which the trust gate needs to derive `verified`) was
-/// dropped on the next materialize. Idempotent on attachment id; malformed
-/// payloads are skipped (the reducer-side validator already rejected them
-/// at emit time).
-fn materialize_verifier_attachments_from_events(p: &mut Project) {
-    use crate::verifier_attachment::VerifierAttachment;
-
-    for ev in &p.events {
-        if ev.kind != "verifier_attachment.added" {
-            continue;
-        }
-        let Some(att_value) = ev.payload.get("attachment") else {
-            continue;
-        };
-        let Ok(att) = serde_json::from_value::<VerifierAttachment>(att_value.clone()) else {
-            continue;
-        };
-        if att.verify().is_err() {
-            continue;
-        }
-        if p.verifier_attachments.iter().any(|a| a.id == att.id) {
-            continue;
-        }
-        p.verifier_attachments.push(att);
-    }
-}
-
-/// Walk the event log to populate `Project.trajectories` and
-/// `Project.negative_results` from the canonical
-/// `trajectory.created` / `trajectory.step_appended` /
-/// `trajectory.retracted` / `negative_result.asserted` /
-/// `negative_result.retracted` events. Mirrors what the reducer
-/// would do on a fresh replay; this is the missing materialization
-/// step in `load_vela_repo`.
-fn materialize_trajectories_and_nulls_from_events(p: &mut Project) {
-    use crate::bundle::{NegativeResult, Trajectory, TrajectoryStep};
-
-    let mut trajectories: std::collections::HashMap<String, Trajectory> =
-        std::collections::HashMap::new();
-    let mut nulls: std::collections::HashMap<String, NegativeResult> =
-        std::collections::HashMap::new();
-
-    for ev in &p.events {
-        match ev.kind.as_str() {
-            "trajectory.created" => {
-                if let Some(traj_value) = ev.payload.get("trajectory")
-                    && let Ok(traj) = serde_json::from_value::<Trajectory>(traj_value.clone())
-                {
-                    trajectories.insert(traj.id.clone(), traj);
-                }
-            }
-            "trajectory.step_appended" => {
-                let traj_id = ev.target.id.clone();
-                if let Some(step_value) = ev.payload.get("step")
-                    && let Ok(step) = serde_json::from_value::<TrajectoryStep>(step_value.clone())
-                    && let Some(traj) = trajectories.get_mut(&traj_id)
-                {
-                    traj.steps.push(step);
-                }
-            }
-            "trajectory.retracted" => {
-                if let Some(traj) = trajectories.get_mut(&ev.target.id) {
-                    traj.retracted = true;
-                }
-            }
-            "negative_result.asserted" => {
-                if let Some(nr_value) = ev.payload.get("negative_result")
-                    && let Ok(nr) = serde_json::from_value::<NegativeResult>(nr_value.clone())
-                {
-                    nulls.insert(nr.id.clone(), nr);
-                }
-            }
-            "negative_result.retracted" => {
-                if let Some(nr) = nulls.get_mut(&ev.target.id) {
-                    nr.retracted = true;
-                }
-            }
-            _ => {}
-        }
-    }
-
-    if !trajectories.is_empty() {
-        let mut traj_vec: Vec<Trajectory> = trajectories.into_values().collect();
-        traj_vec.sort_by(|a, b| a.id.cmp(&b.id));
-        p.trajectories = traj_vec;
-    }
-    if !nulls.is_empty() {
-        let mut nr_vec: Vec<NegativeResult> = nulls.into_values().collect();
-        nr_vec.sort_by(|a, b| a.id.cmp(&b.id));
-        p.negative_results = nr_vec;
-    }
 }
 
 // ── Save ─────────────────────────────────────────────────────────────
@@ -1283,6 +1019,110 @@ mod tests {
 
     use crate::test_support::{make_finding, make_project};
 
+    /// attempts / transfers / endorsements / contradictions have reducer
+    /// arms but NO directory storage: the event log is their only
+    /// persistence. Before the replay loader, `load_vela_repo` had no path
+    /// for them at all, so a deposited attempt vanished on the next load
+    /// (the 4th instance of the forgot-a-materializer bug class). The
+    /// replay loader makes the reducer the single load path; this test
+    /// pins it. When a new Project collection gains a reducer arm, it must
+    /// also be grafted in `load_vela_repo` — extend this test with it.
+    #[test]
+    fn evented_side_tables_survive_save_and_load() {
+        use crate::attempt::{Attempt, AttemptDraft};
+        use crate::endorsement::{Endorsement, EndorsementDraft};
+        use crate::events::{StateActor, StateEvent, StateTarget};
+        use ed25519_dalek::SigningKey;
+        use serde_json::json;
+
+        let tmp = TempDir::new().unwrap();
+        let dir = tmp.path().join("side-tables");
+        let mut original = make_project("side-tables", vec![]);
+        let key = SigningKey::from_bytes(&[7u8; 32]);
+
+        let attempt = Attempt::build(
+            AttemptDraft {
+                problem: 1,
+                frontier: "f".to_string(),
+                kind: "construction".to_string(),
+                claim: "a(8) >= 33".to_string(),
+                claimed_status: "banked".to_string(),
+                ..Default::default()
+            },
+            &key,
+        )
+        .unwrap();
+        let endorsement = Endorsement::build(
+            EndorsementDraft {
+                target_record: attempt.attempt_id.clone(),
+                endorser: "reviewer:side-table-test".to_string(),
+                dimension: String::new(),
+                rationale: "pins the side-table survival contract".to_string(),
+                at: "2026-01-01T00:00:00+00:00".to_string(),
+            },
+            &key,
+        )
+        .unwrap();
+
+        let mk_event = |kind: &str,
+                        target_type: &str,
+                        target_id: &str,
+                        payload: serde_json::Value,
+                        ts: &str| StateEvent {
+            schema: crate::events::EVENT_SCHEMA.to_string(),
+            id: format!("vev_sidetable_{kind}").replace('.', "_"),
+            kind: kind.to_string(),
+            target: StateTarget {
+                r#type: target_type.to_string(),
+                id: target_id.to_string(),
+            },
+            actor: StateActor {
+                id: "reviewer:side-table-test".to_string(),
+                r#type: "human".to_string(),
+            },
+            timestamp: ts.to_string(),
+            reason: "side-table survival test".to_string(),
+            before_hash: "sha256:null".to_string(),
+            after_hash: "sha256:null".to_string(),
+            payload,
+            caveats: vec![],
+            signature: None,
+            schema_artifact_id: None,
+        };
+        original.events.push(mk_event(
+            "attempt.deposited",
+            "attempt",
+            &attempt.attempt_id,
+            json!({ "attempt": attempt }),
+            "2026-01-01T00:00:01.000000+00:00",
+        ));
+        original.events.push(mk_event(
+            "endorsement.deposited",
+            "endorsement",
+            &endorsement.endorsement_id,
+            json!({ "endorsement": endorsement }),
+            "2026-01-01T00:00:02.000000+00:00",
+        ));
+
+        init_repo(&dir, &original).unwrap();
+        let loaded = load(&VelaSource::VelaRepo(dir)).unwrap();
+        assert_eq!(
+            loaded.attempts.len(),
+            1,
+            "attempt.deposited must survive save -> load (event log is its only storage)"
+        );
+        assert_eq!(loaded.attempts[0].attempt_id, attempt.attempt_id);
+        assert_eq!(
+            loaded.endorsements.len(),
+            1,
+            "endorsement.deposited must survive save -> load"
+        );
+        assert_eq!(
+            loaded.endorsements[0].endorsement_id,
+            endorsement.endorsement_id
+        );
+    }
+
     // ── regression: verifier attachments survive load/materialize ────
     // A `verifier_attachment.added` event must fold into
     // `Project.verifier_attachments` on load, exactly like the reducer arm
@@ -1336,16 +1176,19 @@ mod tests {
         let mut p = make_project("t", vec![]);
         p.events.push(ev);
         assert!(p.verifier_attachments.is_empty());
-        materialize_verifier_attachments_from_events(&mut p);
+        // The replay loader is now the single fold path (loader = reducer).
+        let replayed = reducer::replayed_projection(&p).expect("replay");
         assert_eq!(
-            p.verifier_attachments.len(),
+            replayed.verifier_attachments.len(),
             1,
-            "verifier_attachment.added must fold into verifier_attachments on load"
+            "verifier_attachment.added must fold into verifier_attachments on replay"
         );
-        assert_eq!(p.verifier_attachments[0].id, att.id);
-        // idempotent
-        materialize_verifier_attachments_from_events(&mut p);
-        assert_eq!(p.verifier_attachments.len(), 1);
+        assert_eq!(replayed.verifier_attachments[0].id, att.id);
+        // idempotent under a duplicated event
+        let dup = p.events[0].clone();
+        p.events.push(dup);
+        let replayed_twice = reducer::replayed_projection(&p).expect("replay twice");
+        assert_eq!(replayed_twice.verifier_attachments.len(), 1);
     }
 
     // ── detect tests ────────────────────────────────────────────────

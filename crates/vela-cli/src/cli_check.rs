@@ -88,6 +88,18 @@ pub(crate) fn cmd_check(
                 println!("  - {conflict}");
             }
         }
+        // Loader = reducer: the materialized state must be reproducible
+        // from its own event log (genesis seeded from the proposal
+        // payload store, then one full reducer replay). A divergence
+        // here means the loader and the reducer disagree — the bug
+        // class that silently dropped side tables four times.
+        let replay_verification = vela_protocol::reducer::verify_replay(&frontier);
+        println!("replay verification: {}", replay_verification.note);
+        if !replay_verification.ok {
+            for diff in replay_verification.diffs.iter().take(20) {
+                println!("  - {diff}");
+            }
+        }
         if let Ok(signature_report) = sign::verify_frontier_data(&frontier, None)
             && signature_report.signed > 0
         {
@@ -99,6 +111,7 @@ pub(crate) fn cmd_check(
         let signal_report = signals::analyze(&frontier, &[]);
         print_signal_summary(&signal_report, strict);
         if !replay_report.ok
+            || !replay_verification.ok
             || (strict
                 && (!signal_report.review_queue.is_empty()
                     || signal_report.proof_readiness.status != "ready"))
