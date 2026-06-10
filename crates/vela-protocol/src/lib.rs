@@ -36,6 +36,7 @@ pub mod scientific_diff;
 pub mod sign;
 pub mod sources;
 pub mod state;
+pub mod statement_attestation;
 pub mod status_provenance;
 pub mod tcb_policy;
 pub mod transfer;

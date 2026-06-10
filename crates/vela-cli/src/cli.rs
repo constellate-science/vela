@@ -220,6 +220,100 @@ pub async fn run_command() {
             let _ = conformance::run(&dir);
         }
         Commands::Gate { action } => cmd_gate(action),
+        Commands::AttestStatement {
+            frontier,
+            target,
+            informal_ref,
+            formal_ref,
+            formal_file,
+            formal_hash,
+            verdict,
+            note,
+            by,
+            key,
+            json,
+        } => {
+            use vela_protocol::statement_attestation::{
+                AttestationDraft, FaithfulnessVerdict, StatementAttestation,
+            };
+            let key_hex = std::fs::read_to_string(&key)
+                .map(|s| s.trim().to_string())
+                .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
+            let signing_key = parse_signing_key(&key_hex);
+            let fh = match (&formal_file, &formal_hash) {
+                (Some(p), _) => {
+                    use sha2::Digest;
+                    let bytes = std::fs::read(p).unwrap_or_else(|e| {
+                        fail_return(&format!("read formal file {}: {e}", p.display()))
+                    });
+                    hex::encode(sha2::Sha256::digest(&bytes))
+                }
+                (None, Some(h)) => h.trim().to_string(),
+                (None, None) => fail_return("pass --formal-file or --formal-hash"),
+            };
+            let v = match verdict.as_str() {
+                "faithful" => FaithfulnessVerdict::Faithful,
+                "variant" => FaithfulnessVerdict::Variant,
+                "unfaithful" => FaithfulnessVerdict::Unfaithful,
+                other => fail_return(&format!(
+                    "verdict must be faithful|variant|unfaithful, got '{other}'"
+                )),
+            };
+            let att = StatementAttestation::build(
+                AttestationDraft {
+                    target: target.clone(),
+                    informal_ref,
+                    formal_ref,
+                    formal_statement_hash: fh,
+                    verdict: v,
+                    note,
+                    attested_by: by.clone(),
+                    attested_at: chrono::Utc::now().to_rfc3339(),
+                },
+                &signing_key,
+            )
+            .unwrap_or_else(|e| fail_return(&e));
+
+            let mut project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
+            if !project.findings.iter().any(|f| f.id == target) {
+                fail(&format!("target finding {target} not found in frontier"));
+            }
+            let event = vela_protocol::events::new_finding_event(
+                vela_protocol::events::FindingEventInput {
+                    kind: "statement.attested",
+                    finding_id: &target,
+                    actor_id: &by,
+                    actor_type: vela_protocol::events::actor_kind(&by),
+                    reason: "statement-faithfulness attestation",
+                    before_hash: "sha256:null",
+                    after_hash: "sha256:null",
+                    payload: serde_json::json!({ "attestation": att }),
+                    caveats: Vec::new(),
+                },
+            );
+            vela_protocol::reducer::apply_event(&mut project, &event)
+                .unwrap_or_else(|e| fail_return(&e));
+            project.events.push(event);
+            repo::save_to_path(&frontier, &project).unwrap_or_else(|e| fail_return(&e));
+            let payload = json!({
+                "ok": true,
+                "command": "attest_statement",
+                "attestation_id": att.id,
+                "target": target,
+                "verdict": verdict,
+                "attested_by": by,
+            });
+            if json {
+                print_json(&payload);
+            } else {
+                println!(
+                    "{} statement attestation {} ({verdict}) recorded on {target}",
+                    style::ok("ok"),
+                    att.id
+                );
+            }
+        }
+
         Commands::Attach {
             frontier,
             target,
@@ -8102,6 +8196,7 @@ const SCIENCE_SUBCOMMANDS: &[&str] = &[
     "accept",
     "accept-batch",
     "attach",
+    "attest-statement",
     "attest",
     "lineage",
     // v0.75: Carina spec deliverable (list/schema/validate

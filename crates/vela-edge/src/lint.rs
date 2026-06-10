@@ -922,6 +922,7 @@ mod tests {
             attempt_resolutions: vec![],
             transfers: vec![],
             endorsements: vec![],
+            statement_attestations: vec![],
         }
     }
 

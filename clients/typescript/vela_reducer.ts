@@ -694,6 +694,9 @@ function applyEvent(state: ReducerState, event: Event): void {
   else if (kind === "finding.superseded") {
     applyFindingSuperseded(state.findings, event);
   }
+  // Statement-faithfulness attestation: side-table upsert in Rust; no-op
+  // on the findings digest here. Rust mirror: apply_statement_attested.
+  else if (kind === "statement.attested") return;
   // Causal re-grading from payload.after ({claim, grade}). Rust mirror:
   // reducer.rs::apply_assertion_reinterpreted_causal.
   else if (kind === "assertion.reinterpreted_causal") {

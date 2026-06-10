@@ -1733,6 +1733,57 @@ fn build_reinterpreted_causal_log(
     }]
 }
 
+/// `statement.attested` builder. The attestation is a signed vsa_ record
+/// riding in payload.attestation; the Rust reducer re-verifies its
+/// signature and upserts it into a side table outside the
+/// finding-effects digest. Coverage proves no reducer errors on the
+/// kind; the upsert + signature semantics are pinned by the Rust unit
+/// tests in statement_attestation.rs and reducer tests.
+fn build_statement_attested_log(
+    frontier_idx: usize,
+    findings: &[FindingBundle],
+) -> Vec<events::StateEvent> {
+    use vela_protocol::statement_attestation::{
+        AttestationDraft, FaithfulnessVerdict, StatementAttestation,
+    };
+    let key = ed25519_dalek::SigningKey::from_bytes(&[11u8; 32]);
+    let att = StatementAttestation::build(
+        AttestationDraft {
+            target: findings[0].id.clone(),
+            informal_ref: format!("fixture-problem #{frontier_idx}"),
+            formal_ref: format!("fixture/Formal{frontier_idx}.lean"),
+            formal_statement_hash: "b".repeat(64),
+            verdict: FaithfulnessVerdict::Faithful,
+            note: "Fixture attestation for cross-impl coverage.".to_string(),
+            attested_by: "reviewer:attest-fixture".to_string(),
+            attested_at: fixture_timestamp(frontier_idx, 0),
+        },
+        &key,
+    )
+    .expect("build fixture attestation");
+    vec![StateEvent {
+        schema: events::EVENT_SCHEMA.to_string(),
+        id: String::new(),
+        kind: "statement.attested".to_string(),
+        target: StateTarget {
+            r#type: "finding".to_string(),
+            id: findings[0].id.clone(),
+        },
+        actor: StateActor {
+            id: "reviewer:attest-fixture".to_string(),
+            r#type: "human".to_string(),
+        },
+        timestamp: fixture_timestamp(frontier_idx, 2),
+        reason: "Fixture statement attestation for cross-impl coverage".to_string(),
+        before_hash: NULL_HASH.to_string(),
+        after_hash: NULL_HASH.to_string(),
+        payload: json!({ "attestation": att }),
+        caveats: vec![],
+        signature: None,
+        schema_artifact_id: None,
+    }]
+}
+
 /// v0.220: diff_pack.released / diff_pack.reviewed /
 /// verdict_conflict.resolved fixture builders. These three reducer
 /// arms write to side tables (`released_diff_packs`,
@@ -2564,6 +2615,24 @@ fn export_cross_impl_reducer_fixtures() {
         );
     }
 
+    // Fixture 14 — statement.attested (v0.702). No-op on the
+    // finding-effects digest (attestations live in a side table); a
+    // reducer that ERRORS on the kind fails this fixture.
+    {
+        let frontier_idx = FIXTURE_FRONTIER_COUNT + 11;
+        let findings: Vec<FindingBundle> = (0..FINDINGS_PER_FRONTIER)
+            .map(|i| make_finding(frontier_idx, i))
+            .collect();
+        let event_log = build_statement_attested_log(frontier_idx, &findings);
+        export_one(
+            &out_dir,
+            frontier_idx,
+            "statement_attested",
+            findings,
+            event_log,
+        );
+    }
+
     // v0.107.4: write fixtures.manifest.json with SHA-256 of every
     // exported fixture. THREAT_MODEL.md A12 names tampered fixtures
     // as a real attack surface; the manifest closes the integrity
@@ -2687,6 +2756,9 @@ fn fixture_coverage_includes_every_reducer_arm() {
         all_kinds.insert(ev.kind);
     }
     for ev in build_reinterpreted_causal_log(frontier_idx, &findings) {
+        all_kinds.insert(ev.kind);
+    }
+    for ev in build_statement_attested_log(frontier_idx, &findings) {
         all_kinds.insert(ev.kind);
     }
 

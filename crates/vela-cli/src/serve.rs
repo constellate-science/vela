@@ -329,6 +329,7 @@ fn merge_projects(frontiers: Vec<(String, Project)>) -> Project {
         attempt_resolutions: Vec::new(),
         transfers: Vec::new(),
         endorsements: Vec::new(),
+        statement_attestations: Vec::new(),
     };
     sources::materialize_project(&mut project);
     project
@@ -2868,6 +2869,17 @@ fn tool_task_packet(
             "reasons": gate.reasons,
             "attachments": atts.len(),
         },
+        "statement_attestations": frontier
+            .statement_attestations
+            .iter()
+            .filter(|a| a.target == target.id)
+            .map(|a| json!({
+                "id": a.id,
+                "verdict": format!("{:?}", a.verdict),
+                "attested_by": a.attested_by,
+                "formal_ref": a.formal_ref,
+            }))
+            .collect::<Vec<_>>(),
         "allowed_outputs": allowed_outputs,
         "failed_routes": {
             "count": failed_routes.len(),

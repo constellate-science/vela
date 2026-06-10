@@ -225,6 +225,10 @@ pub const EVENT_KIND_ENDORSEMENT_DEPOSITED: &str = "endorsement.deposited";
 /// `vre_` id; the head per attempt is the latest by `at`).
 pub const EVENT_KIND_ATTEMPT_RESOLVED: &str = "attempt.resolved";
 
+/// A signed statement-faithfulness attestation rides in
+/// `payload.attestation`; the reducer upserts it (idempotent by vsa_ id).
+pub const EVENT_KIND_STATEMENT_ATTESTED: &str = "statement.attested";
+
 /// The complete registry of event kinds the protocol can emit or store.
 /// This is the writer-side universe; the reducer must handle every kind
 /// here (a real arm or an explicit no-op) — `reducer::every_known_kind_reduces`
@@ -279,6 +283,7 @@ pub const KNOWN_EVENT_KINDS: &[&str] = &[
     "attempt.resolved",
     "transfer.deposited",
     "endorsement.deposited",
+    "statement.attested",
     "correction_return.review",
     "research_trace.review",
     "key.revoke",

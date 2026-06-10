@@ -217,6 +217,11 @@ pub struct Project {
     /// design. See `apply_endorsement_deposited` and `docs/SIGNIFICANCE_SLOT.md`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub endorsements: Vec<crate::endorsement::Endorsement>,
+    /// Statement-faithfulness attestations (`vsa_`): signed human
+    /// judgments that a formal statement encodes its informal problem.
+    /// Events-only storage (the replay loader grafts them).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub statement_attestations: Vec<crate::statement_attestation::StatementAttestation>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -439,6 +444,7 @@ pub fn assemble(
         attempt_resolutions: Vec::new(),
         transfers: Vec::new(),
         endorsements: Vec::new(),
+        statement_attestations: Vec::new(),
     };
     crate::sources::materialize_project(&mut project);
     project

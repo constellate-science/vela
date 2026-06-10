@@ -883,6 +883,44 @@ pub(crate) enum Commands {
         json: bool,
     },
 
+    /// Attest that a FORMAL statement faithfully encodes an INFORMAL
+    /// problem. Human judgment by design: requires a reviewer: actor and
+    /// that reviewer's signing key (the attestation is a signed vsa_
+    /// record; kernel verification proves the formal statement follows —
+    /// only a human can attest it is the problem anyone meant).
+    AttestStatement {
+        frontier: PathBuf,
+        /// The finding (`vf_…`) whose formalization is being judged.
+        #[arg(long)]
+        target: String,
+        /// Where the informal problem lives (e.g. "erdosproblems.com #12").
+        #[arg(long)]
+        informal_ref: String,
+        /// Where the formal statement lives (repo path / URL at a commit).
+        #[arg(long)]
+        formal_ref: String,
+        /// Path to the formal statement artifact (its sha256 is recorded),
+        /// or pass --formal-hash directly.
+        #[arg(long)]
+        formal_file: Option<PathBuf>,
+        #[arg(long)]
+        formal_hash: Option<String>,
+        /// faithful | variant | unfaithful
+        #[arg(long)]
+        verdict: String,
+        /// The reasoning: what was compared, what diverges. Required.
+        #[arg(long)]
+        note: String,
+        /// The attesting reviewer (must be reviewer:…).
+        #[arg(long)]
+        by: String,
+        /// Path to the reviewer's Ed25519 private key (hex seed). Required.
+        #[arg(long)]
+        key: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Accept a batch of proposals in one load → apply-all → save pass.
     ///
     /// The scale-capable accept path: the single `accept` reloads, re-runs

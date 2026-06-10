@@ -744,6 +744,11 @@ def apply_event(state: dict, event: dict) -> None:
     # causal_evidence_grade from payload.after. Outside the
     # finding-effects digest. Rust mirror:
     # reducer.rs::apply_assertion_reinterpreted_causal.
+    # Statement-faithfulness attestation: side-table upsert in Rust;
+    # no-op on the finding-effects digest here. Rust mirror:
+    # reducer.rs::apply_statement_attested.
+    elif kind == "statement.attested":
+        return
     elif kind == "assertion.reinterpreted_causal":
         apply_assertion_reinterpreted_causal(state["findings"], event)
     # Audit-only / writerless kinds (validated at emit, no projected

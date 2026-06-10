@@ -142,6 +142,10 @@ pub const REDUCER_MUTATION_KINDS: &[&str] = &[
     // Causal re-grading replays `assertion.causal_claim` /
     // `causal_evidence_grade` from the event's `payload.after`.
     "assertion.reinterpreted_causal",
+    // Statement-faithfulness attestation: upserts a signed vsa_ record
+    // into state.statement_attestations (idempotent by id; the record's
+    // own Ed25519 signature is re-verified on apply).
+    "statement.attested",
 ];
 
 /// Apply one canonical event to `state`, mutating it in place.
@@ -277,6 +281,7 @@ pub fn apply_event_indexed(
         "transfer.deposited" => apply_transfer_deposited(state, event),
         "endorsement.deposited" => apply_endorsement_deposited(state, event),
         "attempt.resolved" => apply_attempt_resolved(state, event),
+        "statement.attested" => apply_statement_attested(state, event),
         // Supersession: the event targets the *old* finding and flips its
         // `flags.superseded`. The replacement finding's body lives in the
         // accepted proposal's `payload.new_finding` and enters replay via
@@ -362,6 +367,7 @@ pub fn replay_from_genesis(
         attempt_resolutions: Vec::new(),
         transfers: Vec::new(),
         endorsements: Vec::new(),
+        statement_attestations: Vec::new(),
     };
     crate::sources::materialize_project(&mut state);
     // v0.105: build the finding-id index once, reuse across every
@@ -1635,6 +1641,33 @@ fn upsert_by<T>(vec: &mut Vec<T>, item: T, same: impl Fn(&T, &T) -> bool) {
 /// `payload.attempt`. Integrity: the object must `verify()` (id re-derives,
 /// signature checks, claim_digest matches) — a forged or hand-edited deposit
 /// is rejected. Idempotent by `vat_` id.
+/// `statement.attested`: upsert the signed attestation from
+/// `payload.attestation`. The record's own signature + content address
+/// are re-verified on every apply — a tampered attestation cannot
+/// re-enter through replay.
+fn apply_statement_attested(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    use crate::statement_attestation::StatementAttestation;
+    let value = event
+        .payload
+        .get("attestation")
+        .ok_or("statement.attested event missing payload.attestation")?
+        .clone();
+    let att: StatementAttestation = serde_json::from_value(value)
+        .map_err(|e| format!("statement.attested payload parse: {e}"))?;
+    att.verify()
+        .map_err(|e| format!("statement.attested rejected: {e}"))?;
+    if let Some(existing) = state
+        .statement_attestations
+        .iter_mut()
+        .find(|a| a.id == att.id)
+    {
+        *existing = att;
+    } else {
+        state.statement_attestations.push(att);
+    }
+    Ok(())
+}
+
 fn apply_attempt_deposited(state: &mut Project, event: &StateEvent) -> Result<(), String> {
     use crate::attempt::Attempt;
 
