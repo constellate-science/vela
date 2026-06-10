@@ -1136,6 +1136,8 @@ mod tests {
             transfers: vec![],
             endorsements: vec![],
             statement_attestations: Vec::new(),
+            attempt_claims: Vec::new(),
+            statement_registrations: Vec::new(),
         };
 
         let report = verify_frontier_data(&frontier, None).unwrap();
@@ -1193,6 +1195,8 @@ mod tests {
             transfers: vec![],
             endorsements: vec![],
             statement_attestations: Vec::new(),
+            attempt_claims: Vec::new(),
+            statement_registrations: Vec::new(),
         }
     }
 

@@ -1,0 +1,9 @@
+{
+ "kind": "interval_product",
+ "p": 71,
+ "cuts": [
+  7,
+  9,
+  20
+ ]
+}

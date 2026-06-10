@@ -742,6 +742,8 @@ fn load_vela_repo(dir: &Path) -> Result<Project, String> {
             c.transfers = replayed.transfers;
             c.endorsements = replayed.endorsements;
             c.statement_attestations = replayed.statement_attestations;
+            c.attempt_claims = replayed.attempt_claims;
+            c.statement_registrations = replayed.statement_registrations;
             // Locator repairs land on the replayed atoms (the reducer
             // arm); copy them onto the cache-derived atoms by id so the
             // curation work the canonical events recorded survives load.

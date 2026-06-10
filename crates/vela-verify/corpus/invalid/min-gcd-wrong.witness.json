@@ -1,0 +1,10 @@
+{
+ "kind": "min_binom_gcd",
+ "cases": [
+  {
+   "n": 10,
+   "k": 3,
+   "claimed_min_gcd": "999"
+  }
+ ]
+}

@@ -36,14 +36,14 @@ pub struct VerifyResult {
 }
 
 impl VerifyResult {
-    fn ok(message: impl Into<String>) -> Self {
+    pub fn ok(message: impl Into<String>) -> Self {
         Self {
             ok: true,
             message: message.into(),
             value: None,
         }
     }
-    fn fail(message: impl Into<String>) -> Self {
+    pub fn fail(message: impl Into<String>) -> Self {
         Self {
             ok: false,
             message: message.into(),
@@ -243,6 +243,44 @@ impl Witness {
 
 /// Verify a witness against its exact verifier, plus the optional
 /// `claimed_size` cross-check.
+/// Machine-checked novelty: does `new` strictly dominate `prior` for
+/// kinds with a natural order? Conservative: kinds without an obvious
+/// dominance order return Err (the caller reports "not comparable") —
+/// never a silent pass. This is the anti-AI-novelty-judge: dominance is
+/// arithmetic, not opinion.
+pub fn dominates(new: &Witness, prior: &Witness) -> Result<bool, String> {
+    use Witness::*;
+    match (new, prior) {
+        (
+            Sidon {
+                n: n1, points: p1, ..
+            },
+            Sidon {
+                n: n2, points: p2, ..
+            },
+        ) => {
+            if n1 != n2 {
+                return Err(format!("different n ({n1} vs {n2}); not comparable"));
+            }
+            Ok(p1.len() > p2.len())
+        }
+        (Golomb { marks: m1, .. }, Golomb { marks: m2, .. }) => Ok(m1.len() > m2.len()),
+        (IntervalProduct { p: p1, cuts: c1 }, IntervalProduct { p: p2, cuts: c2 }) => {
+            if p1 == p2 {
+                Ok(c1.len() > c2.len())
+            } else {
+                // a longer chain at ANY prime is a new k-record
+                Ok(c1.len() > c2.len())
+            }
+        }
+        _ => Err(format!(
+            "no dominance order defined between {} and {}",
+            new.kind(),
+            prior.kind()
+        )),
+    }
+}
+
 pub fn verify_witness(witness: &Witness) -> VerifyResult {
     match witness {
         Witness::Sidon {

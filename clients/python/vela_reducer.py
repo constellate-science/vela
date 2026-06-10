@@ -749,6 +749,11 @@ def apply_event(state: dict, event: dict) -> None:
     # reducer.rs::apply_statement_attested.
     elif kind == "statement.attested":
         return
+    # Obligation lease + priority registration: side-table upserts in
+    # Rust; no-ops on the finding-effects digest here. Rust mirrors:
+    # reducer.rs::apply_attempt_claimed / apply_statement_registered.
+    elif kind in ("attempt.claimed", "statement.registered"):
+        return
     elif kind == "assertion.reinterpreted_causal":
         apply_assertion_reinterpreted_causal(state["findings"], event)
     # Audit-only / writerless kinds (validated at emit, no projected

@@ -921,6 +921,47 @@ pub(crate) enum Commands {
         json: bool,
     },
 
+    /// Lease an open obligation so other producers route around it.
+    /// Signed event; one live lease per obligation; expiry = claimed_at
+    /// + ttl, computed at read time.
+    Claim {
+        frontier: PathBuf,
+        /// The obligation finding (`vf_…`) being claimed.
+        obligation: String,
+        #[arg(long, default_value_t = 86400)]
+        ttl: u64,
+        /// Claiming actor (agent:… or reviewer:…).
+        #[arg(long)]
+        by: String,
+        /// Path to the claimant's Ed25519 private key (hex seed).
+        #[arg(long)]
+        key: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Register a statement hash for priority: a content-addressed
+    /// timestamp in the signed log, externally anchored by the
+    /// release-archive chain.
+    RegisterStatement {
+        frontier: PathBuf,
+        /// Path to a file holding the exact statement text, or pass
+        /// --hash directly.
+        #[arg(long)]
+        statement_file: Option<PathBuf>,
+        #[arg(long)]
+        hash: Option<String>,
+        /// Where the informal problem lives.
+        #[arg(long)]
+        informal_ref: String,
+        #[arg(long)]
+        by: String,
+        #[arg(long)]
+        key: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Accept a batch of proposals in one load → apply-all → save pass.
     ///
     /// The scale-capable accept path: the single `accept` reloads, re-runs

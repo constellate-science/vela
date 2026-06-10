@@ -119,6 +119,25 @@ pub(crate) fn cmd_check(
                     && (e.kind.ends_with(".reviewed") || e.kind == "finding.asserted")
             })
             .count();
+        // Prior-art collision lint: exact normalized-statement duplicates
+        // among non-superseded findings are a state error.
+        let mut seen_hashes: std::collections::HashMap<String, &str> =
+            std::collections::HashMap::new();
+        let mut collisions = Vec::new();
+        for f in frontier.findings.iter().filter(|f| !f.flags.superseded) {
+            let h = vela_protocol::canonical::normalized_statement_hash(&f.assertion.text);
+            if let Some(prev) = seen_hashes.get(&h) {
+                collisions.push(format!("{} duplicates {}", f.id, prev));
+            } else {
+                seen_hashes.insert(h, f.id.as_str());
+            }
+        }
+        if !collisions.is_empty() {
+            println!("prior-art collisions: {}", collisions.len());
+            for c in collisions.iter().take(10) {
+                println!("  - {c}");
+            }
+        }
         if unsigned_keyed_accepts > 0 {
             println!(
                 "key custody: {unsigned_keyed_accepts} accept-class event(s) by keyed reviewers carry no signature (history predating key registration; new accepts require --key)"

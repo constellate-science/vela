@@ -697,6 +697,10 @@ function applyEvent(state: ReducerState, event: Event): void {
   // Statement-faithfulness attestation: side-table upsert in Rust; no-op
   // on the findings digest here. Rust mirror: apply_statement_attested.
   else if (kind === "statement.attested") return;
+  // Obligation lease + priority registration: side-table upserts in Rust;
+  // no-ops on the findings digest here.
+  else if (kind === "attempt.claimed" || kind === "statement.registered")
+    return;
   // Causal re-grading from payload.after ({claim, grade}). Rust mirror:
   // reducer.rs::apply_assertion_reinterpreted_causal.
   else if (kind === "assertion.reinterpreted_causal") {

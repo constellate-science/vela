@@ -276,6 +276,14 @@ pub struct VerifierAttachment {
     pub verifier_actor: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub note: String,
+    /// Monoculture provenance (optional; absent on legacy records):
+    /// which IMPLEMENTATION produced this run. N runs of one frozen
+    /// binary are replication; N independent implementations are
+    /// diversity — the gate's reasons distinguish them.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub implementation_id: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub toolchain_hash: String,
 }
 
 /// Fields a caller supplies; the id and schema are derived.
@@ -328,6 +336,8 @@ impl VerifierAttachment {
             method_integrity: MethodIntegrity::Unattested,
             verifier_actor: draft.verifier_actor,
             note: draft.note,
+            implementation_id: String::new(),
+            toolchain_hash: String::new(),
         };
         att.id = att.derive_id()?;
         Ok(att)
@@ -459,6 +469,25 @@ pub fn derive_gate_status(
         .iter()
         .filter(|a| a.is_passing_match(current_claim_digest))
         .collect();
+
+    // Monoculture observation (informational, never demotes in v1):
+    // when the matched set agrees but every run names the SAME
+    // implementation, say so — N runs of one binary are replication,
+    // not implementation diversity.
+    {
+        let impls: std::collections::HashSet<&str> = matched
+            .iter()
+            .map(|a| a.implementation_id.as_str())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if matched.len() >= 2 && impls.len() == 1 {
+            reasons.push(format!(
+                "monoculture: {} matched run(s) all from implementation '{}' — independent implementations would strengthen this",
+                matched.len(),
+                impls.iter().next().unwrap()
+            ));
+        }
+    }
 
     // G5 method-integrity: an attachment that *would* match the claim but
     // ran with a compromised method (e.g. a forbidden Lean axiom such as

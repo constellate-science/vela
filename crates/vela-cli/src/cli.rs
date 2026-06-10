@@ -220,6 +220,129 @@ pub async fn run_command() {
             let _ = conformance::run(&dir);
         }
         Commands::Gate { action } => cmd_gate(action),
+        Commands::Claim {
+            frontier,
+            obligation,
+            ttl,
+            by,
+            key,
+            json,
+        } => {
+            let key_hex = std::fs::read_to_string(&key)
+                .map(|s| s.trim().to_string())
+                .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
+            let signing_key = parse_signing_key(&key_hex);
+            let pubkey = hex::encode(signing_key.verifying_key().to_bytes());
+            let mut project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
+            if !project.findings.iter().any(|f| f.id == obligation) {
+                fail(&format!("obligation finding {obligation} not found"));
+            }
+            let mut event = vela_protocol::events::new_finding_event(
+                vela_protocol::events::FindingEventInput {
+                    kind: "attempt.claimed",
+                    finding_id: &obligation,
+                    actor_id: &by,
+                    actor_type: vela_protocol::events::actor_kind(&by),
+                    reason: "obligation lease",
+                    before_hash: "sha256:null",
+                    after_hash: "sha256:null",
+                    payload: serde_json::json!({
+                        "obligation_id": obligation,
+                        "lease_ttl_seconds": ttl,
+                        "claimant_actor": by,
+                        "claimant_pubkey": pubkey,
+                    }),
+                    caveats: Vec::new(),
+                    timestamp: None,
+                },
+            );
+            vela_protocol::reducer::apply_event(&mut project, &event)
+                .unwrap_or_else(|e| fail_return(&e));
+            event.signature = Some(
+                vela_protocol::sign::sign_event(&event, &signing_key)
+                    .unwrap_or_else(|e| fail_return(&e)),
+            );
+            project.events.push(event);
+            repo::save_to_path(&frontier, &project).unwrap_or_else(|e| fail_return(&e));
+            let payload = json!({
+                "ok": true, "command": "claim", "obligation": obligation,
+                "by": by, "ttl_seconds": ttl,
+            });
+            if json {
+                print_json(&payload);
+            } else {
+                println!(
+                    "{} leased {obligation} to {by} for {ttl}s (signed)",
+                    style::ok("ok")
+                );
+            }
+        }
+
+        Commands::RegisterStatement {
+            frontier,
+            statement_file,
+            hash,
+            informal_ref,
+            by,
+            key,
+            json,
+        } => {
+            let key_hex = std::fs::read_to_string(&key)
+                .map(|s| s.trim().to_string())
+                .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
+            let signing_key = parse_signing_key(&key_hex);
+            let statement_hash = match (&statement_file, &hash) {
+                (Some(p), _) => {
+                    use sha2::Digest;
+                    let bytes = std::fs::read(p)
+                        .unwrap_or_else(|e| fail_return(&format!("read {}: {e}", p.display())));
+                    hex::encode(sha2::Sha256::digest(&bytes))
+                }
+                (None, Some(h)) => h.trim().to_string(),
+                (None, None) => fail_return("pass --statement-file or --hash"),
+            };
+            let mut project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
+            let target_id = project
+                .findings
+                .first()
+                .map(|f| f.id.clone())
+                .unwrap_or_else(|| "vf_genesis".to_string());
+            let mut event = vela_protocol::events::new_finding_event(
+                vela_protocol::events::FindingEventInput {
+                    kind: "statement.registered",
+                    finding_id: &target_id,
+                    actor_id: &by,
+                    actor_type: vela_protocol::events::actor_kind(&by),
+                    reason: "statement priority registration",
+                    before_hash: "sha256:null",
+                    after_hash: "sha256:null",
+                    payload: serde_json::json!({
+                        "statement_hash": statement_hash,
+                        "informal_ref": informal_ref,
+                    }),
+                    caveats: Vec::new(),
+                    timestamp: None,
+                },
+            );
+            vela_protocol::reducer::apply_event(&mut project, &event)
+                .unwrap_or_else(|e| fail_return(&e));
+            event.signature = Some(
+                vela_protocol::sign::sign_event(&event, &signing_key)
+                    .unwrap_or_else(|e| fail_return(&e)),
+            );
+            project.events.push(event);
+            repo::save_to_path(&frontier, &project).unwrap_or_else(|e| fail_return(&e));
+            let payload = json!({
+                "ok": true, "command": "register_statement",
+                "statement_hash": statement_hash, "informal_ref": informal_ref,
+            });
+            if json {
+                print_json(&payload);
+            } else {
+                println!("{} registered statement {statement_hash}", style::ok("ok"));
+            }
+        }
+
         Commands::AttestStatement {
             frontier,
             target,
@@ -6683,7 +6806,39 @@ fn cmd_reproduce(path: &Path, json_output: bool) {
                 continue;
             }
         };
-        let outcome = vela_verify::verify_witness(&witness);
+        let mut outcome = vela_verify::verify_witness(&witness);
+        // Machine-checked novelty: a witness may declare `improves_on`
+        // (a sibling witness path relative to its own directory). The
+        // claim then verifies ONLY if it also strictly dominates the
+        // referenced witness — dominance is arithmetic, not opinion.
+        if outcome.ok
+            && let Ok(value) = serde_json::from_str::<Value>(&raw)
+            && let Some(prior_rel) = value.get("improves_on").and_then(Value::as_str)
+        {
+            let prior_path = file
+                .parent()
+                .map(|d| d.join(prior_rel))
+                .unwrap_or_else(|| std::path::PathBuf::from(prior_rel));
+            match std::fs::read_to_string(&prior_path)
+                .map_err(|e| format!("improves_on read {}: {e}", prior_path.display()))
+                .and_then(|p| parse_witness(&p))
+                .and_then(|prior| vela_verify::dominates(&witness, &prior))
+            {
+                Ok(true) => {
+                    outcome.message =
+                        format!("{} · strictly improves on {prior_rel}", outcome.message);
+                }
+                Ok(false) => {
+                    outcome = vela_verify::VerifyResult::fail(format!(
+                        "claims improves_on {prior_rel} but does NOT strictly dominate it"
+                    ));
+                }
+                Err(e) => {
+                    outcome =
+                        vela_verify::VerifyResult::fail(format!("improves_on check failed: {e}"));
+                }
+            }
+        }
         if outcome.ok {
             passed += 1;
         } else {
@@ -8198,6 +8353,8 @@ const SCIENCE_SUBCOMMANDS: &[&str] = &[
     "accept-batch",
     "attach",
     "attest-statement",
+    "claim",
+    "register-statement",
     "attest",
     "lineage",
     // v0.75: Carina spec deliverable (list/schema/validate

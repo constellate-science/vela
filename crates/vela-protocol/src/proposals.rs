@@ -3421,6 +3421,24 @@ fn apply_add(
             "Refusing to add duplicate finding with existing finding ID {finding_id}"
         ));
     }
+    // Prior-art collision: an EXACT duplicate of an accepted finding's
+    // statement is refused unless the proposal names what it supersedes
+    // (the Sakana rediscovery failure mode, made mechanical).
+    {
+        let new_hash = crate::canonical::normalized_statement_hash(&finding.assertion.text);
+        let declares_supersession = proposal.payload.get("supersedes").is_some()
+            || proposal.payload.get("improves_on").is_some();
+        if !declares_supersession
+            && let Some(dup) = frontier.findings.iter().find(|f| {
+                crate::canonical::normalized_statement_hash(&f.assertion.text) == new_hash
+            })
+        {
+            return Err(format!(
+                "prior-art collision: statement duplicates accepted finding {} — name it via payload.supersedes/improves_on or change the claim",
+                dup.id
+            ));
+        }
+    }
     frontier.findings.push(finding);
     let after_hash = events::finding_hash_by_id(frontier, &finding_id);
     Ok(events::new_finding_event(events::FindingEventInput {
@@ -4547,7 +4565,7 @@ mod tests {
             version: 1,
             previous_version: None,
             assertion: Assertion {
-                text: "Test finding".to_string(),
+                text: format!("Test finding {id}"),
                 assertion_type: "mechanism".to_string(),
                 entities: vec![Entity {
                     name: "LRP1".to_string(),

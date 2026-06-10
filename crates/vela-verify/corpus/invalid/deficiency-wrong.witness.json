@@ -1,0 +1,9 @@
+{
+ "kind": "binom_deficiency",
+ "entries": [
+  {
+   "n": "10",
+   "claimed_deficiency": 12345
+  }
+ ]
+}

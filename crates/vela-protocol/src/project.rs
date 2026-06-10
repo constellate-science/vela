@@ -222,6 +222,14 @@ pub struct Project {
     /// Events-only storage (the replay loader grafts them).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub statement_attestations: Vec<crate::statement_attestation::StatementAttestation>,
+    /// Active obligation leases (events-only; replay-grafted). Expiry is
+    /// computed at read time from claimed_at + ttl.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attempt_claims: Vec<AttemptClaim>,
+    /// Priority registrations: content-addressed statement hashes with
+    /// their log timestamps (events-only; replay-grafted).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub statement_registrations: Vec<StatementRegistration>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -445,6 +453,8 @@ pub fn assemble(
         transfers: Vec::new(),
         endorsements: Vec::new(),
         statement_attestations: Vec::new(),
+        attempt_claims: Vec::new(),
+        statement_registrations: Vec::new(),
     };
     crate::sources::materialize_project(&mut project);
     project
@@ -1194,4 +1204,25 @@ mod tests {
         assert_eq!(c.vela_version, VELA_SCHEMA_VERSION);
         assert!(!c.project.compiled_at.is_empty());
     }
+}
+
+/// An active (or expired — expiry is a read-time computation) lease on
+/// an open obligation. One live lease per obligation; the reducer
+/// rejects a second claim while a prior one is unexpired.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct AttemptClaim {
+    pub obligation_id: String,
+    pub claimant_actor: String,
+    pub claimant_pubkey: String,
+    pub claimed_at: String,
+    pub lease_ttl_seconds: u64,
+}
+
+/// A registered statement hash: the priority timestamp primitive.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct StatementRegistration {
+    pub statement_hash: String,
+    pub informal_ref: String,
+    pub registered_by: String,
+    pub registered_at: String,
 }

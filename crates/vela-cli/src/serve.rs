@@ -330,6 +330,8 @@ fn merge_projects(frontiers: Vec<(String, Project)>) -> Project {
         transfers: Vec::new(),
         endorsements: Vec::new(),
         statement_attestations: Vec::new(),
+        attempt_claims: Vec::new(),
+        statement_registrations: Vec::new(),
     };
     sources::materialize_project(&mut project);
     project
@@ -2825,12 +2827,35 @@ fn tool_task_packet(
             }));
         }
         if let Some(o) = text.find("OPEN:") {
+            // Opportunity view v1: how much of the frontier rests on this
+            // obligation (direct dependents via links, either direction).
+            let dependents = frontier
+                .findings
+                .iter()
+                .filter(|d| d.id != f.id && d.links.iter().any(|l| l.target == f.id))
+                .count();
+            let lease = frontier
+                .attempt_claims
+                .iter()
+                .find(|c| c.obligation_id == f.id)
+                .map(|c| {
+                    json!({
+                        "leased_by": c.claimant_actor,
+                        "claimed_at": c.claimed_at,
+                        "ttl_seconds": c.lease_ttl_seconds,
+                    })
+                });
             open_targets.push(json!({
                 "obligation": f.id,
                 "open": text[o + 5..].trim(),
+                "dependents": dependents,
+                "lease": lease,
             }));
         }
     }
+    // Highest-leverage first: the opportunity ranking is a derived view,
+    // it never gates trust.
+    open_targets.sort_by_key(|t| std::cmp::Reverse(t["dependents"].as_u64().unwrap_or(0)));
 
     // Attempt ledger: every signed pass on this problem, banked or
     // failed — the run history the next agent starts from.
@@ -2856,6 +2881,33 @@ fn tool_task_packet(
         })
         .collect();
 
+    // Context-of-use: derived, never stored — what "verified" MEANS for
+    // this claim. Formal-proof attachments need a faithful statement
+    // attestation to count as verified_formal_statement.
+    let has_formal = atts.iter().any(|a| {
+        format!("{:?}", a.verifier_method)
+            .to_lowercase()
+            .contains("lean")
+    });
+    let attested_faithful = frontier.statement_attestations.iter().any(|a| {
+        a.target == target.id
+            && matches!(
+                a.verdict,
+                vela_protocol::statement_attestation::FaithfulnessVerdict::Faithful
+            )
+    });
+    let context_label = match (
+        format!("{:?}", gate.status).as_str(),
+        has_formal,
+        attested_faithful,
+    ) {
+        ("Verified", true, true) => "verified_formal_statement",
+        ("Verified", true, false) => "verified_proof_statement_unattested",
+        ("Verified", false, _) => "verified_computational_replay",
+        _ if attested_faithful => "human_attested_statement",
+        _ => "unverified",
+    };
+
     serde_json::to_string_pretty(&json!({
         "tool": "task_packet",
         "resolved": {"id": target.id, "problem": problem_number, "from": arg},
@@ -2868,6 +2920,10 @@ fn tool_task_packet(
             "status": format!("{:?}", gate.status),
             "reasons": gate.reasons,
             "attachments": atts.len(),
+        },
+        "context_of_use": {
+            "label": context_label,
+            "regulatory_grade": false,
         },
         "statement_attestations": frontier
             .statement_attestations

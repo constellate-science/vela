@@ -111,6 +111,21 @@ pub fn sha256_canonical<T: Serialize + ?Sized>(value: &T) -> Result<String, Stri
     Ok(hex::encode(Sha256::digest(&bytes)))
 }
 
+/// Normalized statement hash for prior-art collision checks: lowercase,
+/// whitespace-collapsed, sha256. Deterministic and intentionally crude —
+/// it catches EXACT rediscovery (the Sakana failure mode), not
+/// paraphrase; paraphrase detection would need judgment and judgment
+/// never gates.
+pub fn normalized_statement_hash(text: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let norm = text
+        .to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    hex::encode(Sha256::digest(norm.as_bytes()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

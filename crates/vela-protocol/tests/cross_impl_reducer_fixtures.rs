@@ -1798,6 +1798,48 @@ fn build_statement_attested_log(
     }]
 }
 
+/// `attempt.claimed` + `statement.registered` builders: side-table
+/// kinds outside the finding-effects digest; coverage proves no reducer
+/// errors. Lease/registration semantics are pinned by Rust unit tests.
+fn build_claim_and_register_log(
+    frontier_idx: usize,
+    findings: &[FindingBundle],
+) -> Vec<events::StateEvent> {
+    let mk = |kind: &str, ts_idx: usize, payload: serde_json::Value| StateEvent {
+        schema: events::EVENT_SCHEMA.to_string(),
+        id: String::new(),
+        kind: kind.to_string(),
+        target: StateTarget {
+            r#type: "finding".to_string(),
+            id: findings[0].id.clone(),
+        },
+        actor: StateActor {
+            id: "reviewer:lease-fixture".to_string(),
+            r#type: "human".to_string(),
+        },
+        timestamp: fixture_timestamp(frontier_idx, ts_idx),
+        reason: "fixture".to_string(),
+        before_hash: NULL_HASH.to_string(),
+        after_hash: NULL_HASH.to_string(),
+        payload,
+        caveats: vec![],
+        signature: None,
+        schema_artifact_id: None,
+    };
+    vec![
+        mk(
+            "attempt.claimed",
+            0,
+            json!({"obligation_id": findings[0].id, "lease_ttl_seconds": 3600, "claimant_actor": "agent:fixture"}),
+        ),
+        mk(
+            "statement.registered",
+            1,
+            json!({"statement_hash": "d".repeat(64), "informal_ref": "fixture #1"}),
+        ),
+    ]
+}
+
 /// v0.220: diff_pack.released / diff_pack.reviewed /
 /// verdict_conflict.resolved fixture builders. These three reducer
 /// arms write to side tables (`released_diff_packs`,
@@ -2647,6 +2689,23 @@ fn export_cross_impl_reducer_fixtures() {
         );
     }
 
+    // Fixture 15 — attempt.claimed + statement.registered (v0.703).
+    // Side-table kinds; expected_* arrays are untouched genesis findings.
+    {
+        let frontier_idx = FIXTURE_FRONTIER_COUNT + 12;
+        let findings: Vec<FindingBundle> = (0..FINDINGS_PER_FRONTIER)
+            .map(|i| make_finding(frontier_idx, i))
+            .collect();
+        let event_log = build_claim_and_register_log(frontier_idx, &findings);
+        export_one(
+            &out_dir,
+            frontier_idx,
+            "claim_and_register",
+            findings,
+            event_log,
+        );
+    }
+
     // v0.107.4: write fixtures.manifest.json with SHA-256 of every
     // exported fixture. THREAT_MODEL.md A12 names tampered fixtures
     // as a real attack surface; the manifest closes the integrity
@@ -2773,6 +2832,9 @@ fn fixture_coverage_includes_every_reducer_arm() {
         all_kinds.insert(ev.kind);
     }
     for ev in build_statement_attested_log(frontier_idx, &findings) {
+        all_kinds.insert(ev.kind);
+    }
+    for ev in build_claim_and_register_log(frontier_idx, &findings) {
         all_kinds.insert(ev.kind);
     }
 

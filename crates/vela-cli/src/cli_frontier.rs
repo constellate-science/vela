@@ -73,6 +73,8 @@ pub(crate) fn cmd_frontier(action: FrontierAction) {
                 transfers: Vec::new(),
                 endorsements: Vec::new(),
                 statement_attestations: Vec::new(),
+                attempt_claims: Vec::new(),
+                statement_registrations: Vec::new(),
             };
             repo::save_to_path(&path, &project).unwrap_or_else(|e| fail_return(&e));
             let payload = json!({

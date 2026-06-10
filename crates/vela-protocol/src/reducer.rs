@@ -146,6 +146,14 @@ pub const REDUCER_MUTATION_KINDS: &[&str] = &[
     // into state.statement_attestations (idempotent by id; the record's
     // own Ed25519 signature is re-verified on apply).
     "statement.attested",
+    // Obligation lease: one live lease per obligation; a second claim
+    // while a prior is unexpired is a reducer error. Expiry is computed
+    // against the NEW event's timestamp (the log's own clock), never
+    // wall time — replay stays deterministic.
+    "attempt.claimed",
+    // Priority registration: append a content-addressed statement hash
+    // (idempotent on hash).
+    "statement.registered",
 ];
 
 /// Apply one canonical event to `state`, mutating it in place.
@@ -282,6 +290,8 @@ pub fn apply_event_indexed(
         "endorsement.deposited" => apply_endorsement_deposited(state, event),
         "attempt.resolved" => apply_attempt_resolved(state, event),
         "statement.attested" => apply_statement_attested(state, event),
+        "attempt.claimed" => apply_attempt_claimed(state, event),
+        "statement.registered" => apply_statement_registered(state, event),
         // Supersession: the event targets the *old* finding and flips its
         // `flags.superseded`. The replacement finding's body lives in the
         // accepted proposal's `payload.new_finding` and enters replay via
@@ -368,6 +378,8 @@ pub fn replay_from_genesis(
         transfers: Vec::new(),
         endorsements: Vec::new(),
         statement_attestations: Vec::new(),
+        attempt_claims: Vec::new(),
+        statement_registrations: Vec::new(),
     };
     crate::sources::materialize_project(&mut state);
     // v0.105: build the finding-id index once, reuse across every
@@ -1645,6 +1657,96 @@ fn upsert_by<T>(vec: &mut Vec<T>, item: T, same: impl Fn(&T, &T) -> bool) {
 /// `payload.attestation`. The record's own signature + content address
 /// are re-verified on every apply — a tampered attestation cannot
 /// re-enter through replay.
+/// `attempt.claimed`: append/refresh an obligation lease. The
+/// determinism rule: a prior lease is "expired" relative to THIS
+/// event's timestamp (parse both RFC3339 instants; if claimed_at + ttl
+/// <= new event's timestamp, the old lease is dead and the claim
+/// succeeds). Same claimant refreshing their own live lease is allowed.
+fn apply_attempt_claimed(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    let p = &event.payload;
+    let obligation_id = p
+        .get("obligation_id")
+        .and_then(Value::as_str)
+        .ok_or("attempt.claimed missing payload.obligation_id")?;
+    let ttl = p
+        .get("lease_ttl_seconds")
+        .and_then(Value::as_u64)
+        .ok_or("attempt.claimed missing payload.lease_ttl_seconds")?;
+    let claimant_actor = p
+        .get("claimant_actor")
+        .and_then(Value::as_str)
+        .unwrap_or(&event.actor.id)
+        .to_string();
+    let claimant_pubkey = p
+        .get("claimant_pubkey")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let parse = |t: &str| chrono::DateTime::parse_from_rfc3339(t).map(|d| d.timestamp());
+    let now_s = parse(&event.timestamp)
+        .map_err(|e| format!("attempt.claimed: bad event timestamp: {e}"))?;
+    if let Some(existing) = state
+        .attempt_claims
+        .iter()
+        .find(|c| c.obligation_id == obligation_id)
+    {
+        let exp = parse(&existing.claimed_at)
+            .map(|t| t + existing.lease_ttl_seconds as i64)
+            .unwrap_or(i64::MIN);
+        let live = exp > now_s;
+        if live && existing.claimant_actor != claimant_actor {
+            return Err(format!(
+                "obligation {obligation_id} is leased by {} until +{}s; route around it or wait for expiry",
+                existing.claimant_actor, existing.lease_ttl_seconds
+            ));
+        }
+    }
+    state
+        .attempt_claims
+        .retain(|c| c.obligation_id != obligation_id);
+    state.attempt_claims.push(crate::project::AttemptClaim {
+        obligation_id: obligation_id.to_string(),
+        claimant_actor,
+        claimant_pubkey,
+        claimed_at: event.timestamp.clone(),
+        lease_ttl_seconds: ttl,
+    });
+    Ok(())
+}
+
+/// `statement.registered`: append a priority registration (idempotent
+/// on statement_hash).
+fn apply_statement_registered(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    let p = &event.payload;
+    let hash = p
+        .get("statement_hash")
+        .and_then(Value::as_str)
+        .ok_or("statement.registered missing payload.statement_hash")?;
+    if hash.len() != 64 || hex::decode(hash).is_err() {
+        return Err("statement_hash must be 32 bytes of hex".to_string());
+    }
+    if state
+        .statement_registrations
+        .iter()
+        .any(|r| r.statement_hash == hash)
+    {
+        return Ok(());
+    }
+    state
+        .statement_registrations
+        .push(crate::project::StatementRegistration {
+            statement_hash: hash.to_string(),
+            informal_ref: p
+                .get("informal_ref")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string(),
+            registered_by: event.actor.id.clone(),
+            registered_at: event.timestamp.clone(),
+        });
+    Ok(())
+}
+
 fn apply_statement_attested(state: &mut Project, event: &StateEvent) -> Result<(), String> {
     use crate::statement_attestation::StatementAttestation;
     let value = event

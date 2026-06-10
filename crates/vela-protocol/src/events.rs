@@ -229,6 +229,19 @@ pub const EVENT_KIND_ATTEMPT_RESOLVED: &str = "attempt.resolved";
 /// `payload.attestation`; the reducer upserts it (idempotent by vsa_ id).
 pub const EVENT_KIND_STATEMENT_ATTESTED: &str = "statement.attested";
 
+/// A TTL lease on an open obligation: fleet coordination so producers
+/// route around in-flight work (the ETP ran 22M-implication crowd+AI
+/// coordination on GitHub-issue leases; this is that primitive, signed).
+/// Expiry is computed at READ time from event timestamp + ttl — the
+/// reducer never reads a clock.
+pub const EVENT_KIND_ATTEMPT_CLAIMED: &str = "attempt.claimed";
+
+/// Priority registration: a content-addressed statement hash with a hub
+/// receipt timestamp. External anchoring rides the release-archive
+/// chain (every Zenodo/GH bundle embeds the event log), so the time
+/// claim does not depend on trusting the hub.
+pub const EVENT_KIND_STATEMENT_REGISTERED: &str = "statement.registered";
+
 /// The complete registry of event kinds the protocol can emit or store.
 /// This is the writer-side universe; the reducer must handle every kind
 /// here (a real arm or an explicit no-op) — `reducer::every_known_kind_reduces`
@@ -284,6 +297,8 @@ pub const KNOWN_EVENT_KINDS: &[&str] = &[
     "transfer.deposited",
     "endorsement.deposited",
     "statement.attested",
+    "attempt.claimed",
+    "statement.registered",
     "correction_return.review",
     "research_trace.review",
     "key.revoke",

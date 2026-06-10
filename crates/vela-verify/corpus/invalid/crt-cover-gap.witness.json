@@ -1,0 +1,11 @@
+{
+ "kind": "crt_partial_cover",
+ "n": 10,
+ "target_density": "0.9",
+ "rows": [
+  {
+   "modulus": 2,
+   "residue": 0
+  }
+ ]
+}
