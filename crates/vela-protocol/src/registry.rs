@@ -154,6 +154,71 @@ pub fn verify_deprecation(rec: &DeprecationRecord) -> Result<bool, String> {
     Ok(vk.verify(&bytes, &sig).is_ok())
 }
 
+/// A signed owner-rotation record: the CURRENT owner key authorizes a
+/// successor key for a frontier. Append-only — rotations chain, and the
+/// effective owner at any moment is the latest rotation's successor (or
+/// the original publisher if none). This is the designed key-rotation
+/// path; without it, an entry published under a retired key is stuck
+/// behind the owner-continuity guard forever.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct OwnerRotationRecord {
+    pub schema: String,
+    pub vfr_id: String,
+    pub new_owner_pubkey: String,
+    pub rotated_at: String,
+    pub reason: String,
+    pub signature: String,
+    pub signer_pubkey_hex: String,
+}
+
+pub const OWNER_ROTATION_SCHEMA: &str = "vela.frontier-owner-rotation.v0.1";
+
+pub fn rotation_signing_bytes(rec: &OwnerRotationRecord) -> Result<Vec<u8>, String> {
+    let preimage = serde_json::json!({
+        "schema": rec.schema,
+        "vfr_id": rec.vfr_id,
+        "new_owner_pubkey": rec.new_owner_pubkey,
+        "rotated_at": rec.rotated_at,
+        "reason": rec.reason,
+    });
+    crate::canonical::to_canonical_bytes(&preimage)
+}
+
+pub fn sign_rotation(
+    rec: &OwnerRotationRecord,
+    key: &ed25519_dalek::SigningKey,
+) -> Result<String, String> {
+    use ed25519_dalek::Signer;
+    let bytes = rotation_signing_bytes(rec)?;
+    Ok(hex::encode(key.sign(&bytes).to_bytes()))
+}
+
+pub fn verify_rotation(rec: &OwnerRotationRecord) -> Result<bool, String> {
+    use ed25519_dalek::Verifier;
+    if rec.schema != OWNER_ROTATION_SCHEMA {
+        return Err(format!(
+            "rotation schema must be {OWNER_ROTATION_SCHEMA}, got {}",
+            rec.schema
+        ));
+    }
+    if rec.new_owner_pubkey.len() != 64 || hex::decode(&rec.new_owner_pubkey).is_err() {
+        return Err("new_owner_pubkey must be 32 bytes of hex".to_string());
+    }
+    let bytes = rotation_signing_bytes(rec)?;
+    let pk_bytes: [u8; 32] = hex::decode(&rec.signer_pubkey_hex)
+        .map_err(|e| format!("pubkey hex: {e}"))?
+        .try_into()
+        .map_err(|_| "pubkey must be 32 bytes".to_string())?;
+    let vk =
+        ed25519_dalek::VerifyingKey::from_bytes(&pk_bytes).map_err(|e| format!("pubkey: {e}"))?;
+    let sig_bytes: [u8; 64] = hex::decode(&rec.signature)
+        .map_err(|e| format!("signature hex: {e}"))?
+        .try_into()
+        .map_err(|_| "signature must be 64 bytes".to_string())?;
+    let sig = ed25519_dalek::Signature::from_bytes(&sig_bytes);
+    Ok(vk.verify(&bytes, &sig).is_ok())
+}
+
 pub fn entry_signing_bytes(entry: &RegistryEntry) -> Result<Vec<u8>, String> {
     let preimage = json!({
         "schema": entry.schema,

@@ -35,6 +35,76 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
             artifacts,
             json,
         } => cmd_verify_chain(frontier, artifacts, json),
+        RegistryAction::RotateOwner {
+            vfr_id,
+            to,
+            key,
+            new_owner,
+            reason,
+            json,
+        } => {
+            let key_hex = std::fs::read_to_string(&key)
+                .map(|s| s.trim().to_string())
+                .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
+            let signing_key = parse_signing_key(&key_hex);
+            let signer_pubkey = hex::encode(signing_key.verifying_key().to_bytes());
+            let new_owner_pubkey = if std::path::Path::new(&new_owner).exists() {
+                std::fs::read_to_string(&new_owner)
+                    .map(|s| s.trim().to_string())
+                    .unwrap_or_else(|e| fail_return(&format!("read new owner key: {e}")))
+            } else {
+                new_owner.trim().to_string()
+            };
+            let mut rec = vela_protocol::registry::OwnerRotationRecord {
+                schema: vela_protocol::registry::OWNER_ROTATION_SCHEMA.to_string(),
+                vfr_id: vfr_id.clone(),
+                new_owner_pubkey,
+                rotated_at: chrono::Utc::now().to_rfc3339(),
+                reason: reason.clone(),
+                signature: String::new(),
+                signer_pubkey_hex: signer_pubkey,
+            };
+            rec.signature = vela_protocol::registry::sign_rotation(&rec, &signing_key)
+                .unwrap_or_else(|e| fail_return(&format!("sign: {e}")));
+            let hub = to.trim_end_matches('/').to_string();
+            let url = format!("{hub}/entries/{vfr_id}/rotate-owner");
+            let body = serde_json::to_value(&rec)
+                .unwrap_or_else(|e| fail_return(&format!("serialize: {e}")));
+            let (status, text) = {
+                let u = url.clone();
+                std::thread::spawn(move || -> Result<(u16, String), String> {
+                    let resp = reqwest::blocking::Client::new()
+                        .post(&u)
+                        .json(&body)
+                        .send()
+                        .map_err(|e| format!("POST {u}: {e}"))?;
+                    let status = resp.status().as_u16();
+                    let text = resp.text().map_err(|e| format!("read response: {e}"))?;
+                    Ok((status, text))
+                })
+                .join()
+                .unwrap_or_else(|_| fail_return("rotate-owner request thread panicked"))
+                .unwrap_or_else(|e| fail_return(&e))
+            };
+            let payload: serde_json::Value =
+                serde_json::from_str(&text).unwrap_or_else(|_| serde_json::json!({"raw": text}));
+            if json {
+                print_json(&serde_json::json!({
+                    "ok": status < 300,
+                    "command": "registry.rotate_owner",
+                    "vfr_id": vfr_id,
+                    "status": status,
+                    "response": payload,
+                }));
+            } else if status < 300 {
+                println!(
+                    "{} rotated owner of {vfr_id} on {hub} — the successor key is now the effective owner",
+                    style::ok("ok")
+                );
+            } else {
+                fail(&format!("rotate-owner failed ({status}): {payload}"));
+            }
+        }
         RegistryAction::Deprecate {
             vfr_id,
             to,

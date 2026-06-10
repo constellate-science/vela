@@ -752,6 +752,71 @@ impl HubDb {
     }
 
     /// Returns true on fresh insert, false on duplicate.
+    /// The EFFECTIVE owner pubkey: the latest owner rotation's successor,
+    /// or the original publisher's key if no rotation exists. Every owner
+    /// check (re-publish continuity, deprecation, further rotation) must
+    /// use this, never the raw frontiers.owner_pubkey.
+    pub async fn effective_owner_pubkey(&self, vfr_id: &str) -> Result<Option<String>, String> {
+        let rotated: Option<(String,)> = match self {
+            Self::Postgres(p) => sqlx::query_as(
+                "SELECT new_owner_pubkey FROM frontier_owner_rotations WHERE vfr_id = $1 ORDER BY id DESC LIMIT 1",
+            )
+            .bind(vfr_id)
+            .fetch_optional(p)
+            .await
+            .map_err(|e| e.to_string())?,
+            Self::Sqlite(p) => sqlx::query_as(
+                "SELECT new_owner_pubkey FROM frontier_owner_rotations WHERE vfr_id = ?1 ORDER BY id DESC LIMIT 1",
+            )
+            .bind(vfr_id)
+            .fetch_optional(p)
+            .await
+            .map_err(|e| e.to_string())?,
+        };
+        if let Some((k,)) = rotated {
+            return Ok(Some(k));
+        }
+        self.frontier_owner_pubkey(vfr_id).await
+    }
+
+    /// Append an owner rotation (the signature was verified by the caller
+    /// against the CURRENT effective owner).
+    pub async fn record_owner_rotation(
+        &self,
+        vfr_id: &str,
+        new_owner_pubkey: &str,
+        rotated_at: &str,
+        raw_json: &Value,
+    ) -> Result<(), String> {
+        match self {
+            Self::Postgres(p) => sqlx::query(
+                "INSERT INTO frontier_owner_rotations (vfr_id, new_owner_pubkey, rotated_at, raw_json) VALUES ($1, $2, $3, $4)",
+            )
+            .bind(vfr_id)
+            .bind(new_owner_pubkey)
+            .bind(rotated_at)
+            .bind(raw_json)
+            .execute(p)
+            .await
+            .map(|_| ())
+            .map_err(|e| e.to_string()),
+            Self::Sqlite(p) => {
+                let raw = serde_json::to_string(raw_json).map_err(|e| e.to_string())?;
+                sqlx::query(
+                    "INSERT INTO frontier_owner_rotations (vfr_id, new_owner_pubkey, rotated_at, raw_json) VALUES (?1, ?2, ?3, ?4)",
+                )
+                .bind(vfr_id)
+                .bind(new_owner_pubkey)
+                .bind(rotated_at)
+                .bind(raw)
+                .execute(p)
+                .await
+                .map(|_| ())
+                .map_err(|e| e.to_string())
+            }
+        }
+    }
+
     /// Append-only frontier deprecation (earliest-wins; a second
     /// deprecation of the same vfr_id is a no-op). Also flips
     /// `frontiers.status` to 'deprecated', which every live read
@@ -1135,12 +1200,13 @@ impl HubDb {
         // NOT access control on an existing frontier. Without this check anyone
         // could overwrite any published frontier (and rewrite its actor /
         // revocation list) with their own self-signed manifest.
-        if let Some(existing_owner) = self.frontier_owner_pubkey(&entry.vfr_id).await?
+        if let Some(existing_owner) = self.effective_owner_pubkey(&entry.vfr_id).await?
             && existing_owner != entry.owner_pubkey
         {
             return Err(format!(
                 "owner continuity: vfr {} already belongs to a different owner key; a \
-                     re-publish must be signed by the original owner_pubkey",
+                     re-publish must be signed by the current effective owner (original \
+                     publisher, or the successor named by the latest signed owner rotation)",
                 entry.vfr_id
             ));
         }
@@ -1578,7 +1644,7 @@ impl HubDb {
 
         // Owner continuity is the only authority on an existing frontier; a
         // valid self-signature is NOT access control (see promote's guard).
-        match self.frontier_owner_pubkey(vfr_id).await? {
+        match self.effective_owner_pubkey(vfr_id).await? {
             Some(owner) if owner == owner_pubkey => {}
             Some(_) => {
                 return Err(format!(
@@ -2898,6 +2964,19 @@ pub const POSTGRES_EVENT_FIRST_SCHEMA: &[&str] = &[
     // Postgres becomes a queryable cache; the trust chain (manifest +
     // snapshot blobs) is reconstructible from storage alone.
     "ALTER TABLE registry_entries ADD COLUMN IF NOT EXISTS manifest_blob_url TEXT",
+    // Owner rotation: the CURRENT owner key authorizes a successor.
+    // Append-only chain; the effective owner is the latest rotation's
+    // successor (or the original publisher if none). The signed record
+    // rides in raw_json as the audit receipt.
+    r#"CREATE TABLE IF NOT EXISTS frontier_owner_rotations (
+        id BIGSERIAL PRIMARY KEY,
+        vfr_id TEXT NOT NULL,
+        new_owner_pubkey TEXT NOT NULL,
+        rotated_at TEXT NOT NULL,
+        raw_json JSONB NOT NULL,
+        recorded_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )"#,
+    "CREATE INDEX IF NOT EXISTS idx_owner_rotations_vfr ON frontier_owner_rotations (vfr_id, id DESC)",
     // v0.201: federation handle for `vsd_*` Scientific Diff Packs.
     // Mirror of registry_entries but for the v0.193 primitive.
     r#"CREATE TABLE IF NOT EXISTS registry_diff_packs (
@@ -3087,6 +3166,14 @@ pub async fn ensure_sqlite_schema(pool: &SqlitePool) -> Result<(), String> {
             vfr_id TEXT NOT NULL PRIMARY KEY,
             deprecated_at TEXT NOT NULL,
             reason TEXT,
+            raw_json TEXT NOT NULL,
+            recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )"#,
+        r#"CREATE TABLE IF NOT EXISTS frontier_owner_rotations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            vfr_id TEXT NOT NULL,
+            new_owner_pubkey TEXT NOT NULL,
+            rotated_at TEXT NOT NULL,
             raw_json TEXT NOT NULL,
             recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
         )"#,

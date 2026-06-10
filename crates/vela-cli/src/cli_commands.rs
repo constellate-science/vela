@@ -2733,6 +2733,27 @@ pub(crate) enum RegistryAction {
         #[arg(long)]
         json: bool,
     },
+    /// Rotate a published frontier's owner key on a hub. Signed by the
+    /// CURRENT effective owner; the named successor key becomes the one
+    /// every owner check accepts (re-publish, deprecate, next rotation).
+    RotateOwner {
+        /// The frontier (vfr_…)
+        vfr_id: String,
+        /// Hub base URL
+        #[arg(long)]
+        to: String,
+        /// Path to the CURRENT owner's Ed25519 private key (hex seed)
+        #[arg(long)]
+        key: PathBuf,
+        /// Path to the successor PUBLIC key (hex), or the 64-char hex itself
+        #[arg(long)]
+        new_owner: String,
+        /// Why the key is rotating (recorded in the signed receipt)
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        json: bool,
+    },
     /// List all entries in a local registry
     List {
         /// Path or file:// URL of the registry; defaults to ~/.vela/registry/entries.json

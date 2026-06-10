@@ -615,6 +615,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/entries/{vfr_id}/deprecate",
             axum::routing::post(deprecate_entry),
         )
+        .route(
+            "/entries/{vfr_id}/rotate-owner",
+            axum::routing::post(rotate_owner),
+        )
         .route("/search", get(search_endpoint))
         .route("/entries/{vfr_id}/objects/{otype}", get(get_entry_objects))
         .route(
@@ -1153,6 +1157,99 @@ async fn get_entry_status(State(state): State<AppState>, Path(vfr_id): Path<Stri
     .into_response()
 }
 
+/// Owner-signed key rotation: the CURRENT effective owner authorizes a
+/// successor pubkey. Append-only chain; the latest rotation's successor
+/// becomes the key every owner check (re-publish continuity, deprecate,
+/// further rotation) accepts. The designed escape from "the entry is
+/// stuck behind a retired key" — without ever weakening continuity for
+/// anyone who does NOT hold the current owner key.
+async fn rotate_owner(
+    State(state): State<AppState>,
+    Path(vfr_id): Path<String>,
+    Json(body): Json<serde_json::Value>,
+) -> Response {
+    let rec: vela_protocol::registry::OwnerRotationRecord =
+        match serde_json::from_value(body.clone()) {
+            Ok(r) => r,
+            Err(e) => {
+                return (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    Json(json!({"ok": false, "error": format!("rotation parse: {e}")})),
+                )
+                    .into_response();
+            }
+        };
+    if rec.vfr_id != vfr_id {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({"ok": false, "error": "record vfr_id does not match the path"})),
+        )
+            .into_response();
+    }
+    match vela_protocol::registry::verify_rotation(&rec) {
+        Ok(true) => {}
+        Ok(false) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"ok": false, "error": "rotation signature does not verify"})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({"ok": false, "error": format!("verify: {e}")})),
+            )
+                .into_response();
+        }
+    }
+    match state.db.effective_owner_pubkey(&vfr_id).await {
+        Ok(Some(owner)) if owner.eq_ignore_ascii_case(&rec.signer_pubkey_hex) => {}
+        Ok(Some(_)) => {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(json!({"ok": false, "error": "signer is not the frontier's current effective owner key"})),
+            )
+                .into_response();
+        }
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"ok": false, "error": format!("{vfr_id} not found")})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": format!("query: {e}")})),
+            )
+                .into_response();
+        }
+    }
+    match state
+        .db
+        .record_owner_rotation(&vfr_id, &rec.new_owner_pubkey, &rec.rotated_at, &body)
+        .await
+    {
+        Ok(()) => {
+            state.db_cache.write().await.clear();
+            state.frontier_cache.write().await.clear();
+            Json(json!({
+                "ok": true,
+                "vfr_id": vfr_id,
+                "effective_owner_pubkey": rec.new_owner_pubkey,
+            }))
+            .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": format!("db: {e}")})),
+        )
+            .into_response(),
+    }
+}
+
 /// Owner-signed frontier deprecation. The request body is a
 /// `vela.frontier-deprecation.v0.1` record; the signature must verify
 /// over the canonical preimage AND the signer pubkey must equal the
@@ -1200,7 +1297,7 @@ async fn deprecate_entry(
         }
     }
     // Owner continuity: only the registered owner key can deprecate.
-    match state.db.frontier_owner_pubkey(&vfr_id).await {
+    match state.db.effective_owner_pubkey(&vfr_id).await {
         Ok(Some(owner)) if owner.eq_ignore_ascii_case(&rec.signer_pubkey_hex) => {}
         Ok(Some(_)) => {
             return (
