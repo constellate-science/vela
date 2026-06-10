@@ -904,10 +904,16 @@ pub async fn run_command() {
             proposal_id,
             reviewer,
             reason,
+            key,
             strict,
             force,
             json,
         } => {
+            let signing_key = key.map(|p| {
+                let hex_seed = std::fs::read_to_string(&p)
+                    .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", p.display())));
+                parse_signing_key(hex_seed.trim())
+            });
             // The Engine runs Evidence CI on the post-accept state and gates
             // the acceptance on the regression it would introduce.
             let outcome = proposals::accept_at_path_engine(
@@ -915,7 +921,12 @@ pub async fn run_command() {
                 &proposal_id,
                 &reviewer,
                 &reason,
-                proposals::AcceptOptions { strict, force },
+                proposals::AcceptOptions {
+                    strict,
+                    force,
+                    signing_key,
+                    custody_verified: false,
+                },
             )
             .unwrap_or_else(|e| fail_return(&e));
             let v = &outcome.verdict;
@@ -1003,7 +1014,12 @@ pub async fn run_command() {
                 &selected,
                 &reviewer,
                 &reason,
-                proposals::AcceptOptions { strict, force },
+                proposals::AcceptOptions {
+                    strict,
+                    force,
+                    signing_key: None,
+                    custody_verified: false,
+                },
                 dry_run,
             )
             .unwrap_or_else(|e| fail_return(&e));
@@ -3612,10 +3628,22 @@ fn cmd_proposals(action: ProposalAction) {
             proposal_id,
             reviewer,
             reason,
+            key,
             json,
         } => {
-            let event_id = proposals::accept_at_path(&frontier, &proposal_id, &reviewer, &reason)
-                .unwrap_or_else(|e| fail_return(&e));
+            let signing_key = key.map(|p| {
+                let hex_seed = std::fs::read_to_string(&p)
+                    .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", p.display())));
+                parse_signing_key(hex_seed.trim())
+            });
+            let event_id = proposals::accept_at_path_signed(
+                &frontier,
+                &proposal_id,
+                &reviewer,
+                &reason,
+                signing_key.as_ref(),
+            )
+            .unwrap_or_else(|e| fail_return(&e));
             let payload = json!({
                 "ok": true,
                 "command": "proposals.accept",

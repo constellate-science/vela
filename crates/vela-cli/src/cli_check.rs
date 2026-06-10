@@ -100,6 +100,30 @@ pub(crate) fn cmd_check(
                 println!("  - {diff}");
             }
         }
+        // Key-custody audit: once a reviewer is registered WITH a key,
+        // their accept events should carry a signature (key possession is
+        // the accept authority). Unsigned accepts predating key
+        // registration are warned, not failed — history is immutable.
+        let keyed_reviewers: std::collections::HashSet<&str> = frontier
+            .actors
+            .iter()
+            .filter(|a| a.id.starts_with("reviewer:") && !a.public_key.trim().is_empty())
+            .map(|a| a.id.as_str())
+            .collect();
+        let unsigned_keyed_accepts = frontier
+            .events
+            .iter()
+            .filter(|e| {
+                e.signature.is_none()
+                    && keyed_reviewers.contains(e.actor.id.as_str())
+                    && (e.kind.ends_with(".reviewed") || e.kind == "finding.asserted")
+            })
+            .count();
+        if unsigned_keyed_accepts > 0 {
+            println!(
+                "key custody: {unsigned_keyed_accepts} accept-class event(s) by keyed reviewers carry no signature (history predating key registration; new accepts require --key)"
+            );
+        }
         if let Ok(signature_report) = sign::verify_frontier_data(&frontier, None)
             && signature_report.signed > 0
         {

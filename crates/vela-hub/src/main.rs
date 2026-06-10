@@ -3267,6 +3267,12 @@ async fn accept_proposal(
     let opts = vela_protocol::proposals::AcceptOptions {
         strict: true,
         force: false,
+        signing_key: None,
+        // Key possession was proven at the hub boundary: the detached
+        // Ed25519 signature over the canonical accept request verified
+        // against the reviewer's registered, non-revoked key (steps 1-9
+        // above). The hub never holds the raw private key.
+        custody_verified: true,
     };
     let outcome = match vela_protocol::proposals::accept_in_frontier_engine(
         &mut project,

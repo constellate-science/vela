@@ -1025,8 +1025,24 @@ pub fn accept_at_path(
     reviewer: &str,
     reason: &str,
 ) -> Result<String, String> {
+    accept_at_path_signed(path, proposal_id, reviewer, reason, None)
+}
+
+pub fn accept_at_path_signed(
+    path: &Path,
+    proposal_id: &str,
+    reviewer: &str,
+    reason: &str,
+    signing_key: Option<&ed25519_dalek::SigningKey>,
+) -> Result<String, String> {
     let mut frontier = repo::load_from_path(path)?;
-    let event_id = accept_proposal_in_frontier(&mut frontier, proposal_id, reviewer, reason)?;
+    let event_id = accept_proposal_in_frontier_signed(
+        &mut frontier,
+        proposal_id,
+        reviewer,
+        reason,
+        signing_key,
+    )?;
     project::recompute_stats(&mut frontier);
     repo::save_to_path(path, &frontier)?;
     Ok(event_id)
@@ -1043,6 +1059,15 @@ pub struct AcceptOptions {
     /// Override the gate. The override is recorded in the proposal's
     /// decision reason so the forced acceptance is auditable.
     pub force: bool,
+    /// The reviewer's Ed25519 private key. REQUIRED when the reviewer is
+    /// registered with a public key (key custody is the accept
+    /// authority); the accept event is signed with it.
+    pub signing_key: Option<ed25519_dalek::SigningKey>,
+    /// Set by a boundary that has ALREADY proven key possession another
+    /// way — the hub verifies a detached Ed25519 signature over the
+    /// canonical accept request against the registered key before it
+    /// ever reaches this path. Never set this from a local CLI flow.
+    pub custody_verified: bool,
 }
 
 /// The Engine's read on an acceptance: what Evidence CI says about the
@@ -1114,7 +1139,14 @@ pub fn accept_at_path_engine(
     let before_warn = crate::evidence_ci::review_warnings(&before);
 
     // Apply via the sole canonical path; this mutates `frontier` in memory.
-    let event_id = accept_proposal_in_frontier(&mut frontier, proposal_id, reviewer, reason)?;
+    let event_id = accept_proposal_in_frontier_with_custody(
+        &mut frontier,
+        proposal_id,
+        reviewer,
+        reason,
+        opts.signing_key.as_ref(),
+        opts.custody_verified,
+    )?;
 
     let after = crate::evidence_ci::run_project(&frontier, path);
     let new_blocking: Vec<String> = crate::evidence_ci::release_blocking_failures(&after)
@@ -1288,6 +1320,10 @@ pub fn accept_batch_at_path(
                 continue;
             }
         };
+        // Batch accepts stay keyless: on a frontier whose reviewer is
+        // registered with a key, each accept must be individually signed
+        // (`vela accept --key`) — bulk acceptance under a typed name is
+        // exactly what key custody exists to prevent.
         match accept_proposal_in_frontier(&mut frontier, pid, reviewer, reason) {
             Ok(event_id) => {
                 if was_applied {
@@ -1454,8 +1490,15 @@ pub fn accept_in_frontier_engine(
     // re-accept is a no-op that returns the original event id (the
     // before/after Evidence CI delta is empty, the gate passes, and the
     // caller re-persists deterministically).
-    let event_id = accept_proposal_in_frontier(frontier, proposal_id, reviewer, reason)
-        .map_err(AcceptEngineError::Failed)?;
+    let event_id = accept_proposal_in_frontier_with_custody(
+        frontier,
+        proposal_id,
+        reviewer,
+        reason,
+        opts.signing_key.as_ref(),
+        opts.custody_verified,
+    )
+    .map_err(AcceptEngineError::Failed)?;
 
     let after = crate::evidence_ci::run_project(frontier, frontier_path);
     let new_blocking: Vec<String> = crate::evidence_ci::release_blocking_failures(&after)
@@ -2931,9 +2974,76 @@ fn accept_proposal_in_frontier(
     reviewer: &str,
     reason: &str,
 ) -> Result<String, String> {
+    accept_proposal_in_frontier_signed(frontier, proposal_id, reviewer, reason, None)
+}
+
+/// The one canonical accept path, with key-custody enforcement.
+///
+/// If the named reviewer is registered in the frontier's actor table
+/// WITH a public key, the accept REQUIRES the matching private key: the
+/// typed reviewer string is not authority, possession of the key is.
+/// The resulting canonical event is signed with that key, so the accept
+/// is non-repudiable. Reviewers without a registered key keep the
+/// keyless bootstrap behavior (a brand-new frontier must be usable
+/// before any keys exist); `vela check --strict` flags unsigned accepts
+/// once keys are registered.
+///
+/// This is the mechanization of "an AI never signs an accept": an agent
+/// can type any reviewer name, but it cannot produce a signature with a
+/// key it does not hold.
+pub fn accept_proposal_in_frontier_signed(
+    frontier: &mut Project,
+    proposal_id: &str,
+    reviewer: &str,
+    reason: &str,
+    signing_key: Option<&ed25519_dalek::SigningKey>,
+) -> Result<String, String> {
+    accept_proposal_in_frontier_with_custody(
+        frontier,
+        proposal_id,
+        reviewer,
+        reason,
+        signing_key,
+        false,
+    )
+}
+
+pub fn accept_proposal_in_frontier_with_custody(
+    frontier: &mut Project,
+    proposal_id: &str,
+    reviewer: &str,
+    reason: &str,
+    signing_key: Option<&ed25519_dalek::SigningKey>,
+    custody_verified: bool,
+) -> Result<String, String> {
     validate_reviewer_identity(reviewer)?;
     if reason.trim().is_empty() {
         return Err("Decision reason must be non-empty".to_string());
+    }
+    // Key custody: a reviewer registered with a pubkey must prove
+    // possession. Derive the pubkey from the supplied key and compare.
+    let registered_pubkey = frontier
+        .actors
+        .iter()
+        .find(|a| a.id == reviewer && !a.public_key.trim().is_empty())
+        .map(|a| a.public_key.clone());
+    if let Some(expected) = &registered_pubkey
+        && !custody_verified
+    {
+        let Some(key) = signing_key else {
+            return Err(format!(
+                "reviewer {reviewer} is registered with a key ({}…); accepts under this identity require --key <path-to-private-key> — key custody, not the typed name, is the accept authority",
+                &expected[..expected.len().min(12)]
+            ));
+        };
+        let derived = hex::encode(key.verifying_key().to_bytes());
+        if &derived != expected {
+            return Err(format!(
+                "the supplied key derives pubkey {}…, which does not match {reviewer}'s registered key {}…",
+                &derived[..12],
+                &expected[..expected.len().min(12)]
+            ));
+        }
     }
     let index = frontier
         .proposals
@@ -2962,6 +3072,15 @@ fn accept_proposal_in_frontier(
     let event_id = apply_proposal(frontier, &proposal, reviewer, reason)?;
     frontier.proposals[index].status = "applied".to_string();
     frontier.proposals[index].applied_event_id = Some(event_id.clone());
+    // Sign the accept event under the reviewer's key: the signature is
+    // over the canonical event bytes (signature field excluded), so the
+    // content-addressed id is unchanged and the accept is attributable
+    // by cryptography, not by string.
+    if let Some(key) = signing_key
+        && let Some(ev) = frontier.events.iter_mut().find(|e| e.id == event_id)
+    {
+        ev.signature = Some(crate::sign::sign_event(ev, key)?);
+    }
     Ok(event_id)
 }
 

@@ -844,6 +844,12 @@ pub(crate) enum Commands {
         reviewer: String,
         #[arg(long)]
         reason: String,
+        /// Path to the reviewer's Ed25519 private key (hex seed). REQUIRED
+        /// when the reviewer is registered with a public key: key custody,
+        /// not the typed name, is the accept authority, and the accept
+        /// event is signed with this key.
+        #[arg(long)]
+        key: Option<PathBuf>,
         /// Engine strict mode: also block when the acceptance introduces
         /// new review warnings, not only release-blocking regressions.
         #[arg(long)]
@@ -3446,6 +3452,10 @@ pub(crate) enum ProposalAction {
         reviewer: String,
         #[arg(long)]
         reason: String,
+        /// Path to the reviewer's Ed25519 private key (hex seed). REQUIRED
+        /// when the reviewer is registered with a public key.
+        #[arg(long)]
+        key: Option<PathBuf>,
         #[arg(long)]
         json: bool,
     },
