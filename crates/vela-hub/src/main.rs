@@ -572,12 +572,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let key = format!("manifest/{mhash}");
                         match storage.put(&key, bytes, "application/json").await {
                             Ok(url) => {
-                                if db
-                                    .set_manifest_blob_url(&vfr_id, &signature, &url)
-                                    .await
-                                    .is_ok()
-                                {
-                                    archived += 1;
+                                match db.set_manifest_blob_url(&vfr_id, &signature, &url).await {
+                                    Ok(()) => archived += 1,
+                                    Err(e) => {
+                                        // The original silent swallow here hid a
+                                        // missing column-level UPDATE grant for
+                                        // 89 rows. Receipts must fail loudly.
+                                        tracing::warn!(%vfr_id, error = %e, "manifest archived but url not recorded");
+                                    }
                                 }
                             }
                             Err(e) => {
