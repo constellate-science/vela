@@ -35,6 +35,93 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
             artifacts,
             json,
         } => cmd_verify_chain(frontier, artifacts, json),
+        RegistryAction::Maintainer {
+            action,
+            vfr_id,
+            to,
+            maintainer,
+            key,
+            reason,
+            json,
+        } => {
+            let hub = to.trim_end_matches('/').to_string();
+            if action == "list" {
+                let url = format!("{hub}/entries/{vfr_id}/maintainers");
+                let text = {
+                    let u = url.clone();
+                    std::thread::spawn(move || -> Result<String, String> {
+                        reqwest::blocking::get(&u)
+                            .map_err(|e| format!("GET {u}: {e}"))?
+                            .text()
+                            .map_err(|e| e.to_string())
+                    })
+                    .join()
+                    .unwrap_or_else(|_| fail_return("thread panicked"))
+                    .unwrap_or_else(|e| fail_return(&e))
+                };
+                println!("{text}");
+                return;
+            }
+            if !matches!(action.as_str(), "add" | "remove") {
+                fail("action must be add|remove|list");
+            }
+            let key_path = key.unwrap_or_else(|| fail_return("--key required for add/remove"));
+            let key_hex = std::fs::read_to_string(&key_path)
+                .map(|s| s.trim().to_string())
+                .unwrap_or_else(|e| fail_return(&format!("read key: {e}")));
+            let signing_key = parse_signing_key(&key_hex);
+            let m = maintainer.unwrap_or_else(|| fail_return("--maintainer required"));
+            let maintainer_pubkey = if std::path::Path::new(&m).exists() {
+                std::fs::read_to_string(&m)
+                    .map(|s| s.trim().to_string())
+                    .unwrap_or_else(|e| fail_return(&format!("read maintainer key: {e}")))
+            } else {
+                m.trim().to_string()
+            };
+            let mut rec = vela_protocol::registry::MaintainerActionRecord {
+                schema: vela_protocol::registry::MAINTAINER_ACTION_SCHEMA.to_string(),
+                vfr_id: vfr_id.clone(),
+                action: action.clone(),
+                maintainer_pubkey,
+                authorized_at: chrono::Utc::now().to_rfc3339(),
+                reason,
+                signature: String::new(),
+                signer_pubkey_hex: hex::encode(signing_key.verifying_key().to_bytes()),
+            };
+            rec.signature = vela_protocol::registry::sign_maintainer_action(&rec, &signing_key)
+                .unwrap_or_else(|e| fail_return(&format!("sign: {e}")));
+            let url = format!("{hub}/entries/{vfr_id}/maintainers");
+            let body = serde_json::to_value(&rec)
+                .unwrap_or_else(|e| fail_return(&format!("serialize: {e}")));
+            let (status, text) = {
+                let u = url.clone();
+                std::thread::spawn(move || -> Result<(u16, String), String> {
+                    let resp = reqwest::blocking::Client::new()
+                        .post(&u)
+                        .json(&body)
+                        .send()
+                        .map_err(|e| format!("POST {u}: {e}"))?;
+                    Ok((resp.status().as_u16(), resp.text().unwrap_or_default()))
+                })
+                .join()
+                .unwrap_or_else(|_| fail_return("thread panicked"))
+                .unwrap_or_else(|e| fail_return(&e))
+            };
+            let payload: serde_json::Value =
+                serde_json::from_str(&text).unwrap_or_else(|_| serde_json::json!({"raw": text}));
+            if json {
+                print_json(
+                    &serde_json::json!({"ok": status < 300, "status": status, "response": payload}),
+                );
+            } else if status < 300 {
+                println!(
+                    "{} maintainer {action} recorded on {vfr_id}",
+                    style::ok("ok")
+                );
+            } else {
+                fail(&format!("maintainer {action} failed ({status}): {payload}"));
+            }
+        }
         RegistryAction::RotateOwner {
             vfr_id,
             to,

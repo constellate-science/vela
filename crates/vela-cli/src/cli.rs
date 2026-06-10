@@ -220,6 +220,153 @@ pub async fn run_command() {
             let _ = conformance::run(&dir);
         }
         Commands::Gate { action } => cmd_gate(action),
+        Commands::Stash {
+            file,
+            to,
+            pubkey,
+            json,
+        } => {
+            let bytes = std::fs::read(&file)
+                .unwrap_or_else(|e| fail_return(&format!("read {}: {e}", file.display())));
+            let url = format!("{}/scratch", to.trim_end_matches('/'));
+            let (status, text) = {
+                std::thread::spawn(move || -> Result<(u16, String), String> {
+                    let resp = reqwest::blocking::Client::new()
+                        .post(&url)
+                        .header("x-vela-pubkey", pubkey)
+                        .body(bytes)
+                        .send()
+                        .map_err(|e| format!("POST {url}: {e}"))?;
+                    Ok((resp.status().as_u16(), resp.text().unwrap_or_default()))
+                })
+                .join()
+                .unwrap_or_else(|_| fail_return("stash thread panicked"))
+                .unwrap_or_else(|e| fail_return(&e))
+            };
+            let payload: serde_json::Value =
+                serde_json::from_str(&text).unwrap_or_else(|_| json!({"raw": text}));
+            if status < 300 {
+                if json {
+                    print_json(&payload);
+                } else {
+                    println!(
+                        "{} stashed as {} (untrusted scratch)",
+                        style::ok("ok"),
+                        payload["vsx_id"].as_str().unwrap_or("?")
+                    );
+                }
+            } else {
+                fail(&format!("stash failed ({status}): {payload}"));
+            }
+        }
+
+        Commands::Events {
+            vfr_id,
+            from,
+            follow,
+            since,
+        } => {
+            let base = from.trim_end_matches('/').to_string();
+            let mut cursor = since.unwrap_or_default();
+            loop {
+                let url = if cursor.is_empty() {
+                    format!("{base}/entries/{vfr_id}/events?limit=100")
+                } else {
+                    format!("{base}/entries/{vfr_id}/events?since={cursor}&limit=100")
+                };
+                let text = {
+                    let u = url.clone();
+                    std::thread::spawn(move || -> Result<String, String> {
+                        reqwest::blocking::get(&u)
+                            .map_err(|e| format!("GET {u}: {e}"))?
+                            .text()
+                            .map_err(|e| e.to_string())
+                    })
+                    .join()
+                    .unwrap_or_else(|_| fail_return("events thread panicked"))
+                    .unwrap_or_else(|e| fail_return(&e))
+                };
+                let page: serde_json::Value =
+                    serde_json::from_str(&text).unwrap_or_else(|_| json!({}));
+                let events = page["events"].as_array().cloned().unwrap_or_default();
+                for ev in &events {
+                    println!(
+                        "{}  {}  {}  {}",
+                        ev["timestamp"].as_str().unwrap_or("?"),
+                        ev["kind"].as_str().unwrap_or("?"),
+                        ev["target"]["id"].as_str().unwrap_or(""),
+                        ev["actor"]["id"].as_str().unwrap_or("")
+                    );
+                }
+                if let Some(next) = page["next_cursor"].as_str() {
+                    cursor = next.to_string();
+                }
+                if !follow {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_secs(5));
+            }
+        }
+
+        Commands::Recommend {
+            frontier,
+            proposal_id,
+            by,
+            key,
+            reason,
+            json,
+        } => {
+            let key_hex = std::fs::read_to_string(&key)
+                .map(|s| s.trim().to_string())
+                .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
+            let signing_key = parse_signing_key(&key_hex);
+            let mut project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
+            if !project.proposals.iter().any(|p| p.id == proposal_id) {
+                fail(&format!("proposal {proposal_id} not found"));
+            }
+            let target = project
+                .proposals
+                .iter()
+                .find(|p| p.id == proposal_id)
+                .map(|p| p.target.id.clone())
+                .unwrap();
+            let mut event = vela_protocol::events::new_finding_event(
+                vela_protocol::events::FindingEventInput {
+                    kind: "proposal.recommended",
+                    finding_id: &target,
+                    actor_id: &by,
+                    actor_type: vela_protocol::events::actor_kind(&by),
+                    reason: &reason,
+                    before_hash: "sha256:null",
+                    after_hash: "sha256:null",
+                    payload: serde_json::json!({
+                        "proposal_id": proposal_id,
+                        "verdict": "recommend_accept",
+                    }),
+                    caveats: Vec::new(),
+                    timestamp: None,
+                },
+            );
+            vela_protocol::reducer::apply_event(&mut project, &event)
+                .unwrap_or_else(|e| fail_return(&e));
+            event.signature = Some(
+                vela_protocol::sign::sign_event(&event, &signing_key)
+                    .unwrap_or_else(|e| fail_return(&e)),
+            );
+            project.events.push(event);
+            repo::save_to_path(&frontier, &project).unwrap_or_else(|e| fail_return(&e));
+            let payload =
+                json!({"ok": true, "command": "recommend", "proposal_id": proposal_id, "by": by});
+            if json {
+                print_json(&payload);
+            } else {
+                println!(
+                    "{} recommendation recorded on {proposal_id} (signed; consumed by owner/maintainer accepts)",
+                    style::ok("ok")
+                );
+            }
+        }
+
         Commands::Claim {
             frontier,
             obligation,
@@ -8354,6 +8501,9 @@ const SCIENCE_SUBCOMMANDS: &[&str] = &[
     "attach",
     "attest-statement",
     "claim",
+    "stash",
+    "events",
+    "recommend",
     "register-statement",
     "attest",
     "lineage",

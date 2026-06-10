@@ -921,6 +921,47 @@ pub(crate) enum Commands {
         json: bool,
     },
 
+    /// Park bytes in the hub's UNTRUSTED scratch tier; returns a vsx_
+    /// content hash for attempts/failed-routes to reference.
+    Stash {
+        file: PathBuf,
+        #[arg(long, default_value = "https://vela-hub.fly.dev")]
+        to: String,
+        /// Your public key hex (rate-limit identity; content stays untrusted).
+        #[arg(long)]
+        pubkey: String,
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Follow a frontier's hub event stream (new events as they land).
+    Events {
+        vfr_id: String,
+        #[arg(long, default_value = "https://vela-hub.fly.dev")]
+        from: String,
+        /// Keep following (SSE); without it, print the page after --since.
+        #[arg(long)]
+        follow: bool,
+        #[arg(long)]
+        since: Option<String>,
+    },
+
+    /// Record a signed recommend-accept on a pending proposal (a
+    /// reviewer-tier verdict that owner/maintainer keys consume; it
+    /// never lands state by itself).
+    Recommend {
+        frontier: PathBuf,
+        proposal_id: String,
+        #[arg(long)]
+        by: String,
+        #[arg(long)]
+        key: PathBuf,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Lease an open obligation so other producers route around it.
     /// Signed event; one live lease per obligation; expiry = claimed_at
     /// + ttl, computed at read time.
@@ -2829,6 +2870,25 @@ pub(crate) enum RegistryAction {
         new_owner: String,
         /// Why the key is rotating (recorded in the signed receipt)
         #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Manage a frontier's maintainer set on a hub (signed add/remove;
+    /// authority = effective owner or a current maintainer).
+    Maintainer {
+        /// add | remove | list
+        action: String,
+        vfr_id: String,
+        #[arg(long)]
+        to: String,
+        /// The maintainer's PUBLIC key (hex or path) for add/remove.
+        #[arg(long)]
+        maintainer: Option<String>,
+        /// Path to the AUTHORIZING private key (owner or maintainer).
+        #[arg(long)]
+        key: Option<PathBuf>,
+        #[arg(long, default_value = "maintainer-set update")]
         reason: String,
         #[arg(long)]
         json: bool,

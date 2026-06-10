@@ -621,6 +621,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/entries/{vfr_id}/rotate-owner",
             axum::routing::post(rotate_owner),
         )
+        .route(
+            "/entries/{vfr_id}/maintainers",
+            get(list_maintainers).post(maintainer_action),
+        )
+        .route("/producers/{pubkey}", get(get_producer))
+        .route("/scratch", axum::routing::post(post_scratch))
         .route("/search", get(search_endpoint))
         .route("/entries/{vfr_id}/objects/{otype}", get(get_entry_objects))
         .route(
@@ -1247,6 +1253,179 @@ async fn rotate_owner(
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"ok": false, "error": format!("db: {e}")})),
+        )
+            .into_response(),
+    }
+}
+
+/// The effective maintainer set + the action log scaffold.
+async fn list_maintainers(State(state): State<AppState>, Path(vfr_id): Path<String>) -> Response {
+    match state.db.effective_maintainers(&vfr_id).await {
+        Ok(keys) => Json(json!({
+            "vfr_id": vfr_id,
+            "maintainer_pubkeys": keys,
+        }))
+        .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("query: {e}")})),
+        )
+            .into_response(),
+    }
+}
+
+/// Signed maintainer add/remove: authorized by the effective owner OR a
+/// current maintainer (the Linux pull model: trust delegates, every
+/// delegation is a signed, audited record).
+async fn maintainer_action(
+    State(state): State<AppState>,
+    Path(vfr_id): Path<String>,
+    Json(body): Json<serde_json::Value>,
+) -> Response {
+    let rec: vela_protocol::registry::MaintainerActionRecord =
+        match serde_json::from_value(body.clone()) {
+            Ok(r) => r,
+            Err(e) => {
+                return (
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    Json(json!({"ok": false, "error": format!("parse: {e}")})),
+                )
+                    .into_response();
+            }
+        };
+    if rec.vfr_id != vfr_id {
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Json(json!({"ok": false, "error": "record vfr_id does not match the path"})),
+        )
+            .into_response();
+    }
+    match vela_protocol::registry::verify_maintainer_action(&rec) {
+        Ok(true) => {}
+        Ok(false) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"ok": false, "error": "signature does not verify"})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({"ok": false, "error": format!("verify: {e}")})),
+            )
+                .into_response();
+        }
+    }
+    let authorized = match state.db.effective_accept_keys(&vfr_id).await {
+        Ok(keys) => keys
+            .iter()
+            .any(|k| k.eq_ignore_ascii_case(&rec.signer_pubkey_hex)),
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": format!("query: {e}")})),
+            )
+                .into_response();
+        }
+    };
+    if !authorized {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({"ok": false, "error": "signer is neither the effective owner nor a current maintainer"})),
+        )
+            .into_response();
+    }
+    match state
+        .db
+        .record_maintainer_action(
+            &vfr_id,
+            &rec.maintainer_pubkey,
+            &rec.action,
+            &rec.signer_pubkey_hex,
+            &rec.authorized_at,
+            &body,
+        )
+        .await
+    {
+        Ok(()) => {
+            state.db_cache.write().await.clear();
+            Json(json!({"ok": true, "vfr_id": vfr_id, "action": rec.action, "maintainer": rec.maintainer_pubkey}))
+                .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": format!("db: {e}")})),
+        )
+            .into_response(),
+    }
+}
+
+/// Scratch upload: any REGISTERED key may park bytes (size-capped).
+/// Content-addressed; explicitly untrusted — the gate never reads vsx_.
+async fn post_scratch(
+    State(state): State<AppState>,
+    headers: axum::http::HeaderMap,
+    body: axum::body::Bytes,
+) -> Response {
+    const MAX: usize = 10 * 1024 * 1024;
+    if body.len() > MAX {
+        return (
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Json(json!({"ok": false, "error": "scratch uploads are capped at 10 MiB"})),
+        )
+            .into_response();
+    }
+    // Light gate: a pubkey header must be present (rate-limit hook); the
+    // content is untrusted by definition, so no signature over bytes is
+    // demanded in v1.
+    if headers.get("x-vela-pubkey").is_none() {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"ok": false, "error": "send your Ed25519 pubkey hex in x-vela-pubkey"})),
+        )
+            .into_response();
+    }
+    let Some(storage) = &state.storage else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"ok": false, "error": "no object storage configured"})),
+        )
+            .into_response();
+    };
+    match storage.put_scratch(body.to_vec()).await {
+        Ok((vsx, url)) => Json(json!({"ok": true, "vsx_id": vsx, "url": url})).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": format!("storage: {e}")})),
+        )
+            .into_response(),
+    }
+}
+
+/// The producer view: cross-frontier objects signed by one key — the
+/// fundable CV, queryable in one call.
+async fn get_producer(State(state): State<AppState>, Path(pubkey): Path<String>) -> Response {
+    match state.db.producer_objects(&pubkey, 500).await {
+        Ok(rows) => {
+            let mut by_frontier: std::collections::BTreeMap<String, Vec<Value>> =
+                std::collections::BTreeMap::new();
+            for (vfr, otype, oid, raw) in rows {
+                by_frontier.entry(vfr).or_default().push(json!({
+                    "type": otype,
+                    "id": oid,
+                    "summary": raw.get("claim").or_else(|| raw.get("assertion").and_then(|a| a.get("text"))).cloned().unwrap_or(Value::Null),
+                }));
+            }
+            Json(json!({
+                "pubkey": pubkey,
+                "frontiers": by_frontier,
+            }))
+            .into_response()
+        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("query: {e}")})),
         )
             .into_response(),
     }

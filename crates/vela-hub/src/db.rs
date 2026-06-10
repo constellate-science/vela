@@ -81,6 +81,9 @@ struct FrontierObjectRow {
     seq: i64,
     target_id: Option<String>,
     raw_json: Value,
+    /// Producer index: the key that signed/authored the object, when
+    /// derivable (finding provenance actor pubkey, attempt signer, …).
+    signer_pubkey: Option<String>,
 }
 
 impl HubDb {
@@ -817,6 +820,97 @@ impl HubDb {
         }
     }
 
+    /// Append a maintainer add/remove (signature verified by the caller
+    /// against the effective owner or a current maintainer).
+    pub async fn record_maintainer_action(
+        &self,
+        vfr_id: &str,
+        pubkey: &str,
+        action: &str,
+        authorized_by: &str,
+        authorized_at: &str,
+        raw_json: &Value,
+    ) -> Result<(), String> {
+        match self {
+            Self::Postgres(p) => sqlx::query(
+                "INSERT INTO frontier_maintainers (vfr_id, pubkey, action, authorized_by_pubkey, authorized_at, raw_json) VALUES ($1,$2,$3,$4,$5,$6)",
+            )
+            .bind(vfr_id).bind(pubkey).bind(action).bind(authorized_by).bind(authorized_at).bind(raw_json)
+            .execute(p).await.map(|_| ()).map_err(|e| e.to_string()),
+            Self::Sqlite(p) => {
+                let raw = serde_json::to_string(raw_json).map_err(|e| e.to_string())?;
+                sqlx::query(
+                    "INSERT INTO frontier_maintainers (vfr_id, pubkey, action, authorized_by_pubkey, authorized_at, raw_json) VALUES (?1,?2,?3,?4,?5,?6)",
+                )
+                .bind(vfr_id).bind(pubkey).bind(action).bind(authorized_by).bind(authorized_at).bind(raw)
+                .execute(p).await.map(|_| ()).map_err(|e| e.to_string())
+            }
+        }
+    }
+
+    /// The effective maintainer set: latest action per pubkey, filtered
+    /// to 'add'.
+    pub async fn effective_maintainers(&self, vfr_id: &str) -> Result<Vec<String>, String> {
+        let rows: Vec<(String, String)> = match self {
+            Self::Postgres(p) => sqlx::query_as(
+                "SELECT DISTINCT ON (pubkey) pubkey, action FROM frontier_maintainers WHERE vfr_id = $1 ORDER BY pubkey, id DESC",
+            )
+            .bind(vfr_id).fetch_all(p).await.map_err(|e| e.to_string())?,
+            Self::Sqlite(p) => sqlx::query_as(
+                "SELECT pubkey, action FROM frontier_maintainers fm WHERE vfr_id = ?1 AND id = (SELECT MAX(id) FROM frontier_maintainers fm2 WHERE fm2.vfr_id = fm.vfr_id AND fm2.pubkey = fm.pubkey)",
+            )
+            .bind(vfr_id).fetch_all(p).await.map_err(|e| e.to_string())?,
+        };
+        Ok(rows
+            .into_iter()
+            .filter(|(_, a)| a == "add")
+            .map(|(k, _)| k)
+            .collect())
+    }
+
+    /// Every key with accept authority on this frontier: the effective
+    /// owner plus the effective maintainer set.
+    pub async fn effective_accept_keys(&self, vfr_id: &str) -> Result<Vec<String>, String> {
+        let mut keys = self.effective_maintainers(vfr_id).await?;
+        if let Some(owner) = self.effective_owner_pubkey(vfr_id).await?
+            && !keys.iter().any(|k| k.eq_ignore_ascii_case(&owner))
+        {
+            keys.push(owner);
+        }
+        Ok(keys)
+    }
+
+    /// Cross-frontier producer view: verified-frontier objects signed by
+    /// one key (the fundable CV / 48-hour due-diligence query).
+    pub async fn producer_objects(
+        &self,
+        pubkey: &str,
+        limit: i64,
+    ) -> Result<Vec<(String, String, String, Value)>, String> {
+        match self {
+            Self::Postgres(p) => {
+                let rows: Vec<(String, String, String, Value)> = sqlx::query_as(
+                    "SELECT vfr_id, object_type, object_id, raw_json FROM frontier_objects WHERE signer_pubkey = $1 ORDER BY vfr_id, object_type, object_id LIMIT $2",
+                )
+                .bind(pubkey).bind(limit).fetch_all(p).await.map_err(|e| e.to_string())?;
+                Ok(rows)
+            }
+            Self::Sqlite(p) => {
+                let rows: Vec<(String, String, String, String)> = sqlx::query_as(
+                    "SELECT vfr_id, object_type, object_id, raw_json FROM frontier_objects WHERE signer_pubkey = ?1 ORDER BY vfr_id, object_type, object_id LIMIT ?2",
+                )
+                .bind(pubkey).bind(limit).fetch_all(p).await.map_err(|e| e.to_string())?;
+                rows.into_iter()
+                    .map(|(v, t, i, r)| {
+                        serde_json::from_str(&r)
+                            .map(|j| (v, t, i, j))
+                            .map_err(|e| e.to_string())
+                    })
+                    .collect()
+            }
+        }
+    }
+
     /// Append-only frontier deprecation (earliest-wins; a second
     /// deprecation of the same vfr_id is a no-op). Also flips
     /// `frontiers.status` to 'deprecated', which every live read
@@ -1400,6 +1494,7 @@ impl HubDb {
                                     "seq": object.seq,
                                     "target_id": object.target_id,
                                     "raw_json": object.raw_json,
+                                    "signer_pubkey": object.signer_pubkey,
                                 })
                             })
                             .collect(),
@@ -1407,7 +1502,7 @@ impl HubDb {
                     sqlx::query(
                         r#"
                         INSERT INTO frontier_objects (
-                          vfr_id, object_type, object_id, seq, target_id, raw_json
+                          vfr_id, object_type, object_id, seq, target_id, raw_json, signer_pubkey
                         )
                         SELECT
                           $1,
@@ -1415,7 +1510,8 @@ impl HubDb {
                           item->>'object_id',
                           (item->>'seq')::bigint,
                           item->>'target_id',
-                          item->'raw_json'
+                          item->'raw_json',
+                          item->>'signer_pubkey'
                         FROM jsonb_array_elements($2::jsonb) AS item
                         "#,
                     )
@@ -1549,9 +1645,9 @@ impl HubDb {
                     sqlx::query(
                         r#"
                         INSERT INTO frontier_objects (
-                          vfr_id, object_type, object_id, seq, target_id, raw_json
+                          vfr_id, object_type, object_id, seq, target_id, raw_json, signer_pubkey
                         )
-                        VALUES (?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
                         "#,
                     )
                     .bind(&entry.vfr_id)
@@ -1560,6 +1656,7 @@ impl HubDb {
                     .bind(object.seq)
                     .bind(&object.target_id)
                     .bind(&raw)
+                    .bind(&object.signer_pubkey)
                     .execute(&mut *tx)
                     .await
                     .map_err(|e| e.to_string())?;
@@ -1644,12 +1741,16 @@ impl HubDb {
 
         // Owner continuity is the only authority on an existing frontier; a
         // valid self-signature is NOT access control (see promote's guard).
+        let accept_keys = self.effective_accept_keys(vfr_id).await?;
         match self.effective_owner_pubkey(vfr_id).await? {
-            Some(owner) if owner == owner_pubkey => {}
+            Some(_)
+                if accept_keys
+                    .iter()
+                    .any(|k| k.eq_ignore_ascii_case(owner_pubkey)) => {}
             Some(_) => {
                 return Err(format!(
-                    "owner continuity: append to {vfr_id} must be authorized by the \
-                     frontier's owner key"
+                    "accept authority: append to {vfr_id} must be authorized by the \
+                     frontier's owner key or an effective maintainer key"
                 ));
             }
             None => return Err(format!("frontier {vfr_id} has no recorded owner")),
@@ -2977,6 +3078,23 @@ pub const POSTGRES_EVENT_FIRST_SCHEMA: &[&str] = &[
         recorded_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )"#,
     "CREATE INDEX IF NOT EXISTS idx_owner_rotations_vfr ON frontier_owner_rotations (vfr_id, id DESC)",
+    // Maintainer sets: append-only add/remove actions; the effective set
+    // is the latest action per pubkey. Accept authority = owner key OR
+    // any effective maintainer (the Linux pull model).
+    r#"CREATE TABLE IF NOT EXISTS frontier_maintainers (
+        id BIGSERIAL PRIMARY KEY,
+        vfr_id TEXT NOT NULL,
+        pubkey TEXT NOT NULL,
+        action TEXT NOT NULL,
+        authorized_by_pubkey TEXT NOT NULL,
+        authorized_at TEXT NOT NULL,
+        raw_json JSONB NOT NULL,
+        recorded_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )"#,
+    "CREATE INDEX IF NOT EXISTS idx_frontier_maintainers_vfr ON frontier_maintainers (vfr_id, pubkey, id DESC)",
+    // Producer index: signer extracted at promote for cross-frontier
+    // per-key queries.
+    "ALTER TABLE frontier_objects ADD COLUMN IF NOT EXISTS signer_pubkey TEXT",
     // v0.201: federation handle for `vsd_*` Scientific Diff Packs.
     // Mirror of registry_entries but for the v0.193 primitive.
     r#"CREATE TABLE IF NOT EXISTS registry_diff_packs (
@@ -3128,6 +3246,7 @@ pub async fn ensure_sqlite_schema(pool: &SqlitePool) -> Result<(), String> {
             seq INTEGER NOT NULL DEFAULT 0,
             target_id TEXT,
             raw_json TEXT NOT NULL,
+            signer_pubkey TEXT,
             inserted_at TEXT NOT NULL DEFAULT (datetime('now')),
             PRIMARY KEY (vfr_id, object_type, object_id)
         )"#,
@@ -3174,6 +3293,16 @@ pub async fn ensure_sqlite_schema(pool: &SqlitePool) -> Result<(), String> {
             vfr_id TEXT NOT NULL,
             new_owner_pubkey TEXT NOT NULL,
             rotated_at TEXT NOT NULL,
+            raw_json TEXT NOT NULL,
+            recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )"#,
+        r#"CREATE TABLE IF NOT EXISTS frontier_maintainers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            vfr_id TEXT NOT NULL,
+            pubkey TEXT NOT NULL,
+            action TEXT NOT NULL,
+            authorized_by_pubkey TEXT NOT NULL,
+            authorized_at TEXT NOT NULL,
             raw_json TEXT NOT NULL,
             recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
         )"#,
@@ -3282,14 +3411,36 @@ fn collect_frontier_objects(snapshot: &Value) -> Vec<FrontierObjectRow> {
                             "source": source_id,
                             "link": link,
                         }),
+                        signer_pubkey: None,
                     });
                 }
             }
         }
     }
+    // Producer index: derive the signing/authoring key where the object
+    // carries one. Findings: provenance actor pubkey (fallback: the
+    // registered actor matching the author id is resolved at query time,
+    // so absent pubkeys stay NULL rather than guessed). Attempts and
+    // transfers carry signer_pubkey_hex directly.
+    for row in &mut out {
+        row.signer_pubkey = match row.object_type.as_str() {
+            "attempt" | "transfer" | "endorsement" => row
+                .raw_json
+                .get("signer_pubkey_hex")
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            "finding" => row
+                .raw_json
+                .get("provenance")
+                .and_then(|p| p.get("actor_pubkey"))
+                .or_else(|| row.raw_json.get("actor_pubkey"))
+                .and_then(Value::as_str)
+                .map(str::to_string),
+            _ => None,
+        };
+    }
     out
 }
-
 fn collect_array_objects(
     snapshot: &Value,
     array_key: &str,
@@ -3314,6 +3465,7 @@ fn collect_array_objects(
                 seq: idx as i64,
                 target_id,
                 raw_json: item.clone(),
+                signer_pubkey: None,
             });
         }
     }

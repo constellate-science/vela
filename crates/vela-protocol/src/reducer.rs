@@ -310,7 +310,10 @@ pub fn apply_event_indexed(
         // `key.revoke` are audit records (authoritative revocation lives in
         // the hub's append-only revocation table). Explicit arms so a
         // historical log containing any of them replays instead of erroring.
-        "prediction.expired_unresolved"
+        // A reviewer-tier key's recommend-accept: audit record consumed by
+        // owner/maintainer keys; no projected-state mutation.
+        "proposal.recommended"
+        | "prediction.expired_unresolved"
         | "finding.threshold_set"
         | "finding.threshold_met"
         | "frontier.observation_reviewed"

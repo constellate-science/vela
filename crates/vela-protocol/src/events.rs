@@ -299,6 +299,7 @@ pub const KNOWN_EVENT_KINDS: &[&str] = &[
     "statement.attested",
     "attempt.claimed",
     "statement.registered",
+    "proposal.recommended",
     "correction_return.review",
     "research_trace.review",
     "key.revoke",

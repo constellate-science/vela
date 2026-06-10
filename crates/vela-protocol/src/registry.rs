@@ -219,6 +219,74 @@ pub fn verify_rotation(rec: &OwnerRotationRecord) -> Result<bool, String> {
     Ok(vk.verify(&bytes, &sig).is_ok())
 }
 
+/// A signed maintainer-set action: the frontier owner (or a current
+/// maintainer) adds or removes a maintainer key. The effective set is
+/// the latest action per pubkey — the Linux signed-tag pull model
+/// applied to accept authority. Append-only, fully audited.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct MaintainerActionRecord {
+    pub schema: String,
+    pub vfr_id: String,
+    /// "add" | "remove"
+    pub action: String,
+    pub maintainer_pubkey: String,
+    pub authorized_at: String,
+    pub reason: String,
+    pub signature: String,
+    pub signer_pubkey_hex: String,
+}
+
+pub const MAINTAINER_ACTION_SCHEMA: &str = "vela.frontier-maintainer.v0.1";
+
+pub fn maintainer_signing_bytes(rec: &MaintainerActionRecord) -> Result<Vec<u8>, String> {
+    let preimage = serde_json::json!({
+        "schema": rec.schema,
+        "vfr_id": rec.vfr_id,
+        "action": rec.action,
+        "maintainer_pubkey": rec.maintainer_pubkey,
+        "authorized_at": rec.authorized_at,
+        "reason": rec.reason,
+    });
+    crate::canonical::to_canonical_bytes(&preimage)
+}
+
+pub fn sign_maintainer_action(
+    rec: &MaintainerActionRecord,
+    key: &ed25519_dalek::SigningKey,
+) -> Result<String, String> {
+    use ed25519_dalek::Signer;
+    let bytes = maintainer_signing_bytes(rec)?;
+    Ok(hex::encode(key.sign(&bytes).to_bytes()))
+}
+
+pub fn verify_maintainer_action(rec: &MaintainerActionRecord) -> Result<bool, String> {
+    use ed25519_dalek::Verifier;
+    if rec.schema != MAINTAINER_ACTION_SCHEMA {
+        return Err(format!(
+            "maintainer-action schema must be {MAINTAINER_ACTION_SCHEMA}, got {}",
+            rec.schema
+        ));
+    }
+    if !matches!(rec.action.as_str(), "add" | "remove") {
+        return Err("action must be add|remove".to_string());
+    }
+    if rec.maintainer_pubkey.len() != 64 || hex::decode(&rec.maintainer_pubkey).is_err() {
+        return Err("maintainer_pubkey must be 32 bytes of hex".to_string());
+    }
+    let bytes = maintainer_signing_bytes(rec)?;
+    let pk: [u8; 32] = hex::decode(&rec.signer_pubkey_hex)
+        .map_err(|e| format!("pubkey hex: {e}"))?
+        .try_into()
+        .map_err(|_| "pubkey must be 32 bytes".to_string())?;
+    let vk = ed25519_dalek::VerifyingKey::from_bytes(&pk).map_err(|e| format!("pubkey: {e}"))?;
+    let sig: [u8; 64] = hex::decode(&rec.signature)
+        .map_err(|e| format!("signature hex: {e}"))?
+        .try_into()
+        .map_err(|_| "signature must be 64 bytes".to_string())?;
+    let sig = ed25519_dalek::Signature::from_bytes(&sig);
+    Ok(vk.verify(&bytes, &sig).is_ok())
+}
+
 pub fn entry_signing_bytes(entry: &RegistryEntry) -> Result<Vec<u8>, String> {
     let preimage = json!({
         "schema": entry.schema,

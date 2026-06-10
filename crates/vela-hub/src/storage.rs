@@ -114,6 +114,18 @@ impl Storage {
     /// re-uploading the same key with the same content is a no-op for
     /// callers (we don't HEAD-check first; we just PUT — the underlying
     /// store handles overwrite-with-identical-content as a normal write).
+    /// Scratch tier (`vsx_`): content-addressed, explicitly UNTRUSTED
+    /// parking for candidate artifacts so attempts and failed routes can
+    /// reference hashes instead of inlining payloads. Separate prefix;
+    /// never read by any gate.
+    pub async fn put_scratch(&self, bytes: Vec<u8>) -> Result<(String, String), String> {
+        use sha2::Digest;
+        let hash = hex::encode(sha2::Sha256::digest(&bytes));
+        let key = format!("scratch/{hash}");
+        let url = self.put(&key, bytes, "application/octet-stream").await?;
+        Ok((format!("vsx_{}", &hash[..16]), url))
+    }
+
     pub async fn put(
         &self,
         snapshot_hash: &str,
