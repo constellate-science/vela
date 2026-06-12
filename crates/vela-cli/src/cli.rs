@@ -515,6 +515,7 @@ pub async fn run_command() {
             statement_file,
             hash,
             informal_ref,
+            finding,
             by,
             key,
             json,
@@ -534,11 +535,30 @@ pub async fn run_command() {
                 (None, None) => fail_return("pass --statement-file or --hash"),
             };
             let mut project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
-            let target_id = project
-                .findings
-                .first()
-                .map(|f| f.id.clone())
-                .unwrap_or_else(|| "vf_genesis".to_string());
+            // Gap 5: the optional finding-to-registration edge. When
+            // `--finding` is given it must name a real finding; the
+            // vf_ id lands inside the statement.registered payload (a
+            // payload field on the existing kind, never a new kind)
+            // and the event targets that finding.
+            if let Some(vf) = &finding
+                && !project.findings.iter().any(|f| &f.id == vf)
+            {
+                fail_return::<()>(&format!("--finding {vf} not found in this frontier"));
+            }
+            let target_id = finding.clone().unwrap_or_else(|| {
+                project
+                    .findings
+                    .first()
+                    .map(|f| f.id.clone())
+                    .unwrap_or_else(|| "vf_genesis".to_string())
+            });
+            let mut payload = serde_json::json!({
+                "statement_hash": statement_hash,
+                "informal_ref": informal_ref,
+            });
+            if let Some(vf) = &finding {
+                payload["finding_id"] = serde_json::json!(vf);
+            }
             let mut event = vela_protocol::events::new_finding_event(
                 vela_protocol::events::FindingEventInput {
                     kind: "statement.registered",
@@ -548,10 +568,7 @@ pub async fn run_command() {
                     reason: "statement priority registration",
                     before_hash: "sha256:null",
                     after_hash: "sha256:null",
-                    payload: serde_json::json!({
-                        "statement_hash": statement_hash,
-                        "informal_ref": informal_ref,
-                    }),
+                    payload,
                     caveats: Vec::new(),
                     timestamp: None,
                 },
@@ -567,6 +584,7 @@ pub async fn run_command() {
             let payload = json!({
                 "ok": true, "command": "register_statement",
                 "statement_hash": statement_hash, "informal_ref": informal_ref,
+                "finding_id": finding,
             });
             if json {
                 print_json(&payload);
@@ -8812,7 +8830,6 @@ Read-only inspection:
   impact        Report downstream finding impact
   normalize     Apply deterministic frontier-state repairs
   proof         Export and validate a proof packet
-  repo          Inspect split frontier repository status and shape
   doctor        Diagnose first-user checkout, frontier, proof, and Workbench readiness
   stats         Show frontier statistics
   search        Search findings

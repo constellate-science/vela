@@ -1021,6 +1021,13 @@ pub(crate) enum Commands {
         /// Where the informal problem lives.
         #[arg(long)]
         informal_ref: String,
+        /// The `vf_` finding this registration timestamps — the
+        /// canonical finding-to-registration edge (STATE_PLANE_MEMO
+        /// appendix gap 5). Lands inside the statement.registered
+        /// payload; the claim projections use the exact edge instead
+        /// of the digest/informal_ref heuristic when present.
+        #[arg(long)]
+        finding: Option<String>,
         #[arg(long)]
         by: String,
         #[arg(long)]

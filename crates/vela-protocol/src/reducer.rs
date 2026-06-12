@@ -1746,6 +1746,13 @@ fn apply_statement_registered(state: &mut Project, event: &StateEvent) -> Result
                 .to_string(),
             registered_by: event.actor.id.clone(),
             registered_at: event.timestamp.clone(),
+            // Gap 5 (STATE_PLANE_MEMO appendix): the optional
+            // finding-to-registration edge. Old events carry no
+            // payload.finding_id and store None.
+            finding_id: p
+                .get("finding_id")
+                .and_then(Value::as_str)
+                .map(str::to_string),
         });
     Ok(())
 }

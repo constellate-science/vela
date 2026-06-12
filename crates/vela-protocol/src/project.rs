@@ -1225,4 +1225,13 @@ pub struct StatementRegistration {
     pub informal_ref: String,
     pub registered_by: String,
     pub registered_at: String,
+    /// The canonical finding-to-registration edge (STATE_PLANE_MEMO
+    /// appendix gap 5): the `vf_` id this registration timestamps, when
+    /// the registrant declared one. Carried as an optional payload
+    /// field on the existing `statement.registered` kind — old events
+    /// (and old serialized state) parse unchanged via the serde
+    /// default; `None` serializes to nothing, so pre-edge state stays
+    /// byte-identical.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub finding_id: Option<String>,
 }

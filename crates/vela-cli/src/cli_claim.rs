@@ -18,14 +18,17 @@
 //! sit ahead of the clap dispatcher and never collide with the existing
 //! `vela claim <frontier> <obligation>` lease command.
 
+use std::collections::BTreeSet;
 use std::path::Path;
 
 use serde_json::{Value, json};
 use vela_protocol::bundle::{FindingBundle, ReviewState};
 use vela_protocol::contradiction::ContradictionStatus;
-use vela_protocol::events::actor_kind;
-use vela_protocol::project::Project;
+use vela_protocol::events::{StateEvent, actor_kind};
+use vela_protocol::project::{Project, StatementRegistration};
+use vela_protocol::provenance_poly::ProvenancePoly;
 use vela_protocol::repo;
+use vela_protocol::status_provenance::{BelnapStatus, StatusProvenance};
 use vela_protocol::verifier_attachment::{
     AttachmentOutcome, GateStatus, MethodIntegrity, VerifierAttachment, claim_digest,
     derive_gate_status,
@@ -126,6 +129,80 @@ fn adjudicated_contradiction(project: &Project, id: &str) -> bool {
                 ContradictionStatus::ExpertConfirmed { .. } | ContradictionStatus::Resolved { .. }
             )
     })
+}
+
+/// The priority registration for a finding (gap 5). Prefers the exact
+/// finding-to-registration edge (`payload.finding_id`, stored on
+/// `StatementRegistration.finding_id`); falls back to the original
+/// heuristic (statement hash equals the claim digest, or the
+/// informal_ref names the finding id) for registrations that predate
+/// the edge. Returns the registration plus how it matched.
+fn find_priority_registration<'a>(
+    project: &'a Project,
+    id: &str,
+    digest: &str,
+) -> Option<(&'a StatementRegistration, &'static str)> {
+    project
+        .statement_registrations
+        .iter()
+        .find(|r| r.finding_id.as_deref() == Some(id))
+        .map(|r| (r, "finding_edge"))
+        .or_else(|| {
+            project
+                .statement_registrations
+                .iter()
+                .find(|r| r.statement_hash == digest || r.informal_ref.contains(id))
+                .map(|r| (r, "heuristic"))
+        })
+}
+
+/// Gap 2: derive the support/refute provenance polynomials for a
+/// finding from its event history — a READ-SIDE projection, computed
+/// at projection time and never stored. Zero reducer or state changes.
+///
+/// Contribution rules over the canonical log (in log order):
+///   - `finding.asserted` and accept events (`finding.reviewed` with
+///     status accepted/approved) contribute support variables — the
+///     event ids themselves.
+///   - `finding.superseded` and `finding.retracted` apply the
+///     retraction homomorphism `rho_Y` with Y = the support variables
+///     accumulated so far, so every supporting derivation path dies
+///     (Theorem 2/3: no zombie findings — superseded implies the
+///     support polynomial is zero, hence the status cannot be T).
+///   - `finding.dependency_invalidated` contributes a refute variable.
+fn derive_status_provenance(events: &[StateEvent], id: &str) -> StatusProvenance {
+    let mut sp = StatusProvenance::empty();
+    for e in events.iter().filter(|e| e.target.id == id) {
+        match e.kind.as_str() {
+            "finding.asserted" => sp.add_support(&ProvenancePoly::singleton(e.id.as_str())),
+            "finding.reviewed" => {
+                if matches!(
+                    e.payload.get("status").and_then(Value::as_str),
+                    Some("accepted") | Some("approved")
+                ) {
+                    sp.add_support(&ProvenancePoly::singleton(e.id.as_str()));
+                }
+            }
+            "finding.dependency_invalidated" => {
+                sp.add_refute(&ProvenancePoly::singleton(e.id.as_str()));
+            }
+            "finding.superseded" | "finding.retracted" => {
+                let retracted: BTreeSet<String> = sp.support.support();
+                sp = sp.retract(&retracted);
+            }
+            _ => {}
+        }
+    }
+    sp
+}
+
+fn belnap_meaning(status: BelnapStatus) -> &'static str {
+    match status {
+        BelnapStatus::True => "supported",
+        BelnapStatus::False => "refuted",
+        BelnapStatus::Both => "both supported and refuted (contested)",
+        BelnapStatus::None => "neither supported nor refuted",
+    }
 }
 
 /// Latest `finding.reviewed` event targeting this finding, if any —
@@ -250,21 +327,36 @@ fn derive_state_cell(project: &Project, finding: &FindingBundle) -> Value {
         })
         .collect();
 
-    // Priority registration: a registered statement hash matching this
-    // claim's digest, or one whose informal_ref names this finding.
+    // Priority registration: the exact finding-to-registration edge
+    // when present (gap 5), else the original heuristic (statement
+    // hash equals the claim digest, or informal_ref names the id).
     // Rendered `null` (absent) when nothing matches — never invented.
-    let priority = project
-        .statement_registrations
-        .iter()
-        .find(|r| r.statement_hash == digest || r.informal_ref.contains(id))
-        .map(|r| {
-            json!({
-                "statement_hash": r.statement_hash,
-                "informal_ref": r.informal_ref,
-                "registered_by": r.registered_by,
-                "registered_at": r.registered_at,
-            })
-        });
+    let priority = find_priority_registration(project, id, &digest).map(|(r, matched_by)| {
+        json!({
+            "statement_hash": r.statement_hash,
+            "informal_ref": r.informal_ref,
+            "registered_by": r.registered_by,
+            "registered_at": r.registered_at,
+            "finding_id": r.finding_id,
+            "matched_by": matched_by,
+        })
+    });
+
+    // Gap 2: the provenance-semiring view of the same status — derived
+    // from the event history at read time, never stored. Printed NEXT
+    // TO the signal-derived status with an explicit divergence flag:
+    // measurement, not silent replacement.
+    let sp = derive_status_provenance(&project.events, id);
+    let poly_status = sp.derive_status();
+    let poly_letter = poly_status.letter().to_string();
+    let status_provenance = json!({
+        "support_poly": sp.support.to_string(),
+        "refute_poly": sp.refute.to_string(),
+        "letter": poly_letter,
+        "meaning": belnap_meaning(poly_status),
+        "divergence": poly_letter != status,
+        "note": "read-side projection over the event log (asserted/accept -> support vars, supersession/retraction -> rho_Y, dependency_invalidated -> refute); never stored",
+    });
 
     json!({
         "projection": "claim_state_cell",
@@ -285,6 +377,7 @@ fn derive_state_cell(project: &Project, finding: &FindingBundle) -> Value {
             "support_signals": support_signals,
             "refute_signals": refute_signals,
         },
+        "status_provenance": status_provenance,
         "supersession": supersession,
         "dependencies": dependencies,
         "open_obligations": open_obligations,
@@ -393,15 +486,15 @@ fn derive_trust_vector(project: &Project, finding: &FindingBundle) -> Value {
     };
 
     // priority: a registered statement hash (the priority timestamp).
-    let priority = project
-        .statement_registrations
-        .iter()
-        .find(|r| r.statement_hash == digest || r.informal_ref.contains(id))
-        .map(|r| {
+    // Exact finding edge first (gap 5), heuristic fallback.
+    let priority = find_priority_registration(project, id, &digest)
+        .map(|(r, matched_by)| {
             json!({
                 "registered": true,
                 "statement_hash": r.statement_hash,
                 "registered_at": r.registered_at,
+                "finding_id": r.finding_id,
+                "matched_by": matched_by,
             })
         })
         .unwrap_or_else(|| Value::String("absent".into()));
@@ -498,6 +591,18 @@ fn print_state_human(cell: &Value) {
                 .join(", ")
         );
     }
+    let sp = &cell["status_provenance"];
+    println!(
+        "  status (provenance): {} (support: {}, refute: {}){}",
+        sp["letter"].as_str().unwrap_or("?"),
+        sp["support_poly"].as_str().unwrap_or("0"),
+        sp["refute_poly"].as_str().unwrap_or("0"),
+        if sp["divergence"].as_bool().unwrap_or(false) {
+            "  [DIVERGES from signal-derived status]"
+        } else {
+            ""
+        }
+    );
     println!(
         "  superseded: {}",
         cell["supersession"]["superseded"]
@@ -577,5 +682,153 @@ fn render_field(v: &Value, key: &str) -> String {
         format!(" {}", v.as_str().unwrap_or("absent"))
     } else {
         format!(" {}", v[key].as_str().unwrap_or("present"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vela_protocol::events::{NULL_HASH, StateActor, StateTarget};
+
+    fn ev(idx: usize, kind: &str, target: &str, payload: Value) -> StateEvent {
+        StateEvent {
+            schema: vela_protocol::events::EVENT_SCHEMA.to_string(),
+            id: format!("vev_synthetic_{idx:04}"),
+            kind: kind.to_string(),
+            target: StateTarget {
+                r#type: "finding".to_string(),
+                id: target.to_string(),
+            },
+            actor: StateActor {
+                id: "reviewer:synthetic".to_string(),
+                r#type: "human".to_string(),
+            },
+            timestamp: format!("2026-06-12T00:00:{:02}Z", idx % 60),
+            reason: "synthetic provenance test".to_string(),
+            before_hash: NULL_HASH.to_string(),
+            after_hash: NULL_HASH.to_string(),
+            payload,
+            caveats: vec![],
+            signature: None,
+            schema_artifact_id: None,
+        }
+    }
+
+    #[test]
+    fn asserted_plus_accept_derives_t() {
+        let log = vec![
+            ev(0, "finding.asserted", "vf_a", json!({})),
+            ev(1, "finding.reviewed", "vf_a", json!({"status": "accepted"})),
+        ];
+        let sp = derive_status_provenance(&log, "vf_a");
+        assert_eq!(sp.derive_status(), BelnapStatus::True);
+        // Two independent support variables (the two event ids).
+        assert_eq!(sp.support.term_count(), 2);
+        assert!(sp.refute.is_zero());
+    }
+
+    /// Polynomial no-zombie (Theorem 3 at the projection layer):
+    /// supersession applies rho_Y over every accumulated support
+    /// variable, so the support polynomial is zero and the derived
+    /// status cannot remain T.
+    #[test]
+    fn polynomial_no_zombie_superseded_support_is_zero_not_t() {
+        let log = vec![
+            ev(0, "finding.asserted", "vf_a", json!({})),
+            ev(1, "finding.reviewed", "vf_a", json!({"status": "accepted"})),
+            ev(
+                2,
+                "finding.superseded",
+                "vf_a",
+                json!({"new_finding_id": "vf_b"}),
+            ),
+        ];
+        let sp = derive_status_provenance(&log, "vf_a");
+        // superseded => support poly zero => not T.
+        assert!(sp.support.is_zero());
+        assert_ne!(sp.derive_status(), BelnapStatus::True);
+        assert_eq!(sp.derive_status(), BelnapStatus::None);
+    }
+
+    #[test]
+    fn retraction_also_zeroes_support() {
+        let log = vec![
+            ev(0, "finding.asserted", "vf_a", json!({})),
+            ev(1, "finding.retracted", "vf_a", json!({})),
+        ];
+        let sp = derive_status_provenance(&log, "vf_a");
+        assert!(sp.support.is_zero());
+        assert_eq!(sp.derive_status(), BelnapStatus::None);
+    }
+
+    #[test]
+    fn dependency_invalidated_contributes_refute() {
+        let log = vec![
+            ev(0, "finding.asserted", "vf_b", json!({})),
+            ev(
+                1,
+                "finding.dependency_invalidated",
+                "vf_b",
+                json!({"upstream_finding_id": "vf_a", "depth": 1}),
+            ),
+        ];
+        let sp = derive_status_provenance(&log, "vf_b");
+        assert_eq!(sp.derive_status(), BelnapStatus::Both);
+        // Refute variables survive a later supersession of support:
+        let mut log2 = log;
+        log2.push(ev(
+            2,
+            "finding.superseded",
+            "vf_b",
+            json!({"new_finding_id": "vf_c"}),
+        ));
+        let sp2 = derive_status_provenance(&log2, "vf_b");
+        assert!(sp2.support.is_zero());
+        assert_eq!(sp2.derive_status(), BelnapStatus::False);
+    }
+
+    #[test]
+    fn support_after_supersession_revives_via_new_event_only() {
+        // rho_Y kills history; only NEW events (new variables) can
+        // re-support. Retraction never invents support (Theorem 2).
+        let log = vec![
+            ev(0, "finding.asserted", "vf_a", json!({})),
+            ev(1, "finding.superseded", "vf_a", json!({})),
+            ev(2, "finding.reviewed", "vf_a", json!({"status": "accepted"})),
+        ];
+        let sp = derive_status_provenance(&log, "vf_a");
+        assert_eq!(sp.derive_status(), BelnapStatus::True);
+        assert_eq!(sp.support.term_count(), 1);
+    }
+
+    #[test]
+    fn non_accept_reviews_contribute_nothing() {
+        let log = vec![
+            ev(0, "finding.asserted", "vf_a", json!({})),
+            ev(
+                1,
+                "finding.reviewed",
+                "vf_a",
+                json!({"status": "contested"}),
+            ),
+        ];
+        let sp = derive_status_provenance(&log, "vf_a");
+        // Only the assertion supports; the contested review is a
+        // signal-plane fact (flags), not a polynomial contribution.
+        assert_eq!(sp.support.term_count(), 1);
+        assert!(sp.refute.is_zero());
+        assert_eq!(sp.derive_status(), BelnapStatus::True);
+    }
+
+    #[test]
+    fn events_for_other_findings_are_ignored() {
+        let log = vec![
+            ev(0, "finding.asserted", "vf_a", json!({})),
+            ev(1, "finding.asserted", "vf_b", json!({})),
+            ev(2, "finding.retracted", "vf_b", json!({})),
+        ];
+        let sp = derive_status_provenance(&log, "vf_a");
+        assert_eq!(sp.derive_status(), BelnapStatus::True);
+        assert_eq!(sp.support.term_count(), 1);
     }
 }

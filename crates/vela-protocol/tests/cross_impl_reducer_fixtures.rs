@@ -1939,6 +1939,64 @@ fn build_claim_and_register_log(
     ]
 }
 
+/// Gap 5 (STATE_PLANE_MEMO appendix): `statement.registered` carrying
+/// the optional finding-to-registration edge as a payload field
+/// (`finding_id`) on the EXISTING kind — no new event kind. The edge
+/// lands on `StatementRegistration.finding_id` in the Rust side table,
+/// which is outside the cross-impl finding-effects digest, so the
+/// expected_* arrays are the untouched genesis findings; a second
+/// implementation must not ERROR on the extended payload (the no-op
+/// arms in the Python/TypeScript reducers already accept any payload
+/// for this kind).
+fn build_register_with_finding_edge_log(
+    frontier_idx: usize,
+    findings: &[FindingBundle],
+) -> Vec<events::StateEvent> {
+    let mk = |ts_idx: usize, target: &str, payload: serde_json::Value| StateEvent {
+        schema: events::EVENT_SCHEMA.to_string(),
+        id: String::new(),
+        kind: "statement.registered".to_string(),
+        target: StateTarget {
+            r#type: "finding".to_string(),
+            id: target.to_string(),
+        },
+        actor: StateActor {
+            id: "reviewer:priority-fixture".to_string(),
+            r#type: "human".to_string(),
+        },
+        timestamp: fixture_timestamp(frontier_idx, ts_idx),
+        reason: "fixture: finding-to-registration edge".to_string(),
+        before_hash: NULL_HASH.to_string(),
+        after_hash: NULL_HASH.to_string(),
+        payload,
+        caveats: vec![],
+        signature: None,
+        schema_artifact_id: None,
+    };
+    vec![
+        // With the edge: payload.finding_id names a genesis finding.
+        mk(
+            0,
+            &findings[0].id,
+            json!({
+                "statement_hash": "e".repeat(64),
+                "informal_ref": "fixture priority with edge",
+                "finding_id": findings[0].id,
+            }),
+        ),
+        // Without the edge: the pre-gap-5 payload shape still applies
+        // cleanly alongside the extended one.
+        mk(
+            1,
+            &findings[1].id,
+            json!({
+                "statement_hash": "f".repeat(64),
+                "informal_ref": "fixture priority without edge",
+            }),
+        ),
+    ]
+}
+
 /// v0.220: diff_pack.released / diff_pack.reviewed /
 /// verdict_conflict.resolved fixture builders. These three reducer
 /// arms write to side tables (`released_diff_packs`,
@@ -2840,6 +2898,28 @@ fn export_cross_impl_reducer_fixtures() {
             &out_dir,
             frontier_idx,
             "supersession_propagation",
+            findings,
+            event_log,
+        );
+    }
+
+    // Fixture 17 — statement.registered with the finding-to-
+    // registration edge (STATE_PLANE_MEMO appendix gap 5). The payload
+    // gains an OPTIONAL `finding_id` field on the existing kind; the
+    // registration side table is outside the finding-effects digest,
+    // so the expected_* arrays are the untouched genesis findings and
+    // a second implementation must accept (no-op) both the extended
+    // and the legacy payload shapes without erroring.
+    {
+        let frontier_idx = FIXTURE_FRONTIER_COUNT + 14;
+        let findings: Vec<FindingBundle> = (0..FINDINGS_PER_FRONTIER)
+            .map(|i| make_finding(frontier_idx, i))
+            .collect();
+        let event_log = build_register_with_finding_edge_log(frontier_idx, &findings);
+        export_one(
+            &out_dir,
+            frontier_idx,
+            "register_with_finding_edge",
             findings,
             event_log,
         );
