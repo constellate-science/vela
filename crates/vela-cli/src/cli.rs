@@ -8821,6 +8821,9 @@ Read-only inspection:
   gaps          Inspect and rank candidate gap review leads
   bridge        Find candidate cross-domain connections
   review-work   Show read-only review-work queues
+  claim state   Derive the Claim-State Cell for a finding (Belnap status, deps, obligations)
+  claim trust   Derive the Trust Vector for a finding (absent fields shown as absent)
+  claim pack    Bundle state + trust + reproduce command + event ids (citable claim pack)
 
 Advanced (proposal-creation, agent inboxes, federation):
   scout              Run Literature Scout against a folder of PDFs (writes proposals)
@@ -9281,6 +9284,20 @@ pub fn run_from_args() {
                     std::process::exit(2);
                 });
             cmd_proof_explain(&frontier);
+            return;
+        }
+        // Read-only claim projections: `vela claim {state,trust,pack}`.
+        // Intercepted ahead of the clap dispatcher (mirroring `proof
+        // verify`) so they never collide with the existing
+        // `vela claim <frontier> <obligation>` lease command. Pure
+        // derivations over the accepted log — no writes, no new events.
+        Some("claim")
+            if matches!(
+                args.get(2).map(String::as_str),
+                Some("state" | "trust" | "pack")
+            ) =>
+        {
+            crate::cli_claim::run(&args);
             return;
         }
         Some(cmd) if !is_science_subcommand(cmd) => {

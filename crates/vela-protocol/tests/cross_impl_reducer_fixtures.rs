@@ -1711,6 +1711,105 @@ fn build_superseded_log(
     }]
 }
 
+/// Supersession-propagation builder (fixture 16). A two-finding log
+/// where B depends on A, A is superseded, then B is invalidated through
+/// the upstream cascade:
+///
+///   - `finding.asserted` + `finding.reviewed(accepted)` for A and B
+///   - `finding.superseded` on A — flips `A.flags.superseded` (outside
+///     the finding-effects digest)
+///   - `finding.dependency_invalidated` on B citing A as the upstream —
+///     sets `B.flags.contested` and appends a deterministic cascade
+///     annotation (BOTH inside the digest)
+///
+/// This encodes REALITY: supersession itself is a LOCAL flag-flip on the
+/// old finding. It does NOT auto-propagate to dependents — propagation to
+/// B is an explicit, separately-emitted `finding.dependency_invalidated`
+/// event, not an automatic homomorphism over A's provenance. The fixture
+/// pins both the supersession of A (digest-invisible, no reducer error)
+/// and the visible cascade onto B (contested + annotation), so a second
+/// implementation must reproduce the propagation byte-for-byte.
+fn build_supersession_propagation_log(
+    frontier_idx: usize,
+    findings: &[FindingBundle],
+) -> Vec<events::StateEvent> {
+    let actor_id = format!("reviewer:supersede-prop-{frontier_idx}");
+    let a = &findings[0];
+    let b = &findings[1];
+    let mut log = Vec::new();
+
+    for f in [a, b] {
+        let proposal_id = format!("vpr_{}_{}", frontier_idx, &f.id[3..]);
+        log.push(events::new_finding_event(FindingEventInput {
+            kind: "finding.asserted",
+            finding_id: &f.id,
+            actor_id: &actor_id,
+            actor_type: "human",
+            reason: "supersession-propagation genesis assertion",
+            before_hash: NULL_HASH,
+            after_hash: NULL_HASH,
+            payload: json!({ "proposal_id": proposal_id }),
+            caveats: vec![],
+            timestamp: None,
+        }));
+        log.push(events::new_finding_event(FindingEventInput {
+            kind: "finding.reviewed",
+            finding_id: &f.id,
+            actor_id: &actor_id,
+            actor_type: "human",
+            reason: "supersession-propagation review",
+            before_hash: NULL_HASH,
+            after_hash: NULL_HASH,
+            payload: json!({ "proposal_id": proposal_id, "status": "accepted" }),
+            caveats: vec![],
+            timestamp: None,
+        }));
+    }
+
+    // Supersede A. Thin event: the replacement body enters via loader
+    // genesis seeding, never the reducer. `flags.superseded` flips on A.
+    let supersede = events::new_finding_event(FindingEventInput {
+        kind: "finding.superseded",
+        finding_id: &a.id,
+        actor_id: &actor_id,
+        actor_type: "human",
+        reason: "A superseded by a corrected finding",
+        before_hash: NULL_HASH,
+        after_hash: NULL_HASH,
+        payload: json!({
+            "proposal_id": format!("vpr_supersede_{frontier_idx:08x}"),
+            "new_finding_id": format!("vf_supersede_new_{frontier_idx:08x}"),
+        }),
+        caveats: vec![],
+        timestamp: None,
+    });
+    let supersede_id = supersede.id.clone();
+    log.push(supersede);
+
+    // B depends on A; the upstream supersession invalidates B via an
+    // EXPLICIT cascade event (the reducer never emits this itself).
+    let dep_proposal = format!("vpr_{}_{}", frontier_idx, &b.id[3..]);
+    log.push(events::new_finding_event(FindingEventInput {
+        kind: "finding.dependency_invalidated",
+        finding_id: &b.id,
+        actor_id: &actor_id,
+        actor_type: "human",
+        reason: "upstream A superseded — invalidate dependent B",
+        before_hash: NULL_HASH,
+        after_hash: NULL_HASH,
+        payload: json!({
+            "proposal_id": dep_proposal,
+            "upstream_finding_id": a.id,
+            "upstream_event_id": supersede_id,
+            "depth": 1u64,
+        }),
+        caveats: vec![],
+        timestamp: None,
+    }));
+
+    log
+}
+
 /// `assertion.reinterpreted_causal` builder. Replays the causal
 /// re-grading from `payload.after` ({claim, grade}). Causal fields are
 /// not part of the finding-effects digest; coverage proves no reducer
@@ -2706,6 +2805,46 @@ fn export_cross_impl_reducer_fixtures() {
         );
     }
 
+    // Fixture 16 — supersession + dependency-cascade propagation.
+    // Two findings: A (findings[0]) and B (findings[1]), where B carries
+    // a `depends_on` link to A. The log supersedes A and then invalidates
+    // B through the upstream cascade. Unlike the no-op coverage fixtures,
+    // this one moves the finding-effects digest: B becomes contested and
+    // gains a deterministic `ann_dep_*` cascade annotation, so a second
+    // implementation must reproduce the propagation byte-for-byte.
+    // A's supersession is digest-invisible (`flags.superseded` is outside
+    // the digest) but the reducer must not error on the kind. The Rust
+    // unit tests `supersession_is_local_no_dependent_cascade` and
+    // `superseded_finding_never_renders_live` pin the flag-flip and the
+    // no-zombie property directly.
+    {
+        let frontier_idx = FIXTURE_FRONTIER_COUNT + 13;
+        let mut findings: Vec<FindingBundle> =
+            vec![make_finding(frontier_idx, 0), make_finding(frontier_idx, 1)];
+        // B (findings[1]) depends on A (findings[0]). Overwrite the
+        // synthetic forward "supports" link with an explicit depends_on
+        // edge to A. Links are excluded from the content-address, so the
+        // ids are unchanged.
+        let a_id = findings[0].id.clone();
+        findings[0].links = vec![];
+        findings[1].links = vec![Link {
+            target: a_id,
+            link_type: "depends_on".into(),
+            note: "B's premise rests on A".into(),
+            inferred_by: "vela-cross-impl-fixture/0".into(),
+            created_at: "2026-05-02T00:00:00Z".into(),
+            mechanism: None,
+        }];
+        let event_log = build_supersession_propagation_log(frontier_idx, &findings);
+        export_one(
+            &out_dir,
+            frontier_idx,
+            "supersession_propagation",
+            findings,
+            event_log,
+        );
+    }
+
     // v0.107.4: write fixtures.manifest.json with SHA-256 of every
     // exported fixture. THREAT_MODEL.md A12 names tampered fixtures
     // as a real attack surface; the manifest closes the integrity
@@ -2883,6 +3022,137 @@ fn federation_events_fixture_pairs_conflict_with_resolution() {
             .and_then(|v| v.as_str())
             .unwrap_or(""),
         "resolved event must reference detected event by id"
+    );
+}
+
+/// Build the (A, B) genesis pair for the supersession-propagation
+/// fixture: B (index 1) carries a `depends_on` link to A (index 0).
+fn supersession_pair(frontier_idx: usize) -> Vec<FindingBundle> {
+    let mut findings = vec![make_finding(frontier_idx, 0), make_finding(frontier_idx, 1)];
+    let a_id = findings[0].id.clone();
+    findings[0].links = vec![];
+    findings[1].links = vec![Link {
+        target: a_id,
+        link_type: "depends_on".into(),
+        note: "B's premise rests on A".into(),
+        inferred_by: "vela-cross-impl-fixture/0".into(),
+        created_at: "2026-05-02T00:00:00Z".into(),
+        mechanism: None,
+    }];
+    findings
+}
+
+/// Reality check on what supersession actually does in the reducer.
+/// Supersession is a LOCAL flag-flip on the old finding; it does NOT
+/// auto-propagate down the `depends_on` edge. The dependent B only
+/// changes because of the EXPLICIT `finding.dependency_invalidated`
+/// cascade event — which sets `contested` and appends a deterministic
+/// `ann_dep_*` annotation, both visible in the cross-impl digest.
+#[test]
+fn supersession_is_local_no_dependent_cascade() {
+    let frontier_idx = 990;
+    let findings = supersession_pair(frontier_idx);
+    let a_id = findings[0].id.clone();
+    let b_id = findings[1].id.clone();
+    let log = normalize_event_log(
+        frontier_idx,
+        build_supersession_propagation_log(frontier_idx, &findings),
+    );
+    let post = replay_from_genesis(
+        findings.clone(),
+        log,
+        "supersession-propagation",
+        "reality test",
+        "2026-05-02T00:00:00Z",
+        "vela-cross-impl/0",
+    )
+    .expect("replay must succeed");
+
+    let a = post.findings.iter().find(|f| f.id == a_id).unwrap();
+    let b = post.findings.iter().find(|f| f.id == b_id).unwrap();
+
+    // A: superseded (local), and ONLY superseded — supersession does not
+    // contest or retract the old finding itself.
+    assert!(a.flags.superseded, "A must carry flags.superseded");
+    assert!(!a.flags.contested, "supersession must not contest A");
+    assert!(!a.flags.retracted, "supersession must not retract A");
+
+    // B: contested via the explicit cascade, with the deterministic
+    // annotation. The `superseded` flag NEVER propagates to B.
+    assert!(b.flags.contested, "B must be contested by the cascade");
+    assert!(
+        !b.flags.superseded,
+        "superseded must NOT propagate down the depends_on edge"
+    );
+    assert!(
+        b.annotations
+            .iter()
+            .any(|ann| ann.id.starts_with("ann_dep_")),
+        "B must carry the deterministic cascade annotation"
+    );
+    // B's dependency on A survives — the link target still points at A.
+    assert!(
+        b.links
+            .iter()
+            .any(|l| l.target == a_id && l.link_type == "depends_on"),
+        "B's depends_on edge to A is preserved"
+    );
+}
+
+/// No-zombie property, as it EXISTS in the reducer: once a finding is
+/// superseded it never re-renders as live. There is no reducer arm that
+/// clears `flags.superseded`, so replay is monotone on the flag and a
+/// second independent replay reproduces the superseded state bit-for-bit.
+/// (The proposal-store hydration path `replayed_projection` is not used
+/// here — these fixtures seed genesis directly — so the property is
+/// asserted on the Project state, which the task permits.)
+#[test]
+fn superseded_finding_never_renders_live() {
+    let frontier_idx = 991;
+    let findings = supersession_pair(frontier_idx);
+    let a_id = findings[0].id.clone();
+    let log = normalize_event_log(
+        frontier_idx,
+        build_supersession_propagation_log(frontier_idx, &findings),
+    );
+
+    let replay = || {
+        replay_from_genesis(
+            findings.clone(),
+            log.clone(),
+            "supersession-propagation",
+            "no-zombie test",
+            "2026-05-02T00:00:00Z",
+            "vela-cross-impl/0",
+        )
+        .expect("replay must succeed")
+    };
+
+    let first = replay();
+    let a1 = first.findings.iter().find(|f| f.id == a_id).unwrap();
+    assert!(a1.flags.superseded, "A is superseded after replay");
+
+    // A second, independent replay never resurrects A as live: the
+    // superseded flag persists and the finding projection (finding_hash,
+    // which excludes links) is byte-stable across replays.
+    let second = replay();
+    let a2 = second.findings.iter().find(|f| f.id == a_id).unwrap();
+    assert!(
+        a2.flags.superseded,
+        "A stays superseded across an independent replay (no zombie)"
+    );
+    assert_eq!(
+        events::finding_hash(a1),
+        events::finding_hash(a2),
+        "the superseded finding's projection is stable — it never re-renders as live"
+    );
+
+    // Belnap-honest: superseded is a distinct terminal state. A is not
+    // silently flipped back to an active (un-superseded, un-flagged) cell
+    // by any projection in the replay path.
+    assert!(
+        !(!a2.flags.superseded && !a2.flags.retracted && !a2.flags.contested),
+        "a superseded finding must never appear as a clean live cell"
     );
 }
 

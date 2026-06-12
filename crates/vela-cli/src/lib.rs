@@ -12,6 +12,7 @@ use colored::Colorize;
 // `vela_protocol::*`.
 pub mod cli;
 mod cli_check;
+mod cli_claim;
 mod cli_commands;
 mod cli_finding;
 mod cli_frontier;
