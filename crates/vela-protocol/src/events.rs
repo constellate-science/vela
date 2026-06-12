@@ -931,6 +931,15 @@ pub fn replay_report(frontier: &Project) -> ReplayReport {
         if let Err(err) = validate_event_payload(&event.kind, &event.payload) {
             conflicts.push(format!("event {} payload invalid: {err}", event.id));
         }
+        // Side-table events (statement.registered, attempt.deposited, …)
+        // are minted with before_hash == after_hash == NULL_HASH: they
+        // record activity against a finding without transitioning its
+        // state, so they are transparent to the per-finding hash chain.
+        // Including them would break the chain between the real
+        // transitions on either side.
+        if event.before_hash == NULL_HASH && event.after_hash == NULL_HASH {
+            continue;
+        }
         chains
             .entry(format!("{}:{}", event.target.r#type, event.target.id))
             .or_default()
@@ -1953,6 +1962,88 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
                 );
             }
         }
+        // Loader=reducer parity: every kind the reducer replays must
+        // also pass payload validation, or `vela check`'s event-replay
+        // verdict reports valid history as conflict. These arms are
+        // signature-pure shape checks; the reducer arms re-verify the
+        // embedded objects' own ids/signatures on apply.
+        "verdict_conflict.resolved" => {
+            if !object.get("conflict").is_some_and(|v| v.is_object()) {
+                return Err(
+                    "verdict_conflict.resolved payload.conflict must be an object".to_string(),
+                );
+            }
+        }
+        "contradiction.resolved" => {
+            if !object.get("contradiction").is_some_and(|v| v.is_object()) {
+                return Err(
+                    "contradiction.resolved payload.contradiction must be an object".to_string(),
+                );
+            }
+        }
+        EVENT_KIND_ATTEMPT_DEPOSITED => {
+            if !object.get("attempt").is_some_and(|v| v.is_object()) {
+                return Err("attempt.deposited payload.attempt must be an object".to_string());
+            }
+        }
+        EVENT_KIND_TRANSFER_DEPOSITED => {
+            if !object.get("transfer").is_some_and(|v| v.is_object()) {
+                return Err("transfer.deposited payload.transfer must be an object".to_string());
+            }
+        }
+        EVENT_KIND_ENDORSEMENT_DEPOSITED => {
+            if !object.get("endorsement").is_some_and(|v| v.is_object()) {
+                return Err(
+                    "endorsement.deposited payload.endorsement must be an object".to_string(),
+                );
+            }
+        }
+        EVENT_KIND_ATTEMPT_RESOLVED => {
+            if !object.get("resolution").is_some_and(|v| v.is_object()) {
+                return Err("attempt.resolved payload.resolution must be an object".to_string());
+            }
+        }
+        EVENT_KIND_STATEMENT_ATTESTED => {
+            if !object.get("attestation").is_some_and(|v| v.is_object()) {
+                return Err("statement.attested payload.attestation must be an object".to_string());
+            }
+        }
+        EVENT_KIND_ATTEMPT_CLAIMED => {
+            let obligation_id = require_str("obligation_id")?;
+            if obligation_id.trim().is_empty() {
+                return Err("payload.obligation_id must be non-empty".to_string());
+            }
+            if !object
+                .get("lease_ttl_seconds")
+                .is_some_and(|v| v.as_u64().is_some())
+            {
+                return Err(
+                    "attempt.claimed payload.lease_ttl_seconds must be a non-negative integer"
+                        .to_string(),
+                );
+            }
+        }
+        EVENT_KIND_STATEMENT_REGISTERED => {
+            let hash = require_str("statement_hash")?;
+            if hash.len() != 64 || hex::decode(hash).is_err() {
+                return Err(
+                    "payload.statement_hash must be 32 bytes of hex (64 hex chars)".to_string(),
+                );
+            }
+            if let Some(finding) = object.get("finding_id")
+                && !finding.is_null()
+                && !finding.is_string()
+            {
+                return Err("payload.finding_id must be a string when present".to_string());
+            }
+        }
+        "proposal.recommended" => {
+            require_str("proposal_id")?;
+        }
+        // Historical audit-record kinds: the reducer replays them as
+        // no-ops; the payload shape is whatever the retired surface
+        // minted. Object-ness is already enforced above.
+        "correction_return.review" | "research_trace.review" => {}
 
         other => return Err(format!("unknown event kind '{other}'")),
     }

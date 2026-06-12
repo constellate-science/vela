@@ -22,7 +22,7 @@ pub(crate) enum Commands {
         #[arg(long)]
         conformance: bool,
         /// Conformance test directory
-        #[arg(long, default_value = "tests/conformance")]
+        #[arg(long, default_value = "conformance")]
         conformance_dir: PathBuf,
         /// Run all checks
         #[arg(long)]
@@ -270,7 +270,7 @@ pub(crate) enum Commands {
     },
     /// Run protocol conformance vectors
     Conformance {
-        #[arg(default_value = "tests/conformance")]
+        #[arg(default_value = "conformance")]
         dir: PathBuf,
     },
     /// The verification gate: deliverable-grade and verifier-attachment
@@ -1192,46 +1192,6 @@ pub(crate) enum PacketAction {
     /// Validate a proof packet
     Validate {
         path: PathBuf,
-        #[arg(long)]
-        json: bool,
-    },
-}
-
-#[derive(Subcommand)]
-pub(crate) enum TraceAction {
-    /// Validate a bounded research trace source artifact
-    Validate {
-        path: PathBuf,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Draft pending review proposals from a trace
-    Propose {
-        path: PathBuf,
-        #[arg(long)]
-        frontier: PathBuf,
-        #[arg(long)]
-        out: PathBuf,
-        #[arg(long)]
-        json: bool,
-    },
-}
-
-#[derive(Subcommand)]
-pub(crate) enum CorrectionReturnAction {
-    /// Validate a correction return object
-    Validate {
-        path: PathBuf,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Draft pending review proposals from a correction return
-    Propose {
-        path: PathBuf,
-        #[arg(long)]
-        frontier: PathBuf,
-        #[arg(long)]
-        out: PathBuf,
         #[arg(long)]
         json: bool,
     },

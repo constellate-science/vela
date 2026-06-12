@@ -28,16 +28,15 @@ Runtime objects, federation, and dedicated constellation interfaces are not part
 of the v0 protocol contract.
 
 The Carina kernel name is reserved for the primitive object and event model
-inside this protocol. See [`CARINA.md`](CARINA.md) for the kernel vocabulary and
-[`ARTIFACT_TO_STATE.md`](ARTIFACT_TO_STATE.md) for the first external artifact
-adapter.
+inside this protocol. See [`CARINA.md`](CARINA.md) for the kernel vocabulary;
+the external-artifact adapter ships as the `vela artifact-to-state` command
+(section 6's event kinds cover the records it mints).
 
-The protocol boundary follows the invariant contract in
-[`INVARIANTS.md`](INVARIANTS.md): scientific activity is source material until
-it enters the proposal -> diff -> review -> accepted event -> deterministic
-replay path. Derived answer pages, graph views, benchmark tables, and source
-dashboards are projections over replayed frontier state, not separate truth
-stores.
+The protocol boundary is the invariant this spec enforces throughout:
+scientific activity is source material until it enters the proposal -> diff ->
+review -> accepted event -> deterministic replay path. Derived answer pages,
+graph views, benchmark tables, and source dashboards are projections over
+replayed frontier state, not separate truth stores.
 
 ## 1. design principles
 
@@ -750,9 +749,8 @@ serialized only when present).
 for `frontier.conflict_resolved` events. The CLI loads the paired
 event from the local frontier, signs the canonical preimage with the
 reviewer's Ed25519 key, and POSTs it to the peer hub at
-`POST /entries/<vfr_id>/events`. The full wire format and the
-substrate-doctrine rationale live in
-[`FEDERATION.md`](FEDERATION.md); the protocol-level surface follows.
+`POST /entries/<vfr_id>/events`. The protocol-level wire surface
+follows.
 
 Auth headers (the body omits the `signature` field so the bytes the
 hub canonicalizes match the bytes the reviewer signed):
@@ -789,9 +787,7 @@ Response codes:
 | `409 Conflict` | A different resolution event already pairs with the same `conflict_event_id`. |
 | `422 Unprocessable Entity` | Paired `frontier.conflict_detected` not found on this hub. |
 
-The non-normative [State Transition Spec](STATE_TRANSITION_SPEC.md) sketches the
-larger typed transition language this protocol can grow into. v0 remains
-proposal/event/finding centered.
+v0 remains proposal/event/finding centered.
 
 ### 6.9 Release history
 
@@ -810,8 +806,7 @@ Earlier releases are documented inline in the sections above.
 
 The portable baseline remains monolithic `frontier.json`.
 
-The default cloneable frontier repository format is defined in
-[`FRONTIER_REPO.md`](FRONTIER_REPO.md):
+The default cloneable frontier repository format is:
 
 ```text
 my-frontier/

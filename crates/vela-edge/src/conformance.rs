@@ -64,8 +64,11 @@ pub fn run(dir: &Path) -> (usize, usize) {
         let suite_name = suite["suite"].as_str().unwrap_or("unknown");
         let cases = suite["cases"].as_array();
 
+        // Not a suite-vector file (e.g. `conformance/` also carries the
+        // cross-impl contract files consumed by verify.py and the Rust
+        // vector tests). Skip quietly; the summary line names the real
+        // contract when nothing here is runnable.
         if cases.is_none() {
-            eprintln!("  no cases found in {}", path.display());
             continue;
         }
 
@@ -113,7 +116,12 @@ pub fn run(dir: &Path) -> (usize, usize) {
     }
 
     println!();
-    if failed == 0 {
+    if passed == 0 && failed == 0 {
+        println!(
+            "  no runnable suite vectors in {} — the cross-impl conformance contract is `conformance/verify.py` (reducer fixtures) plus the Rust vector tests in `crates/vela-protocol/tests/`.",
+            dir.display()
+        );
+    } else if failed == 0 {
         println!(
             "  {} all {passed} conformance tests passed.",
             style::ok("ok")

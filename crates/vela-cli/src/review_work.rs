@@ -152,12 +152,9 @@ fn build_review_work_frontier_index(
         fallback_counts_from_files,
         counts,
         copy_commands: vec![
-            format!("vela index build {} --json", repo_path.display()),
-            format!("vela index status {} --json", repo_path.display()),
-            format!(
-                "vela index query {} --kind finding --q amyloid --json",
-                repo_path.display()
-            ),
+            format!("vela status {} --json", repo_path.display()),
+            format!("vela stats {} --json", repo_path.display()),
+            format!("vela search <query> --source {} --json", repo_path.display()),
         ],
         boundary: "The database is a rebuildable read model. Canonical state remains frontier files and accepted events.",
     }
@@ -794,25 +791,22 @@ fn build_review_work_payload(repo_path: &Path) -> Result<ReviewWorkPayload, Stri
                 "benchmarks/frontier-graph-navigation-paper-rag-baseline.v1.json",
                 "benchmarks/frontier-graph-blind-scoring-pack.v1.json",
                 "benchmarks/frontier-graph-benchmark-error-analysis.v1.json",
-                "docs/FRONTIER_GRAPH_BENCHMARK_ERROR_ANALYSIS_v0.482.md",
             ],
             copy_commands: vec![
-                "./scripts/run-frontier-graph-navigation-answers.py projects/anti-amyloid-translation",
-                "./scripts/build-frontier-paper-rag-baseline-v2.py projects/anti-amyloid-translation",
-                "./scripts/build-frontier-graph-blind-scoring-pack.py",
-                "./scripts/score-frontier-graph-benchmark-errors.py",
+                "jq '.summary' benchmarks/frontier-graph-navigation-answers.v1.json",
+                "jq '.summary' benchmarks/frontier-graph-blind-scoring-pack.v1.json",
             ],
             boundary: "copy benchmark commands only; this read-only review mode does not score external validation and does not mutate frontier state",
         },
         action_queue_submit: ReviewWorkSubmitPath {
             source: "review/frontier-action-queue.v1.json",
             proposal_preview_commands: vec![
-                "vela correction-return propose projects/anti-amyloid-translation/review/correction-return.template.json --frontier projects/anti-amyloid-translation --out /tmp/correction-return-proposals.json --json",
-                "vela proposals import projects/anti-amyloid-translation /tmp/correction-return-proposals.json --json",
+                "vela proposals validate review/correction-return-proposals.v1.json --json",
+                "vela proposals import <frontier> review/correction-return-proposals.v1.json --json",
             ],
             explicit_reviewer_actions: vec![
-                "vela proposals accept projects/anti-amyloid-translation <proposal-id> --reviewer reviewer:solo-maintainer --reason \"Accept returned correction into observation review history.\" --json",
-                "vela proposals reject projects/anti-amyloid-translation <proposal-id> --reviewer reviewer:solo-maintainer --reason \"Reject returned correction for now.\" --json",
+                "vela proposals accept <frontier> <proposal-id> --reviewer reviewer:solo-maintainer --reason \"Accept returned correction into observation review history.\" --json",
+                "vela proposals reject <frontier> <proposal-id> --reviewer reviewer:solo-maintainer --reason \"Reject returned correction for now.\" --json",
             ],
             boundary: "Proposal previews and reviewer actions are commands to copy. The review-work page does not execute them.",
         },

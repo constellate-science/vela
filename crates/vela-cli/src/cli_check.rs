@@ -164,7 +164,7 @@ pub(crate) fn cmd_check(
     }
     if run_all || conformance_flag {
         // v0.106: a fresh `cargo install vela-cli` user runs `vela check`
-        // from a directory without `tests/conformance/` (those vectors
+        // from a directory without `conformance/` (those vectors
         // live in the source repo). Pre-v0.106 the default
         // `run_all` path called `conformance::run` unconditionally,
         // which `process::exit(1)`'d with a confusing error. Skip
@@ -176,7 +176,7 @@ pub(crate) fn cmd_check(
             conformance::run(conformance_dir);
         } else {
             eprintln!(
-                "  conformance: skipped ({} not present; pass --conformance-dir <path> to point at the source repo's tests/conformance)",
+                "  conformance: skipped ({} not present; pass --conformance-dir <path> to point at the source repo's conformance directory)",
                 conformance_dir.display()
             );
         }
