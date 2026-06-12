@@ -802,7 +802,7 @@ fn build_review_work_payload(repo_path: &Path) -> Result<ReviewWorkPayload, Stri
                 "./scripts/build-frontier-graph-blind-scoring-pack.py",
                 "./scripts/score-frontier-graph-benchmark-errors.py",
             ],
-            boundary: "copy benchmark commands only; this workbench mode does not score external validation and does not mutate frontier state",
+            boundary: "copy benchmark commands only; this read-only review mode does not score external validation and does not mutate frontier state",
         },
         action_queue_submit: ReviewWorkSubmitPath {
             source: "review/frontier-action-queue.v1.json",
@@ -814,7 +814,7 @@ fn build_review_work_payload(repo_path: &Path) -> Result<ReviewWorkPayload, Stri
                 "vela proposals accept projects/anti-amyloid-translation <proposal-id> --reviewer reviewer:solo-maintainer --reason \"Accept returned correction into observation review history.\" --json",
                 "vela proposals reject projects/anti-amyloid-translation <proposal-id> --reviewer reviewer:solo-maintainer --reason \"Reject returned correction for now.\" --json",
             ],
-            boundary: "Proposal previews and reviewer actions are commands to copy. The workbench page does not execute them.",
+            boundary: "Proposal previews and reviewer actions are commands to copy. The review-work page does not execute them.",
         },
         queues,
     })

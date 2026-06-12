@@ -105,7 +105,7 @@ pub fn run(frontier_arg: Option<&Path>, port: u16) -> DoctorReport {
         warnings.push("rg missing; release gates use ripgrep for text checks".to_string());
     }
     if !has_curl {
-        warnings.push("curl missing; HTTP and Workbench smoke checks will fail".to_string());
+        warnings.push("curl missing; HTTP and serve smoke checks will fail".to_string());
     }
     if frontier_load_ok && !matches!(proof_status.as_str(), "fresh" | "current" | "ready") {
         warnings.push(format!("proof state is {proof_status}"));
@@ -118,11 +118,11 @@ pub fn run(frontier_arg: Option<&Path>, port: u16) -> DoctorReport {
     let next_commands = if frontier_load_ok {
         vec![
             format!("vela doctor {frontier_display} --port {port}"),
-            format!("vela workbench {frontier_display} --port {port}"),
-            format!("vela frontier health {frontier_display}"),
+            format!("vela serve {frontier_display} --http {port}"),
+            format!("vela frontier audit {frontier_display}"),
             format!("vela evidence-ci {frontier_display}"),
             format!("vela proof {frontier_display} --out /tmp/vela-proof"),
-            "vela packet validate /tmp/vela-proof".to_string(),
+            "vela verify /tmp/vela-proof".to_string(),
         ]
     } else {
         vec![

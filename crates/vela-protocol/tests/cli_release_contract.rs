@@ -270,7 +270,7 @@ fn stats_and_gap_text_preserve_review_lead_caveats() {
 
     let stats = run_text(&["stats", frontier.to_str().unwrap()]);
     assert!(stats.contains("recorded proof:"));
-    assert!(stats.contains("packet files are checked by `vela packet validate`"));
+    assert!(stats.contains("packet files are checked by `vela verify`"));
 
     let gaps = run_text(&["gaps", "rank", frontier.to_str().unwrap(), "--top", "3"]);
     assert!(gaps.contains("CANDIDATE GAP REVIEW LEADS"));
@@ -317,8 +317,28 @@ fn advanced_help_quickstart_uses_release_commands() {
     let help = run_text(&["help", "advanced"]);
 
     assert!(help.contains("vela check frontier.json --json"));
-    assert!(help.contains("bridge        Find candidate cross-domain connections"));
+    assert!(help.contains("reproduce     Re-verify stored witnesses from scratch"));
     assert!(!help.contains("vela check frontier.json --strict --json"));
     assert!(!help.contains("bridges derive"));
     assert!(!help.contains("vela workbench"));
+    // The v0.700 cut: the help must advertise nothing the binary
+    // cannot run. These were the most prominent removed families.
+    for dead in [
+        "scout",
+        "compile-notes",
+        "clinical-trial-import",
+        "source-inbox",
+        "  atlas ",
+        "constellation",
+        "federation",
+        "  bridge ",
+        "  packet ",
+        "  bench ",
+        "Workbench",
+    ] {
+        assert!(
+            !help.contains(dead),
+            "help advanced still advertises removed surface: {dead}"
+        );
+    }
 }

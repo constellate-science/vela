@@ -1,11 +1,21 @@
 # Vela protocol specification v0.105.0
 
-> **CLI-surface note (v0.700).** The command surface was cut to a ~60-command
+> **CLI-surface note (v0.700).** The command surface was cut to a ~70-command
 > core in v0.700. Event kinds and reducer semantics in this spec remain
 > normative — the reducer still replays every historical event — but some CLI
 > invocations referenced below (`vela trace`, `vela bridge`, `vela federation`,
 > `vela discord`, `vela impact`) describe commands that were removed from the
 > binary. The events they minted are still valid state.
+
+> **Version-scheme note.** Two numbering schemes appear in this repository.
+> Markers of the form `v0.X` or `v0.X.Y` (v0.32, v0.78, v0.105, v0.262, …)
+> are the original micro-version stamps: each names the working cycle that
+> introduced a feature, kept as historical provenance in comments, doc
+> strings, and this spec's section headings. The workspace release version
+> (`0.700.0`, reported by `vela version`) is a separate, later scheme that
+> began at 0.700 with the consolidated substrate. The two do not compare:
+> v0.78 is *older* than 0.700, not newer. Micro-version markers are never
+> bumped retroactively; new work cites the release scheme.
 
 
 This document defines the shipped v0 language kernel for portable,
@@ -276,7 +286,9 @@ the first 16 hex characters of the hash.
 
 Source records use `vs_...`, evidence atoms use `vea_...`, condition records use
 `vcnd_...`, artifacts use `va_...`, proposals use `vpr_...`, and canonical
-events use `vev_...`.
+events use `vev_...`. The full prefix registry — the authoritative meaning of
+every live `v*_` prefix, including the known `vat_` and `vtr_` collisions —
+lives in [`PREFIXES.md`](PREFIXES.md).
 
 ## 4. confidence
 

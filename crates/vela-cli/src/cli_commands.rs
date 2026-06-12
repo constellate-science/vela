@@ -60,12 +60,12 @@ pub(crate) enum Commands {
         #[arg(long)]
         json: bool,
     },
-    /// Diagnose first-user checkout, frontier, proof, and Workbench readiness.
+    /// Diagnose first-user checkout, frontier, proof, and serve readiness.
     Doctor {
         /// Frontier JSON file or Vela repo. Defaults to the release frontier
         /// when run from the repository root.
         frontier: Option<PathBuf>,
-        /// Local Workbench port to check.
+        /// Local serve port to check.
         #[arg(long, default_value_t = 3741)]
         port: u16,
         /// Output stable JSON.
@@ -259,11 +259,9 @@ pub(crate) enum Commands {
         sequence: String,
     },
     /// Recompute SHA-256 over every file in a proof packet, compare to
-    /// the manifest, and validate the proof-trace chain. Friendlier
-    /// alias for `vela packet validate <path>` — same code path, same
-    /// guarantee. Use this when you've pulled a packet from someone
-    /// else and want one command that says "yes, this is what they
-    /// signed, byte for byte."
+    /// the manifest, and validate the proof-trace chain. Use this when
+    /// you've pulled a packet from someone else and want one command
+    /// that says "yes, this is what they signed, byte for byte."
     Verify {
         /// Path to the proof packet directory (the one with manifest.json)
         path: PathBuf,
@@ -318,7 +316,7 @@ pub(crate) enum Commands {
         #[command(subcommand)]
         action: FrontierAction,
     },
-    /// Walk the local Workbench draft queue (Phase R, v0.5):
+    /// Walk the local serve draft queue:
     /// list, sign-and-apply, or clear queued review actions
     Queue {
         #[command(subcommand)]

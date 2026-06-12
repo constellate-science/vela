@@ -1959,7 +1959,7 @@ fn build_reviewer_replay_manifest(
         commands: vec![
             PacketReviewerReplayCommand {
                 step: "validate_packet".to_string(),
-                command: "vela packet validate /path/to/proof-packet".to_string(),
+                command: "vela verify /path/to/proof-packet".to_string(),
             },
             PacketReviewerReplayCommand {
                 step: "inspect_source_debt".to_string(),

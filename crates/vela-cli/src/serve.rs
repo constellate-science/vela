@@ -1488,7 +1488,7 @@ async fn http_queue_append(
             return (
                 StatusCode::BAD_REQUEST,
                 Json(
-                    json!({"error": "Workbench queue requires a single-file frontier (--frontier <PATH>)"}),
+                    json!({"error": "The draft queue requires a single-file frontier (--frontier <PATH>)"}),
                 ),
             );
         }

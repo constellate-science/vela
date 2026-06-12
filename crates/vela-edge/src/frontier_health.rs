@@ -229,7 +229,7 @@ pub fn analyze(frontier_path: &Path) -> Result<FrontierHealthReport, String> {
         caveats: vec![
             "Health is an operating projection for local review. It is not a truth verdict."
                 .to_string(),
-            "Hosted surfaces must remain read-only; local Workbench and CLI own review actions."
+            "Hosted surfaces must remain read-only; the local review server (`vela serve`) and CLI own review actions."
                 .to_string(),
         ],
     };

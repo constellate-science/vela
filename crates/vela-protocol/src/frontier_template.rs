@@ -189,10 +189,8 @@ pub fn adoption_next_commands(path: &Path) -> Vec<String> {
     let target = path.display().to_string();
     vec![
         format!("vela doctor {target}"),
-        format!(
-            "vela source-inbox add {target} --title \"Example source\" --locator doi:10.0000/example --source-type paper --json"
-        ),
-        format!("vela source-inbox list {target} --json"),
+        format!("vela status {target} --json"),
+        format!("vela check {target} --strict --json"),
         format!(
             "vela task create {target} --type source_ingestion --objective \"Review whether the example source changes the frontier.\" --input doi:10.0000/example --risk-class source_repair --acceptance \"source identity is verified\" --status eligible --json"
         ),
@@ -207,7 +205,7 @@ pub fn default_next_commands(path: &Path) -> Vec<String> {
         format!("vela check {target} --strict --json"),
         format!("vela proof {target} --out proof/latest"),
         format!("vela stats {target}"),
-        format!("vela workbench {target} --port 3741"),
+        format!("vela serve {target} --http 3741"),
     ]
 }
 

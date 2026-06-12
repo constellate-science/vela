@@ -454,7 +454,7 @@ pub fn all_tools() -> Vec<ToolDefinition> {
             vec![
                 "Refuses to operate without VELA_AGENT_KEY_HEX set; no silent unsigned submissions.",
                 "Writes to .vela/agent_attestations/, .vela/diff_packs/, .vela/agent_proposals/ — does NOT pass through the canonical proposal reducer.",
-                "Resulting pack is reviewer-pending until a reviewer issues a verdict via the v0.203 workbench + v0.205 promoter.",
+                "Resulting pack is reviewer-pending until a reviewer issues a verdict via the local review queue + diff-pack promoter.",
             ],
         ),
         tool(

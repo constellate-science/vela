@@ -506,13 +506,13 @@ It is read-only and does not count as review. Run it with:
   --out /tmp/gbm-strict-handoff-validation
 ```
 
-The local Workbench page `/review/work` renders those queue totals without
+The local serve page `/review/work` renders those queue totals without
 counting as review or mutating frontier state. `/review/work.json`
 emits the same `vela.workbench.review_work.v0.1` payload for agents and
 release checks.
 For local operator inspection without starting a browser server, run
 `vela review-work <frontier> --json`. It uses the same read-only
-review-work builder as the Workbench route.
+review-work builder as the serve route.
 The generated strict-signal review packet includes
 `strict-signal-invitations/` with lane-specific invitation drafts for
 the same four remediation lanes. The drafts preserve reviewer/date
@@ -581,13 +581,13 @@ boundary. It is read-only and does not count as review. Run it with:
   --out /tmp/pediatric-hgg-handoff-validation
 ```
 
-The local Workbench page `/review/work` renders those queue totals without
+The local serve page `/review/work` renders those queue totals without
 counting as review or mutating frontier state. `/review/work.json`
 emits the same `vela.workbench.review_work.v0.1` payload for agents and
 release checks.
 For local operator inspection without starting a browser server, run
 `vela review-work <frontier> --json`. It uses the same read-only
-review-work builder as the Workbench route.
+review-work builder as the serve route.
 The cleanup lane map does not clear source review, Diff Packs, or
 attestations.
 

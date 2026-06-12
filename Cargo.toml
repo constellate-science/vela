@@ -1,39 +1,26 @@
 [workspace]
+# The consolidated six-crate substrate (0.700):
+#   vela-protocol       the protocol kernel (events, reducer, objects)
+#   vela-protocol-core  shared primitives under the kernel
+#   vela-edge           derived views and adapters over kernel state
+#   vela-cli            the `vela` binary (CLI + serve + MCP)
+#   vela-hub            the hub server (registry, event streams)
+#   vela-verify         frozen, dependency-light exact verifiers; the
+#                       reference registry `vela gate` / `vela reproduce`
+#                       build on
 members = [
     "crates/vela-protocol",
     "crates/vela-edge",
     "crates/vela-protocol-core",
     "crates/vela-cli",
     "crates/vela-hub",
-    # v0.78.2: vela-atlas carved out as a real crate. The
-    # namespace-stubs/vela-atlas package stays in place (it's
-    # not in this list) and `cargo publish` of crates/vela-atlas
-    # at 0.78.0 supersedes the 0.0.0 stub.
-    # v0.81.1: vela-constellation carved out as a real crate.
-    # The namespace-stubs/vela-constellation isn't a thing yet
-    # (we never reserved it; this is a fresh publish slot for
-    # later cycles).
-    # v0.123: vela-relay carved out as a real crate + binary.
-    # The namespace-stubs/vela-relay v0.0.0 publish stays in the
-    # repo history; cargo publish of crates/vela-relay at 0.123.0
-    # supersedes the stub. Library re-exports source_adapters /
-    # runtime_adapters from vela-protocol; binary lists the four
-    # adapter shapes (see docs/RELAY.md).
-    # v0.149: vela-search ships the build-time index over
-    # registered frontiers. Pure derived view, not authority;
-    # the canonical state stays in registry + frontier event
-    # logs. See docs/SEARCH.md.
-    # vela-verify: frozen, dependency-light exact verifiers for
-    # combinatorial / coding-theory witnesses. The reference verifier
-    # registry the gate and `vela reproduce` build on.
     "crates/vela-verify",
 ]
 # Reserved crates.io namespace names for the ten-year ecosystem ontology
-# (kept here for the record now that the placeholder namespace-stubs/ dirs
-# are removed — the crates.io reservations stand independent of the local
-# stubs): vela-navigator, vela-registry, vela-canopus, vela-observatory,
-# constellate-studio, constellate-commons. (vela-atlas became a real crate at
-# v0.78.2 and vela-relay at v0.123 — both in `members` above.)
+# (the placeholder namespace-stubs/ dirs are removed; the crates.io
+# reservations stand independent of the local stubs): vela-navigator,
+# vela-registry, vela-canopus, vela-observatory, constellate-studio,
+# constellate-commons.
 resolver = "3"
 
 [workspace.package]
@@ -43,8 +30,7 @@ license = "Apache-2.0 OR MIT"
 repository = "https://github.com/vela-science/vela"
 homepage = "https://github.com/vela-science/vela"
 # Per-crate `publish` is set explicitly: `vela-protocol` and `vela-cli`
-# publish to crates.io; `vela-scientist` and `vela-hub` stay
-# unpublished (internal agent layer and server-only hub).
+# publish to crates.io; `vela-hub` stays unpublished (server-only hub).
 publish = false
 
 [workspace.dependencies]

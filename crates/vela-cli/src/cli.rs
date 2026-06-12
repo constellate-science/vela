@@ -3880,7 +3880,7 @@ fn cmd_stats(path: &Path) {
     );
     if frontier.proof_state.latest_packet.status != "never_exported" {
         println!(
-            "  proof note:     recorded frontier metadata; packet files are checked by `vela packet validate`"
+            "  proof note:     recorded frontier metadata; packet files are checked by `vela verify`"
         );
     }
     if !s.categories.is_empty() {
@@ -5750,7 +5750,7 @@ fn cmd_doctor(frontier: Option<&Path>, port: u16, json_output: bool) {
             }
         );
         println!(
-            "  workbench:   port {} {}",
+            "  serve:       port {} {}",
             report.workbench_port,
             if report.workbench_port_available {
                 "available"
@@ -8617,187 +8617,84 @@ pub struct ProofTrace {
     pub trace_path: String,
 }
 
+// The strict v0.700 command surface. Every name here is a live clap
+// subcommand in `cli_commands.rs::Commands` (plus the pre-clap
+// intercepts: `help`, `version`, `proof verify|explain`,
+// `claim state|trust|pack`). This list is the allowlist `run_from_args`
+// consults before handing off to clap; it must advertise nothing the
+// binary cannot run.
 const SCIENCE_SUBCOMMANDS: &[&str] = &[
-    "compile-notes",
-    "compile-code",
-    "compile-data",
-    "review-pending",
-    "find-tensions",
-    "plan-experiments",
-    "scout",
-    "check",
-    "normalize",
-    "integrity",
-    "impact",
-    "discord",
-    "evidence-ci",
-    "doctor",
-    "quickstart",
-    "proof",
-    "repo",
-    "serve",
-    "stats",
-    "search",
-    "search-index",
-    "index",
-    "citation",
-    "credit",
-    "crossref",
-    "handle",
-    "hub",
-    "lean",
-    "attempt",
-    "transfer",
-    "retro-impact",
-    "diff-pack",
-    "policy",
-    "controller",
-    "incident",
-    "review-packet",
-    "review-session",
-    "source-inbox",
-    "adoption",
-    "share",
-    "tool",
-    "eval",
-    "conflict",
-    "preprint",
-    "review-thread",
-    "proof-attest-verification",
-    "proof-verify-attestation",
-    "tensions",
-    "gaps",
-    "bridge",
-    "export",
-    "packet",
-    "trace",
-    "correction-return",
-    "bench",
-    "conformance",
-    "gate",
-    "reproduce",
-    "version",
-    "sign",
-    "actor",
-    "frontier",
-    "queue",
-    "registry",
-    "init",
-    "import",
-    "lock",
-    "doc",
-    "diff",
-    "proposals",
-    "finding",
-    "link",
-    "entity",
-    "review",
-    "note",
-    "caveat",
-    "revise",
-    "reject",
-    "history",
-    "import-events",
-    "retract",
-    "propagate",
-    // v0.32: replication as a first-class kernel object.
-    "replicate",
-    "replications",
-    // v0.33: computational provenance — datasets and code as
-    // first-class kernel objects.
-    "dataset-add",
-    "datasets",
-    "code-add",
-    "code-artifacts",
-    "artifact-add",
-    "artifact-to-state",
-    "bridge-kit",
-    "source-adapter",
-    "task",
-    "runtime-adapter",
-    "artifacts",
-    "artifact-audit",
-    "decision-brief",
-    "review-work",
-    "trial-summary",
-    "source-verification",
-    "source-ingest-plan",
-    "clinical-trial-import",
-    // v0.49: NegativeResult deposits (registered_trial + exploratory).
-    "negative-result-add",
-    "negative-results",
-    // v0.50: Trajectory — search-path deposits.
-    "trajectory-create",
-    "trajectory-step",
-    "trajectories",
-    // v0.51: dual-use access tier classification.
-    "tier-set",
-    // v0.56: mechanical evidence-atom locator repair.
-    "locator-repair",
-    // v0.57: mechanical finding-level span repair.
-    "span-repair",
-    // v0.57: entity resolution.
-    "entity-resolve",
-    // v0.79: append a new entity tag to an existing finding.
-    "entity-add",
-    // v0.117: register a Carina Proof primitive (vpf_*) against a finding.
-    "proof-add",
-    // v0.131: scaffold an AI-agent identity kit (agent init / list).
-    "agent",
-    // v0.57: external source fetch (Crossref / PubMed / CT.gov).
-    "source-fetch",
-    // v0.34: predictions and resolutions — the epistemic accountability
-    // ledger.
-    "predict",
-    "resolve",
-    "predictions",
-    "predictions-expire",
-    "calibration",
-    // v0.35: inference layer — consensus aggregation over claim-similar
-    // findings.
-    "consensus",
-    // v0.39: federation — peer registry + sync runtime.
-    "federation",
-    // v0.40: causal reasoning — identifiability audit.
-    "causal",
-    // v0.42: daily-driver triad + conversational REPL. The
-    // "git status / git log / inbox" of the substrate, plus a
-    // thin natural-language router over the same kernel queries.
-    "status",
-    "log",
-    "inbox",
-    "ask",
-    // v0.46: cross-frontier bridge runtime.
-    "bridges",
-    // v0.49: friendlier alias for `vela packet validate <path>`.
-    "verify",
-    // v0.74: top-level alias verbs that surface the daily flow
-    // (init/ingest/propose/diff/accept/attest/log/lineage/serve)
-    // without burying the verbs inside subcommand groups.
-    "ingest",
-    "propose",
     "accept",
     "accept-batch",
+    "actor",
+    "agent",
+    "artifact-to-state",
+    "ask",
     "attach",
+    "attempt",
+    "attest",
     "attest-statement",
+    "carina",
+    "caveat",
+    "check",
     "claim",
-    "stash",
     "completions",
-    "onboard",
+    "conformance",
+    "diff",
+    "doc",
+    "doctor",
+    "entity",
     "events",
+    "evidence-ci",
+    "export",
+    "finding",
+    "frontier",
+    "gate",
+    "history",
+    "hub",
+    "import",
+    "import-events",
+    "inbox",
+    "ingest",
+    "init",
+    "integrity",
+    "lean",
+    "link",
+    "lock",
+    "log",
+    "normalize",
+    "note",
+    "onboard",
+    "preprint",
+    "proof",
+    "proof-add",
+    "proof-attest-verification",
+    "proof-verify-attestation",
+    "proposals",
+    "propose",
+    "queue",
+    "quickstart",
     "recommend",
     "register-statement",
-    "attest",
-    "lineage",
-    // v0.75: Carina spec deliverable (list/schema/validate
-    // against the 14 bundled primitive schemas).
-    "carina",
-    // v0.78: Atlas-level surface (init / materialize / serve).
-    // Routes through handlers the binary installs.
-    "atlas",
-    // v0.82: Constellation-level surface (init / materialize /
-    // serve). Network of Atlases (vco_*).
-    "constellation",
+    "registry",
+    "reject",
+    "reproduce",
+    "retract",
+    "retro-impact",
+    "review",
+    "review-work",
+    "revise",
+    "search",
+    "serve",
+    "sign",
+    "stash",
+    "stats",
+    "status",
+    "task",
+    "tensions",
+    "transfer",
+    "verify",
+    "version",
 ];
 
 pub fn is_science_subcommand(name: &str) -> bool {
@@ -8812,7 +8709,7 @@ Version control for scientific state.
 Usage:
   vela <COMMAND>
 
-Core flow (v0.74):
+Core flow:
   init          Initialize a split frontier repo
   ingest        Ingest a paper, dataset, or Carina packet (dispatches by file type)
   propose       Create a finding.review proposal
@@ -8821,112 +8718,84 @@ Core flow (v0.74):
   attest        Sign findings under your private key
   status        One-screen frontier state (replay, proposals, leases, attestations)
   log           Recent canonical state events
-  lineage       State-transition replay for one finding
-  serve         Local Workbench (findings, evidence, diff, lineage)
+  history       State-transition replay for one finding
+  serve         Serve a read-only frontier over MCP stdio or HTTP (the local review server)
 
 Read-only inspection:
   check         Validate a frontier, repo, or proof packet
   integrity     Check accepted frontier state integrity
-  impact        Report downstream finding impact
   normalize     Apply deterministic frontier-state repairs
-  proof         Export and validate a proof packet
-  doctor        Diagnose first-user checkout, frontier, proof, and Workbench readiness
+  proof         Export and validate a proof packet (`proof verify`, `proof explain`)
+  doctor        Diagnose first-user checkout, frontier, proof, and serve readiness
   stats         Show frontier statistics
   search        Search findings
-  index         Build and query the local frontier index database
   tensions      List candidate contradictions and tensions
-  gaps          Inspect and rank candidate gap review leads
-  bridge        Find candidate cross-domain connections
+  inbox         Triage list of pending proposals
+  ask           Route a natural-language question to a structured kernel query
   review-work   Show read-only review-work queues
+  evidence-ci   Check source, evidence, condition, confidence, and policy review readiness
   claim state   Derive the Claim-State Cell for a finding (Belnap status, deps, obligations)
   claim trust   Derive the Trust Vector for a finding (absent fields shown as absent)
   claim pack    Bundle state + trust + reproduce command + event ids (citable claim pack)
 
-Advanced (proposal-creation, agent inboxes, federation):
-  scout              Run Literature Scout against a folder of PDFs (writes proposals)
-  compile-notes      Run Notes Compiler against a Markdown vault (writes proposals)
-  compile-code       Run Code & Notebook Analyst against a research repo (writes proposals)
-  compile-data       Run Datasets agent against a folder of CSV/TSV data (writes proposals)
-  review-pending     Run Reviewer Agent: score every pending proposal (writes notes)
-  find-tensions      Run Contradiction Finder: surface real contradictions among findings
-  plan-experiments   Run Experiment Planner: propose experiments for open questions / hypotheses
-  export        Export frontier artifacts
-  packet        Inspect or validate proof packets
-  trace         Validate research traces and draft review proposals
-  correction-return
-                Validate returned corrections and draft review proposals
-  bench         Run deterministic benchmark gates
+Verification:
+  verify        Re-hash and validate a proof packet (manifest + proof-trace chain)
   conformance   Run protocol conformance vectors
   gate          Verification gate: deliverable-grade + verifier-attachment checks
   reproduce     Re-verify stored witnesses from scratch (frozen exact verifiers)
+  attach        Bind a verifier attachment to a finding (propose -> accept in one step)
+  attempt       Verify banked attempts (vat_): id re-derivation + signature + claim digest
+  transfer      Verify cross-domain transfers (vtr_): id re-derivation + signature
+  retro-impact  How much downstream verified state rests on a record
+  proof-add     Register a Carina Proof primitive (vpf_*) against a finding
+  proof-attest-verification
+                Record a verifier's signed output as a vpv_* attestation
+  proof-verify-attestation
+                Verify a vpv_* proof-verification record (id + signature)
+  lean          Anchor Lean theorems to their content-addressed source bytes
+  carina        Validate Carina-shaped JSON against the bundled primitive schemas
 
-Production (multi-producer coordination, signed judgment):
-  claim              Lease an open obligation (TTL; one live lease per target)
-  register-statement Register a statement hash as a priority timestamp
-  attest-statement   Sign a statement-faithfulness verdict (faithful/variant/unfaithful)
-  recommend          Record a reviewer-tier recommend-accept on a pending proposal
-  onboard            Write AGENTS.md + CLAUDE.md for a frontier (regenerated from the log)
-  stash              Park bytes in the hub's untrusted vsx_ scratch tier
-  events             Follow a frontier's hub event stream (--follow)
-  completions        Emit shell completions (bash, zsh, fish)
-  sign          Optional signing and signature verification
-  runtime-adapter
-                Normalize external runtime exports into reviewable proposals
-  version       Show version information
-  import        Import frontier.json into a .vela repo
+Proposals and review:
   proposals     Inspect, validate, export, import, accept, or reject write proposals
-  artifact-to-state
-                Import a Carina artifact packet as reviewable proposals
-  bridge-kit
-                Validate Carina artifact packets before importing runtime output
-  source-adapter
-                Run reviewed source adapters into artifact-to-state proposals
-  source-inbox
-                Manage local source-material records before evidence review
-  adoption
-                Build first external adoption transcripts
-  share
-                Build and inspect read-only frontier share packages
-  controller
-                Reconcile local frontier signals into review tasks
-  incident      Open, list, close, and inspect local frontier incidents
-  evidence-ci   Check source, evidence, condition, confidence, and policy review readiness
-  task          Create, list, claim, and close local frontier tasks
-  review-packet
-                Build local review packets for task workspaces
-  review-session
-                Record local outside-review sessions over frontier objects
-  policy        Check frontier-owned evidence, review, confidence, and agent policy
-  finding       Add or manage finding bundles as frontier state
-  link          Add typed links between findings (incl. cross-frontier vf_at-vfr targets)
-  entity        Resolve unresolved entities against a bundled common-entity table (v0.19)
-  frontier      Scaffold (`new`), materialize, and manage frontier metadata + deps
-  actor         Register Ed25519 publisher identities in a frontier
-  registry      Publish, pull, list; maintainer add/remove, deprecate, rotate-owner
   review        Create a review proposal or review interactively
   note          Add a lightweight note to a finding
   caveat        Create an explicit caveat proposal
   revise        Create a confidence revision proposal
   reject        Create a rejection proposal
-  history       Show state-transition history for one finding (v0.74 alias: `lineage`)
-  import-events  Import review/state events from a packet or JSON file
   retract       Create a retraction proposal
-  propagate     Simulate impact over declared dependency links
-  artifact-add  Register a content-addressed artifact
-  artifacts     List content-addressed artifacts
-  artifact-audit Audit artifact locators, hashes, references, and profiles
-  decision-brief Show the validated decision brief projection
-  review-work Show read-only review-work queues
-  trial-summary Show the validated trial outcome projection
-  source-verification Show the validated source verification projection
-  source-ingest-plan Show the validated source ingest plan
-  clinical-trial-import  Import a ClinicalTrials.gov record as an artifact
-  locator-repair Mechanically repair an evidence atom's missing source locator
-  span-repair    Mechanically repair a finding's missing evidence span
-  entity-resolve Resolve a finding entity to a canonical id
-  source-fetch   Fetch metadata + abstract for a doi:/pmid:/nct: source
-  atlas         Compose multiple frontiers into a domain-level Atlas (vat_*) (v0.78+)
-  constellation Compose multiple Atlases into a cross-domain Constellation (vco_*) (v0.82+)
+  accept-batch  Apply several pending proposals under one reviewer decision
+  recommend     Record a reviewer-tier recommend-accept on a pending proposal
+  import-events Import review/state events from a packet or JSON file
+  queue         Walk the local draft queue: list, sign-and-apply, or clear queued review actions
+  finding       Add or manage finding bundles as frontier state
+  link          Add typed links between findings (incl. cross-frontier vf_at-vfr targets)
+  entity        Resolve unresolved entities against the bundled common-entity table
+
+Production (multi-producer coordination, signed judgment):
+  claim              Lease an open obligation (TTL; one live lease per target)
+  register-statement Register a statement hash as a priority timestamp
+  attest-statement   Sign a statement-faithfulness verdict (faithful/variant/unfaithful)
+  onboard            Write AGENTS.md + CLAUDE.md for a frontier (regenerated from the log)
+  stash              Park bytes in the hub's untrusted vsx_ scratch tier
+  events             Follow a frontier's hub event stream (--follow)
+  task               Create, list, claim, and close local frontier tasks
+  hub                Declare a federated-hub spec primitive (vhs_*)
+  artifact-to-state  Import a Carina artifact packet as reviewable proposals
+  export             Export frontier artifacts
+  preprint           Render a frontier as a Markdown preprint (derived view)
+  agent              Scaffold an AI-agent identity kit (init / list)
+
+Identity and publishing:
+  sign          Optional signing and signature verification
+  actor         Register Ed25519 publisher identities in a frontier
+  registry      Publish, pull, list; maintainer add/remove, deprecate, rotate-owner
+  frontier      Scaffold (`new`), materialize, and manage frontier metadata + deps
+  lock          Regenerate or verify the frontier's `vela.lock` dependency pins
+  doc           Generate a static HTML site documenting the frontier
+  import        Import frontier.json into a .vela repo
+  quickstart    Guided first-frontier walkthrough
+  completions   Emit shell completions (bash, zsh, fish)
+  version       Show version information
 
 Quick start (the demo):
   vela init demo --name "Your bounded question"
@@ -8934,12 +8803,12 @@ Quick start (the demo):
   vela propose demo <vf_id> --status accepted --reason "..." --reviewer reviewer:you --apply
   vela diff <vpr_id> --frontier demo
   vela accept demo <vpr_id> --reviewer reviewer:you --reason "applied"
-  vela serve --path demo
+  vela serve demo --http 8787
 
 Substrate health:
   vela frontier materialize my-frontier --json
   vela frontier audit my-frontier --json
-  vela repo status my-frontier --json
+  vela status my-frontier --json
   vela proof verify my-frontier --json
   vela check my-frontier --strict --json
 
@@ -8999,7 +8868,7 @@ fn print_session_help() {
     println!("    vela <command>    Run a specific subcommand");
     println!("    vela help advanced   Full subcommand list (30+ commands)");
     println!();
-    println!("  CORE FLOW (v0.74)");
+    println!("  CORE FLOW");
     println!("    init              Initialize a split frontier repo");
     println!("    ingest <path>     Ingest a paper, dataset, or Carina packet");
     println!("    propose           Create a finding.review proposal");
@@ -9007,8 +8876,8 @@ fn print_session_help() {
     println!("    accept <vpr_id>   Apply a proposal under reviewer authority");
     println!("    attest            Sign findings under your private key");
     println!("    log               Recent canonical state events");
-    println!("    lineage <vf_id>   State-transition replay for one finding");
-    println!("    serve             Local Workbench (find, evidence, diff, lineage)");
+    println!("    history <vf_id>   State-transition replay for one finding");
+    println!("    serve             Read-only frontier over MCP stdio or HTTP");
     println!();
     println!("  DAILY ALSO-RANS");
     println!("    status            One-screen frontier health");
@@ -9017,18 +8886,13 @@ fn print_session_help() {
     println!("    review            Review a proposal interactively");
     println!("    ask <question>    Plain-text query against the frontier");
     println!();
-    println!("  REASONING (Pearl 1 → 2 → 3)");
-    println!("    causal audit                       Per-finding identifiability");
-    println!("    causal effect <src> --on <tgt>     Pairwise back-door / front-door");
-    println!("    causal counterfactual <src> --target <tgt> --set-to <0..1>");
-    println!();
-    println!("  COMPOSITION");
-    println!("    bridge <a> <b>                     Cross-frontier hypotheses");
-    println!("    consensus <vf>                     Field consensus over similar claims");
+    println!("  VERIFY");
+    println!("    gate check <vf>                    Trust-gate status for one finding");
+    println!("    reproduce <dir>                    Re-verify stored witnesses from scratch");
+    println!("    claim state <vf>                   Claim-State Cell (Belnap status, deps)");
     println!();
     println!("  PUBLISH");
     println!("    registry publish                   Push a signed manifest to the hub");
-    println!("    federation peer-add                Federate with another hub");
     println!();
     println!("  In session, type a single letter for a quick verb, or any");
     println!("  question in plain text. `q` or `exit` quits.");
