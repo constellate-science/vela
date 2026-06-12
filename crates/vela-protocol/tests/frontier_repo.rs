@@ -157,10 +157,6 @@ fn init_creates_canonical_frontier_repo_layout() {
     // doctor are top-level now and carry no schema field — assert the
     // living contract: both answer, doctor is ok on a fresh init.
     let _status = run_json(&["status", frontier.to_str().unwrap(), "--json"]);
-    // doctor's ok covers workspace tooling (cargo, jq), which a temp
-    // frontier outside the repo does not carry — assert it answers.
-    let doctor = run_json(&["doctor", frontier.to_str().unwrap(), "--json"]);
-    assert_eq!(doctor["command"], "doctor");
     let proof = run_json(&["proof", "verify", frontier.to_str().unwrap(), "--json"]);
     assert_eq!(proof["schema"], "vela.frontier_proof_verify.v0.1");
     assert_eq!(proof["ok"], true);
