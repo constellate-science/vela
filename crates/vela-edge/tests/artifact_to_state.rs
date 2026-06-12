@@ -15,29 +15,29 @@ fn write_empty_frontier(path: &Path) {
 fn write_packet(path: &Path) {
     let packet = serde_json::json!({
         "schema": "carina.artifact_packet.v0.1",
-        "packet_id": "cap_anti_amyloid_agent_demo",
+        "packet_id": "cap_sidon_a309370_agent_demo",
         "producer": {
             "kind": "agent",
             "id": "agent:scienceclaw-demo",
             "name": "ScienceClaw-shaped demo agent"
         },
-        "topic": "Anti-amyloid translation in Alzheimer's disease",
+        "topic": "Sidon set lower bounds for OEIS A309370",
         "created_at": "2026-05-06T00:00:00Z",
         "artifacts": [
             {
                 "id": "ext_artifact_001",
                 "kind": "model_output",
-                "title": "Agent synthesis output",
+                "title": "Agent search output",
                 "locator": "https://example.org/agent-output.json",
                 "content_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
                 "parents": [],
-                "metadata": {"tool": "synthesis"}
+                "metadata": {"tool": "search"}
             },
             {
                 "id": "ext_artifact_002",
                 "kind": "table",
-                "title": "Endpoint comparison table",
-                "locator": "https://example.org/endpoints.csv",
+                "title": "Bound comparison table",
+                "locator": "https://example.org/bounds.csv",
                 "content_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
                 "parents": ["ext_artifact_001"],
                 "metadata": {"rows": 7}
@@ -45,40 +45,40 @@ fn write_packet(path: &Path) {
             {
                 "id": "ext_artifact_003",
                 "kind": "registry_record",
-                "title": "Trial registry pull",
-                "locator": "https://clinicaltrials.gov/study/NCT03887455",
+                "title": "OEIS sequence pull",
+                "locator": "https://oeis.org/A309370",
                 "content_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
                 "parents": ["ext_artifact_001"],
-                "metadata": {"nct_id": "NCT03887455"}
+                "metadata": {"oeis_id": "A309370"}
             }
         ],
         "candidate_claims": [
             {
                 "id": "claim_001",
-                "assertion": "Agent synthesis says anti-amyloid benefit remains bounded by early symptomatic disease stage.",
-                "assertion_type": "therapeutic",
+                "assertion": "Agent search proposes a Sidon set witnessing a(14) >= 79.",
+                "assertion_type": "combinatorial",
                 "evidence_artifact_ids": ["ext_artifact_001", "ext_artifact_002"],
                 "source_refs": ["https://example.org/agent-output.json"],
-                "conditions": ["early symptomatic Alzheimer's disease", "amyloid confirmation required"],
+                "conditions": ["all pairwise sums distinct", "witness independently checkable"],
                 "confidence": 0.55,
                 "caveats": ["Agent-generated; requires reviewer acceptance."]
             },
             {
                 "id": "claim_002",
-                "assertion": "Agent synthesis flags ARIA monitoring as a condition on anti-amyloid translation.",
-                "assertion_type": "therapeutic",
+                "assertion": "Agent search flags witness re-verification as a condition on the proposed bound.",
+                "assertion_type": "combinatorial",
                 "evidence_artifact_ids": ["ext_artifact_003"],
-                "source_refs": ["https://clinicaltrials.gov/study/NCT03887455"],
-                "conditions": ["monoclonal antibody treatment", "MRI monitoring available"],
+                "source_refs": ["https://oeis.org/A309370"],
+                "conditions": ["deterministic verifier available", "witness re-runs to the same result"],
                 "confidence": 0.5,
-                "caveats": ["Registry-derived summary; verify against label and protocol."]
+                "caveats": ["Registry-derived summary; verify against the canonical sequence entry."]
             }
         ],
         "open_needs": [
             {
                 "id": "need_001",
-                "question": "Which public individual-level dataset links amyloid clearance, ARIA, and cognitive endpoints?",
-                "rationale": "This would discriminate biomarker movement from patient-level benefit-risk."
+                "question": "Which independent verifier re-checks the proposed witness against the Sidon-set definition?",
+                "rationale": "This would separate a claimed bound from a re-checked, witness-backed bound."
             }
         ],
         "caveats": ["ScienceClaw-shaped packet used as source material, not accepted truth."]
@@ -102,7 +102,7 @@ fn artifact_to_state_writes_pending_artifact_claim_and_gap_proposals() {
     )
     .expect("import packet");
 
-    assert_eq!(report.packet_id, "cap_anti_amyloid_agent_demo");
+    assert_eq!(report.packet_id, "cap_sidon_a309370_agent_demo");
     assert_eq!(report.artifact_proposals, 3);
     assert_eq!(report.finding_proposals, 2);
     assert_eq!(report.gap_proposals, 1);
@@ -250,7 +250,7 @@ fn bridge_kit_validate_reports_valid_packet() {
     assert_eq!(report.invalid_packet_count, 0);
     assert_eq!(
         report.packets[0].packet_id.as_deref(),
-        Some("cap_anti_amyloid_agent_demo")
+        Some("cap_sidon_a309370_agent_demo")
     );
     assert_eq!(report.packets[0].artifact_count, 3);
     assert_eq!(report.packets[0].candidate_claim_count, 2);

@@ -1442,7 +1442,7 @@ fn load_score_ledger_for_packet(source_path: Option<&Path>) -> serde_json::Value
         });
     };
     read_json_value(
-        &repo_root.join("benchmarks/public/anti-amyloid-score-ledger.v1.json"),
+        &repo_root.join("benchmarks/public/score-ledger.v1.json"),
         serde_json::json!({
             "schema": "vela.public_benchmark_score_ledger.v0.1",
             "summary": {
@@ -1953,8 +1953,7 @@ fn build_reviewer_replay_manifest(
             impact_index: "reviewer/impact-index.json".to_string(),
             guided_tours: "reviewer/guided-tours.json".to_string(),
             frontier_freshness_plan: "reviewer/frontier-freshness-plan.json".to_string(),
-            outsider_handoff:
-                "projects/anti-amyloid-translation/review/outsider-handoff.v1.json".to_string(),
+            outsider_handoff: "review/outsider-handoff.v1.json".to_string(),
         },
         commands: vec![
             PacketReviewerReplayCommand {

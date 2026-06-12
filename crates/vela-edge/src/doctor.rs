@@ -170,11 +170,24 @@ fn resolve_frontier_path(frontier_arg: Option<&Path>, workspace_root: &Path) -> 
     if let Some(path) = frontier_arg {
         return path.to_path_buf();
     }
-    let flagship = workspace_root.join("projects/anti-amyloid-translation");
-    if flagship.exists() {
-        return flagship;
+    if let Some(frontier) = first_local_frontier(&workspace_root.join("projects")) {
+        return frontier;
     }
     workspace_root.to_path_buf()
+}
+
+/// Returns the first frontier repo (a directory carrying a `.vela/` store)
+/// under `projects_root`, in sorted order. Frontier-agnostic: the doctor does
+/// not privilege any single campaign.
+fn first_local_frontier(projects_root: &Path) -> Option<PathBuf> {
+    let mut candidates: Vec<PathBuf> = std::fs::read_dir(projects_root)
+        .ok()?
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.join(".vela").is_dir())
+        .collect();
+    candidates.sort();
+    candidates.into_iter().next()
 }
 
 fn workspace_root() -> String {
@@ -237,12 +250,23 @@ mod tests {
 
     #[test]
     fn kind_reports_frontier_repo() {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let frontier = root.join("projects/anti-amyloid-translation");
-        if !frontier.exists() {
-            eprintln!("skipping: campaign fixture {frontier:?} absent in this checkout");
-            return;
-        }
+        let dir = tempfile::tempdir().expect("tempdir");
+        let frontier = dir.path().join("some-frontier");
+        std::fs::create_dir_all(frontier.join(".vela")).expect("create frontier store");
         assert_eq!(frontier_kind(&frontier), "frontier_repo");
+    }
+
+    #[test]
+    fn first_local_frontier_picks_first_vela_repo() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let projects = dir.path().join("projects");
+        // A plain directory is not a frontier; a directory with .vela/ is.
+        std::fs::create_dir_all(projects.join("not-a-frontier")).expect("plain dir");
+        std::fs::create_dir_all(projects.join("zebra-frontier").join(".vela")).expect("frontier b");
+        std::fs::create_dir_all(projects.join("alpha-frontier").join(".vela")).expect("frontier a");
+        let found = first_local_frontier(&projects).expect("a frontier repo exists");
+        assert_eq!(found, projects.join("alpha-frontier"));
+        // No projects directory at all resolves to None, not a panic.
+        assert!(first_local_frontier(&dir.path().join("absent")).is_none());
     }
 }

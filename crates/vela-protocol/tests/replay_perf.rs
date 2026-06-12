@@ -17,11 +17,10 @@
 //!   N = 10,000   ~310ms    (31us / event)
 //!   N = 20,000   ~1.1s     (56us / event)
 //!
-//! Real frontiers today (anti-amyloid: 144 findings; brain-tumor-
-//! translation: 100 findings) are ~3 orders of magnitude smaller and
-//! replay in single-digit ms. The O(N^2) characterization matters for
-//! infrastructure-grade scaling (100K+ event federations), not for
-//! current load.
+//! Real frontiers today (low hundreds of findings each) are ~3 orders
+//! of magnitude smaller and replay in single-digit ms. The O(N^2)
+//! characterization matters for infrastructure-grade scaling (100K+
+//! event federations), not for current load.
 //!
 //! ## Future optimization (deferred)
 //!

@@ -424,7 +424,7 @@ mod tests {
 
     #[test]
     fn inflation_fires_only_when_claim_exceeds_accepted() {
-        // anti-amyloid case: accounting claims 5531, event log backs 647.
+        // inflation case: accounting claims 5531 findings, event log backs 647.
         let inflated = finding_inflation_issue("review/canonical-accounting.v2.json", 5531, 647)
             .expect("claim above accepted must flag");
         assert_eq!(inflated.rule_id, "accounting_finding_inflation");
@@ -442,7 +442,7 @@ mod tests {
 
     #[test]
     fn llm_finding_needs_review_to_be_canonical() {
-        // LLM-authored + unreviewed = the failure mode (bbb's gemini-3-flash set).
+        // LLM-authored + unreviewed = the failure mode (an unreviewed model-extracted set).
         assert!(is_unreviewed_llm_finding("llm_extraction", false));
         assert!(is_unreviewed_llm_finding("LLM_inference", false));
         // reviewed LLM finding is fine (the Erdős spine: agent-ingested but reviewed).
