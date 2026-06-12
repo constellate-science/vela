@@ -2933,7 +2933,7 @@ fn tool_task_packet(
                 "id": a.id,
                 "verdict": format!("{:?}", a.verdict),
                 "attested_by": a.attested_by,
-                "formal_ref": a.formal_ref,
+                "formal_ref": sanitize_local_path(&a.formal_ref),
             }))
             .collect::<Vec<_>>(),
         "allowed_outputs": allowed_outputs,
@@ -3472,6 +3472,23 @@ fn json_rpc_error(id: &Option<Value>, code: i32, message: &str) -> Value {
     json!({"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}})
 }
 
+/// Projection-side path sanitation: some early signed attestations recorded
+/// a LOCAL absolute checkout path in `formal_ref`. The signed event is
+/// immutable, so the fix lives at the serializer boundary — a local absolute
+/// path renders as its bare artifact name (the statement hash carried
+/// alongside pins the content, not the path).
+fn sanitize_local_path(s: &str) -> String {
+    const LOCAL_PREFIXES: [&str; 5] = ["/Users/", "/home/", "/private/", "/var/", "/tmp/"];
+    if LOCAL_PREFIXES.iter().any(|p| s.starts_with(p)) {
+        return s
+            .rsplit('/')
+            .find(|seg| !seg.is_empty())
+            .unwrap_or("")
+            .to_string();
+    }
+    s.to_string()
+}
+
 fn trunc(s: &str, max: usize) -> String {
     if s.len() <= max {
         return s.to_string();
@@ -3481,6 +3498,33 @@ fn trunc(s: &str, max: usize) -> String {
         end -= 1;
     }
     format!("{}...", &s[..end])
+}
+
+#[cfg(test)]
+mod sanitize_local_path_tests {
+    use super::sanitize_local_path;
+
+    #[test]
+    fn local_absolute_path_renders_as_bare_artifact_name() {
+        // The real leak shape: an early attestation recorded a local
+        // checkout path (with a corrupted segment) as formal_ref.
+        let leaked = "/Users/someone/personal/vela/google-deepmind/x@0647711a7118PNOutputs/ErdosProblems/erdos_152.lean";
+        assert_eq!(sanitize_local_path(leaked), "erdos_152.lean");
+        assert_eq!(sanitize_local_path("/home/ci/build/a.lean"), "a.lean");
+    }
+
+    #[test]
+    fn non_local_refs_pass_through() {
+        assert_eq!(
+            sanitize_local_path("Outputs/ErdosProblems/erdos_152.lean"),
+            "Outputs/ErdosProblems/erdos_152.lean"
+        );
+        assert_eq!(
+            sanitize_local_path("erdosproblems.com #125"),
+            "erdosproblems.com #125"
+        );
+        assert_eq!(sanitize_local_path(""), "");
+    }
 }
 
 #[cfg(test)]
