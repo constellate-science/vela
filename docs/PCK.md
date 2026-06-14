@@ -1,4 +1,3 @@
-> **Distilled into [docs/CANON.md](CANON.md).** This file is derivation and detail beneath the canon, not a competing framing.
 
 # Proof-Carrying Knowledge (PCK): the Bitcoin-scale candidate for Vela
 

@@ -2,7 +2,7 @@
 
 This document describes the on-ramp for an AI agent that wants to read frontier state and draft proposals against a Vela frontier. The substrate-honest contract: every agent-drafted truth claim flows through the same reviewer-gated discipline as every other proposal. No agent has a privileged write path.
 
-Humans reviewing a frontier should start at [REVIEWER_QUICKSTART](REVIEWER_QUICKSTART.md) instead; this is the agent on-ramp.
+Humans reviewing a frontier should start at [REVIEWER_PLAYBOOK](REVIEWER_PLAYBOOK.md) instead; this is the agent on-ramp.
 
 ## One-command scaffold (v0.131)
 

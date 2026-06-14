@@ -52,16 +52,24 @@ fn fetch_all_events(hub: &str, vfr: &str) -> Result<Vec<Value>, String> {
     let mut out = Vec::new();
     let mut cursor: Option<String> = None;
     loop {
+        // The hub's events endpoint pages by `since=<last event id>` (oldest
+        // first); `next_cursor` carries the id to resume from. This must match
+        // clients/python/vela_verify_log.py — using `cursor=` instead silently
+        // re-fetches page 1 forever on any log past the page limit.
         let url = match &cursor {
-            Some(c) => format!("{hub}/entries/{vfr}/events?limit=1000&cursor={c}"),
+            Some(c) => format!("{hub}/entries/{vfr}/events?limit=1000&since={c}"),
             None => format!("{hub}/entries/{vfr}/events?limit=1000"),
         };
         let page = get_json(&url)?;
-        if let Some(evs) = page.get("events").and_then(|v| v.as_array()) {
+        let batch = page.get("events").and_then(|v| v.as_array());
+        let got = batch.map(|b| b.len()).unwrap_or(0);
+        if let Some(evs) = batch {
             out.extend(evs.iter().cloned());
         }
         match page.get("next_cursor").and_then(|v| v.as_str()) {
-            Some(c) if !c.is_empty() => cursor = Some(c.to_string()),
+            // Stop on an empty page even if a cursor is advertised, so a
+            // misbehaving hub can never spin this loop forever.
+            Some(c) if !c.is_empty() && got > 0 => cursor = Some(c.to_string()),
             _ => break,
         }
     }
