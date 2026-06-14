@@ -17,6 +17,7 @@ mod cli_commands;
 mod cli_finding;
 mod cli_frontier;
 mod cli_lean;
+mod cli_log_verify;
 mod cli_owner_rotate;
 mod cli_registry;
 mod cli_source_fetch;

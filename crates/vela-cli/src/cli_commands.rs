@@ -3103,6 +3103,29 @@ pub(crate) enum RegistryAction {
         #[arg(long)]
         json: bool,
     },
+    /// Independently verify a hub's RFC 6962 transparency log: fetch the
+    /// signed tree head (STH), check its Ed25519 signature against an
+    /// externally-pinned pubkey, recompute the Merkle root from the event
+    /// content-address preimages, and (with --event) check that event's
+    /// inclusion proof. Proves the hub cannot forge or silently drop accepted
+    /// state. The Rust sibling of clients/python/vela_verify_log.py.
+    VerifyLog {
+        /// The frontier (vfr_…) whose log to verify.
+        vfr_id: String,
+        /// Hub base URL (e.g. https://vela-hub.fly.dev).
+        #[arg(long)]
+        hub: String,
+        /// Optional event id (vev_…) to also prove inclusion of.
+        #[arg(long)]
+        event: Option<String>,
+        /// Expected Ed25519 pubkey (hex), pinned out-of-band. Strongly
+        /// recommended; without it the STH's self-advertised key is trusted
+        /// (a corruption check only, not authenticity).
+        #[arg(long)]
+        pubkey: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]

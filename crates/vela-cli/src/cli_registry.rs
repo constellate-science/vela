@@ -29,6 +29,19 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
             .join("entries.json")
     };
     match action {
+        RegistryAction::VerifyLog {
+            vfr_id,
+            hub,
+            event,
+            pubkey,
+            json,
+        } => crate::cli_log_verify::cmd_verify_log(
+            &vfr_id,
+            &hub,
+            event.as_deref(),
+            pubkey.as_deref(),
+            json,
+        ),
         RegistryAction::VerifyAll { from, json } => cmd_verify_all(from, json),
         RegistryAction::VerifyChain {
             frontier,
