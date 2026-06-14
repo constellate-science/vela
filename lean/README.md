@@ -1,6 +1,6 @@
 # Vela Lean theorem formalization
 
-This is a minimal Lean 4 / Mathlib project for the Vela substrate theorem bundle. Forty-three theorems are machine-checked in this directory.
+This is a minimal Lean 4 / Mathlib project for the Vela substrate theorem bundle. The numbered substrate guarantees (1-20, cross-referenced below) are machine-checked alongside the frontier-calculus suite (`Vela/FrontierCalculus.lean`) and the cross-frontier transfer chain. About 150 checked theorems and lemmas in all, with no `sorry` or `axiom`.
 
 ## Contents
 
