@@ -49,42 +49,27 @@ pub struct FindingDraftOptions {
     /// fields instead of jamming everything into `title`. Each is optional
     /// so `vela finding add` callers don't have to know all of them up front;
     /// the substrate has the fields, the CLI just exposes them.
-    #[allow(dead_code)] // populated by CLI; consumed by build_add_finding_proposal
+    // populated by CLI; consumed by build_add_finding_proposal
     pub doi: Option<String>,
-    #[allow(dead_code)]
     pub pmid: Option<String>,
-    #[allow(dead_code)]
     pub year: Option<i32>,
-    #[allow(dead_code)]
     pub journal: Option<String>,
-    #[allow(dead_code)]
     pub url: Option<String>,
     /// Authors of the source artifact (the paper/preprint/etc).
     /// Distinct from `author` above, which is the Vela actor doing the curation.
-    #[allow(dead_code)]
     pub source_authors: Vec<String>,
     /// v0.11: structured conditions — replaces the placeholder
     /// "Manually added finding; requires evidence review…" that was on
     /// every manually-added finding in v0.10. Each field independently optional.
-    #[allow(dead_code)]
     pub conditions_text: Option<String>,
-    #[allow(dead_code)]
     pub species: Vec<String>,
-    #[allow(dead_code)]
     pub in_vivo: bool,
-    #[allow(dead_code)]
     pub in_vitro: bool,
-    #[allow(dead_code)]
     pub human_data: bool,
-    #[allow(dead_code)]
     pub clinical_trial: bool,
-    #[allow(dead_code)]
     pub entities_reviewed: bool,
-    #[allow(dead_code)]
     pub evidence_spans: Vec<Value>,
-    #[allow(dead_code)]
     pub gap: bool,
-    #[allow(dead_code)]
     pub negative_space: bool,
     /// v0.339: optional replication attestation for verified circuit-claim
     /// findings. When present it is attached to the finding.add proposal

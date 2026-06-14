@@ -367,7 +367,6 @@ pub fn verify_finding(finding: &FindingBundle, envelope: &SignedEnvelope) -> Res
 }
 
 /// Verify a finding against a specific public key (hex-encoded).
-#[allow(dead_code)]
 pub fn verify_finding_with_pubkey(
     finding: &FindingBundle,
     envelope: &SignedEnvelope,

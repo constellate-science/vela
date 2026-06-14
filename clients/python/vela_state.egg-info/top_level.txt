@@ -1,3 +1,0 @@
-vela_loader
-vela_reducer
-vela_verify

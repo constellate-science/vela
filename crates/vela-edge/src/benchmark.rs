@@ -14,7 +14,6 @@ use vela_protocol::project;
 use vela_protocol::repo;
 
 /// A single gold-standard finding.
-#[allow(dead_code)]
 #[derive(Debug, Clone, Deserialize)]
 pub struct GoldFinding {
     #[serde(default)]

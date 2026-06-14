@@ -42,7 +42,6 @@ pub struct BridgeEntity {
     pub tension: Option<String>,
 }
 
-#[allow(dead_code)]
 pub struct BridgeFinding {
     pub id: String,
     pub assertion: String,

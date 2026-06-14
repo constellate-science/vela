@@ -28,3 +28,6 @@ Cargo.lock.bak
 *.key
 !*.pub.key
 !*.pub.json
+
+# Python build metadata
+*.egg-info/

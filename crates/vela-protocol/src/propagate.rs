@@ -25,7 +25,6 @@ pub enum PropagationAction {
     /// Source paper was retracted. Mark finding as retracted, flag all dependents.
     Retracted,
     /// A specific field was corrected. Flag dependents if assertion text or direction changed.
-    #[allow(dead_code)]
     Corrected {
         field: String,
         original: String,

@@ -191,7 +191,6 @@ pub fn run(
 // ── Cross-frontier search ───────────────────────────────────────────
 
 /// A search result grouped by source frontier.
-#[allow(dead_code)]
 pub struct CrossFrontierResult {
     pub frontier_name: String,
     pub frontier_file: String,
