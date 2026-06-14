@@ -214,6 +214,11 @@ mod tests {
     /// The v2 conservative-extension theorem: the corner of the graded status
     /// reproduces the v1 Belnap status for EVERY confidence map and every
     /// support/refute shape. v1 readers are provably unaffected.
+    ///
+    /// This is a fixture witness for a *machine-checked* theorem: the universal
+    /// statement is proven in Lean as `graded_corner_conservative`
+    /// (`lean/Vela/FrontierCalculus.lean`, Theorem 20), over all polynomials and
+    /// all positive confidence assignments — not just the cases enumerated here.
     #[test]
     fn graded_status_corner_is_conservative_over_v1() {
         use crate::frontier_calculus::Rational;

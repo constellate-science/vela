@@ -1,6 +1,6 @@
 # Vela Lean theorem formalization
 
-This is a minimal Lean 4 / Mathlib project for the Vela substrate theorem bundle. Thirty-four theorems are machine-checked in this directory.
+This is a minimal Lean 4 / Mathlib project for the Vela substrate theorem bundle. Thirty-five theorems are machine-checked in this directory.
 
 ## Contents
 
@@ -63,6 +63,7 @@ This is a minimal Lean 4 / Mathlib project for the Vela substrate theorem bundle
 | 17 | Search-index determinism | `vela_search::build_index` (same inputs → same vsi_* under canonical-bytes + abstract hash injectivity) |
 | 18 | Owner-epoch chain monotone-by-one | `governance::OwnerEpochChain::append` (strictly increasing by 1, starts at 1) |
 | 19 | Registry checkpoint root injectivity | `checkpoint::compute_registry_root` (same canonical summary → same root; equal roots imply equal summaries) |
+| 20 | Graded-status conservative extension (v2 calculus) | `crates/vela-protocol/src/frontier_calculus.rs` (`graded_status_corner_is_conservative_over_v1`), `status_provenance.rs::derive_graded_status`, surfaced in `vela claim state` |
 
 Theorems 1–7 are substrate-internal: they pin algebraic guarantees of the kernel (replay determinism, hash-DAG integrity, sound signing, sound index maintenance). Theorem 8 is the bundle's first external mathematical fact: a non-trivial number-theoretic claim (the n = 2 case of Erdős-Ginzburg-Ziv 1961) carried alongside the substrate's own correctness theorems. It demonstrates that the Lean bundle can grow with the same tooling that pins kernel guarantees, and provides a worked example for future formalized findings on substrate frontiers.
 
@@ -90,6 +91,11 @@ standalone — `lean Vela/Core.lean` (and likewise `Transfer`, `ReducerModel`), 
 
 - `Vela/Core.lean` — substrate Theorems 2, 3, 4 re-proven over plain `List` (retraction monotonicity,
   no-zombie status, frontier upward closure): the dependency-free heart of the substrate.
+- `Vela/FrontierCalculus.lean` — Theorem 20, the v2 frontier-calculus **conservative-extension** result:
+  the graded bilattice corner reproduces the v1 Belnap `deriveStatus` for *every* positive per-source
+  confidence (`graded_corner_conservative`), with the lemmas that `kappa` positivity tracks support
+  (`kappa_pos_iff`) and that retraction can only lower the degree (`kappa_retract_le`). The graded layer
+  adds resolution, it never moves the corner. Builds standalone on `Vela.Core` in under a second.
 - `Vela/TransferCWCtoDNA.lean` — a concrete cross-frontier transfer `ConstantWeightCode(n,d,w) →
   DNACode(n,d,w)` (identity on the symbol list under `0=A, 1=C`), with a genuine `sound` proof
   (Mathlib-free; build via `lake build Vela.TransferCWCtoDNA` since it imports `Vela.Transfer`). The
