@@ -449,6 +449,13 @@ pub fn project_confidence(p: &ProvenancePoly, conf: &BTreeMap<String, Rational>)
 /// (Viterbi with the square-free / collapse-exponents correction). Variables
 /// absent from the confidence map default to 1 (assumptions carry conditions,
 /// not decay).
+///
+/// v3 framing (`lean/Vela/FrontierCalculus.lean`): the `collapse_exponents`
+/// flag is `kappa` reading the *environment quotient* `EnvProv = Env(p)` rather
+/// than raw `N[X]`. On that layer `kappa = Eval_Viterbi . env`, an exact
+/// homomorphism, not the lax map it looks like on `N[X]`. The square-free
+/// collapse (`envWeight_idem`) and the env quotient's multiplicativity
+/// (`env_mul_support`, T4) are machine-checked there.
 pub fn kappa(p: &ProvenancePoly, conf: &BTreeMap<String, Rational>) -> Rational {
     eval_poly(
         &Viterbi,

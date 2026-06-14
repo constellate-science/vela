@@ -98,4 +98,112 @@ theorem kappa_retract_le (conf : Nat → Nat) (Y : Nat → Bool) (p : Poly) :
 example : corner (kappa (fun _ => 1) [[1, 2], [3]]) (kappa (fun _ => 1) []) = Status.true_ := by
   decide
 
+/-! ## v3 correction: bag provenance vs environment provenance
+
+The v2 memo grouped `kappa` under "every projection is an `Eval_v` homomorphism
+from `N[X]`", then footnoted that `kappa` is only *lax* on shared products
+(`kappa (x·x) = v(x)`, not `v(x)^2`). The v3 fix (independent GPT-pro review,
+2026-06-14) stops reading `kappa` off raw `N[X]` and splits two canonical layers:
+
+  * `BagProv = N[X]`     keeps multiplicity  -> counting / attribution
+  * `EnvProv = Env(p)`   forgets exponents   -> kappa / retraction / attack-locality
+
+`Env(p)` is the square-free image: each monomial becomes its *set* of assumptions.
+On that quotient `kappa` is exact, not lax: a product of monomials is the *union*
+of their assumption sets, and a variable in a union is multiplied once. The four
+results below discharge the correction -- the quotient is support-multiplicative
+(the env homomorphism, T4); the square-free collapse is a theorem, not a footnote;
+positivity is unchanged so the corner law (Theorem 20) survives verbatim on the
+corrected kappa; and counting (bag) is provably distinct from kappa (env), so
+shared evidence is never silently double-counted (T13, kappa non-collapse). -/
+
+/-- Forget multiplicity: keep one copy of each assumption. `nodup m` is the
+    square-free image of a monomial -- its assumption *set*. Mathlib-free. -/
+def nodup : List Nat → List Nat
+  | [] => []
+  | x :: xs => if x ∈ xs then nodup xs else x :: nodup xs
+
+/-- The square-free image has the same assumptions as the original (set equality
+    at the membership level). -/
+theorem mem_nodup (x : Nat) : ∀ m : List Nat, x ∈ nodup m ↔ x ∈ m := by
+  intro m
+  induction m with
+  | nil => simp [nodup]
+  | cons y ys ih =>
+      rw [List.mem_cons]
+      by_cases h : y ∈ ys
+      · simp only [nodup, if_pos h, ih]
+        constructor
+        · exact Or.inr
+        · rintro (rfl | hx)
+          · exact h
+          · exact hx
+      · simp only [nodup, if_neg h, List.mem_cons, ih]
+
+/-- The environment weight of a monomial: the product of confidences over its
+    assumption *set* (square-free). This is `kappa`'s Viterbi product read on
+    `EnvProv`, where a shared assumption is multiplied once. -/
+def envWeight (conf : Nat → Nat) (m : List Nat) : Nat := monoWeight conf (nodup m)
+
+/-- **The square-free collapse is a theorem.** A repeated assumption contributes
+    once. This is exactly the statement that *fails* for raw `monoWeight` over
+    `N[X]` and *holds* on the environment quotient -- the v2 "lax" footnote, made
+    precise and located at the right layer. -/
+theorem envWeight_idem (conf : Nat → Nat) (x : Nat) (xs : List Nat) :
+    envWeight conf (x :: x :: xs) = envWeight conf (x :: xs) := by
+  simp [envWeight, nodup]
+
+/-- **T4 (environment quotient is support-multiplicative).** The assumption set of
+    a product monomial `m1·m2 = m1 ++ m2` is the union of the two assumption sets:
+    exponents are forgotten and shared assumptions merge rather than accumulate.
+    This is the multiplicativity of the quotient `env : N[X] -> EnvProv`. -/
+theorem env_mul_support (m1 m2 : List Nat) (x : Nat) :
+    x ∈ nodup (m1 ++ m2) ↔ x ∈ nodup m1 ∨ x ∈ nodup m2 := by
+  rw [mem_nodup, mem_nodup, mem_nodup, List.mem_append]
+
+/-- `kappa` evaluated on the environment quotient (`EnvProv`): the max over
+    monomials of the square-free `envWeight`. This is the v3 home for `kappa`. -/
+def kappaEnv (conf : Nat → Nat) (p : Poly) : Nat :=
+  p.foldr (fun m acc => Nat.max (envWeight conf m) acc) 0
+
+/-- `envWeight` is positive whenever every confidence is (the set-product of
+    positives is positive). -/
+theorem envWeight_pos {conf : Nat → Nat} (hconf : ∀ x, 0 < conf x) (m : List Nat) :
+    0 < envWeight conf m := monoWeight_pos hconf (nodup m)
+
+/-- The corrected `kappaEnv` still tracks support: positive iff there is a
+    derivation. (So the layer change does not disturb the corner.) -/
+theorem kappaEnv_pos_iff {conf : Nat → Nat} (hconf : ∀ x, 0 < conf x) (p : Poly) :
+    0 < kappaEnv conf p ↔ p ≠ [] := by
+  cases p with
+  | nil => simp [kappaEnv]
+  | cons m rest =>
+      have : 0 < kappaEnv conf (m :: rest) :=
+        Nat.lt_of_lt_of_le (envWeight_pos hconf m) (Nat.le_max_left _ _)
+      simp [this]
+
+/-- **Conservativity survives the correction.** The graded corner taken on the
+    environment-quotient `kappaEnv` still reproduces the v1 Belnap `deriveStatus`
+    for every positive confidence -- Theorem 20 is robust to moving `kappa` to its
+    proper layer. -/
+theorem graded_corner_conservative_env {conf : Nat → Nat} (hconf : ∀ x, 0 < conf x)
+    (piT piF : Poly) :
+    corner (kappaEnv conf piT) (kappaEnv conf piF)
+      = deriveStatus (!piT.isEmpty) (!piF.isEmpty) := by
+  have d : ∀ p : Poly, decide (0 < kappaEnv conf p) = !p.isEmpty := by
+    intro p
+    cases p with
+    | nil => simp [kappaEnv]
+    | cons m rest =>
+        have : 0 < kappaEnv conf (m :: rest) := (kappaEnv_pos_iff hconf _).mpr (by simp)
+        simp [this]
+  unfold corner
+  rw [d piT, d piF]
+
+/-- **T13 (kappa non-collapse).** Counting (bag, with multiplicity) and `kappa`
+    (env, square-free) are genuinely different projections: a doubled assumption
+    weighs `v(x)^2` under counting but `v(x)` under `kappa`. Shared evidence is
+    never silently promoted to independent support. -/
+example : monoWeight (fun _ => 2) [0, 0] ≠ envWeight (fun _ => 2) [0, 0] := by decide
+
 end Vela.FrontierCalculus

@@ -1,6 +1,6 @@
 # Vela Lean theorem formalization
 
-This is a minimal Lean 4 / Mathlib project for the Vela substrate theorem bundle. Thirty-five theorems are machine-checked in this directory.
+This is a minimal Lean 4 / Mathlib project for the Vela substrate theorem bundle. Thirty-eight theorems are machine-checked in this directory.
 
 ## Contents
 
@@ -95,7 +95,7 @@ standalone — `lean Vela/Core.lean` (and likewise `Transfer`, `ReducerModel`), 
   the graded bilattice corner reproduces the v1 Belnap `deriveStatus` for *every* positive per-source
   confidence (`graded_corner_conservative`), with the lemmas that `kappa` positivity tracks support
   (`kappa_pos_iff`) and that retraction can only lower the degree (`kappa_retract_le`). The graded layer
-  adds resolution, it never moves the corner. Builds standalone on `Vela.Core` in under a second.
+  adds resolution, it never moves the corner. Builds standalone on `Vela.Core` in under a second. The v3 layer split (GPT-pro review) is proven here too: `env`, the square-free quotient `N[X] -> EnvProv`, is support-multiplicative (`env_mul_support`, T4) and the square-free collapse is a theorem (`envWeight_idem`), so `kappa` is `Eval_Viterbi . env` rather than a lax map on `N[X]`; `graded_corner_conservative_env` shows the corner law survives the relocation, and `envWeight` vs `monoWeight` proves counting (bag) distinct from `kappa` (env) (T13 non-collapse).
 - `Vela/TransferCWCtoDNA.lean` — a concrete cross-frontier transfer `ConstantWeightCode(n,d,w) →
   DNACode(n,d,w)` (identity on the symbol list under `0=A, 1=C`), with a genuine `sound` proof
   (Mathlib-free; build via `lake build Vela.TransferCWCtoDNA` since it imports `Vela.Transfer`). The
