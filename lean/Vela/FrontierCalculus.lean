@@ -206,4 +206,64 @@ theorem graded_corner_conservative_env {conf : Nat → Nat} (hconf : ∀ x, 0 < 
     never silently promoted to independent support. -/
 example : monoWeight (fun _ => 2) [0, 0] ≠ envWeight (fun _ => 2) [0, 0] := by decide
 
+/-! ## v3: the context wall
+
+The scope wall (substrate Theorem 7 / memo section 21) is algebraic: positive
+derivations commute with semiring projection, while negation, aggregation, and
+recursion do not. The context wall is its scientific-safety twin: no support may
+move from one context to another without an explicit *licensed* rule (restriction,
+generalization, transfer, faithfulness, transport). It is what stops
+
+    mouse model        -> human claim
+    formal variant     -> named problem solved
+    cell assay         -> clinical therapeutic claim
+    benchmark result   -> real-world capability
+    semantic replay    -> bitwise replay
+
+from happening silently. Model: support carries a context. In-context derivation
+(`derive`) is context-preserving by construction; the only constructor that
+advances the context is `transfer`, and it demands a licensed `move c d`. The
+confinement theorem then certifies that the context of any supported claim is
+reachable from its origin along a chain of licensed moves -- so a context with no
+licensed path from the origin can hold no support. -/
+
+/-- Reflexive-transitive closure of a relation (Mathlib-free). -/
+inductive RTC {α : Type} (r : α → α → Prop) : α → α → Prop
+  | refl (a : α) : RTC r a a
+  | tail {a b c : α} : RTC r a b → r b c → RTC r a c
+
+/-- Context-tagged support reachable from origin `o`. `move c d` is the
+    licensed-rule relation -- the only sanctioned way to change context.
+    `derive` stands for arbitrary in-context work and is context-preserving. -/
+inductive Reach {C : Type} (move : C → C → Prop) (o : C) : C → Prop
+  | here : Reach move o o
+  | derive {c : C} : Reach move o c → Reach move o c
+  | transfer {c d : C} : Reach move o c → move c d → Reach move o d
+
+/-- **The context wall (confinement).** The context of any supported claim is
+    reachable from its origin along a chain of *licensed* moves. In-context
+    derivation never moves the context; only `transfer` through `move` does. -/
+theorem context_confined {C : Type} (move : C → C → Prop) (o c : C)
+    (h : Reach move o c) : RTC move o c := by
+  induction h with
+  | here => exact RTC.refl o
+  | derive _ ih => exact ih
+  | transfer _ hmove ih => exact RTC.tail ih hmove
+
+/-- **No silent context jump.** If no licensed rule-chain reaches context `d`
+    from the origin, no support reaches `d`. The contrapositive that makes the
+    wall a safety property: a cross-context claim requires a rule. -/
+theorem no_silent_context_jump {C : Type} (move : C → C → Prop) (o d : C)
+    (h : ¬ RTC move o d) : ¬ Reach move o d :=
+  fun hr => h (context_confined move o d hr)
+
+/-- With no licensed moves at all, support is confined to its origin context:
+    `mouse -> human` (and every other unlicensed jump) is blocked. -/
+theorem confined_when_no_moves {C : Type} (o c : C)
+    (h : Reach (fun _ _ => False) o c) : c = o := by
+  induction h with
+  | here => rfl
+  | derive _ ih => exact ih
+  | transfer _ hmove _ => exact hmove.elim
+
 end Vela.FrontierCalculus
