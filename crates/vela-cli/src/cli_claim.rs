@@ -349,12 +349,25 @@ fn derive_state_cell(project: &Project, finding: &FindingBundle) -> Value {
     let sp = derive_status_provenance(&project.events, id);
     let poly_status = sp.derive_status();
     let poly_letter = poly_status.letter().to_string();
+    // v2 frontier calculus: the graded bilattice status (kappa of support,
+    // kappa of refute), derived from the SAME polynomials at read time. Absent
+    // per-source confidence it defaults to 1, so the corner reproduces the
+    // Belnap status exactly — the conservative extension, live.
+    let graded = sp.derive_graded_status(&std::collections::BTreeMap::new());
     let status_provenance = json!({
         "support_poly": sp.support.to_string(),
         "refute_poly": sp.refute.to_string(),
         "letter": poly_letter,
         "meaning": belnap_meaning(poly_status),
         "divergence": poly_letter != status,
+        "graded_status": {
+            "support_degree": graded.x.to_f64(),
+            "opposition_degree": graded.y.to_f64(),
+            "information": graded.information().to_f64(),
+            "conflict": graded.conflict().to_f64(),
+            "corner": graded.corner().letter().to_string(),
+            "note": "v2 bilattice point [0,1]x[0,1] (frontier_calculus); confidence defaults to 1 so the corner equals the Belnap letter (conservative extension). Per-source confidence is the deferred refinement.",
+        },
         "note": "read-side projection over the event log (asserted/accept -> support vars, supersession/retraction -> rho_Y, dependency_invalidated -> refute); never stored",
     });
 
