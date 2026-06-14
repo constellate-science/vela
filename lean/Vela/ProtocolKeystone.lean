@@ -42,7 +42,7 @@ theorem fold_ok_step (nv : Frontier → Level → Bool) (lk : Frontier → Front
   | none => simp [fold, hacc] at h
   | some s =>
     simp only [fold, hacc] at h
-    exact ⟨h, by simp [hacc]⟩
+    exact ⟨h, by simp⟩
 
 /-- **Succinct history certification.** If the final integrity bit is set, then the starting bit was set
     and *every* delta in the unbounded history was accepted (no rejections). -/

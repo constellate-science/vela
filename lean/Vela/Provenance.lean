@@ -118,7 +118,7 @@ theorem retraction_monotone
 theorem status_provenance_sound_t
     {X : Type u} [DecidableEq X]
     (piT piF : ProvenancePoly X)
-    (h : deriveStatus piT piF = BelnapStatus.true_)
+    (_h : deriveStatus piT piF = BelnapStatus.true_)
     (Y : Set X) [DecidablePred (fun x : X => x ∈ Y)]
     (h_empty : (rho_Y Y piT).support = ∅) :
     deriveStatus (rho_Y Y piT) (rho_Y Y piF) ≠ BelnapStatus.true_ := by

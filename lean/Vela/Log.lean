@@ -121,8 +121,8 @@ Validity states the operational precondition for causal replay. -/
 theorem replay_convergence_valid_causal_logs
     (r : Reducer) (init : AtlasState)
     (log₁ log₂ : EventLog)
-    (hvalid₁ : ValidCausalLog log₁)
-    (hvalid₂ : ValidCausalLog log₂)
+    (_hvalid₁ : ValidCausalLog log₁)
+    (_hvalid₂ : ValidCausalLog log₂)
     (h : SameFiniteLog log₁ log₂) :
     replayCanonical r init log₁ = replayCanonical r init log₂ := by
   exact replay_convergence_same_finite_log r init log₁ log₂ h

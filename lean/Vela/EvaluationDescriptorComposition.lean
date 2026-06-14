@@ -99,8 +99,8 @@ preserves descriptor identity, when both reference the same
 descriptor. -/
 theorem theorem34_eval_descriptor_composition_eval_first
     (s : State) (e : Evaluation) (p : Pack) (d : DescriptorId)
-    (h_eval_targets : e.target_id = d)
-    (h_pack_refs : pack_references_descriptor p d)
+    (_h_eval_targets : e.target_id = d)
+    (_h_pack_refs : pack_references_descriptor p d)
     (h_pre : descriptor_id_in_state s d = some d) :
     descriptor_id_in_state (accept_pack (record_evaluation s e) p) d
       = some d := by
@@ -115,8 +115,8 @@ substrate-side this is the formal anchor for "replay is
 order-equivalent over these two arms." -/
 theorem theorem34_eval_descriptor_composition_pack_first
     (s : State) (e : Evaluation) (p : Pack) (d : DescriptorId)
-    (h_eval_targets : e.target_id = d)
-    (h_pack_refs : pack_references_descriptor p d)
+    (_h_eval_targets : e.target_id = d)
+    (_h_pack_refs : pack_references_descriptor p d)
     (h_pre : descriptor_id_in_state s d = some d) :
     descriptor_id_in_state (record_evaluation (accept_pack s p) e) d
       = some d := by

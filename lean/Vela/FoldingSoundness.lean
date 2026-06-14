@@ -28,8 +28,7 @@ namespace Vela.FoldingSoundness
     Pure ring identity, closed by associative-commutative normalization (no Mathlib `ring`). -/
 theorem fold_expand (a1 a2 b1 b2 r : Int) :
     (a1 + r*a2) * (b1 + r*b2) = a1*b1 + r*(a1*b2 + a2*b1) + r*r*(a2*b2) := by
-  simp only [Int.mul_add, Int.add_mul, Int.mul_assoc, Int.mul_comm, Int.mul_left_comm,
-             Int.add_assoc, Int.add_comm, Int.add_left_comm]
+  simp only [Int.mul_add, Int.mul_comm, Int.mul_left_comm, Int.add_assoc, Int.add_comm]
 
 /-- **Folding completeness.** Folding two satisfied relaxed-R1CS rows yields a satisfied folded row.
     `hT` carries the Nova cross-term definition in subtraction-free form. -/
@@ -41,8 +40,7 @@ theorem fold_complete
     (a1 + r*a2) * (b1 + r*b2) = (u1 + r*u2)*(c1 + r*c2) + (e1 + r*T + r*r*e2) := by
   rw [fold_expand, h1, hT, h2]
   -- goal: (u1*c1+e1) + r*(T+u1*c2+u2*c1) + r*r*(u2*c2+e2) = (u1+r*u2)*(c1+r*c2) + (e1+r*T+r*r*e2)
-  simp only [Int.mul_add, Int.add_mul, Int.mul_assoc, Int.mul_comm, Int.mul_left_comm,
-             Int.add_assoc, Int.add_comm, Int.add_left_comm]
+  simp only [Int.mul_add, Int.mul_comm, Int.mul_left_comm, Int.add_assoc, Int.add_comm, Int.add_left_comm]
 
 /-- `r ≠ 0 → r*r ≠ 0` over `Int` (integral domain). -/
 private theorem sq_ne_zero {r : Int} (hr : r ≠ 0) : r*r ≠ 0 := by
@@ -65,8 +63,7 @@ theorem fold_sound
     rw [fold_expand, h1, hT]
   have rhs_eq : (u1 + r*u2)*(c1 + r*c2) + (e1 + r*T + r*r*e2)
       = (u1*c1 + e1) + r*(T + u1*c2 + u2*c1) + r*r*(u2*c2 + e2) := by
-    simp only [Int.mul_add, Int.add_mul, Int.mul_assoc, Int.mul_comm, Int.mul_left_comm,
-               Int.add_assoc, Int.add_comm, Int.add_left_comm]
+    simp only [Int.mul_add, Int.mul_comm, Int.mul_left_comm, Int.add_assoc, Int.add_comm, Int.add_left_comm]
   rw [lhs_eq, rhs_eq] at hfold
   -- hfold : A + r*r*(a2*b2) = A + r*r*(u2*c2 + e2)
   have key : r*r*(a2*b2) = r*r*(u2*c2 + e2) := Int.add_left_cancel hfold

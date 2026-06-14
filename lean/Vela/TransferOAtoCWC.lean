@@ -30,7 +30,7 @@ theorem onehot_weight (row : Fin k → Fin s) :
   unfold oh
   rw [Fintype.sum_prod_type]
   have : ∀ c : Fin k, ∑ σ : Fin s, (if row c = σ then (1 : ℤ) else 0) = 1 := by
-    intro c; simp [Finset.sum_ite_eq']
+    intro c; simp
   simp [this]
 
 /-- One-hot entries are `0` or `1`. -/
@@ -49,7 +49,7 @@ theorem onehot_inner (r r' : Fin k → Fin s) :
   intro c _
   -- inner over σ: 1 iff r c = σ and r' c = σ, i.e. iff r c = r' c (with σ = r c)
   by_cases h : r c = r' c
-  · simp [h, Finset.sum_ite_eq']
+  · simp [h]
   · have : ∀ σ : Fin s, (if r c = σ then (1:ℤ) else 0) * (if r' c = σ then 1 else 0) = 0 := by
       intro σ; by_cases h1 : r c = σ <;> by_cases h2 : r' c = σ <;> simp [h1, h2]
       · exact absurd (h1 ▸ h2.symm ▸ rfl) h
@@ -74,7 +74,7 @@ theorem onehot_distance (r r' : Fin k → Fin s) :
   -- k + k − 2·agreements = 2·(differ),  since agreements + differ = k
   have hpart : ((univ.filter (fun c : Fin k => r c = r' c)).card : ℤ)
       + ((univ.filter (fun c : Fin k => r c ≠ r' c)).card : ℤ) = k := by
-    have h := Finset.filter_card_add_filter_neg_card_eq_card
+    have h := Finset.card_filter_add_card_filter_not
       (s := (univ : Finset (Fin k))) (p := fun c => r c = r' c)
     have hcard : (univ : Finset (Fin k)).card = k := by simp
     rw [hcard] at h

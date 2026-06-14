@@ -20,6 +20,7 @@ variable {n : ℕ} [NeZero n] (H : Fin n → Fin n → ℤ)
 /-- Binary image of an entry: `+1 ↦ 1`, `−1 ↦ 0`. -/
 def b (i k : Fin n) : ℤ := if H i k = 1 then 1 else 0
 
+omit [NeZero n] in
 /-- The defining algebraic relation `H i k = 2·(b i k) − 1` when entries are `±1`. -/
 theorem entry_eq (hpm : ∀ i k, H i k = 1 ∨ H i k = -1) (i k : Fin n) :
     H i k = 2 * b H i k - 1 := by
@@ -44,6 +45,7 @@ theorem weight_eq (hpm : ∀ i k, H i k = 1 ∨ H i k = -1)
     intro k _; exact entry_eq H hpm i k
   rw [hexp] at hsum0; linarith
 
+omit [NeZero n] in
 /-- **Distance.** Two distinct rows differ on exactly `n/2` coordinates: `2·(disagreements) = n`.
     With equal weights (`weight_eq`) this is the constant-weight minimum-distance content. -/
 theorem distance_eq (hpm : ∀ i k, H i k = 1 ∨ H i k = -1)

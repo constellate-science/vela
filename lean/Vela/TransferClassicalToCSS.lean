@@ -53,12 +53,12 @@ theorem css_commute {rx rz : ℕ}
     cases t with
     | inl j => simp [stab, Xstab, symplectic]
     | inr j =>
-      simp only [stab, Xstab, Zstab, symplectic, mul_zero, zero_mul, add_zero]
+      simp only [stab, Xstab, Zstab, symplectic, mul_zero, add_zero]
       exact hortho i j
   | inr i =>
     cases t with
     | inl j =>
-      simp only [stab, Xstab, Zstab, symplectic, mul_zero, zero_mul, zero_add]
+      simp only [stab, Xstab, Zstab, symplectic, mul_zero, zero_add]
       rw [show (∑ a, Hz i a * Hx j a) = ∑ a, Hx j a * Hz i a from
         Finset.sum_congr rfl (fun a _ => mul_comm _ _)]
       exact hortho j i

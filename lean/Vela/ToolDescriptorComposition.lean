@@ -94,7 +94,7 @@ descriptor is present in the pre-state, the descriptor's id
 resolves to the same value in the post-accept state. -/
 theorem theorem28_tool_descriptor_composition
     (s : State) (p : Pack) (d : String)
-    (h_ref : references_descriptor p d)
+    (_h_ref : references_descriptor p d)
     (h_pre : descriptor_id_in_state s d = some d) :
     descriptor_id_in_state (accept_pack s p) d = some d := by
   -- h_ref is the substrate-side precondition (the pack actually

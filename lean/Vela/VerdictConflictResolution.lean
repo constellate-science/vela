@@ -96,10 +96,10 @@ trail: a second resolution does not overwrite the first; it adds a
 new record. -/
 theorem theorem31b_resolution_distinct_when_actor_or_time_or_winner_differs
     (a b : ConflictPreimage)
-    (h_frontier : a.frontier_id = b.frontier_id)
-    (h_verdicts : a.verdicts = b.verdicts)
-    (h_members : a.shared_member_ids_sorted = b.shared_member_ids_sorted)
-    (h_mode : a.resolution_mode = b.resolution_mode)
+    (_h_frontier : a.frontier_id = b.frontier_id)
+    (_h_verdicts : a.verdicts = b.verdicts)
+    (_h_members : a.shared_member_ids_sorted = b.shared_member_ids_sorted)
+    (_h_mode : a.resolution_mode = b.resolution_mode)
     (h_differs : a.resolution_actor ≠ b.resolution_actor ∨
                  a.resolved_at ≠ b.resolved_at ∨
                  a.winning_verdict_id ≠ b.winning_verdict_id) :
