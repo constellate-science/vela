@@ -266,4 +266,55 @@ theorem confined_when_no_moves {C : Type} (o c : C)
   | derive _ ih => exact ih
   | transfer _ hmove _ => exact hmove.elim
 
+/-! ## v3: transfer closure is a least fixed point (order-independent)
+
+v2 fixed second-order transfer cascades (`A` supports `B`, `B` supports `C`, so
+`A` supports `C`) by iterating the reducer to a fixpoint rather than trusting
+event-id sort order -- but left that as an implementation footnote. v3 promotes
+it to a theorem: the transfer closure is the *least fixed point* of the positive
+transfer rule above the seed, and a least fixed point is unique, so the order in
+which events are folded cannot change the result.
+
+`Closure` is defined inductively, hence order-free by construction. The two
+theorems certify it is genuinely the least fixed point (`closure_least`) and that
+*any* least fixed point of the same rule coincides with it (`transfer_closure_order_independent`)
+-- so two folds in different orders that both reach a fixed point above the seed
+compute the same support set. -/
+
+/-- The transfer closure: the least set containing the seed and closed under the
+    positive transfer rule `move`. `seed` = directly-supported claims; `move c d`
+    = "a licensed transfer carries support from `c` to `d`". -/
+inductive Closure {C : Type} (seed : C → Prop) (move : C → C → Prop) : C → Prop
+  | seed {c : C} : seed c → Closure seed move c
+  | step {c d : C} : Closure seed move c → move c d → Closure seed move d
+
+/-- **`Closure` is the least fixed point.** Any predicate `P` that contains the
+    seed and is closed under the transfer rule already contains the whole closure.
+    (The closure is itself a fixed point: `Closure.step` is exactly closure under
+    `move`.) -/
+theorem closure_least {C : Type} (seed : C → Prop) (move : C → C → Prop)
+    (P : C → Prop) (hseed : ∀ c, seed c → P c)
+    (hstep : ∀ c d, P c → move c d → P d) :
+    ∀ c, Closure seed move c → P c := by
+  intro c h
+  induction h with
+  | seed hc => exact hseed _ hc
+  | step _ hmove ih => exact hstep _ _ ih hmove
+
+/-- **Transfer closure is order-independent.** Any set `S` that is *also* a least
+    fixed point of the transfer rule above the seed (closed under the rule, and
+    minimal among such sets) coincides with `Closure`. Since a fold to a fixed
+    point above the seed lands on a least fixed point regardless of event order,
+    every order computes the same transferred support. -/
+theorem transfer_closure_order_independent {C : Type} (seed : C → Prop)
+    (move : C → C → Prop) (S : C → Prop)
+    (hSseed : ∀ c, seed c → S c) (hSstep : ∀ c d, S c → move c d → S d)
+    (hSleast : ∀ (P : C → Prop), (∀ c, seed c → P c) →
+      (∀ c d, P c → move c d → P d) → ∀ c, S c → P c) :
+    ∀ c, S c ↔ Closure seed move c := by
+  intro c
+  constructor
+  · exact hSleast (Closure seed move) (fun _ => Closure.seed) (fun _ _ => Closure.step) c
+  · exact closure_least seed move S hSseed hSstep c
+
 end Vela.FrontierCalculus

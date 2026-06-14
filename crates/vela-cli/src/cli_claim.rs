@@ -368,6 +368,18 @@ fn derive_state_cell(project: &Project, finding: &FindingBundle) -> Value {
             "corner": graded.corner().letter().to_string(),
             "note": "v2 bilattice point [0,1]x[0,1] (frontier_calculus); confidence defaults to 1 so the corner equals the Belnap letter (conservative extension). Per-source confidence is the deferred refinement.",
         },
+        // Projection provenance (T16): the derived graded flag is auditable, not
+        // authoritative. This record names the evaluator, valuation, and source
+        // so anyone can recompute the flag from the declared inputs above. It is
+        // a proof packet for a projection, never stored state.
+        "projection_provenance": {
+            "projection_kind": "graded_bilattice_status",
+            "evaluator": "kappa = Eval_Viterbi . env (square-free environment quotient of N[X], v3); corner thresholds each coordinate at > 0",
+            "valuation": "per-source confidence in [0,1]; absent sources default to 1",
+            "source": { "support_poly": sp.support.to_string(), "refute_poly": sp.refute.to_string() },
+            "policy": "frontier_calculus v3 (env-quotient kappa; conservative extension is Theorem 20, lean/Vela/FrontierCalculus.lean)",
+            "reproduce": "kappa(support_poly) and kappa(refute_poly) under the valuation give (support_degree, opposition_degree); the corner letter is deriveStatus(support_degree > 0, opposition_degree > 0)",
+        },
         "note": "read-side projection over the event log (asserted/accept -> support vars, supersession/retraction -> rho_Y, dependency_invalidated -> refute); never stored",
     });
 
