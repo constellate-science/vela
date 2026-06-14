@@ -149,6 +149,22 @@ impl StatusProvenance {
         }
     }
 
+    /// The v2 graded status (frontier calculus): one bilattice point
+    /// `(support_degree, opposition_degree)` derived from the SAME two
+    /// polynomials by the kappa projection, with per-source confidence.
+    ///
+    /// Conservative extension of [`Self::derive_status`]: for every confidence
+    /// map, `self.derive_graded_status(conf).corner() == self.derive_status()`,
+    /// so the corner sublattice reproduces v1 Belnap exactly and v1 readers are
+    /// unaffected. Like the Belnap status, this is derived, never persisted.
+    /// Sources absent from `confidence` default to confidence 1.
+    pub fn derive_graded_status(
+        &self,
+        confidence: &std::collections::BTreeMap<String, crate::frontier_calculus::Rational>,
+    ) -> crate::frontier_calculus::BilatticePoint {
+        crate::frontier_calculus::status_point(&self.support, &self.refute, confidence)
+    }
+
     /// Retract a set of source/event identifiers from both
     /// support and refute polynomials.
     ///
@@ -193,6 +209,39 @@ mod tests {
     fn support_only_derives_to_t() {
         let sp = StatusProvenance::new(ProvenancePoly::singleton("p1"), ProvenancePoly::zero());
         assert_eq!(sp.derive_status(), BelnapStatus::True);
+    }
+
+    /// The v2 conservative-extension theorem: the corner of the graded status
+    /// reproduces the v1 Belnap status for EVERY confidence map and every
+    /// support/refute shape. v1 readers are provably unaffected.
+    #[test]
+    fn graded_status_corner_is_conservative_over_v1() {
+        use crate::frontier_calculus::Rational;
+        let p = |s: &str| ProvenancePoly::singleton(s);
+        let cases = [
+            StatusProvenance::empty(),
+            StatusProvenance::new(&p("a") + &p("b"), ProvenancePoly::zero()),
+            StatusProvenance::new(ProvenancePoly::zero(), p("c")),
+            StatusProvenance::new(p("a"), p("c")),
+        ];
+        let confs: [std::collections::BTreeMap<String, Rational>; 3] = [
+            std::collections::BTreeMap::new(),
+            [("a".to_string(), Rational::new(1, 2))].into(),
+            [
+                ("a".to_string(), Rational::new(1, 100)),
+                ("c".to_string(), Rational::new(99, 100)),
+            ]
+            .into(),
+        ];
+        for sp in &cases {
+            for conf in &confs {
+                assert_eq!(
+                    sp.derive_graded_status(conf).corner(),
+                    sp.derive_status(),
+                    "graded corner must equal the v1 Belnap status"
+                );
+            }
+        }
     }
 
     #[test]

@@ -13,6 +13,7 @@ pub mod endorsement;
 pub mod events;
 pub mod evidence_ci;
 pub mod federation;
+pub mod frontier_calculus;
 pub mod frontier_graph;
 pub mod frontier_policy;
 pub mod frontier_repo;
