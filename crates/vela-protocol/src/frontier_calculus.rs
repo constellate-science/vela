@@ -544,6 +544,278 @@ pub fn corner_leq_k(a: BelnapStatus, b: BelnapStatus) -> bool {
     corner_point(a).leq_k(&corner_point(b))
 }
 
+// ===========================================================================
+// Verification cost and the admission boundary (session 7, doctrine law 18)
+//
+// v(q, c) is the cost of verifying a claim; admission requirements are a
+// monotone increasing function of v. Permissionless iff verification is cheap;
+// gated otherwise; refused outright at v = ∞. The cheap-verifier scope boundary
+// is DERIVED, not asserted — a clinical-shaped claim (no in-software verifier,
+// v = ∞) has no admission path through any policy.
+// ===========================================================================
+
+/// `v(q, c)` for a derived claim: the cheapest-derivation (tropical) cost.
+/// Sources absent from `cost` default to 0 (already paid); the empty polynomial
+/// (no derivation at all) is `∞` — nothing to verify cheaply.
+pub fn verification_cost(p: &ProvenancePoly, cost: &BTreeMap<String, Rational>) -> Cost {
+    project_cost(p, cost)
+}
+
+/// `v = ∞`: no in-software verifier, so no policy admits the claim.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NoAdmissionPath(pub String);
+
+/// The outcome of an admission check: whether the writer may write without a
+/// reviewer, and which trust coordinates the record must carry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AdmissionDecision {
+    pub permissionless: bool,
+    pub required_trust_coordinates: BTreeSet<String>,
+}
+
+/// Required trust coordinates as a monotone increasing function of `v`.
+#[derive(Debug, Clone, Copy)]
+pub struct AdmissionPolicy {
+    pub name: &'static str,
+    pub cheap_threshold: i128,
+    pub gated_threshold: i128,
+}
+
+impl AdmissionPolicy {
+    fn coords(names: &[&str]) -> BTreeSet<String> {
+        names.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    /// The trust coordinates required to admit a claim at cost `v`. Monotone:
+    /// a higher cost never requires fewer coordinates. `∞` has no admission path.
+    pub fn required_trust_coordinates(&self, v: Cost) -> Result<BTreeSet<String>, NoAdmissionPath> {
+        let c = match v {
+            Cost::Inf => {
+                return Err(NoAdmissionPath(format!(
+                    "policy {}: no in-software verifier (v = ∞); no admission path \
+                     through the verifier gate",
+                    self.name
+                )));
+            }
+            Cost::Finite(c) => c,
+        };
+        let mut req = Self::coords(&["log_integrity", "verifier_gate"]);
+        if c > Rational::from_int(self.cheap_threshold) {
+            req.extend(Self::coords(&["artifact_replay", "human_review"]));
+        }
+        if c > Rational::from_int(self.gated_threshold) {
+            req.extend(Self::coords(&[
+                "statement_faithfulness",
+                "significance_endorsement",
+            ]));
+        }
+        Ok(req)
+    }
+
+    /// Admit a claim at cost `v`: permissionless iff verification is cheap.
+    pub fn admit(&self, v: Cost) -> Result<AdmissionDecision, NoAdmissionPath> {
+        let required_trust_coordinates = self.required_trust_coordinates(v)?;
+        let permissionless =
+            matches!(v, Cost::Finite(c) if c <= Rational::from_int(self.cheap_threshold));
+        Ok(AdmissionDecision {
+            permissionless,
+            required_trust_coordinates,
+        })
+    }
+}
+
+/// The standard admission registry.
+pub const ADMISSION_DEFAULT: AdmissionPolicy = AdmissionPolicy {
+    name: "default",
+    cheap_threshold: 10,
+    gated_threshold: 100,
+};
+pub const ADMISSION_STRICT: AdmissionPolicy = AdmissionPolicy {
+    name: "strict",
+    cheap_threshold: 1,
+    gated_threshold: 10,
+};
+
+// ===========================================================================
+// Replay tiers: bitwise vs semantic-within-tolerance (session 7, law 17)
+//
+// Two equivalence relations replace the scalar artifact_replay reading. The
+// load-bearing rule: a tolerance spec is an attestation, never a proof —
+// someone SIGNS "within tau is the same result"; the kernel never invents tau,
+// and a semantic receipt can never produce a bitwise-grade trust coordinate.
+// ===========================================================================
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReplayTier {
+    Bitwise,
+    Semantic,
+}
+
+/// Replay refused: a tier upgrade without a new bitwise event, or a semantic
+/// claim without a signed tolerance attestation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReplayRefused(pub String);
+
+/// "Within tau is the same result" — a signed attestation carrying the signer's
+/// responsibility, never a proof the kernel can derive.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ToleranceAttestation {
+    pub tau: f64,
+    pub signer: String,
+    pub signature: String,
+}
+
+impl ToleranceAttestation {
+    pub fn is_signed(&self) -> bool {
+        !self.signer.is_empty() && !self.signature.is_empty()
+    }
+}
+
+/// A replay outcome: the tier, the observed and reference outputs as canonical
+/// bytes (bitwise equality; parsed as `f64` for the semantic comparison), and
+/// the signed tolerance for a semantic receipt.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ReplayReceipt {
+    pub tier: ReplayTier,
+    pub observed: String,
+    pub reference: String,
+    pub tolerance: Option<ToleranceAttestation>,
+}
+
+/// Whether a replay passes at its declared tier. Semantic replay refuses
+/// without a signed, nonnegative tolerance — the kernel never invents tau.
+pub fn replay_passes(r: &ReplayReceipt) -> Result<bool, ReplayRefused> {
+    match r.tier {
+        ReplayTier::Bitwise => Ok(r.observed == r.reference),
+        ReplayTier::Semantic => {
+            let tol = r
+                .tolerance
+                .as_ref()
+                .filter(|t| t.is_signed())
+                .ok_or_else(|| {
+                    ReplayRefused(
+                        "semantic replay requires a signed tolerance attestation; a \
+                     tolerance spec is an attestation, never a proof"
+                            .to_string(),
+                    )
+                })?;
+            if tol.tau < 0.0 {
+                return Err(ReplayRefused("tolerance must be nonnegative".to_string()));
+            }
+            let o: f64 = r
+                .observed
+                .parse()
+                .map_err(|_| ReplayRefused("semantic observed is not numeric".to_string()))?;
+            let f: f64 = r
+                .reference
+                .parse()
+                .map_err(|_| ReplayRefused("semantic reference is not numeric".to_string()))?;
+            Ok((o - f).abs() <= tol.tau)
+        }
+    }
+}
+
+/// Derive the artifact-replay trust coordinate from a typed receipt. Tier
+/// monotonicity: bitwise implies semantic at every tau >= 0, and a tier is
+/// never upgraded without a new replay event — a semantic receipt can never
+/// yield the bitwise-grade coordinate.
+pub fn replay_trust_grade(
+    r: &ReplayReceipt,
+    requested: ReplayTier,
+) -> Result<&'static str, ReplayRefused> {
+    if requested == ReplayTier::Bitwise && r.tier != ReplayTier::Bitwise {
+        return Err(ReplayRefused(
+            "a semantic receipt can never produce a bitwise-grade trust \
+             coordinate; tier upgrade requires a new bitwise replay event"
+                .to_string(),
+        ));
+    }
+    if !replay_passes(r)? {
+        return Err(ReplayRefused(format!("replay failed at tier {:?}", r.tier)));
+    }
+    if r.tier == ReplayTier::Bitwise && requested == ReplayTier::Bitwise {
+        Ok("bitwise_replay")
+    } else {
+        Ok("semantic_replay_within_attested_tolerance")
+    }
+}
+
+// ===========================================================================
+// Assumption environments (ATMS-lite, session 7) — defeasible transfer layer 1
+//
+// Environments are assumption sets: the variable set of each monomial.
+// Invalidating an assumption removes every environment containing it. Because
+// monomials already ARE variable sets, this is the same homomorphism as
+// variable zeroing — retraction generalizes to assumption-set invalidation with
+// no new operator, and supersession cascades by the retraction theorem applied
+// transitively.
+// ===========================================================================
+
+/// The ATMS environments of a polynomial: the variable set of each monomial.
+pub fn environments(p: &ProvenancePoly) -> BTreeSet<BTreeSet<String>> {
+    p.terms().map(|(mono, _)| mono.variables()).collect()
+}
+
+/// Invalidate an assumption set: drop every environment (monomial) containing
+/// an invalidated assumption. Extensionally equal to [`ProvenancePoly::retract`];
+/// implemented independently so the subsumption is checked, not assumed.
+pub fn invalidate_environments(p: &ProvenancePoly, invalid: &BTreeSet<String>) -> ProvenancePoly {
+    let mut out = ProvenancePoly::zero();
+    for (mono, coeff) in p.terms() {
+        if mono.variables().is_disjoint(invalid) {
+            out.insert_term(mono.clone(), *coeff);
+        }
+    }
+    out
+}
+
+// ===========================================================================
+// Statement-faithfulness strength relation (session 7)
+//
+// Six values for how a formal statement relates to the informal claim it
+// attests, with composition along formalization chains. Composition is an
+// associative monoid with EQUIVALENT as identity and UNFAITHFUL absorbing;
+// mixed or incomparable directions compose to AMBIGUOUS — information loss is
+// explicit, never silently resolved. (Distinct from the binary
+// `statement_attestation::FaithfulnessVerdict`: this is the graded relation.)
+// ===========================================================================
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FaithfulnessStrength {
+    Equivalent,
+    FormalStronger,
+    FormalWeaker,
+    Incomparable,
+    Ambiguous,
+    Unfaithful,
+}
+
+/// Compose two faithfulness strengths along a formalization chain.
+pub fn compose_faithfulness(
+    a: FaithfulnessStrength,
+    b: FaithfulnessStrength,
+) -> FaithfulnessStrength {
+    use FaithfulnessStrength::*;
+    if a == Unfaithful || b == Unfaithful {
+        return Unfaithful; // absorbing
+    }
+    if a == Equivalent {
+        return b; // identity
+    }
+    if b == Equivalent {
+        return a;
+    }
+    if a == Ambiguous || b == Ambiguous {
+        return Ambiguous;
+    }
+    match (a, b) {
+        (FormalStronger, FormalStronger) => FormalStronger,
+        (FormalWeaker, FormalWeaker) => FormalWeaker,
+        // mixed directions or any INCOMPARABLE leg: strength info is lost.
+        _ => Ambiguous,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -693,5 +965,217 @@ mod tests {
         assert_eq!(pt.y, r(8, 10)); // refute confidence
         assert_eq!(pt.corner(), Both);
         assert_eq!(pt.conflict(), r(8, 10).min(r(9, 10)));
+    }
+
+    // --- check 21: admission is a monotone function of verification cost ------
+    #[test]
+    fn check21_admission_monotone_in_cost() {
+        let pol = ADMISSION_DEFAULT;
+        let cheap = pol.admit(Cost::Finite(Rational::from_int(2))).unwrap();
+        let costly = pol.admit(Cost::Finite(Rational::from_int(500))).unwrap();
+        assert!(
+            cheap.permissionless,
+            "SAT-shaped (cheap) admits permissionless"
+        );
+        assert!(!costly.permissionless, "exhaustive (costly) is gated");
+        assert!(
+            cheap
+                .required_trust_coordinates
+                .is_subset(&costly.required_trust_coordinates)
+                && cheap.required_trust_coordinates != costly.required_trust_coordinates,
+            "cheaper verification requires strictly fewer trust coordinates"
+        );
+
+        // A clinical-shaped claim (v = ∞) is refused by every policy.
+        for p in [ADMISSION_DEFAULT, ADMISSION_STRICT] {
+            assert!(p.admit(Cost::Inf).is_err());
+            // monotone: more cost never requires fewer coordinates.
+            let mut prev: BTreeSet<String> = BTreeSet::new();
+            for c in [0i128, 1, 5, 10, 50, 100, 1000] {
+                let req = p
+                    .required_trust_coordinates(Cost::Finite(Rational::from_int(c)))
+                    .unwrap();
+                assert!(prev.is_subset(&req), "admission must be monotone in v");
+                prev = req;
+            }
+        }
+
+        // v for a derived claim is the cheapest derivation (tropical).
+        let support = &(&var("sat_cert") * &var("replay")) + &var("exhaustive_run");
+        let cost = conf(&[
+            ("sat_cert", (2, 1)),
+            ("replay", (1, 1)),
+            ("exhaustive_run", (500, 1)),
+        ]);
+        assert_eq!(
+            verification_cost(&support, &cost),
+            Cost::Finite(Rational::from_int(3))
+        );
+        assert!(
+            ADMISSION_DEFAULT
+                .admit(verification_cost(&support, &cost))
+                .unwrap()
+                .permissionless
+        );
+        // no derivation at all: nothing to verify cheaply -> ∞.
+        assert_eq!(
+            verification_cost(&ProvenancePoly::zero(), &BTreeMap::new()),
+            Cost::Inf
+        );
+    }
+
+    // --- check 22: replay tiers; tolerance is an attestation, never a proof ---
+    #[test]
+    fn check22_replay_tiers() {
+        let attn = |tau: f64| ToleranceAttestation {
+            tau,
+            signer: "will".to_string(),
+            signature: "sig-demo".to_string(),
+        };
+        let bitwise = ReplayReceipt {
+            tier: ReplayTier::Bitwise,
+            observed: "2.0".to_string(),
+            reference: "2.0".to_string(),
+            tolerance: None,
+        };
+        assert!(replay_passes(&bitwise).unwrap());
+        // bitwise implies semantic at every tolerance.
+        for tau in [0.0, 1e-9, 1e-3, 1.0] {
+            let sem = ReplayReceipt {
+                tier: ReplayTier::Semantic,
+                observed: "2.0".to_string(),
+                reference: "2.0".to_string(),
+                tolerance: Some(attn(tau)),
+            };
+            assert!(replay_passes(&sem).unwrap());
+        }
+        assert_eq!(
+            replay_trust_grade(&bitwise, ReplayTier::Bitwise).unwrap(),
+            "bitwise_replay"
+        );
+        let semantic_only = ReplayReceipt {
+            tier: ReplayTier::Semantic,
+            observed: "2.0000001".to_string(),
+            reference: "2.0".to_string(),
+            tolerance: Some(attn(1e-3)),
+        };
+        assert_eq!(
+            replay_trust_grade(&semantic_only, ReplayTier::Semantic).unwrap(),
+            "semantic_replay_within_attested_tolerance"
+        );
+        // a semantic receipt can never produce a bitwise-grade coordinate.
+        assert!(replay_trust_grade(&semantic_only, ReplayTier::Bitwise).is_err());
+        // the kernel never invents tau: no tolerance, or unsigned, is refused.
+        let no_tol = ReplayReceipt {
+            tier: ReplayTier::Semantic,
+            observed: "2.0".to_string(),
+            reference: "2.0".to_string(),
+            tolerance: None,
+        };
+        assert!(replay_passes(&no_tol).is_err());
+        let unsigned = ReplayReceipt {
+            tier: ReplayTier::Semantic,
+            observed: "2.0".to_string(),
+            reference: "2.0".to_string(),
+            tolerance: Some(ToleranceAttestation {
+                tau: 1e-3,
+                signer: String::new(),
+                signature: String::new(),
+            }),
+        };
+        assert!(replay_passes(&unsigned).is_err());
+    }
+
+    // --- check 23: assumption invalidation subsumes variable zeroing ----------
+    #[test]
+    fn check23_assumption_invalidation_subsumes_zeroing() {
+        // transfer-shaped support: asm·src·thm (one derivation through an
+        // assumption) plus an independent alternative.
+        let p = &(&(&var("asm") * &var("src")) * &var("thm")) + &var("alt");
+        let invalid: BTreeSet<String> = BTreeSet::from(["asm".to_string()]);
+
+        // invalidate_environments is extensionally equal to retract.
+        assert_eq!(invalidate_environments(&p, &invalid), p.retract(&invalid));
+        // no surviving environment contains the invalidated assumption.
+        for env in environments(&invalidate_environments(&p, &invalid)) {
+            assert!(env.is_disjoint(&invalid));
+        }
+
+        // the support coordinate of the bilattice point moves DOWN on
+        // invalidation (the cascade reaches the derived claim).
+        let cmap = conf(&[
+            ("asm", (9, 10)),
+            ("src", (9, 10)),
+            ("thm", (9, 10)),
+            ("alt", (1, 2)),
+        ]);
+        let before = status_point(&p, &ProvenancePoly::zero(), &cmap);
+        let after = status_point(
+            &invalidate_environments(&p, &invalid),
+            &ProvenancePoly::zero(),
+            &cmap,
+        );
+        assert!(
+            after.x < before.x,
+            "invalidation must lower the support degree"
+        );
+
+        // the singleton case is exactly variable zeroing (retraction theorem).
+        let single = var("asm");
+        assert_eq!(
+            invalidate_environments(&single, &invalid),
+            single.retract(&invalid)
+        );
+        assert!(invalidate_environments(&single, &invalid).is_zero());
+    }
+
+    // --- faithfulness strength is an associative monoid -----------------------
+    #[test]
+    fn faithfulness_strength_monoid() {
+        use FaithfulnessStrength::*;
+        let all = [
+            Equivalent,
+            FormalStronger,
+            FormalWeaker,
+            Incomparable,
+            Ambiguous,
+            Unfaithful,
+        ];
+        // EQUIVALENT is the identity; UNFAITHFUL absorbs.
+        for s in all {
+            assert_eq!(compose_faithfulness(Equivalent, s), s);
+            assert_eq!(compose_faithfulness(s, Equivalent), s);
+            assert_eq!(compose_faithfulness(Unfaithful, s), Unfaithful);
+            assert_eq!(compose_faithfulness(s, Unfaithful), Unfaithful);
+        }
+        // same direction composes; mixed / incomparable lose to AMBIGUOUS.
+        assert_eq!(
+            compose_faithfulness(FormalStronger, FormalStronger),
+            FormalStronger
+        );
+        assert_eq!(
+            compose_faithfulness(FormalWeaker, FormalWeaker),
+            FormalWeaker
+        );
+        assert_eq!(
+            compose_faithfulness(FormalStronger, FormalWeaker),
+            Ambiguous
+        );
+        assert_eq!(
+            compose_faithfulness(FormalStronger, Incomparable),
+            Ambiguous
+        );
+        // associativity over every triple.
+        for a in all {
+            for b in all {
+                for c in all {
+                    assert_eq!(
+                        compose_faithfulness(compose_faithfulness(a, b), c),
+                        compose_faithfulness(a, compose_faithfulness(b, c)),
+                        "compose must be associative"
+                    );
+                }
+            }
+        }
     }
 }
