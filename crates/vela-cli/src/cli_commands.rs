@@ -3112,8 +3112,9 @@ pub(crate) enum RegistryAction {
     VerifyLog {
         /// The frontier (vfr_…) whose log to verify.
         vfr_id: String,
-        /// Hub base URL (e.g. https://vela-hub.fly.dev).
-        #[arg(long)]
+        /// Hub base URL (e.g. https://vela-hub.fly.dev). `--to` is an accepted
+        /// alias (harmonized with `registry propose --to`).
+        #[arg(long, visible_alias = "to")]
         hub: String,
         /// Optional event id (vev_…) to also prove inclusion of.
         #[arg(long)]
