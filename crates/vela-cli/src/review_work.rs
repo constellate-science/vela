@@ -341,8 +341,8 @@ fn build_review_work_payload(repo_path: &Path) -> Result<ReviewWorkPayload, Stri
             examples: outside_review.iter().take(4).cloned().collect(),
             operator_artifacts: vec![
                 "review/outside-review-2026-q3.md",
-                "docs/templates/outside-review-return.md",
-                "docs/templates/outside-review-action-map.md",
+                "templates/outside-review-return.md",
+                "templates/outside-review-action-map.md",
             ],
             validation_commands: review_work_queue_validation_commands("outside_review"),
             boundary: "Outside review packets must be dispatched and returned outside this read-only page.",
