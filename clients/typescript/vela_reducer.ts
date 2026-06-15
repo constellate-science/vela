@@ -710,8 +710,6 @@ function applyEvent(state: ReducerState, event: Event): void {
   // state on replay (explicit no-op arms in the Rust reducer).
   else if (
     kind === "prediction.expired_unresolved" ||
-    kind === "finding.threshold_set" ||
-    kind === "finding.threshold_met" ||
     kind === "frontier.observation_reviewed" ||
     kind === "correction_return.review" ||
     kind === "research_trace.review" ||

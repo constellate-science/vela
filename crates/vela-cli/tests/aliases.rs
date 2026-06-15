@@ -1,7 +1,10 @@
-//! Integration tests pinning the consolidated CLI surface: flag aliases
-//! (B3) and the dual top-level/subcommand paths (B1/B4). These run the
-//! actual built `vela` binary, so they catch alias-path divergence and
-//! surface drift that unit tests over the clap tree cannot.
+//! Integration tests pinning the consolidated CLI surface. After the
+//! dev-only cleanup, each concept has exactly ONE spelling: the
+//! acting-identity flag is `--reviewer` (no `--actor`/`--by`), the key flag
+//! is `--key` (no `--private-key`), and the finding-mutation verbs live only
+//! under `vela finding <verb>` (no top-level `vela note`). These run the
+//! built `vela` binary so they catch surface drift the clap-tree unit tests
+//! can't.
 
 use std::process::{Command, Output};
 
@@ -24,52 +27,68 @@ fn combined(out: &Output) -> String {
     )
 }
 
-/// The acting-identity flag accepts all three spellings (canonical
-/// `--reviewer`, hidden aliases `--actor` / `--by`), so no existing script
-/// breaks. We assert the flag PARSES (reaches the handler, which then fails
-/// on the bogus frontier) rather than being rejected as an unknown arg.
+/// The acting-identity flag is `--reviewer` and ONLY `--reviewer` — the
+/// retired `--actor`/`--by` aliases must now be rejected (one canonical name).
 #[test]
-fn identity_flag_aliases_parse() {
-    for flag in ["--reviewer", "--actor", "--by"] {
+fn identity_flag_is_canonical_reviewer_only() {
+    let ok = vela(&[
+        "accept",
+        "/tmp/vela_nonexistent.json",
+        "vpr_x",
+        "--reviewer",
+        "reviewer:w",
+        "--reason",
+        "r",
+    ]);
+    assert!(
+        !stderr(&ok).contains("unexpected argument"),
+        "`accept --reviewer` should parse, got: {}",
+        stderr(&ok)
+    );
+    for retired in ["--actor", "--by"] {
         let out = vela(&[
             "accept",
-            "/tmp/vela_nonexistent.json",
+            "/tmp/x.json",
             "vpr_x",
-            flag,
+            retired,
             "reviewer:w",
             "--reason",
             "r",
         ]);
         assert!(
-            !stderr(&out).contains("unexpected argument"),
-            "`accept {flag}` should parse, got: {}",
+            stderr(&out).contains("unexpected argument") || stderr(&out).contains(retired),
+            "retired alias `{retired}` should be rejected, got: {}",
             stderr(&out)
         );
     }
 }
 
-/// `sign apply` takes the canonical `--key` and the back-compat alias
-/// `--private-key`.
+/// `sign apply` takes `--key` and only `--key` (retired `--private-key`).
 #[test]
-fn key_flag_alias_parses() {
-    for flag in ["--key", "--private-key"] {
-        let out = vela(&[
-            "sign",
-            "apply",
-            "/tmp/vela_nonexistent.json",
-            flag,
-            "/tmp/nope",
-        ]);
-        assert!(
-            !stderr(&out).contains("unexpected argument"),
-            "`sign apply {flag}` should parse, got: {}",
-            stderr(&out)
-        );
-    }
+fn key_flag_is_canonical_key_only() {
+    let ok = vela(&[
+        "sign",
+        "apply",
+        "/tmp/vela_nonexistent.json",
+        "--key",
+        "/tmp/nope",
+    ]);
+    assert!(
+        !stderr(&ok).contains("unexpected argument"),
+        "`sign apply --key` should parse, got: {}",
+        stderr(&ok)
+    );
+    let retired = vela(&["sign", "apply", "/tmp/x.json", "--private-key", "/tmp/nope"]);
+    assert!(
+        stderr(&retired).contains("unexpected argument")
+            || stderr(&retired).contains("private-key"),
+        "retired `--private-key` should be rejected, got: {}",
+        stderr(&retired)
+    );
 }
 
-/// Sanity: a genuinely-unknown flag IS still rejected, so the alias
-/// acceptance above is meaningful (not a parser that swallows everything).
+/// Sanity: a genuinely-unknown flag is rejected (so the checks above mean
+/// something — the parser doesn't swallow everything).
 #[test]
 fn unknown_flag_is_rejected() {
     let out = vela(&[
@@ -88,16 +107,15 @@ fn unknown_flag_is_rejected() {
     );
 }
 
-/// Both the top-level alias and the namespaced subcommand dispatch (they
-/// are intentionally-distinct paths: top-level `accept` runs the engine
-/// gate; `proposals accept` is the lower-level apply). Neither must regress
-/// to "unknown or non-release command".
+/// The two intentionally-distinct accept/reject paths still dispatch:
+/// top-level `accept` (engine-gated) + `proposals accept`/`proposals reject`
+/// (lower-level). Neither regresses to "unknown or non-release command".
+/// (Top-level `vela reject` was retired — see `finding_verbs_are_nested_only`.)
 #[test]
-fn dual_accept_paths_both_dispatch() {
+fn accept_paths_dispatch() {
     for args in [
         vec!["accept", "--help"],
         vec!["proposals", "accept", "--help"],
-        vec!["reject", "--help"],
         vec!["proposals", "reject", "--help"],
     ] {
         let out = vela(&args);
@@ -109,8 +127,8 @@ fn dual_accept_paths_both_dispatch() {
     }
 }
 
-/// The managed-identity verbs added this cycle must be reachable through
-/// the clap-derived allowlist (the drift that bit `id`/`publish`).
+/// The managed-identity verbs must be reachable through the clap-derived
+/// allowlist (the drift that bit `id`/`publish`).
 #[test]
 fn ergonomics_verbs_are_reachable() {
     for verb in ["id", "publish"] {
@@ -122,10 +140,10 @@ fn ergonomics_verbs_are_reachable() {
     }
 }
 
-/// B7 Part B: the finding-verbs are reachable both as `vela finding <verb>`
-/// (canonical) and as the old top-level `vela <verb>` (hidden back-compat).
+/// The finding-mutation/graph verbs live ONLY under `vela finding <verb>`;
+/// the retired top-level spellings (`vela note` …) must now 404.
 #[test]
-fn finding_verbs_nest_and_keep_top_level_alias() {
+fn finding_verbs_are_nested_only() {
     for verb in [
         "note", "caveat", "revise", "reject", "retract", "link", "entity",
     ] {
@@ -137,11 +155,11 @@ fn finding_verbs_nest_and_keep_top_level_alias() {
         );
         let top = vela(&[verb, "--help"]);
         assert!(
-            !combined(&top).contains("unknown or non-release command"),
-            "`vela {verb}` (back-compat alias) should still dispatch"
+            combined(&top).contains("unknown or non-release command"),
+            "retired top-level `vela {verb}` should 404, got: {}",
+            combined(&top)
         );
     }
-    // `finding --help` advertises the nested verbs; top-level `--help` hides them.
     let finding_help = combined(&vela(&["finding", "--help"]));
     assert!(finding_help.contains("note") && finding_help.contains("retract"));
 }

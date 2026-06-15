@@ -3,17 +3,15 @@
 //! definitions live apart from the handler functions and dispatch. Pure
 //! data: the handlers and `run_command` dispatch stay in `cli.rs`.
 //!
-//! ## Flag-naming conventions (one name per concept)
-//! - **Acting identity** → `--reviewer` (canonical). The legacy `--actor`
-//!   and `--by` spellings are accepted as hidden aliases on these commands,
-//!   so old scripts keep working; new help shows `--reviewer`. The value
-//!   defaults from the configured identity (`vela id`), so the flag is
-//!   usually omitted entirely. `--owner` stays distinct (registry
-//!   owner-role operations); `--actor` stays the canonical for the
-//!   lower-level verifier/author identities (lean verify-all, ingest) that
-//!   are NOT the reviewer concept.
-//! - **Signing key** → `--key` (canonical). `--private-key` is a hidden
-//!   alias on `sign apply`. Defaults from `vela id`.
+//! ## Flag-naming conventions (one name per concept, no aliases)
+//! - **Acting identity** → `--reviewer` for the decision/judgment commands
+//!   (the old `--actor`/`--by` aliases were retired in the dev-only
+//!   cleanup). `--owner` stays distinct (registry owner-role operations);
+//!   `--actor` stays the canonical for the lower-level verifier/author
+//!   identities (lean verify-all, ingest) that are NOT the reviewer concept.
+//!   The value defaults from the configured identity (`vela id`), so the
+//!   flag is usually omitted entirely.
+//! - **Signing key** → `--key`. Defaults from `vela id`.
 //! - **Targets** → `--hub` (a registry/peer base URL the client talks to),
 //!   `--to` (a publish/append destination), `--from` (a read source). One
 //!   meaning each; do not overload.
@@ -598,23 +596,6 @@ pub(crate) enum Commands {
         #[command(subcommand)]
         command: FindingCommands,
     },
-    /// Add typed links between findings — including cross-frontier
-    /// references of the form `vf_<id>@vfr_<id>` (v0.8). Until v0.9
-    /// link state lived only in JSON; `vela link add` is the CLI on-ramp.
-    #[command(hide = true)]
-    Link {
-        #[command(subcommand)]
-        action: LinkAction,
-    },
-    /// v0.19: resolve unresolved entities against a bundled common-entity
-    /// table (UniProt for proteins, MeSH for diseases, ChEBI/DrugBank for
-    /// compounds, etc.). Lowers `needs_review` for matched entities and
-    /// populates `canonical_id`. Idempotent unless `--force` is passed.
-    #[command(hide = true)]
-    Entity {
-        #[command(subcommand)]
-        action: EntityAction,
-    },
     /// Create or apply one proposal-backed finding review
     Review {
         /// Frontier JSON file or Vela repo
@@ -637,67 +618,6 @@ pub(crate) enum Commands {
         #[arg(long)]
         json: bool,
     },
-    /// Add a lightweight note to a finding
-    #[command(hide = true)]
-    Note {
-        frontier: PathBuf,
-        finding_id: String,
-        #[arg(long)]
-        text: String,
-        #[arg(long)]
-        author: String,
-        /// Immediately accept and apply the proposal locally
-        #[arg(long)]
-        apply: bool,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Add an explicit caveat to a finding
-    #[command(hide = true)]
-    Caveat {
-        frontier: PathBuf,
-        finding_id: String,
-        #[arg(long)]
-        text: String,
-        #[arg(long)]
-        author: String,
-        #[arg(long)]
-        apply: bool,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Revise an interpretation field while preserving history
-    #[command(hide = true)]
-    Revise {
-        frontier: PathBuf,
-        finding_id: String,
-        /// New confidence score from 0.0 to 1.0
-        #[arg(long)]
-        confidence: f64,
-        /// Reason for the revision
-        #[arg(long)]
-        reason: String,
-        /// Reviewer identifier
-        #[arg(long)]
-        reviewer: String,
-        #[arg(long)]
-        apply: bool,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Mark a finding as rejected without deleting it
-    Reject {
-        frontier: PathBuf,
-        finding_id: String,
-        #[arg(long)]
-        reason: String,
-        #[arg(long)]
-        reviewer: String,
-        #[arg(long)]
-        apply: bool,
-        #[arg(long)]
-        json: bool,
-    },
     /// Show state-transition history for one finding
     History {
         frontier: PathBuf,
@@ -716,20 +636,6 @@ pub(crate) enum Commands {
         source: PathBuf,
         #[arg(long)]
         into: PathBuf,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Retract a finding
-    #[command(hide = true)]
-    Retract {
-        source: PathBuf,
-        finding_id: String,
-        #[arg(long)]
-        reason: String,
-        #[arg(long)]
-        reviewer: String,
-        #[arg(long)]
-        apply: bool,
         #[arg(long)]
         json: bool,
     },
@@ -904,7 +810,7 @@ pub(crate) enum Commands {
         proposal_id: String,
         /// Reviewer actor id. Optional: defaults to your configured
         /// identity (`vela id create`).
-        #[arg(long, alias = "actor", alias = "by")]
+        #[arg(long)]
         reviewer: Option<String>,
         #[arg(long)]
         reason: String,
@@ -978,7 +884,7 @@ pub(crate) enum Commands {
         note: String,
         /// The attesting reviewer (must be reviewer:…). Optional: defaults
         /// to your configured identity (`vela id`).
-        #[arg(long = "reviewer", alias = "actor", alias = "by")]
+        #[arg(long = "reviewer")]
         by: Option<String>,
         /// Path to the reviewer's Ed25519 private key. Optional: defaults to
         /// your configured identity's key.
@@ -1029,7 +935,7 @@ pub(crate) enum Commands {
         frontier: PathBuf,
         proposal_id: String,
         /// Recommending reviewer. Optional: defaults to your identity.
-        #[arg(long = "reviewer", alias = "actor", alias = "by")]
+        #[arg(long = "reviewer")]
         by: Option<String>,
         /// Reviewer key. Optional: defaults to your identity's key.
         #[arg(long)]
@@ -1063,7 +969,7 @@ pub(crate) enum Commands {
         ttl: u64,
         /// Claiming actor (agent:… or reviewer:…). Optional: defaults to
         /// your configured identity (`vela id`).
-        #[arg(long = "reviewer", alias = "actor", alias = "by")]
+        #[arg(long = "reviewer")]
         by: Option<String>,
         /// Path to the claimant's Ed25519 private key. Optional: defaults to
         /// your configured identity's key.
@@ -1096,7 +1002,7 @@ pub(crate) enum Commands {
         #[arg(long)]
         finding: Option<String>,
         /// Recording actor. Optional: defaults to your configured identity.
-        #[arg(long = "reviewer", alias = "actor", alias = "by")]
+        #[arg(long = "reviewer")]
         by: Option<String>,
         /// Actor key. Optional: defaults to your configured identity's key.
         #[arg(long)]
@@ -1170,7 +1076,7 @@ pub(crate) enum Commands {
         #[arg(long = "scope")]
         scopes: Vec<String>,
         /// Local reviewer id, for example `reviewer:will-blair`.
-        #[arg(long, alias = "actor", alias = "by")]
+        #[arg(long)]
         reviewer: Option<String>,
         /// Reviewer role for this attestation, such as `domain_reviewer`.
         #[arg(long)]
@@ -1334,7 +1240,7 @@ pub(crate) enum SignAction {
         frontier: PathBuf,
         /// Path to the Ed25519 private key. Canonical flag is `--key`;
         /// `--private-key` is accepted as a back-compat alias.
-        #[arg(long = "key", alias = "private-key")]
+        #[arg(long = "key")]
         private_key: PathBuf,
         #[arg(long)]
         json: bool,
@@ -1623,7 +1529,7 @@ pub(crate) enum BridgesAction {
         bridge_id: String,
         /// Reviewer identity attaching the verdict. Defaults to
         /// $VELA_REVIEWER_ID or `reviewer:will-blair`.
-        #[arg(long, alias = "actor", alias = "by")]
+        #[arg(long)]
         reviewer: Option<String>,
         /// Optional verdict note.
         #[arg(long)]
@@ -1636,7 +1542,7 @@ pub(crate) enum BridgesAction {
     Refute {
         frontier: PathBuf,
         bridge_id: String,
-        #[arg(long, alias = "actor", alias = "by")]
+        #[arg(long)]
         reviewer: Option<String>,
         #[arg(long)]
         note: Option<String>,
@@ -3724,7 +3630,7 @@ pub(crate) enum FindingCommands {
         #[arg(long)]
         json: bool,
     },
-    /// Attach a lightweight note to a finding (also `vela note`).
+    /// Attach a lightweight note to a finding.
     Note {
         frontier: PathBuf,
         finding_id: String,
@@ -3737,7 +3643,7 @@ pub(crate) enum FindingCommands {
         #[arg(long)]
         json: bool,
     },
-    /// Attach an explicit caveat to a finding (also `vela caveat`).
+    /// Attach an explicit caveat to a finding.
     Caveat {
         frontier: PathBuf,
         finding_id: String,
@@ -3750,7 +3656,7 @@ pub(crate) enum FindingCommands {
         #[arg(long)]
         json: bool,
     },
-    /// Revise a finding's confidence interpretation (also `vela revise`).
+    /// Revise a finding's confidence interpretation.
     Revise {
         frontier: PathBuf,
         finding_id: String,
@@ -3765,7 +3671,7 @@ pub(crate) enum FindingCommands {
         #[arg(long)]
         json: bool,
     },
-    /// Mark a finding rejected without deleting it (also `vela reject`).
+    /// Mark a finding rejected without deleting it.
     Reject {
         frontier: PathBuf,
         finding_id: String,
@@ -3778,7 +3684,7 @@ pub(crate) enum FindingCommands {
         #[arg(long)]
         json: bool,
     },
-    /// Retract a finding (also `vela retract`).
+    /// Retract a finding.
     Retract {
         source: PathBuf,
         finding_id: String,
@@ -3791,12 +3697,12 @@ pub(crate) enum FindingCommands {
         #[arg(long)]
         json: bool,
     },
-    /// Add typed links between findings (also `vela link`).
+    /// Add typed links between findings.
     Link {
         #[command(subcommand)]
         action: LinkAction,
     },
-    /// Resolve unresolved entities against the bundled table (also `vela entity`).
+    /// Resolve unresolved entities against the bundled table.
     Entity {
         #[command(subcommand)]
         action: EntityAction,
@@ -3856,7 +3762,7 @@ pub(crate) enum ProposalAction {
         frontier: PathBuf,
         proposal_id: String,
         /// Reviewer actor id. Optional: defaults to your configured identity.
-        #[arg(long, alias = "actor", alias = "by")]
+        #[arg(long)]
         reviewer: Option<String>,
         #[arg(long)]
         reason: String,
@@ -3872,7 +3778,7 @@ pub(crate) enum ProposalAction {
         frontier: PathBuf,
         proposal_id: String,
         /// Reviewer actor id. Optional: defaults to your configured identity.
-        #[arg(long, alias = "actor", alias = "by")]
+        #[arg(long)]
         reviewer: Option<String>,
         #[arg(long)]
         reason: String,

@@ -891,8 +891,6 @@ pub async fn run_command() {
             apply_artifacts,
             json,
         } => cmd_artifact_to_state(&frontier, &packet, &actor, apply_artifacts, json),
-        Commands::Link { action } => cmd_link(action),
-        Commands::Entity { action } => cmd_entity(action),
         Commands::Finding { command } => match command {
             FindingCommands::Add {
                 frontier,
@@ -1219,41 +1217,6 @@ pub async fn run_command() {
             .unwrap_or_else(|e| fail_return(&e));
             print_state_report(&report, json);
         }
-        Commands::Note {
-            frontier,
-            finding_id,
-            text,
-            author,
-            apply,
-            json,
-        } => cmd_finding_note(frontier, finding_id, text, author, apply, json),
-        Commands::Caveat {
-            frontier,
-            finding_id,
-            text,
-            author,
-            apply,
-            json,
-        } => cmd_finding_caveat(frontier, finding_id, text, author, apply, json),
-        Commands::Revise {
-            frontier,
-            finding_id,
-            confidence,
-            reason,
-            reviewer,
-            apply,
-            json,
-        } => cmd_finding_revise(
-            frontier, finding_id, confidence, reason, reviewer, apply, json,
-        ),
-        Commands::Reject {
-            frontier,
-            finding_id,
-            reason,
-            reviewer,
-            apply,
-            json,
-        } => cmd_finding_reject(frontier, finding_id, reason, reviewer, apply, json),
         Commands::History {
             frontier,
             finding_id,
@@ -1294,14 +1257,6 @@ pub async fn run_command() {
                 println!("{report}");
             }
         }
-        Commands::Retract {
-            source,
-            finding_id,
-            reason,
-            reviewer,
-            apply,
-            json,
-        } => cmd_finding_retract(source, finding_id, reason, reviewer, apply, json),
         Commands::ProofAdd {
             frontier,
             target_finding,
@@ -5672,18 +5627,13 @@ Verification:
 Proposals and review:
   proposals     Inspect, validate, export, import, accept, or reject write proposals
   review        Create a review proposal or review interactively
-  note          Add a lightweight note to a finding
-  caveat        Create an explicit caveat proposal
-  revise        Create a confidence revision proposal
-  reject        Create a rejection proposal
-  retract       Create a retraction proposal
   accept-batch  Apply several pending proposals under one reviewer decision
   recommend     Record a reviewer-tier recommend-accept on a pending proposal
   import-events Import review/state events from a packet or JSON file
   queue         Walk the local draft queue: list, sign-and-apply, or clear queued review actions
-  finding       Add or manage finding bundles as frontier state
-  link          Add typed links between findings (incl. cross-frontier vf_at-vfr targets)
-  entity        Resolve unresolved entities against the bundled common-entity table
+  finding       Manage finding bundles + per-finding verbs:
+                  finding add | review | note | caveat | revise | reject |
+                  retract | link | entity | supersede | causal-set
 
 Production (multi-producer coordination, signed judgment):
   claim              Lease an open obligation (TTL; one live lease per target)
@@ -6260,7 +6210,6 @@ mod surface_tests {
         "attest",
         "attest-statement",
         "carina",
-        "caveat",
         "check",
         "claim",
         "completions",
@@ -6268,7 +6217,6 @@ mod surface_tests {
         "diff",
         "doc",
         "doctor",
-        "entity",
         "events",
         "evidence-ci",
         "export",
@@ -6285,11 +6233,9 @@ mod surface_tests {
         "init",
         "integrity",
         "lean",
-        "link",
         "lock",
         "log",
         "normalize",
-        "note",
         "onboard",
         "preprint",
         "proof",
@@ -6304,13 +6250,10 @@ mod surface_tests {
         "recommend",
         "register-statement",
         "registry",
-        "reject",
         "reproduce",
-        "retract",
         "retro-impact",
         "review",
         "review-work",
-        "revise",
         "search",
         "serve",
         "sign",

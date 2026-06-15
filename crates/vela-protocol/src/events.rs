@@ -279,8 +279,6 @@ pub const KNOWN_EVENT_KINDS: &[&str] = &[
     "finding.span_repaired",
     "finding.entity_resolved",
     "finding.entity_added",
-    "finding.threshold_set",
-    "finding.threshold_met",
     "assertion.reinterpreted_causal",
     "source_text.reviewed",
     "negative_result.asserted",
@@ -1544,35 +1542,6 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
             };
             check_block("before")?;
             check_block("after")?;
-        }
-        // v0.37: multi-sig kernel events. `threshold_set` records the
-        // policy attached to a finding (k unique valid signatures
-        // required); `threshold_met` records the moment the k-th
-        // signature lands. Both are content-addressed under the same
-        // canonical-JSON discipline as every other event kind.
-        "finding.threshold_set" => {
-            let threshold = object
-                .get("threshold")
-                .and_then(Value::as_u64)
-                .ok_or("missing required positive integer 'threshold'")?;
-            if threshold == 0 {
-                return Err("threshold must be >= 1".to_string());
-            }
-        }
-        "finding.threshold_met" => {
-            let count = object
-                .get("signature_count")
-                .and_then(Value::as_u64)
-                .ok_or("missing required positive integer 'signature_count'")?;
-            let threshold = object
-                .get("threshold")
-                .and_then(Value::as_u64)
-                .ok_or("missing required positive integer 'threshold'")?;
-            if count < threshold {
-                return Err(format!(
-                    "signature_count {count} below threshold {threshold}"
-                ));
-            }
         }
         // v0.49: key revocation event. Carries the revoked Ed25519
         // pubkey (hex-encoded 64 chars), the ISO-8601 moment compromise

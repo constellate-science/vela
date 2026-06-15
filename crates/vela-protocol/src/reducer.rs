@@ -314,8 +314,6 @@ pub fn apply_event_indexed(
         // owner/maintainer keys; no projected-state mutation.
         "proposal.recommended"
         | "prediction.expired_unresolved"
-        | "finding.threshold_set"
-        | "finding.threshold_met"
         | "frontier.observation_reviewed"
         | "correction_return.review"
         | "research_trace.review"

@@ -131,6 +131,7 @@ fn cross_frontier_dep_and_link_survive_materialize_cycle() {
 
     // 4. add a cross-frontier link
     run_ok(&[
+        "finding",
         "link",
         "add",
         frontier_str,
@@ -213,6 +214,7 @@ fn cross_frontier_dep_and_link_survive_materialize_cycle() {
         .expect("second finding_id present")
         .to_string();
     run_ok(&[
+        "finding",
         "link",
         "add",
         frontier_str,

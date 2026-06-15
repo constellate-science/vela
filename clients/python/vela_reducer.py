@@ -761,8 +761,6 @@ def apply_event(state: dict, event: dict) -> None:
     # reducer.rs.
     elif kind in (
         "prediction.expired_unresolved",
-        "finding.threshold_set",
-        "finding.threshold_met",
         "frontier.observation_reviewed",
         "correction_return.review",
         "research_trace.review",
