@@ -86,6 +86,21 @@ fn leaves_from(evs: &[Value]) -> Result<Vec<Vec<u8>>, String> {
     Ok(leaves)
 }
 
+/// Fetch the hub's transparency-log public key from its discovery
+/// manifest (`/.well-known/vela` → `signature.pubkey`). This is a SEPARATE
+/// endpoint from `/log/sth`, so binding the STH against it is a genuine
+/// cross-check (it catches a hub that signs the STH with a key other than
+/// the one it advertises), not the self-referential "trust the key the STH
+/// names." Returns `None` when the hub runs unsigned or omits the field.
+fn fetch_well_known_pubkey(hub: &str) -> Option<String> {
+    let manifest = get_json(&format!("{hub}/.well-known/vela")).ok()?;
+    manifest
+        .get("signature")
+        .and_then(|s| s.get("pubkey"))
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+}
+
 fn run(
     vfr: &str,
     hub: &str,
@@ -94,6 +109,26 @@ fn run(
 ) -> Result<LogReport, String> {
     let hub = hub.trim_end_matches('/');
     let mut checks = Vec::new();
+
+    // 0. Key resolution: an explicit --pubkey pin always wins. Otherwise
+    //    auto-discover the hub's log key from /.well-known/vela so verify
+    //    "just works" without the user knowing which of several hub keys to
+    //    pin. Discovery is weaker than a truly out-of-band pin (both come
+    //    from the same hub) but far stronger than trusting the STH's own
+    //    self-named key, and it removes the #1 verify-time confusion.
+    let discovered = if pinned.is_none() {
+        fetch_well_known_pubkey(hub)
+    } else {
+        None
+    };
+    let key_source = if pinned.is_some() {
+        "pinned"
+    } else if discovered.is_some() {
+        "discovered"
+    } else {
+        "none"
+    };
+    let effective_pin: Option<&str> = pinned.or(discovered.as_deref());
 
     // 1. Signed tree head.
     let sth_resp = get_json(&format!("{hub}/entries/{vfr}/log/sth"))?;
@@ -117,15 +152,17 @@ fn run(
             .get("pubkey")
             .and_then(|v| v.as_str())
             .ok_or("signature missing pubkey")?;
-        if pinned.is_some_and(|p| p != adv) {
-            let p = pinned.unwrap();
+        if effective_pin.is_some_and(|p| p != adv) {
+            let p = effective_pin.unwrap();
             return Err(format!(
-                "pubkey mismatch: pinned {}… but STH advertises {}…",
+                "pubkey mismatch: {key_source} key {}… but STH advertises {}… \
+                 (the hub signed the tree head with a key other than the one it \
+                 publishes — do not trust this log)",
                 &p[..p.len().min(16)],
                 &adv[..adv.len().min(16)]
             ));
         }
-        let expected = pinned.unwrap_or(adv);
+        let expected = effective_pin.unwrap_or(adv);
         let vk = verifying_key(expected)?;
         let sig_hex = sig
             .get("value")
@@ -139,11 +176,16 @@ fn run(
         let canon = canonical::to_canonical_bytes(sth)?;
         vk.verify(&canon, &Signature::from_bytes(&sig_bytes))
             .map_err(|e| format!("STH signature INVALID: {e}"))?;
-        signature = if pinned.is_some() {
-            "verified (pinned pubkey)".to_string()
-        } else {
-            "verified, UNPINNED — corruption check only; pass --pubkey to bind authenticity"
-                .to_string()
+        signature = match key_source {
+            "pinned" => "verified (pinned pubkey)".to_string(),
+            "discovered" => format!(
+                "verified (key auto-discovered from {hub}/.well-known/vela: {}…); \
+                 pass --pubkey to pin out-of-band for maximum assurance",
+                &expected[..expected.len().min(16)]
+            ),
+            _ => "verified, UNPINNED — corruption check only; the hub runs unsigned \
+                  or omits its key, so this binds integrity, not authenticity"
+                .to_string(),
         };
         checks.push(format!("STH signature {signature}"));
     } else {

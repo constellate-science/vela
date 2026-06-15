@@ -279,12 +279,12 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
             caveats,
             json,
         } => {
-            // 1. Load the proposer's signing key; derive the pubkey header.
-            let key_hex = std::fs::read_to_string(&key)
-                .map(|s| s.trim().to_string())
-                .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
-            let signing_key = parse_signing_key(&key_hex);
+            // 1. Resolve identity: proposer key + actor + hub fall back to
+            //    the configured `vela id` profile when flags are omitted.
+            let signing_key = crate::cli_identity::resolve_signing_key(key.as_deref());
             let signer_pubkey = hex::encode(signing_key.verifying_key().to_bytes());
+            let actor = crate::cli_identity::resolve_actor(actor.as_deref());
+            let to = crate::cli_identity::resolve_hub(to.as_deref());
 
             // 2. Read the payload (file or `-` for stdin) and parse as JSON.
             let payload_str = if payload.as_os_str() == "-" {
@@ -581,11 +581,9 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
             limit,
             json,
         } => {
-            let key_hex = std::fs::read_to_string(&key)
-                .map(|s| s.trim().to_string())
-                .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
-            let signing_key = parse_signing_key(&key_hex);
+            let signing_key = crate::cli_identity::resolve_signing_key(key.as_deref());
             let signer_pubkey = hex::encode(signing_key.verifying_key().to_bytes());
+            let to = crate::cli_identity::resolve_hub(to.as_deref());
 
             let project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
             let vfr = project.frontier_id();
@@ -744,12 +742,10 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
             license,
             json,
         } => {
-            // Read and parse the private key first so we can derive
-            // the pubkey before we look at the actor registry.
-            let key_hex = std::fs::read_to_string(&key)
-                .map(|s| s.trim().to_string())
-                .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
-            let signing_key = parse_signing_key(&key_hex);
+            // Resolve identity: owner + key fall back to the configured
+            // `vela id` profile when the flags are omitted.
+            let owner = crate::cli_identity::resolve_actor(owner.as_deref());
+            let signing_key = crate::cli_identity::resolve_signing_key(key.as_deref());
             let derived = hex::encode(signing_key.verifying_key().to_bytes());
 
             // Load frontier and look up (or auto-register) the owner.

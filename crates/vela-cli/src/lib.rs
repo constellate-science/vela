@@ -16,6 +16,7 @@ mod cli_claim;
 mod cli_commands;
 mod cli_finding;
 mod cli_frontier;
+mod cli_identity;
 mod cli_lean;
 mod cli_log_verify;
 mod cli_registry;

@@ -304,6 +304,31 @@ pub(crate) enum Commands {
         #[command(subcommand)]
         action: SignAction,
     },
+    /// Your Vela identity: set up a key once, then publish/accept/propose
+    /// with no `--key`/`--actor`/`--hub` flags. `vela id create` is the
+    /// one-time onboarding step.
+    Id {
+        #[command(subcommand)]
+        action: IdAction,
+    },
+    /// Push a frontier's current state to the hub. The one verb to share
+    /// your work: owner, key, and hub come from your `vela id` profile, so
+    /// the common path is just `vela publish <frontier>`. A full,
+    /// idempotent publish (it replaces the hub's view), so it always
+    /// succeeds regardless of how the hub's log diverged. Power users who
+    /// want delta-only deposits can still use `vela registry append`.
+    Publish {
+        /// Path to the frontier (`.vela/` repo or frontier.json).
+        frontier: PathBuf,
+        /// Hub base URL. Optional: defaults to your configured identity's hub.
+        #[arg(long)]
+        to: Option<String>,
+        /// Optional SPDX license identifier for the registry entry.
+        #[arg(long)]
+        license: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
     /// Manage the frontier's registered actor identities (Phase M, v0.4)
     Actor {
         #[command(subcommand)]
@@ -847,14 +872,15 @@ pub(crate) enum Commands {
     Accept {
         frontier: PathBuf,
         proposal_id: String,
+        /// Reviewer actor id. Optional: defaults to your configured
+        /// identity (`vela id create`).
         #[arg(long)]
-        reviewer: String,
+        reviewer: Option<String>,
         #[arg(long)]
         reason: String,
-        /// Path to the reviewer's Ed25519 private key (hex seed). REQUIRED
-        /// when the reviewer is registered with a public key: key custody,
-        /// not the typed name, is the accept authority, and the accept
-        /// event is signed with this key.
+        /// Path to the reviewer's Ed25519 private key (hex seed). Optional:
+        /// defaults to your configured identity's key. Key custody, not the
+        /// typed name, is the accept authority; the event is signed with it.
         #[arg(long)]
         key: Option<PathBuf>,
         /// Engine strict mode: also block when the acceptance introduces
@@ -1192,6 +1218,56 @@ pub(crate) enum PacketAction {
     /// Validate a proof packet
     Validate {
         path: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum IdAction {
+    /// One-time setup: generate a key, store it, and remember your actor id
+    /// and default hub. After this, `vela publish` / `vela accept` /
+    /// `vela propose` need no `--key`/`--actor`/`--hub` flags.
+    Create {
+        /// Your handle, e.g. `alice`. Becomes `reviewer:alice` (or
+        /// `agent:alice` with --agent). Defaults to `$USER`.
+        #[arg(long)]
+        handle: Option<String>,
+        /// Register as an agent identity (`agent:<handle>`) instead of a
+        /// human reviewer.
+        #[arg(long)]
+        agent: bool,
+        /// Default hub base URL for publish/propose/verify.
+        #[arg(long)]
+        hub: Option<String>,
+        /// Overwrite an existing identity.
+        #[arg(long)]
+        force: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show the current identity (actor id, public key, key path, hub).
+    /// Aliased as `vela whoami`.
+    #[command(alias = "whoami")]
+    Show {
+        #[arg(long)]
+        json: bool,
+    },
+    /// Adopt an existing private key as your identity (e.g. one a
+    /// teammate generated, or a key you already use elsewhere).
+    Import {
+        /// Path to the existing Ed25519 private key (hex seed).
+        #[arg(long)]
+        key: PathBuf,
+        /// Your handle, e.g. `alice`. Defaults to `$USER`.
+        #[arg(long)]
+        handle: Option<String>,
+        #[arg(long)]
+        agent: bool,
+        #[arg(long)]
+        hub: Option<String>,
+        #[arg(long)]
+        force: bool,
         #[arg(long)]
         json: bool,
     },
@@ -2896,12 +2972,14 @@ pub(crate) enum RegistryAction {
     Publish {
         /// Path to the frontier file
         frontier: PathBuf,
-        /// Stable owner actor id (must be registered in the frontier)
+        /// Stable owner actor id (must be registered in the frontier).
+        /// Optional: defaults to your configured identity.
         #[arg(long)]
-        owner: String,
-        /// Path to the owner's Ed25519 private key (hex-encoded)
+        owner: Option<String>,
+        /// Path to the owner's Ed25519 private key. Optional: defaults to
+        /// your configured identity's key.
         #[arg(long)]
-        key: PathBuf,
+        key: Option<PathBuf>,
         /// Network locator under which the frontier is reachable
         /// (file:// path or HTTP URL the publisher serves). Optional
         /// since v0.55: when publishing to an HTTP hub, the hub's own
@@ -2931,12 +3009,13 @@ pub(crate) enum RegistryAction {
     Append {
         /// Path to the local frontier (`.vela/` repo or frontier.json).
         frontier: PathBuf,
-        /// Hub base URL (e.g. https://vela-hub.fly.dev).
+        /// Hub base URL. Optional: defaults to your configured identity's hub.
         #[arg(long)]
-        to: String,
-        /// Path to the owner's Ed25519 private key (hex-encoded).
+        to: Option<String>,
+        /// Path to the owner's Ed25519 private key. Optional: defaults to
+        /// your configured identity's key.
         #[arg(long)]
-        key: PathBuf,
+        key: Option<PathBuf>,
         /// Cap the number of new records pushed this run (0 = all).
         #[arg(long, default_value_t = 0)]
         limit: usize,
@@ -2960,15 +3039,16 @@ pub(crate) enum RegistryAction {
     Propose {
         /// Frontier address (`vfr_…`) to propose into.
         vfr_id: String,
-        /// Hub base URL.
-        #[arg(long, default_value = "https://vela-hub.fly.dev")]
-        to: String,
-        /// Path to the proposer's Ed25519 private key (hex-encoded).
+        /// Hub base URL. Optional: defaults to your configured identity's hub.
         #[arg(long)]
-        key: PathBuf,
-        /// Proposer actor id (e.g. `reviewer:alice` or `agent:my-bot`).
+        to: Option<String>,
+        /// Path to the proposer's Ed25519 private key. Optional: defaults to
+        /// your configured identity's key.
         #[arg(long)]
-        actor: String,
+        key: Option<PathBuf>,
+        /// Proposer actor id. Optional: defaults to your configured identity.
+        #[arg(long)]
+        actor: Option<String>,
         /// Actor type: `human` or `agent`.
         #[arg(long, default_value = "human")]
         actor_type: String,
@@ -3643,12 +3723,13 @@ pub(crate) enum ProposalAction {
     Accept {
         frontier: PathBuf,
         proposal_id: String,
+        /// Reviewer actor id. Optional: defaults to your configured identity.
         #[arg(long)]
-        reviewer: String,
+        reviewer: Option<String>,
         #[arg(long)]
         reason: String,
-        /// Path to the reviewer's Ed25519 private key (hex seed). REQUIRED
-        /// when the reviewer is registered with a public key.
+        /// Path to the reviewer's Ed25519 private key. Optional: defaults to
+        /// your configured identity's key.
         #[arg(long)]
         key: Option<PathBuf>,
         #[arg(long)]
@@ -3658,14 +3739,14 @@ pub(crate) enum ProposalAction {
     Reject {
         frontier: PathBuf,
         proposal_id: String,
+        /// Reviewer actor id. Optional: defaults to your configured identity.
         #[arg(long)]
-        reviewer: String,
+        reviewer: Option<String>,
         #[arg(long)]
         reason: String,
-        /// Path to the reviewer's Ed25519 private key (hex seed). REQUIRED
-        /// when the reviewer is registered with a public key: a reject is
-        /// now a signed, append-only event, so key custody is the reject
-        /// authority just as it is for accept.
+        /// Path to the reviewer's Ed25519 private key. Optional: defaults to
+        /// your configured identity's key. A reject is a signed, append-only
+        /// event, so key custody is its authority just as for accept.
         #[arg(long)]
         key: Option<PathBuf>,
         #[arg(long)]

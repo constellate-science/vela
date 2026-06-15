@@ -706,6 +706,27 @@ pub async fn run_command() {
         Commands::Reproduce { path, json } => cmd_reproduce(&path, json),
         Commands::Version => println!("vela {}", env!("CARGO_PKG_VERSION")),
         Commands::Sign { action } => cmd_sign(action),
+        Commands::Id { action } => cmd_id(action),
+        Commands::Publish {
+            frontier,
+            to,
+            license,
+            json,
+        } => {
+            // The friendly "share my work" verb: a full publish to the
+            // identity hub, with owner+key resolved from the profile inside
+            // the registry handler. Full (not delta) so it always succeeds.
+            let hub = crate::cli_identity::resolve_hub(to.as_deref());
+            cmd_registry(RegistryAction::Publish {
+                frontier,
+                owner: None,
+                key: None,
+                locator: None,
+                to: Some(hub),
+                license,
+                json,
+            });
+        }
         Commands::Actor { action } => cmd_actor(action),
         Commands::Frontier { action } => cmd_frontier(action),
         Commands::Queue { action } => cmd_queue(action),
@@ -1377,11 +1398,8 @@ pub async fn run_command() {
             force,
             json,
         } => {
-            let signing_key = key.map(|p| {
-                let hex_seed = std::fs::read_to_string(&p)
-                    .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", p.display())));
-                parse_signing_key(hex_seed.trim())
-            });
+            let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
+            let signing_key = crate::cli_identity::resolve_signing_key_opt(key.as_deref());
             // The Engine runs Evidence CI on the post-accept state and gates
             // the acceptance on the regression it would introduce.
             let outcome = proposals::accept_at_path_engine(
@@ -4173,11 +4191,8 @@ fn cmd_proposals(action: ProposalAction) {
             key,
             json,
         } => {
-            let signing_key = key.map(|p| {
-                let hex_seed = std::fs::read_to_string(&p)
-                    .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", p.display())));
-                parse_signing_key(hex_seed.trim())
-            });
+            let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
+            let signing_key = crate::cli_identity::resolve_signing_key_opt(key.as_deref());
             let event_id = proposals::accept_at_path_signed(
                 &frontier,
                 &proposal_id,
@@ -4213,11 +4228,8 @@ fn cmd_proposals(action: ProposalAction) {
             key,
             json,
         } => {
-            let signing_key = key.map(|p| {
-                let hex_seed = std::fs::read_to_string(&p)
-                    .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", p.display())));
-                parse_signing_key(hex_seed.trim())
-            });
+            let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
+            let signing_key = crate::cli_identity::resolve_signing_key_opt(key.as_deref());
             proposals::reject_at_path_signed(
                 &frontier,
                 &proposal_id,
@@ -4305,6 +4317,143 @@ fn cmd_artifact_to_state(
             report.pending_truth_proposals
         );
     }
+}
+
+fn cmd_id(action: IdAction) {
+    use crate::cli_identity::{
+        DEFAULT_HUB, Identity, identity_path, load_identity, save_identity, vela_home,
+    };
+    match action {
+        IdAction::Create {
+            handle,
+            agent,
+            hub,
+            force,
+            json,
+        } => {
+            if load_identity().is_some() && !force {
+                fail(&format!(
+                    "an identity already exists ({}). Run `vela id show`, or pass --force to overwrite.",
+                    identity_path().display()
+                ));
+            }
+            let handle = handle
+                .or_else(|| std::env::var("USER").ok())
+                .map(|h| h.trim().to_string())
+                .filter(|h| !h.is_empty())
+                .unwrap_or_else(|| "anon".to_string());
+            let actor_type = if agent { "agent" } else { "human" };
+            let actor_id = format!("{}:{}", if agent { "agent" } else { "reviewer" }, handle);
+            let key_dir = vela_home().join("keys").join(&handle);
+            let pubkey = sign::generate_keypair(&key_dir).unwrap_or_else(|e| fail_return(&e));
+            let key_path = key_dir.join("private.key");
+            let hub_url = hub.unwrap_or_else(|| DEFAULT_HUB.to_string());
+            let identity = Identity {
+                version: "1.0".to_string(),
+                actor_id: actor_id.clone(),
+                actor_type: actor_type.to_string(),
+                key_path: key_path.display().to_string(),
+                pubkey: pubkey.clone(),
+                hub_url: hub_url.clone(),
+            };
+            save_identity(&identity).unwrap_or_else(|e| fail_return(&e));
+            print_identity_created(&identity, json);
+        }
+        IdAction::Import {
+            key,
+            handle,
+            agent,
+            hub,
+            force,
+            json,
+        } => {
+            if load_identity().is_some() && !force {
+                fail(&format!(
+                    "an identity already exists ({}). Run `vela id show`, or pass --force to overwrite.",
+                    identity_path().display()
+                ));
+            }
+            let hex = std::fs::read_to_string(&key)
+                .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
+            let signing = parse_signing_key(hex.trim());
+            let pubkey = hex::encode(signing.verifying_key().to_bytes());
+            let handle = handle
+                .or_else(|| std::env::var("USER").ok())
+                .map(|h| h.trim().to_string())
+                .filter(|h| !h.is_empty())
+                .unwrap_or_else(|| "anon".to_string());
+            let actor_id = format!("{}:{}", if agent { "agent" } else { "reviewer" }, handle);
+            let identity = Identity {
+                version: "1.0".to_string(),
+                actor_id: actor_id.clone(),
+                actor_type: if agent { "agent" } else { "human" }.to_string(),
+                key_path: key.display().to_string(),
+                pubkey: pubkey.clone(),
+                hub_url: hub.unwrap_or_else(|| DEFAULT_HUB.to_string()),
+            };
+            save_identity(&identity).unwrap_or_else(|e| fail_return(&e));
+            print_identity_created(&identity, json);
+        }
+        IdAction::Show { json } => {
+            let Some(identity) = load_identity() else {
+                if json {
+                    print_json(&json!({"ok": false, "configured": false}));
+                } else {
+                    println!(
+                        "{} no identity configured — run `vela id create --handle <your-name>`",
+                        style::warn("none")
+                    );
+                }
+                return;
+            };
+            if json {
+                print_json(&json!({
+                    "ok": true,
+                    "configured": true,
+                    "actor_id": identity.actor_id,
+                    "actor_type": identity.actor_type,
+                    "pubkey": identity.pubkey,
+                    "key_path": identity.key_path,
+                    "hub_url": identity.hub_url,
+                }));
+            } else {
+                println!("{}", style::ok("identity"));
+                println!("  actor:  {}", identity.actor_id);
+                println!("  pubkey: {}", identity.pubkey);
+                println!("  key:    {}", identity.key_path);
+                println!("  hub:    {}", identity.hub_url);
+            }
+        }
+    }
+}
+
+/// Shared success print for `vela id create` / `vela id import`: shows the
+/// identity and the single line a maintainer runs to register it, so the
+/// onboarding handoff is one copy-paste.
+fn print_identity_created(identity: &crate::cli_identity::Identity, json: bool) {
+    if json {
+        print_json(&json!({
+            "ok": true,
+            "command": "id.create",
+            "actor_id": identity.actor_id,
+            "actor_type": identity.actor_type,
+            "pubkey": identity.pubkey,
+            "key_path": identity.key_path,
+            "hub_url": identity.hub_url,
+        }));
+        return;
+    }
+    println!("{} identity · {}", style::ok("ready"), identity.actor_id);
+    println!("  public key: {}", identity.pubkey);
+    println!("  key file:   {}", identity.key_path);
+    println!("  hub:        {}", identity.hub_url);
+    println!();
+    println!("Next: a maintainer registers you on a frontier with");
+    println!(
+        "  vela actor add <frontier> {} --pubkey {}",
+        identity.actor_id, identity.pubkey
+    );
+    println!("Then `vela publish`, `vela propose`, and `vela accept` need no key flags.");
 }
 
 fn cmd_sign(action: SignAction) {
@@ -8714,6 +8863,7 @@ const SCIENCE_SUBCOMMANDS: &[&str] = &[
     "gate",
     "history",
     "hub",
+    "id",
     "import",
     "import-events",
     "inbox",
@@ -8734,6 +8884,7 @@ const SCIENCE_SUBCOMMANDS: &[&str] = &[
     "proof-verify-attestation",
     "proposals",
     "propose",
+    "publish",
     "queue",
     "quickstart",
     "recommend",
@@ -8930,6 +9081,9 @@ fn print_session_help() {
     println!("    vela <command>    Run a specific subcommand");
     println!("    vela help advanced   Full subcommand list (30+ commands)");
     println!();
+    println!("  SETUP (once)");
+    println!("    id create         Generate your key + identity; then no --key/--actor/--hub flags");
+    println!();
     println!("  CORE FLOW");
     println!("    init              Initialize a split frontier repo");
     println!("    ingest <path>     Ingest a paper, dataset, or Carina packet");
@@ -8954,7 +9108,8 @@ fn print_session_help() {
     println!("    claim state <vf>                   Claim-State Cell (Belnap status, deps)");
     println!();
     println!("  PUBLISH");
-    println!("    registry publish                   Push a signed manifest to the hub");
+    println!("    publish <frontier>                 Push your frontier to the hub (one verb, no flags)");
+    println!("    registry verify-log <vfr>          Independently verify a hub's transparency log");
     println!();
     println!("  In session, type a single letter for a quick verb, or any");
     println!("  question in plain text. `q` or `exit` quits.");
