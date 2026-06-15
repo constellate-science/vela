@@ -476,6 +476,29 @@ pub fn all_tools() -> Vec<ToolDefinition> {
             true,
             vec!["Trajectories are unsigned — they document a search path, not a truth claim."],
         ),
+        // An autonomous agent submits a SIGNED StateProposal to a remote hub.
+        // Proposes only: the hub forces pending_review and a human reviewer
+        // must accept through the strict gate (an AI never signs an accept).
+        tool(
+            "vela_agent_propose_to_hub",
+            "Submit a signed StateProposal to a remote Vela hub over MCP. The agent signs with VELA_AGENT_KEY_HEX (the same canonical bytes the hub verifies) and POSTs to {hub}/entries/{vfr}/proposals. The proposal is authored by the agent's `agent:*` id and lands as pending_review; a human reviewer must accept it through the strict gate before it changes state. Proposes only — never accepts.",
+            json!({"type": "object", "properties": {
+                "hub": {"type": "string", "description": "Hub base URL (or set VELA_HUB env), e.g. https://vela-hub.fly.dev"},
+                "vfr": {"type": "string", "description": "The vfr_ frontier id on the hub."},
+                "kind": {"type": "string", "description": "Proposal kind, e.g. finding.note, finding.caveat, finding.confidence_revise, finding.retract."},
+                "target": {"type": "string", "description": "The vf_ finding id this change targets."},
+                "reason": {"type": "string", "description": "Why this change — the reviewer reads this."},
+                "actor": {"type": "string", "description": "The proposing actor id; must start with `agent:`. Defaults to agent:mcp."},
+                "payload": {"description": "Kind-specific payload, e.g. {\"text\": \"…\"} for note/caveat, {\"confidence\": 0.5} for confidence_revise, {} for retract."}
+            }, "required": ["vfr", "kind", "target", "reason"]}),
+            PermissionLevel::Write,
+            true,
+            vec![
+                "Refuses to operate without VELA_AGENT_KEY_HEX set; no silent unsigned submissions.",
+                "Proposes only — the hub forces pending_review; a human reviewer accepts through the strict gate. An AI never signs an accept.",
+                "A proposal self-signature binds authorship only; it confers no authority.",
+            ],
+        ),
         // v0.214: read-side tools. None require a signing key. They
         // give a multi-turn LLM session a way to inspect prior
         // context before composing a submission.
