@@ -1,49 +1,15 @@
-#![allow(unused_imports)]
 use crate::cli::{
-    collect_witness_files, default_registry_path, fail, fail_return, load_frontier_or_fail,
-    parse_signing_key, parse_witness, print_json, print_signal_summary,
+    fail, fail_return,
+    parse_signing_key, print_json,
 };
-use crate::cli::{fmt_timestamp, frontier_label, print_identity_created};
+use crate::cli::print_identity_created;
 use crate::cli_commands::*;
-use crate::cli_identity::{
-    DEFAULT_HUB, Identity, identity_path, load_identity, save_identity, vela_home,
-};
-use crate::serve;
-use clap::Parser;
 use colored::Colorize;
-use serde::Serialize;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
-use std::path::{Path, PathBuf};
-use vela_edge::benchmark;
-use vela_edge::carina_validate;
-use vela_edge::conformance;
-use vela_edge::doctor;
-use vela_edge::export;
-use vela_edge::frontier_health;
-use vela_edge::frontier_task;
-use vela_edge::lint;
-use vela_edge::normalize;
-use vela_edge::packet;
-use vela_edge::review;
-use vela_edge::reviewer_identity;
-use vela_edge::search;
-use vela_edge::signals;
-use vela_edge::state_integrity;
-use vela_edge::tensions;
-use vela_edge::validate;
-use vela_protocol::bundle;
+use std::path::PathBuf;
 use vela_protocol::cli_style as style;
-use vela_protocol::diff;
-use vela_protocol::events;
-use vela_protocol::evidence_ci;
-use vela_protocol::frontier_repo;
-use vela_protocol::project;
-use vela_protocol::proposals;
 use vela_protocol::repo;
 use vela_protocol::sign;
-use vela_protocol::sources;
-use vela_protocol::state;
 
 pub(crate) fn cmd_id(action: IdAction) {
     use crate::cli_identity::{
