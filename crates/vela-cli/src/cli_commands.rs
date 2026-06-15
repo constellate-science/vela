@@ -944,12 +944,14 @@ pub(crate) enum Commands {
         /// The reasoning: what was compared, what diverges. Required.
         #[arg(long)]
         note: String,
-        /// The attesting reviewer (must be reviewer:…).
+        /// The attesting reviewer (must be reviewer:…). Optional: defaults
+        /// to your configured identity (`vela id`).
         #[arg(long)]
-        by: String,
-        /// Path to the reviewer's Ed25519 private key (hex seed). Required.
+        by: Option<String>,
+        /// Path to the reviewer's Ed25519 private key. Optional: defaults to
+        /// your configured identity's key.
         #[arg(long)]
-        key: PathBuf,
+        key: Option<PathBuf>,
         #[arg(long)]
         json: bool,
     },
@@ -991,10 +993,12 @@ pub(crate) enum Commands {
     Recommend {
         frontier: PathBuf,
         proposal_id: String,
+        /// Recommending reviewer. Optional: defaults to your identity.
         #[arg(long)]
-        by: String,
+        by: Option<String>,
+        /// Reviewer key. Optional: defaults to your identity's key.
         #[arg(long)]
-        key: PathBuf,
+        key: Option<PathBuf>,
         #[arg(long)]
         reason: String,
         #[arg(long)]
@@ -1021,12 +1025,14 @@ pub(crate) enum Commands {
         obligation: String,
         #[arg(long, default_value_t = 86400)]
         ttl: u64,
-        /// Claiming actor (agent:… or reviewer:…).
+        /// Claiming actor (agent:… or reviewer:…). Optional: defaults to
+        /// your configured identity (`vela id`).
         #[arg(long)]
-        by: String,
-        /// Path to the claimant's Ed25519 private key (hex seed).
+        by: Option<String>,
+        /// Path to the claimant's Ed25519 private key. Optional: defaults to
+        /// your configured identity's key.
         #[arg(long)]
-        key: PathBuf,
+        key: Option<PathBuf>,
         #[arg(long)]
         json: bool,
     },
@@ -1052,10 +1058,12 @@ pub(crate) enum Commands {
         /// of the digest/informal_ref heuristic when present.
         #[arg(long)]
         finding: Option<String>,
+        /// Recording actor. Optional: defaults to your configured identity.
         #[arg(long)]
-        by: String,
+        by: Option<String>,
+        /// Actor key. Optional: defaults to your configured identity's key.
         #[arg(long)]
-        key: PathBuf,
+        key: Option<PathBuf>,
         #[arg(long)]
         json: bool,
     },
@@ -1852,9 +1860,10 @@ pub(crate) enum LeanAction {
         /// the substrate.
         #[arg(long)]
         build_log: PathBuf,
-        /// Path to a 32-byte hex-encoded Ed25519 private key.
+        /// Path to the Ed25519 private key. Optional: defaults to your
+        /// configured identity's key (`vela id`).
         #[arg(long)]
-        key: PathBuf,
+        key: Option<PathBuf>,
         /// Free-form verifier identity (e.g. github-action URL).
         #[arg(long)]
         actor: String,
@@ -1955,9 +1964,10 @@ pub(crate) enum TransferAction {
     Mint {
         /// Path to the draft JSON.
         draft: PathBuf,
-        /// Path to the Ed25519 signing key (64 hex chars).
+        /// Path to the Ed25519 signing key. Optional: defaults to your
+        /// configured identity's key (`vela id`).
         #[arg(long)]
-        key: PathBuf,
+        key: Option<PathBuf>,
         /// Where to write the signed `vtr_` record.
         #[arg(long)]
         out: PathBuf,
@@ -2870,12 +2880,14 @@ pub(crate) enum QueueAction {
     /// Sign each queued draft with the actor's Ed25519 key and apply
     /// it locally. Removes signed entries from the queue on success.
     Sign {
-        /// Stable actor id matching a registered entry in the frontier
+        /// Stable actor id matching a registered entry in the frontier.
+        /// Optional: defaults to your configured identity (`vela id`).
         #[arg(long)]
-        actor: String,
-        /// Path to the actor's Ed25519 private key (hex-encoded)
+        actor: Option<String>,
+        /// Path to the actor's Ed25519 private key. Optional: defaults to
+        /// your configured identity's key.
         #[arg(long)]
-        key: PathBuf,
+        key: Option<PathBuf>,
         /// Override the queue file location
         #[arg(long)]
         queue_file: Option<PathBuf>,
@@ -2911,9 +2923,10 @@ pub(crate) enum RegistryAction {
         /// Hub base URL (e.g. https://vela-hub.fly.dev)
         #[arg(long)]
         to: String,
-        /// Path to the owner's Ed25519 private key (hex seed)
+        /// Path to the owner's Ed25519 private key. Optional: defaults to
+        /// your configured identity's key (`vela id`).
         #[arg(long)]
-        key: PathBuf,
+        key: Option<PathBuf>,
         /// Why this frontier is retired (recorded in the signed receipt)
         #[arg(long)]
         reason: String,
@@ -2929,9 +2942,10 @@ pub(crate) enum RegistryAction {
         /// Hub base URL
         #[arg(long)]
         to: String,
-        /// Path to the CURRENT owner's Ed25519 private key (hex seed)
+        /// Path to the CURRENT owner's Ed25519 private key. Optional:
+        /// defaults to your configured identity's key (`vela id`).
         #[arg(long)]
-        key: PathBuf,
+        key: Option<PathBuf>,
         /// Path to the successor PUBLIC key (hex), or the 64-char hex itself
         #[arg(long)]
         new_owner: String,

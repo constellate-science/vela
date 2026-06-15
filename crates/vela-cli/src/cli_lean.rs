@@ -173,14 +173,7 @@ pub(crate) fn cmd_lean(action: LeanAction) {
                 DEFAULT_ALLOWED_AXIOMS, FORBIDDEN_AXIOMS, TcbDraft, TcbPolicy,
             };
 
-            let key_hex = std::fs::read_to_string(&key)
-                .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
-            let key_bytes = hex::decode(key_hex.trim())
-                .unwrap_or_else(|e| fail_return(&format!("decode key hex: {e}")));
-            let key_arr: [u8; 32] = key_bytes
-                .try_into()
-                .unwrap_or_else(|_| fail_return("signing key must be 32 bytes"));
-            let signing = ed25519_dalek::SigningKey::from_bytes(&key_arr);
+            let signing = crate::cli_identity::resolve_signing_key(key.as_deref());
 
             let log_bytes = std::fs::read(&build_log).unwrap_or_else(|e| {
                 fail_return(&format!("read build log {}: {e}", build_log.display()))
@@ -697,14 +690,7 @@ pub(crate) fn cmd_transfer(action: TransferAction) {
                 .unwrap_or_else(|e| fail_return(&format!("read draft {}: {e}", draft.display())));
             let d: TransferDraft = serde_json::from_str(&body)
                 .unwrap_or_else(|e| fail_return(&format!("parse draft {}: {e}", draft.display())));
-            let key_hex = std::fs::read_to_string(&key)
-                .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
-            let key_bytes = hex::decode(key_hex.trim())
-                .unwrap_or_else(|e| fail_return(&format!("decode key hex: {e}")));
-            let key_arr: [u8; 32] = key_bytes
-                .try_into()
-                .unwrap_or_else(|_| fail_return("signing key must be 32 bytes"));
-            let signing = ed25519_dalek::SigningKey::from_bytes(&key_arr);
+            let signing = crate::cli_identity::resolve_signing_key(key.as_deref());
             let t = Transfer::build(d, &signing)
                 .unwrap_or_else(|e| fail_return(&format!("build transfer: {e}")));
             let json_out = serde_json::to_string_pretty(&t).unwrap_or_default();

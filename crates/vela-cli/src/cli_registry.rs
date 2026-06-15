@@ -78,11 +78,10 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
             if !matches!(action.as_str(), "add" | "remove") {
                 fail("action must be add|remove|list");
             }
-            let key_path = key.unwrap_or_else(|| fail_return("--key required for add/remove"));
-            let key_hex = std::fs::read_to_string(&key_path)
-                .map(|s| s.trim().to_string())
-                .unwrap_or_else(|e| fail_return(&format!("read key: {e}")));
-            let signing_key = parse_signing_key(&key_hex);
+            let signing_key = crate::cli_identity::resolve_signing_key_opt(key.as_deref())
+                .unwrap_or_else(|| {
+                    fail_return("add/remove needs a key — pass --key or run `vela id create`")
+                });
             let m = maintainer.unwrap_or_else(|| fail_return("--maintainer required"));
             let maintainer_pubkey = if std::path::Path::new(&m).exists() {
                 std::fs::read_to_string(&m)
@@ -143,10 +142,7 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
             reason,
             json,
         } => {
-            let key_hex = std::fs::read_to_string(&key)
-                .map(|s| s.trim().to_string())
-                .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
-            let signing_key = parse_signing_key(&key_hex);
+            let signing_key = crate::cli_identity::resolve_signing_key(key.as_deref());
             let signer_pubkey = hex::encode(signing_key.verifying_key().to_bytes());
             let new_owner_pubkey = if std::path::Path::new(&new_owner).exists() {
                 std::fs::read_to_string(&new_owner)
@@ -212,10 +208,7 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
             reason,
             json,
         } => {
-            let key_hex = std::fs::read_to_string(&key)
-                .map(|s| s.trim().to_string())
-                .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
-            let signing_key = parse_signing_key(&key_hex);
+            let signing_key = crate::cli_identity::resolve_signing_key(key.as_deref());
             let signer_pubkey = hex::encode(signing_key.verifying_key().to_bytes());
             let mut rec = vela_protocol::registry::DeprecationRecord {
                 schema: vela_protocol::registry::DEPRECATION_SCHEMA.to_string(),

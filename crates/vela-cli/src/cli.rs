@@ -397,10 +397,8 @@ pub async fn run_command() {
             reason,
             json,
         } => {
-            let key_hex = std::fs::read_to_string(&key)
-                .map(|s| s.trim().to_string())
-                .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
-            let signing_key = parse_signing_key(&key_hex);
+            let by = crate::cli_identity::resolve_actor(by.as_deref());
+            let signing_key = crate::cli_identity::resolve_signing_key(key.as_deref());
             let mut project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
             if !project.proposals.iter().any(|p| p.id == proposal_id) {
                 fail(&format!(
@@ -460,10 +458,8 @@ pub async fn run_command() {
             key,
             json,
         } => {
-            let key_hex = std::fs::read_to_string(&key)
-                .map(|s| s.trim().to_string())
-                .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
-            let signing_key = parse_signing_key(&key_hex);
+            let by = crate::cli_identity::resolve_actor(by.as_deref());
+            let signing_key = crate::cli_identity::resolve_signing_key(key.as_deref());
             let pubkey = hex::encode(signing_key.verifying_key().to_bytes());
             let mut project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
             if !project.findings.iter().any(|f| f.id == obligation) {
@@ -520,10 +516,8 @@ pub async fn run_command() {
             key,
             json,
         } => {
-            let key_hex = std::fs::read_to_string(&key)
-                .map(|s| s.trim().to_string())
-                .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
-            let signing_key = parse_signing_key(&key_hex);
+            let by = crate::cli_identity::resolve_actor(by.as_deref());
+            let signing_key = crate::cli_identity::resolve_signing_key(key.as_deref());
             let statement_hash = match (&statement_file, &hash) {
                 (Some(p), _) => {
                     use sha2::Digest;
@@ -609,10 +603,8 @@ pub async fn run_command() {
             use vela_protocol::statement_attestation::{
                 AttestationDraft, FaithfulnessVerdict, StatementAttestation,
             };
-            let key_hex = std::fs::read_to_string(&key)
-                .map(|s| s.trim().to_string())
-                .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
-            let signing_key = parse_signing_key(&key_hex);
+            let by = crate::cli_identity::resolve_actor(by.as_deref());
+            let signing_key = crate::cli_identity::resolve_signing_key(key.as_deref());
             let fh = match (&formal_file, &formal_hash) {
                 (Some(p), _) => {
                     use sha2::Digest;
@@ -4849,10 +4841,8 @@ fn cmd_queue(action: QueueAction) {
                 }
                 return;
             }
-            let key_hex = std::fs::read_to_string(&key)
-                .map(|s| s.trim().to_string())
-                .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));
-            let signing_key = parse_signing_key(&key_hex);
+            let actor = crate::cli_identity::resolve_actor(actor.as_deref());
+            let signing_key = crate::cli_identity::resolve_signing_key(key.as_deref());
             let mut signed_count = 0usize;
             let mut remaining = Vec::new();
             for action in q.actions.iter() {
@@ -6249,6 +6239,11 @@ fn cmd_proof_attest_verification(
 ) {
     use vela_protocol::proof_verification::{ProofVerification, VerificationDraft};
 
+    // Identity-resolution EXEMPTION (B2): `--key` stays mandatory here by
+    // design. This records a THIRD-PARTY external verifier's signed output
+    // (e.g. a CI Action's own key), which is deliberately NOT the operator's
+    // `vela id` identity — defaulting it to the local profile would
+    // mis-attribute the attestation. Keep the explicit key read.
     let key_hex = std::fs::read_to_string(&key)
         .map(|s| s.trim().to_string())
         .unwrap_or_else(|e| fail_return(&format!("read key: {e}")));
@@ -8834,88 +8829,59 @@ pub struct ProofTrace {
 // `claim state|trust|pack`). This list is the allowlist `run_from_args`
 // consults before handing off to clap; it must advertise nothing the
 // binary cannot run.
-const SCIENCE_SUBCOMMANDS: &[&str] = &[
-    "accept",
-    "accept-batch",
-    "actor",
-    "agent",
-    "artifact-to-state",
-    "ask",
-    "attach",
-    "attempt",
-    "attest",
-    "attest-statement",
-    "carina",
-    "caveat",
-    "check",
-    "claim",
-    "completions",
-    "conformance",
-    "diff",
-    "doc",
-    "doctor",
-    "entity",
-    "events",
-    "evidence-ci",
-    "export",
-    "finding",
-    "frontier",
-    "gate",
-    "history",
-    "hub",
-    "id",
-    "import",
-    "import-events",
-    "inbox",
-    "ingest",
-    "init",
-    "integrity",
-    "lean",
-    "link",
-    "lock",
-    "log",
-    "normalize",
-    "note",
-    "onboard",
-    "preprint",
-    "proof",
-    "proof-add",
-    "proof-attest-verification",
-    "proof-verify-attestation",
-    "proposals",
-    "propose",
-    "publish",
-    "queue",
-    "quickstart",
-    "recommend",
-    "register-statement",
-    "registry",
-    "reject",
-    "reproduce",
-    "retract",
-    "retro-impact",
-    "review",
-    "review-work",
-    "revise",
-    "search",
-    "serve",
-    "sign",
-    "stash",
-    "stats",
-    "status",
-    "task",
-    "tensions",
-    "transfer",
-    "verify",
-    "version",
-];
+/// Commands intentionally withheld from the released surface. A DENY list,
+/// not an ALLOW list: hiding a command here is safe (the worst case is a
+/// real command stays unreachable until removed from the list), whereas the
+/// old hand-maintained allowlist had the opposite, dangerous failure mode —
+/// a NEW command silently 404'd ("unknown or non-release command") until
+/// someone remembered to add its string. Empty today.
+const RELEASE_DENY: &[&str] = &[];
+
+/// Whether `name` is a released top-level command the dispatcher will hand
+/// to clap. Derived from the clap command tree (`Cli::command()`), not a
+/// hand-maintained list, so a newly-added subcommand — or any of its
+/// aliases — is accepted the instant it exists. `surface.rs`'s unit tests
+/// pin this to the enum so the derivation can never silently drop a
+/// command. (Pre-clap intercepts like `claim state` / `proof verify` are
+/// matched in `run_from_args` before this gate, so they need no entry.)
+/// The released top-level command names + aliases, derived once from the
+/// clap tree and memoized. Building the full command tree is not free, so
+/// caching keeps `is_science_subcommand` O(1) per dispatch instead of
+/// rebuilding ~226 nodes every call.
+fn released_command_names() -> &'static std::collections::HashSet<String> {
+    use std::sync::OnceLock;
+    static NAMES: OnceLock<std::collections::HashSet<String>> = OnceLock::new();
+    NAMES.get_or_init(|| {
+        use clap::CommandFactory;
+        let mut set = std::collections::HashSet::new();
+        for c in Cli::command().get_subcommands() {
+            set.insert(c.get_name().to_string());
+            for a in c.get_all_aliases() {
+                set.insert(a.to_string());
+            }
+        }
+        set
+    })
+}
 
 pub fn is_science_subcommand(name: &str) -> bool {
-    SCIENCE_SUBCOMMANDS.contains(&name)
+    if RELEASE_DENY.contains(&name) {
+        return false;
+    }
+    released_command_names().contains(name)
 }
 
 fn print_strict_help() {
-    println!(
+    print!("{}", strict_help_text());
+}
+
+/// The curated, grouped command reference (`vela help advanced`). Kept
+/// hand-curated for legibility — clap's flat alphabetical dump is worse UX —
+/// but `mod surface_tests` asserts every released subcommand appears here,
+/// so it can never silently omit a newly-added command (the drift the old
+/// hand-maintained allowlist suffered, now caught at the help layer too).
+fn strict_help_text() -> String {
+    format!(
         r#"Vela {}
 Version control for scientific state.
 
@@ -8999,6 +8965,8 @@ Production (multi-producer coordination, signed judgment):
   agent              Scaffold an AI-agent identity kit (init / list)
 
 Identity and publishing:
+  id            Set up your key + identity once (then no --key/--actor/--hub flags)
+  publish       Push a frontier to the hub (one verb; owner/key/hub from your identity)
   sign          Optional signing and signature verification
   actor         Register Ed25519 publisher identities in a frontier
   registry      Publish, pull, list; maintainer add/remove, deprecate, rotate-owner
@@ -9041,7 +9009,7 @@ Publish your own frontier (see docs/PUBLISHING.md):
       --to https://vela-hub.fly.dev
 "#,
         env!("CARGO_PKG_VERSION")
-    );
+    )
 }
 
 // Bare `vela` (no args) opens a session against the nearest `.vela/`
@@ -9082,7 +9050,9 @@ fn print_session_help() {
     println!("    vela help advanced   Full subcommand list (30+ commands)");
     println!();
     println!("  SETUP (once)");
-    println!("    id create         Generate your key + identity; then no --key/--actor/--hub flags");
+    println!(
+        "    id create         Generate your key + identity; then no --key/--actor/--hub flags"
+    );
     println!();
     println!("  CORE FLOW");
     println!("    init              Initialize a split frontier repo");
@@ -9108,8 +9078,12 @@ fn print_session_help() {
     println!("    claim state <vf>                   Claim-State Cell (Belnap status, deps)");
     println!();
     println!("  PUBLISH");
-    println!("    publish <frontier>                 Push your frontier to the hub (one verb, no flags)");
-    println!("    registry verify-log <vfr>          Independently verify a hub's transparency log");
+    println!(
+        "    publish <frontier>                 Push your frontier to the hub (one verb, no flags)"
+    );
+    println!(
+        "    registry verify-log <vfr>          Independently verify a hub's transparency log"
+    );
     println!();
     println!("  In session, type a single letter for a quick verb, or any");
     println!("  question in plain text. `q` or `exit` quits.");
@@ -9473,5 +9447,158 @@ fn print_engine_verdict(v: &proposals::EngineVerdict) {
         other => {
             println!("  {} evidence-ci: {}", style::warn("engine"), other);
         }
+    }
+}
+
+#[cfg(test)]
+mod surface_tests {
+    //! Pins the released command surface to the clap enum, so the
+    //! drift that silently broke `id` and `publish` this cycle (a real
+    //! command rejected as "unknown or non-release") can never recur, and
+    //! so the curated `help advanced` reference can never omit a command.
+    use super::*;
+    use clap::CommandFactory;
+
+    /// Building the ~226-node clap tree needs more than a default test
+    /// thread's 2 MiB stack (it is fine on the 8 MiB main thread, where the
+    /// CLI actually runs), so each test runs its body on a roomy stack.
+    fn on_big_stack(f: impl FnOnce() + Send + 'static) {
+        std::thread::Builder::new()
+            .stack_size(32 * 1024 * 1024)
+            .spawn(f)
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    fn released_names() -> Vec<String> {
+        Cli::command()
+            .get_subcommands()
+            .map(|c| c.get_name().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn every_clap_subcommand_is_released() {
+        on_big_stack(|| {
+            for name in released_names() {
+                assert!(
+                    is_science_subcommand(&name),
+                    "clap exposes subcommand `{name}` but is_science_subcommand rejects it \
+                     (a RELEASE_DENY entry, or a derivation bug) — it would 404 at dispatch"
+                );
+            }
+        });
+    }
+
+    #[test]
+    fn every_subcommand_is_documented_in_advanced_help() {
+        on_big_stack(|| {
+            let help = strict_help_text();
+            for name in released_names() {
+                let listed = help.lines().any(|l| {
+                    let t = l.trim_start();
+                    t == name || t.starts_with(&format!("{name} "))
+                });
+                assert!(
+                    listed,
+                    "subcommand `{name}` is not listed in `vela help advanced` \
+                     (strict_help_text) — add a row so the reference stays complete"
+                );
+            }
+        });
+    }
+
+    /// The v0.700 released command set. A regression guard: later
+    /// consolidation batches may NEST these (keeping a hidden top-level
+    /// alias) but must never make one unreachable. `is_science_subcommand`
+    /// counts aliases, so a nested-with-alias command still passes here.
+    const V0700_BASELINE: &[&str] = &[
+        "accept",
+        "accept-batch",
+        "actor",
+        "agent",
+        "artifact-to-state",
+        "ask",
+        "attach",
+        "attempt",
+        "attest",
+        "attest-statement",
+        "carina",
+        "caveat",
+        "check",
+        "claim",
+        "completions",
+        "conformance",
+        "diff",
+        "doc",
+        "doctor",
+        "entity",
+        "events",
+        "evidence-ci",
+        "export",
+        "finding",
+        "frontier",
+        "gate",
+        "history",
+        "hub",
+        "id",
+        "import",
+        "import-events",
+        "inbox",
+        "ingest",
+        "init",
+        "integrity",
+        "lean",
+        "link",
+        "lock",
+        "log",
+        "normalize",
+        "note",
+        "onboard",
+        "preprint",
+        "proof",
+        "proof-add",
+        "proof-attest-verification",
+        "proof-verify-attestation",
+        "proposals",
+        "propose",
+        "publish",
+        "queue",
+        "quickstart",
+        "recommend",
+        "register-statement",
+        "registry",
+        "reject",
+        "reproduce",
+        "retract",
+        "retro-impact",
+        "review",
+        "review-work",
+        "revise",
+        "search",
+        "serve",
+        "sign",
+        "stash",
+        "stats",
+        "status",
+        "task",
+        "tensions",
+        "transfer",
+        "verify",
+        "version",
+    ];
+
+    #[test]
+    fn v0700_baseline_commands_stay_reachable() {
+        on_big_stack(|| {
+            for name in V0700_BASELINE {
+                assert!(
+                    is_science_subcommand(name),
+                    "v0.700 command `{name}` is no longer reachable — a consolidation \
+                     dropped it instead of nesting-with-alias"
+                );
+            }
+        });
     }
 }
