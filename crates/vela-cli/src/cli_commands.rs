@@ -3724,6 +3724,83 @@ pub(crate) enum FindingCommands {
         #[arg(long)]
         json: bool,
     },
+    /// Attach a lightweight note to a finding (also `vela note`).
+    Note {
+        frontier: PathBuf,
+        finding_id: String,
+        #[arg(long)]
+        text: String,
+        #[arg(long)]
+        author: String,
+        #[arg(long)]
+        apply: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Attach an explicit caveat to a finding (also `vela caveat`).
+    Caveat {
+        frontier: PathBuf,
+        finding_id: String,
+        #[arg(long)]
+        text: String,
+        #[arg(long)]
+        author: String,
+        #[arg(long)]
+        apply: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Revise a finding's confidence interpretation (also `vela revise`).
+    Revise {
+        frontier: PathBuf,
+        finding_id: String,
+        #[arg(long)]
+        confidence: f64,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        reviewer: String,
+        #[arg(long)]
+        apply: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Mark a finding rejected without deleting it (also `vela reject`).
+    Reject {
+        frontier: PathBuf,
+        finding_id: String,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        reviewer: String,
+        #[arg(long)]
+        apply: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Retract a finding (also `vela retract`).
+    Retract {
+        source: PathBuf,
+        finding_id: String,
+        #[arg(long)]
+        reason: String,
+        #[arg(long)]
+        reviewer: String,
+        #[arg(long)]
+        apply: bool,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Add typed links between findings (also `vela link`).
+    Link {
+        #[command(subcommand)]
+        action: LinkAction,
+    },
+    /// Resolve unresolved entities against the bundled table (also `vela entity`).
+    Entity {
+        #[command(subcommand)]
+        action: EntityAction,
+    },
 }
 
 #[derive(Subcommand)]

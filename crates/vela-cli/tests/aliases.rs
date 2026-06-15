@@ -121,3 +121,27 @@ fn ergonomics_verbs_are_reachable() {
         );
     }
 }
+
+/// B7 Part B: the finding-verbs are reachable both as `vela finding <verb>`
+/// (canonical) and as the old top-level `vela <verb>` (hidden back-compat).
+#[test]
+fn finding_verbs_nest_and_keep_top_level_alias() {
+    for verb in [
+        "note", "caveat", "revise", "reject", "retract", "link", "entity",
+    ] {
+        let nested = vela(&["finding", verb, "--help"]);
+        assert!(
+            !combined(&nested).contains("unknown or non-release command")
+                && !combined(&nested).contains("unrecognized subcommand"),
+            "`vela finding {verb}` should dispatch"
+        );
+        let top = vela(&[verb, "--help"]);
+        assert!(
+            !combined(&top).contains("unknown or non-release command"),
+            "`vela {verb}` (back-compat alias) should still dispatch"
+        );
+    }
+    // `finding --help` advertises the nested verbs; top-level `--help` hides them.
+    let finding_help = combined(&vela(&["finding", "--help"]));
+    assert!(finding_help.contains("note") && finding_help.contains("retract"));
+}

@@ -1149,6 +1149,51 @@ pub async fn run_command() {
                 .unwrap_or_else(|e| fail_return(&e));
                 print_state_report(&report, json);
             }
+            FindingCommands::Note {
+                frontier,
+                finding_id,
+                text,
+                author,
+                apply,
+                json,
+            } => cmd_finding_note(frontier, finding_id, text, author, apply, json),
+            FindingCommands::Caveat {
+                frontier,
+                finding_id,
+                text,
+                author,
+                apply,
+                json,
+            } => cmd_finding_caveat(frontier, finding_id, text, author, apply, json),
+            FindingCommands::Revise {
+                frontier,
+                finding_id,
+                confidence,
+                reason,
+                reviewer,
+                apply,
+                json,
+            } => cmd_finding_revise(
+                frontier, finding_id, confidence, reason, reviewer, apply, json,
+            ),
+            FindingCommands::Reject {
+                frontier,
+                finding_id,
+                reason,
+                reviewer,
+                apply,
+                json,
+            } => cmd_finding_reject(frontier, finding_id, reason, reviewer, apply, json),
+            FindingCommands::Retract {
+                source,
+                finding_id,
+                reason,
+                reviewer,
+                apply,
+                json,
+            } => cmd_finding_retract(source, finding_id, reason, reviewer, apply, json),
+            FindingCommands::Link { action } => cmd_link(action),
+            FindingCommands::Entity { action } => cmd_entity(action),
         },
         Commands::Review {
             frontier,
@@ -1181,11 +1226,7 @@ pub async fn run_command() {
             author,
             apply,
             json,
-        } => {
-            let report = state::add_note(&frontier, &finding_id, &text, &author, apply)
-                .unwrap_or_else(|e| fail_return(&e));
-            print_state_report(&report, json);
-        }
+        } => cmd_finding_note(frontier, finding_id, text, author, apply, json),
         Commands::Caveat {
             frontier,
             finding_id,
@@ -1193,11 +1234,7 @@ pub async fn run_command() {
             author,
             apply,
             json,
-        } => {
-            let report = state::caveat_finding(&frontier, &finding_id, &text, &author, apply)
-                .unwrap_or_else(|e| fail_return(&e));
-            print_state_report(&report, json);
-        }
+        } => cmd_finding_caveat(frontier, finding_id, text, author, apply, json),
         Commands::Revise {
             frontier,
             finding_id,
@@ -1206,20 +1243,9 @@ pub async fn run_command() {
             reviewer,
             apply,
             json,
-        } => {
-            let report = state::revise_confidence(
-                &frontier,
-                &finding_id,
-                state::ReviseOptions {
-                    confidence,
-                    reason,
-                    reviewer,
-                },
-                apply,
-            )
-            .unwrap_or_else(|e| fail_return(&e));
-            print_state_report(&report, json);
-        }
+        } => cmd_finding_revise(
+            frontier, finding_id, confidence, reason, reviewer, apply, json,
+        ),
         Commands::Reject {
             frontier,
             finding_id,
@@ -1227,11 +1253,7 @@ pub async fn run_command() {
             reviewer,
             apply,
             json,
-        } => {
-            let report = state::reject_finding(&frontier, &finding_id, &reviewer, &reason, apply)
-                .unwrap_or_else(|e| fail_return(&e));
-            print_state_report(&report, json);
-        }
+        } => cmd_finding_reject(frontier, finding_id, reason, reviewer, apply, json),
         Commands::History {
             frontier,
             finding_id,
@@ -1279,11 +1301,7 @@ pub async fn run_command() {
             reviewer,
             apply,
             json,
-        } => {
-            let report = state::retract_finding(&source, &finding_id, &reviewer, &reason, apply)
-                .unwrap_or_else(|e| fail_return(&e));
-            print_state_report(&report, json);
-        }
+        } => cmd_finding_retract(source, finding_id, reason, reviewer, apply, json),
         Commands::ProofAdd {
             frontier,
             target_finding,

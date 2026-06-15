@@ -590,3 +590,85 @@ pub(crate) fn cmd_task(action: TaskAction) {
         }
     }
 }
+
+// ── Finding-verb handlers (shared by the top-level alias + `vela finding`) ──
+// Extracted so `vela note …` (hidden top-level) and `vela finding note …`
+// (canonical) dispatch to one body.
+
+pub(crate) fn cmd_finding_note(
+    frontier: PathBuf,
+    finding_id: String,
+    text: String,
+    author: String,
+    apply: bool,
+    json: bool,
+) {
+    let report = vela_protocol::state::add_note(&frontier, &finding_id, &text, &author, apply)
+        .unwrap_or_else(|e| fail_return(&e));
+    print_state_report(&report, json);
+}
+
+pub(crate) fn cmd_finding_caveat(
+    frontier: PathBuf,
+    finding_id: String,
+    text: String,
+    author: String,
+    apply: bool,
+    json: bool,
+) {
+    let report =
+        vela_protocol::state::caveat_finding(&frontier, &finding_id, &text, &author, apply)
+            .unwrap_or_else(|e| fail_return(&e));
+    print_state_report(&report, json);
+}
+
+pub(crate) fn cmd_finding_revise(
+    frontier: PathBuf,
+    finding_id: String,
+    confidence: f64,
+    reason: String,
+    reviewer: String,
+    apply: bool,
+    json: bool,
+) {
+    let report = vela_protocol::state::revise_confidence(
+        &frontier,
+        &finding_id,
+        vela_protocol::state::ReviseOptions {
+            confidence,
+            reason,
+            reviewer,
+        },
+        apply,
+    )
+    .unwrap_or_else(|e| fail_return(&e));
+    print_state_report(&report, json);
+}
+
+pub(crate) fn cmd_finding_reject(
+    frontier: PathBuf,
+    finding_id: String,
+    reason: String,
+    reviewer: String,
+    apply: bool,
+    json: bool,
+) {
+    let report =
+        vela_protocol::state::reject_finding(&frontier, &finding_id, &reviewer, &reason, apply)
+            .unwrap_or_else(|e| fail_return(&e));
+    print_state_report(&report, json);
+}
+
+pub(crate) fn cmd_finding_retract(
+    source: PathBuf,
+    finding_id: String,
+    reason: String,
+    reviewer: String,
+    apply: bool,
+    json: bool,
+) {
+    let report =
+        vela_protocol::state::retract_finding(&source, &finding_id, &reviewer, &reason, apply)
+            .unwrap_or_else(|e| fail_return(&e));
+    print_state_report(&report, json);
+}
