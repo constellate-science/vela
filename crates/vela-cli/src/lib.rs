@@ -11,6 +11,7 @@ use colored::Colorize;
 // before; they now live here and reach into the substrate via
 // `vela_protocol::*`.
 pub mod cli;
+mod cli_admin;
 mod cli_check;
 mod cli_claim;
 mod cli_commands;
@@ -25,6 +26,7 @@ mod cli_proof;
 mod cli_read;
 mod cli_registry;
 mod cli_source_fetch;
+mod cli_write;
 mod review_work;
 mod serve;
 
