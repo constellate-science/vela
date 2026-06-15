@@ -671,6 +671,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/entries/{vfr_id}/proposals/{proposal_id}/accept",
             post(accept_proposal).layer(DefaultBodyLimit::max(MAX_ACCEPT_BODY_BYTES)),
         )
+        // Read-only Evidence Diff: a pending proposal's before/after effect
+        // on its target claim plus downstream impact. Pure projection over
+        // the materialized state (the strict accept gate still runs at
+        // accept time); the Engine verdict is absent here (it needs a
+        // frontier path the hub does not have).
+        .route(
+            "/entries/{vfr_id}/proposals/{proposal_id}/evidence-diff",
+            get(get_proposal_evidence_diff),
+        )
         .route(
             "/entries/{vfr_id}/append",
             post(append_to_frontier_endpoint).layer(DefaultBodyLimit::max(MAX_APPEND_BODY_BYTES)),
@@ -1112,6 +1121,49 @@ async fn get_entry(
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": format!("query: {e}")})),
+        )
+            .into_response(),
+    }
+}
+
+/// GET /entries/{vfr_id}/proposals/{proposal_id}/evidence-diff —
+/// the read-only Evidence Diff for a pending proposal: its before/after
+/// effect on the target claim plus the downstream claims whose status
+/// flips. A pure projection over the materialized state (never writes,
+/// never accepts); the strict accept gate still runs at accept time and
+/// is the only thing that mutates state. The Engine verdict is rendered
+/// absent here because `evidence_ci::run_project` needs a frontier path
+/// (policy docs, artifact files) the Postgres-materialized project lacks.
+async fn get_proposal_evidence_diff(
+    State(state): State<AppState>,
+    Path((vfr_id, proposal_id)): Path<(String, String)>,
+) -> Response {
+    let project = match state.db.get_materialized_project(&vfr_id).await {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"ok": false, "error": format!("{vfr_id} not found on this hub")})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"ok": false, "error": format!("project query: {e}")})),
+            )
+                .into_response();
+        }
+    };
+    match vela_protocol::evidence_diff::claim_state_delta(
+        &project,
+        &proposal_id,
+        "reviewer:evidence-diff-preview",
+    ) {
+        Ok(delta) => Json(delta).into_response(),
+        Err(e) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"ok": false, "error": e})),
         )
             .into_response(),
     }

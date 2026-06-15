@@ -5379,6 +5379,7 @@ Read-only inspection:
   claim state   Derive the Claim-State Cell for a finding (Belnap status, deps, obligations)
   claim trust   Derive the Trust Vector for a finding (absent fields shown as absent)
   claim pack    Bundle state + trust + reproduce command + event ids (citable claim pack)
+  claim diff    Evidence Diff: a proposal's before/after effect on a claim + downstream impact
 
 Verification:
   verify        Re-hash and validate a proof packet (manifest + proof-trace chain)
@@ -5816,15 +5817,16 @@ pub fn run_from_args() {
             cmd_proof_explain(&frontier);
             return;
         }
-        // Read-only claim projections: `vela claim {state,trust,pack}`.
+        // Read-only claim projections: `vela claim {state,trust,pack,diff}`.
         // Intercepted ahead of the clap dispatcher (mirroring `proof
         // verify`) so they never collide with the existing
         // `vela claim <frontier> <obligation>` lease command. Pure
         // derivations over the accepted log — no writes, no new events.
+        // `diff` is the Evidence Diff: a proposal's before/after effect.
         Some("claim")
             if matches!(
                 args.get(2).map(String::as_str),
-                Some("state" | "trust" | "pack")
+                Some("state" | "trust" | "pack" | "diff")
             ) =>
         {
             crate::cli_claim::run(&args);

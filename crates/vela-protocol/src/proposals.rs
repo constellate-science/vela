@@ -3310,7 +3310,7 @@ pub fn request_revision_in_frontier_signed(
     Ok(())
 }
 
-fn apply_proposal(
+pub(crate) fn apply_proposal(
     frontier: &mut Project,
     proposal: &StateProposal,
     reviewer: &str,
