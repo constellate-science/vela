@@ -284,6 +284,7 @@ pub(crate) enum Commands {
         json: bool,
     },
     /// Run protocol conformance vectors
+    #[command(hide = true)]
     Conformance {
         #[arg(default_value = "conformance")]
         dir: PathBuf,
@@ -431,6 +432,7 @@ pub(crate) enum Commands {
     /// scientific state" artifact. Default mode regenerates the
     /// lock from current state; `--check` verifies on-disk state
     /// matches the recorded lock and exits non-zero on drift.
+    #[command(hide = true)]
     Lock {
         /// Frontier path (the .vela/ repo root)
         path: PathBuf,
@@ -448,6 +450,7 @@ pub(crate) enum Commands {
     /// Cargo's docs.rs analog for scientific state. Renders
     /// index, findings table, events table, and per-finding
     /// detail pages.
+    #[command(hide = true)]
     Doc {
         /// Frontier path (the .vela/ repo root)
         path: PathBuf,
@@ -533,6 +536,7 @@ pub(crate) enum Commands {
     /// Retro-impact: how much downstream verified state rests on a record,
     /// via the declared dependency graph (`depends_on` + transfer discharges).
     /// A deterministic oracle over verified state, never a popularity score.
+    #[command(hide = true)]
     RetroImpact {
         /// The record id (`vat_`/`vf_`/`vfr_`/`vtr_`) to measure.
         record: String,
@@ -560,6 +564,7 @@ pub(crate) enum Commands {
     /// (abstract, contributors with CRediT roles, findings as
     /// evidence sections, BibTeX citation block). Pure derived
     /// view from the canonical substrate state.
+    #[command(hide = true)]
     Preprint {
         /// Frontier path.
         frontier: PathBuf,
@@ -596,6 +601,7 @@ pub(crate) enum Commands {
     /// Add typed links between findings — including cross-frontier
     /// references of the form `vf_<id>@vfr_<id>` (v0.8). Until v0.9
     /// link state lived only in JSON; `vela link add` is the CLI on-ramp.
+    #[command(hide = true)]
     Link {
         #[command(subcommand)]
         action: LinkAction,
@@ -604,6 +610,7 @@ pub(crate) enum Commands {
     /// table (UniProt for proteins, MeSH for diseases, ChEBI/DrugBank for
     /// compounds, etc.). Lowers `needs_review` for matched entities and
     /// populates `canonical_id`. Idempotent unless `--force` is passed.
+    #[command(hide = true)]
     Entity {
         #[command(subcommand)]
         action: EntityAction,
@@ -631,6 +638,7 @@ pub(crate) enum Commands {
         json: bool,
     },
     /// Add a lightweight note to a finding
+    #[command(hide = true)]
     Note {
         frontier: PathBuf,
         finding_id: String,
@@ -645,6 +653,7 @@ pub(crate) enum Commands {
         json: bool,
     },
     /// Add an explicit caveat to a finding
+    #[command(hide = true)]
     Caveat {
         frontier: PathBuf,
         finding_id: String,
@@ -658,6 +667,7 @@ pub(crate) enum Commands {
         json: bool,
     },
     /// Revise an interpretation field while preserving history
+    #[command(hide = true)]
     Revise {
         frontier: PathBuf,
         finding_id: String,
@@ -701,6 +711,7 @@ pub(crate) enum Commands {
         as_of: Option<String>,
     },
     /// Import review/state events from a packet or JSON file into a frontier
+    #[command(hide = true)]
     ImportEvents {
         source: PathBuf,
         #[arg(long)]
@@ -709,6 +720,7 @@ pub(crate) enum Commands {
         json: bool,
     },
     /// Retract a finding
+    #[command(hide = true)]
     Retract {
         source: PathBuf,
         finding_id: String,
@@ -732,6 +744,7 @@ pub(crate) enum Commands {
     /// loop end-to-end: every proof script lives in the frontier's
     /// canonical event log with a content-addressed locator the
     /// substrate's verifier can pin against.
+    #[command(hide = true)]
     ProofAdd {
         frontier: PathBuf,
         /// Finding the proof targets (`vf_*`).
@@ -766,6 +779,7 @@ pub(crate) enum Commands {
     /// The verifier itself (Lean kernel, Coq, etc.) runs
     /// outside the substrate; this command records the
     /// verifier's signed output and pubkey.
+    #[command(hide = true)]
     ProofAttestVerification {
         /// Proof artifact id (`vpf_*`) the verification covers.
         #[arg(long)]
@@ -804,6 +818,7 @@ pub(crate) enum Commands {
     /// v0.151: verify a `vpv_*` proof-verification record:
     /// re-derive the id, verify the Ed25519 signature against
     /// `verifier_pubkey`. Exits non-zero on any mismatch.
+    #[command(hide = true)]
     ProofVerifyAttestation {
         /// Path to the `vpv_*` verification record JSON.
         record: PathBuf,
@@ -914,6 +929,7 @@ pub(crate) enum Commands {
     /// Reads a `vela.verifier_attachment.v0.1` JSON object (whose `target` is the
     /// finding's `vf_…` id) and lands it via the canonical `verifier.attach`
     /// proposal→accept path. The finding's trust-gate status is derived on read.
+    #[command(hide = true)]
     Attach {
         frontier: PathBuf,
         /// The finding (`vf_…`) the attachment binds to.
@@ -936,6 +952,7 @@ pub(crate) enum Commands {
     /// that reviewer's signing key (the attestation is a signed vsa_
     /// record; kernel verification proves the formal statement follows —
     /// only a human can attest it is the problem anyone meant).
+    #[command(hide = true)]
     AttestStatement {
         frontier: PathBuf,
         /// The finding (`vf_…`) whose formalization is being judged.
@@ -979,6 +996,7 @@ pub(crate) enum Commands {
 
     /// Park bytes in the hub's UNTRUSTED scratch tier; returns a vsx_
     /// content hash for attempts/failed-routes to reference.
+    #[command(hide = true)]
     Stash {
         file: PathBuf,
         #[arg(long, default_value = "https://vela-hub.fly.dev")]
@@ -991,6 +1009,7 @@ pub(crate) enum Commands {
     },
 
     /// Follow a frontier's hub event stream (new events as they land).
+    #[command(hide = true)]
     Events {
         vfr_id: String,
         #[arg(long, default_value = "https://vela-hub.fly.dev")]
@@ -1005,6 +1024,7 @@ pub(crate) enum Commands {
     /// Record a signed recommend-accept on a pending proposal (a
     /// reviewer-tier verdict that owner/maintainer keys consume; it
     /// never lands state by itself).
+    #[command(hide = true)]
     Recommend {
         frontier: PathBuf,
         proposal_id: String,
@@ -1025,6 +1045,7 @@ pub(crate) enum Commands {
     /// routes, allowed outputs, and the named done-condition
     /// ("done means `vela gate` passes"). Codex and Claude Code read
     /// these natively — zero-integration onboarding.
+    #[command(hide = true)]
     Onboard {
         frontier: PathBuf,
         #[arg(long)]
@@ -1055,6 +1076,7 @@ pub(crate) enum Commands {
     /// Register a statement hash for priority: a content-addressed
     /// timestamp in the signed log, externally anchored by the
     /// release-archive chain.
+    #[command(hide = true)]
     RegisterStatement {
         frontier: PathBuf,
         /// Path to a file holding the exact statement text, or pass
@@ -1092,6 +1114,7 @@ pub(crate) enum Commands {
     /// *aggregate* delta, and saves once. The batch is all-or-nothing at
     /// the Engine gate (use `--force` to override), and `--dry-run`
     /// previews the verdict with zero on-disk effect.
+    #[command(hide = true)]
     AcceptBatch {
         frontier: PathBuf,
         /// Accept every `pending_review` proposal in the frontier.
@@ -1194,6 +1217,7 @@ pub(crate) enum Commands {
 
     /// v0.75: validate Carina-shaped JSON against the bundled
     /// schemas, list bundled primitives, or print one schema.
+    #[command(hide = true)]
     Carina {
         #[command(subcommand)]
         action: CarinaAction,
