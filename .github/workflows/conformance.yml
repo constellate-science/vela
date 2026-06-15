@@ -1,0 +1,34 @@
+# Public conformance CI for the Vela substrate. Runs on the PUBLIC repo
+# (vela-science/vela), where GitHub Actions is free + unlimited — so it
+# sidesteps the private-repo billing block. A green badge here is itself a
+# trust signal: anyone can see the substrate builds, lints, tests, and that
+# the frozen verifiers re-derive their witnesses from scratch.
+name: conformance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: conformance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - name: format
+        run: cargo fmt --all -- --check
+      - name: clippy (deny warnings)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: build
+        run: cargo build --release --workspace
+      - name: test (incl. verifier reproduce + reducer parity)
+        run: cargo test --workspace

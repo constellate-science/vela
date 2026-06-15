@@ -12,9 +12,12 @@ primary_region = "yyz"
 [http_service]
   internal_port = 8080
   force_https = true
+  # Keep one machine always warm: the hub is the trust substrate / verifier
+  # endpoint, so a cold-start tax on the first request after idle is
+  # unacceptable. The second machine still scales to zero.
   auto_stop_machines = "stop"
   auto_start_machines = true
-  min_machines_running = 0
+  min_machines_running = 1
 
 [[vm]]
   memory = "1gb"
