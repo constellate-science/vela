@@ -23,8 +23,7 @@ const FIXTURE: &str = include_str!("fixtures/ts_signed_proposal.json");
 
 #[test]
 fn ts_signed_proposal_verifies_in_rust() {
-    let fixture: serde_json::Value =
-        serde_json::from_str(FIXTURE).expect("parse fixture json");
+    let fixture: serde_json::Value = serde_json::from_str(FIXTURE).expect("parse fixture json");
 
     let pubkey_hex = fixture["pubkey_hex"].as_str().expect("pubkey_hex");
     let signature_hex = fixture["signature_hex"].as_str().expect("signature_hex");

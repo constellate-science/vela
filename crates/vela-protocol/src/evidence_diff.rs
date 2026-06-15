@@ -433,7 +433,11 @@ pub fn claim_state_delta(
     // downstream: every finding that depends on the target and whose
     // status letter flips between before and after.
     let mut downstream: Vec<Value> = Vec::new();
-    for dep in project.findings.iter().filter(|f| depends_on(f, &target_id)) {
+    for dep in project
+        .findings
+        .iter()
+        .filter(|f| depends_on(f, &target_id))
+    {
         let before_d = status_letter(project, dep);
         let after_d = after_state
             .findings

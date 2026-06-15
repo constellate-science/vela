@@ -1,8 +1,5 @@
-use crate::cli::{
-    fail, fail_return,
-    parse_signing_key, print_json,
-};
 use crate::cli::print_identity_created;
+use crate::cli::{fail, fail_return, parse_signing_key, print_json};
 use crate::cli_commands::*;
 use colored::Colorize;
 use serde_json::{Value, json};

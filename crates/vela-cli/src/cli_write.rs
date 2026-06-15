@@ -1,11 +1,7 @@
 use crate::cli::{
-    fail, fail_return, print_json,
+    confirm_action, parse_task_status, print_state_report, print_task, sign_and_apply,
 };
-use crate::cli::{
-    confirm_action,
-    parse_task_status, print_state_report, print_task,
-    sign_and_apply,
-};
+use crate::cli::{fail, fail_return, print_json};
 use crate::cli_commands::*;
 use colored::Colorize;
 use serde_json::json;
@@ -669,8 +665,8 @@ pub(crate) fn cmd_recommend(
         .find(|p| p.id == proposal_id)
         .map(|p| p.target.id.clone())
         .unwrap();
-    let mut event = vela_protocol::events::new_finding_event(
-        vela_protocol::events::FindingEventInput {
+    let mut event =
+        vela_protocol::events::new_finding_event(vela_protocol::events::FindingEventInput {
             kind: "proposal.recommended",
             finding_id: &target,
             actor_id: &by,
@@ -684,18 +680,14 @@ pub(crate) fn cmd_recommend(
             }),
             caveats: Vec::new(),
             timestamp: None,
-        },
-    );
-    vela_protocol::reducer::apply_event(&mut project, &event)
-        .unwrap_or_else(|e| fail_return(&e));
+        });
+    vela_protocol::reducer::apply_event(&mut project, &event).unwrap_or_else(|e| fail_return(&e));
     event.signature = Some(
-        vela_protocol::sign::sign_event(&event, &signing_key)
-            .unwrap_or_else(|e| fail_return(&e)),
+        vela_protocol::sign::sign_event(&event, &signing_key).unwrap_or_else(|e| fail_return(&e)),
     );
     project.events.push(event);
     repo::save_to_path(&frontier, &project).unwrap_or_else(|e| fail_return(&e));
-    let payload =
-        json!({"ok": true, "command": "recommend", "proposal_id": proposal_id, "by": by});
+    let payload = json!({"ok": true, "command": "recommend", "proposal_id": proposal_id, "by": by});
     if json {
         print_json(&payload);
     } else {
@@ -723,8 +715,8 @@ pub(crate) fn cmd_claim(
     if !project.findings.iter().any(|f| f.id == obligation) {
         fail(&format!("obligation finding {obligation} not found"));
     }
-    let mut event = vela_protocol::events::new_finding_event(
-        vela_protocol::events::FindingEventInput {
+    let mut event =
+        vela_protocol::events::new_finding_event(vela_protocol::events::FindingEventInput {
             kind: "attempt.claimed",
             finding_id: &obligation,
             actor_id: &by,
@@ -740,13 +732,10 @@ pub(crate) fn cmd_claim(
             }),
             caveats: Vec::new(),
             timestamp: None,
-        },
-    );
-    vela_protocol::reducer::apply_event(&mut project, &event)
-        .unwrap_or_else(|e| fail_return(&e));
+        });
+    vela_protocol::reducer::apply_event(&mut project, &event).unwrap_or_else(|e| fail_return(&e));
     event.signature = Some(
-        vela_protocol::sign::sign_event(&event, &signing_key)
-            .unwrap_or_else(|e| fail_return(&e)),
+        vela_protocol::sign::sign_event(&event, &signing_key).unwrap_or_else(|e| fail_return(&e)),
     );
     project.events.push(event);
     repo::save_to_path(&frontier, &project).unwrap_or_else(|e| fail_return(&e));
@@ -813,8 +802,8 @@ pub(crate) fn cmd_register_statement(
     if let Some(vf) = &finding {
         payload["finding_id"] = serde_json::json!(vf);
     }
-    let mut event = vela_protocol::events::new_finding_event(
-        vela_protocol::events::FindingEventInput {
+    let mut event =
+        vela_protocol::events::new_finding_event(vela_protocol::events::FindingEventInput {
             kind: "statement.registered",
             finding_id: &target_id,
             actor_id: &by,
@@ -825,13 +814,10 @@ pub(crate) fn cmd_register_statement(
             payload,
             caveats: Vec::new(),
             timestamp: None,
-        },
-    );
-    vela_protocol::reducer::apply_event(&mut project, &event)
-        .unwrap_or_else(|e| fail_return(&e));
+        });
+    vela_protocol::reducer::apply_event(&mut project, &event).unwrap_or_else(|e| fail_return(&e));
     event.signature = Some(
-        vela_protocol::sign::sign_event(&event, &signing_key)
-            .unwrap_or_else(|e| fail_return(&e)),
+        vela_protocol::sign::sign_event(&event, &signing_key).unwrap_or_else(|e| fail_return(&e)),
     );
     project.events.push(event);
     repo::save_to_path(&frontier, &project).unwrap_or_else(|e| fail_return(&e));
@@ -873,9 +859,8 @@ pub(crate) fn cmd_attest_statement(
     let fh = match (&formal_file, &formal_hash) {
         (Some(p), _) => {
             use sha2::Digest;
-            let bytes = std::fs::read(p).unwrap_or_else(|e| {
-                fail_return(&format!("read formal file {}: {e}", p.display()))
-            });
+            let bytes = std::fs::read(p)
+                .unwrap_or_else(|e| fail_return(&format!("read formal file {}: {e}", p.display())));
             hex::encode(sha2::Sha256::digest(&bytes))
         }
         (None, Some(h)) => h.trim().to_string(),
@@ -908,8 +893,8 @@ pub(crate) fn cmd_attest_statement(
     if !project.findings.iter().any(|f| f.id == target) {
         fail(&format!("target finding {target} not found in frontier"));
     }
-    let event = vela_protocol::events::new_finding_event(
-        vela_protocol::events::FindingEventInput {
+    let event =
+        vela_protocol::events::new_finding_event(vela_protocol::events::FindingEventInput {
             kind: "statement.attested",
             finding_id: &target,
             actor_id: &by,
@@ -920,10 +905,8 @@ pub(crate) fn cmd_attest_statement(
             payload: serde_json::json!({ "attestation": att }),
             caveats: Vec::new(),
             timestamp: None,
-        },
-    );
-    vela_protocol::reducer::apply_event(&mut project, &event)
-        .unwrap_or_else(|e| fail_return(&e));
+        });
+    vela_protocol::reducer::apply_event(&mut project, &event).unwrap_or_else(|e| fail_return(&e));
     project.events.push(event);
     repo::save_to_path(&frontier, &project).unwrap_or_else(|e| fail_return(&e));
     let payload = json!({

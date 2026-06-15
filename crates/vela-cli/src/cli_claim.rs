@@ -29,7 +29,9 @@ use std::path::Path;
 use serde_json::{Value, json};
 use vela_protocol::bundle::FindingBundle;
 use vela_protocol::events::actor_kind;
-use vela_protocol::evidence_diff::{claim_state_delta, find_priority_registration, matched_attachments, state_cell};
+use vela_protocol::evidence_diff::{
+    claim_state_delta, find_priority_registration, matched_attachments, state_cell,
+};
 use vela_protocol::project::Project;
 use vela_protocol::repo;
 use vela_protocol::verifier_attachment::{AttachmentOutcome, claim_digest, derive_gate_status};
@@ -54,12 +56,14 @@ pub(crate) fn run(args: &[String]) {
     // The `diff` projection takes a proposal id (vpr_…), not a finding id,
     // and renders the Evidence Diff.
     if verb == "diff" {
-        let frontier = positionals.first().copied().unwrap_or_else(|| {
-            fail("usage: vela claim diff <frontier> <proposal_id> [--json]")
-        });
-        let proposal_id = positionals.get(1).copied().unwrap_or_else(|| {
-            fail("usage: vela claim diff <frontier> <proposal_id> [--json]")
-        });
+        let frontier = positionals
+            .first()
+            .copied()
+            .unwrap_or_else(|| fail("usage: vela claim diff <frontier> <proposal_id> [--json]"));
+        let proposal_id = positionals
+            .get(1)
+            .copied()
+            .unwrap_or_else(|| fail("usage: vela claim diff <frontier> <proposal_id> [--json]"));
         let delta = derive_evidence_diff(Path::new(frontier), proposal_id);
         if json {
             print_json(&delta);
@@ -121,9 +125,8 @@ pub(crate) fn run(args: &[String]) {
 /// the result over the placeholder `engine` field.
 fn derive_evidence_diff(path: &Path, proposal_id: &str) -> Value {
     let project = repo::load_from_path(path).unwrap_or_else(|e| fail(&e));
-    let mut delta =
-        claim_state_delta(&project, proposal_id, "reviewer:evidence-diff-preview")
-            .unwrap_or_else(|e| fail(&e));
+    let mut delta = claim_state_delta(&project, proposal_id, "reviewer:evidence-diff-preview")
+        .unwrap_or_else(|e| fail(&e));
     // Best-effort engine verdict; a hiccup here must never break the diff.
     if let Ok(verdict) = vela_protocol::proposals::preview_engine_verdict(path, proposal_id) {
         delta["engine"] = json!({
