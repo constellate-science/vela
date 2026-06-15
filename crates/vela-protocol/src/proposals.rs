@@ -1657,8 +1657,28 @@ pub fn reject_at_path(
     reviewer: &str,
     reason: &str,
 ) -> Result<(), String> {
+    reject_at_path_signed(path, proposal_id, reviewer, reason, None)
+}
+
+/// Reject a proposal, signing the resulting `review.rejected` event under
+/// the reviewer key when supplied. Mirrors `accept_at_path_signed`: if the
+/// reviewer is registered with a pubkey, the key is required.
+pub fn reject_at_path_signed(
+    path: &Path,
+    proposal_id: &str,
+    reviewer: &str,
+    reason: &str,
+    signing_key: Option<&ed25519_dalek::SigningKey>,
+) -> Result<(), String> {
     let mut frontier = repo::load_from_path(path)?;
-    reject_proposal_in_frontier(&mut frontier, proposal_id, reviewer, reason)?;
+    reject_proposal_in_frontier_signed(
+        &mut frontier,
+        proposal_id,
+        reviewer,
+        reason,
+        signing_key,
+        false,
+    )?;
     project::recompute_stats(&mut frontier);
     repo::save_to_path(path, &frontier)?;
     Ok(())
@@ -1670,11 +1690,43 @@ pub fn request_revision_at_path(
     reviewer: &str,
     reason: &str,
 ) -> Result<(), String> {
+    request_revision_at_path_signed(path, proposal_id, reviewer, reason, None)
+}
+
+/// Request revision on a proposal, signing the resulting
+/// `review.revision_requested` event under the reviewer key when supplied.
+pub fn request_revision_at_path_signed(
+    path: &Path,
+    proposal_id: &str,
+    reviewer: &str,
+    reason: &str,
+    signing_key: Option<&ed25519_dalek::SigningKey>,
+) -> Result<(), String> {
     let mut frontier = repo::load_from_path(path)?;
-    request_revision_in_frontier(&mut frontier, proposal_id, reviewer, reason)?;
+    request_revision_in_frontier_signed(
+        &mut frontier,
+        proposal_id,
+        reviewer,
+        reason,
+        signing_key,
+        false,
+    )?;
     project::recompute_stats(&mut frontier);
     repo::save_to_path(path, &frontier)?;
     Ok(())
+}
+
+/// Load a frontier, backfill legacy review events for already-decided
+/// proposals lacking one, and save only if anything was synthesized.
+/// Returns the number of events added. Idempotent: a second run adds zero.
+pub fn backfill_reviews_at_path(path: &Path) -> Result<usize, String> {
+    let mut frontier = repo::load_from_path(path)?;
+    let count = backfill_legacy_review_events(&mut frontier)?;
+    if count > 0 {
+        project::recompute_stats(&mut frontier);
+        repo::save_to_path(path, &frontier)?;
+    }
+    Ok(count)
 }
 
 pub fn record_proof_export(frontier: &mut Project, record: ProofPacketRecord) {
@@ -2968,6 +3020,52 @@ fn enforce_trusted_agent_accept_policy(
     ))
 }
 
+/// Key custody for a reviewer decision (accept / reject / request-revision).
+///
+/// If the named reviewer is registered in the frontier's actor table WITH
+/// a public key, the decision REQUIRES the matching private key: the typed
+/// reviewer string is not authority, possession of the key is. Reviewers
+/// without a registered key keep the keyless bootstrap behavior (a new
+/// frontier must be usable before any keys exist). `custody_verified`
+/// short-circuits the check when possession was already proved out of band
+/// (the hub verifies a detached signature before calling in).
+///
+/// This is the mechanization of "an AI never signs a decision": an agent
+/// can type any reviewer name, but it cannot produce a signature with a key
+/// it does not hold — and now that applies symmetrically to rejects, not
+/// just accepts.
+fn enforce_reviewer_key_custody(
+    frontier: &Project,
+    reviewer: &str,
+    signing_key: Option<&ed25519_dalek::SigningKey>,
+    custody_verified: bool,
+) -> Result<(), String> {
+    let registered_pubkey = frontier
+        .actors
+        .iter()
+        .find(|a| a.id == reviewer && !a.public_key.trim().is_empty())
+        .map(|a| a.public_key.clone());
+    if let Some(expected) = &registered_pubkey
+        && !custody_verified
+    {
+        let Some(key) = signing_key else {
+            return Err(format!(
+                "reviewer {reviewer} is registered with a key ({}…); decisions under this identity require --key <path-to-private-key> — key custody, not the typed name, is the review authority",
+                &expected[..expected.len().min(12)]
+            ));
+        };
+        let derived = hex::encode(key.verifying_key().to_bytes());
+        if &derived != expected {
+            return Err(format!(
+                "the supplied key derives pubkey {}…, which does not match {reviewer}'s registered key {}…",
+                &derived[..12],
+                &expected[..expected.len().min(12)]
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn accept_proposal_in_frontier(
     frontier: &mut Project,
     proposal_id: &str,
@@ -3022,29 +3120,7 @@ pub fn accept_proposal_in_frontier_with_custody(
     }
     // Key custody: a reviewer registered with a pubkey must prove
     // possession. Derive the pubkey from the supplied key and compare.
-    let registered_pubkey = frontier
-        .actors
-        .iter()
-        .find(|a| a.id == reviewer && !a.public_key.trim().is_empty())
-        .map(|a| a.public_key.clone());
-    if let Some(expected) = &registered_pubkey
-        && !custody_verified
-    {
-        let Some(key) = signing_key else {
-            return Err(format!(
-                "reviewer {reviewer} is registered with a key ({}…); accepts under this identity require --key <path-to-private-key> — key custody, not the typed name, is the accept authority",
-                &expected[..expected.len().min(12)]
-            ));
-        };
-        let derived = hex::encode(key.verifying_key().to_bytes());
-        if &derived != expected {
-            return Err(format!(
-                "the supplied key derives pubkey {}…, which does not match {reviewer}'s registered key {}…",
-                &derived[..12],
-                &expected[..expected.len().min(12)]
-            ));
-        }
-    }
+    enforce_reviewer_key_custody(frontier, reviewer, signing_key, custody_verified)?;
     let index = frontier
         .proposals
         .iter()
@@ -3084,23 +3160,70 @@ pub fn accept_proposal_in_frontier_with_custody(
     Ok(event_id)
 }
 
-fn reject_proposal_in_frontier(
+/// Build, sign, and append a `review.*` decision event to the log. The
+/// event is the tamper-evident, replayable record of the decision — the
+/// thing a reject previously lacked entirely. Signed under the reviewer
+/// key when present (custody is enforced by the caller before this runs),
+/// so the decision is non-repudiable; the content-addressed id is over the
+/// unsigned shape, so signing never changes it. `decided_at` is reused for
+/// both the event timestamp and the proposal's `reviewed_at`, so the two
+/// never diverge by a second clock read.
+fn push_signed_review_event(
+    frontier: &mut Project,
+    proposal_id: &str,
+    proposal_kind: &str,
+    verdict: &str,
+    applied_event_id: Option<String>,
+    reviewer: &str,
+    reason: &str,
+    decided_at: &str,
+    signing_key: Option<&ed25519_dalek::SigningKey>,
+) -> Result<(), String> {
+    let mut event = events::new_review_decision_event(
+        proposal_id,
+        proposal_kind,
+        verdict,
+        applied_event_id,
+        reviewer,
+        reason,
+        Some(decided_at),
+        false,
+    )?;
+    if let Some(key) = signing_key {
+        event.signature = Some(crate::sign::sign_event(&event, key)?);
+    }
+    frontier.events.push(event);
+    mark_proof_stale(
+        frontier,
+        format!("Recorded review decision on proposal {proposal_id} after latest proof export"),
+    );
+    Ok(())
+}
+
+/// Reject a proposal, recording a signed `review.rejected` event. This is
+/// the half of the lifecycle that used to leave no trace: a reject is now
+/// as accountable as an accept — same key custody, same append-only signed
+/// event, same replayability.
+pub fn reject_proposal_in_frontier_signed(
     frontier: &mut Project,
     proposal_id: &str,
     reviewer: &str,
     reason: &str,
+    signing_key: Option<&ed25519_dalek::SigningKey>,
+    custody_verified: bool,
 ) -> Result<(), String> {
     validate_reviewer_identity(reviewer)?;
     if reason.trim().is_empty() {
         return Err("Decision reason must be non-empty".to_string());
     }
+    enforce_reviewer_key_custody(frontier, reviewer, signing_key, custody_verified)?;
     let index = frontier
         .proposals
         .iter()
         .position(|proposal| proposal.id == proposal_id)
         .ok_or_else(|| format!("Proposal not found: {proposal_id}"))?;
     match frontier.proposals[index].status.as_str() {
-        "pending_review" | "accepted" => {}
+        "pending_review" | "accepted" | "needs_revision" => {}
         "rejected" => {
             return Err(format!("Proposal {} is already rejected", proposal_id));
         }
@@ -3111,23 +3234,42 @@ fn reject_proposal_in_frontier(
             return Err(format!("Unsupported proposal status '{}'", other));
         }
     }
+    let decided_at = Utc::now().to_rfc3339();
+    let proposal_kind = frontier.proposals[index].kind.clone();
     frontier.proposals[index].status = "rejected".to_string();
     frontier.proposals[index].reviewed_by = Some(reviewer.to_string());
-    frontier.proposals[index].reviewed_at = Some(Utc::now().to_rfc3339());
+    frontier.proposals[index].reviewed_at = Some(decided_at.clone());
     frontier.proposals[index].decision_reason = Some(reason.to_string());
+    push_signed_review_event(
+        frontier,
+        proposal_id,
+        &proposal_kind,
+        "rejected",
+        None,
+        reviewer,
+        reason,
+        &decided_at,
+        signing_key,
+    )?;
     Ok(())
 }
 
-fn request_revision_in_frontier(
+/// Send a proposal back for revision, recording a signed
+/// `review.revision_requested` event. Same accountability contract as
+/// reject.
+pub fn request_revision_in_frontier_signed(
     frontier: &mut Project,
     proposal_id: &str,
     reviewer: &str,
     reason: &str,
+    signing_key: Option<&ed25519_dalek::SigningKey>,
+    custody_verified: bool,
 ) -> Result<(), String> {
     validate_reviewer_identity(reviewer)?;
     if reason.trim().is_empty() {
         return Err("Decision reason must be non-empty".to_string());
     }
+    enforce_reviewer_key_custody(frontier, reviewer, signing_key, custody_verified)?;
     let index = frontier
         .proposals
         .iter()
@@ -3148,10 +3290,23 @@ fn request_revision_in_frontier(
             return Err(format!("Unsupported proposal status '{}'", other));
         }
     }
+    let decided_at = Utc::now().to_rfc3339();
+    let proposal_kind = frontier.proposals[index].kind.clone();
     frontier.proposals[index].status = "needs_revision".to_string();
     frontier.proposals[index].reviewed_by = Some(reviewer.to_string());
-    frontier.proposals[index].reviewed_at = Some(Utc::now().to_rfc3339());
+    frontier.proposals[index].reviewed_at = Some(decided_at.clone());
     frontier.proposals[index].decision_reason = Some(reason.to_string());
+    push_signed_review_event(
+        frontier,
+        proposal_id,
+        &proposal_kind,
+        "revision_requested",
+        None,
+        reviewer,
+        reason,
+        &decided_at,
+        signing_key,
+    )?;
     Ok(())
 }
 
@@ -4547,6 +4702,243 @@ pub fn manifest_hash(path: &Path) -> Result<String, String> {
 
 pub fn repo_proposals_dir(root: &Path) -> PathBuf {
     root.join(".vela/proposals")
+}
+
+// ── Review-decision projection + parity (status derived from the log) ──
+//
+// A proposal's decision state is no longer a free-floating mutable field:
+// it is a PROJECTION of the signed `review.*` events (and, for accepts,
+// the domain event the accept produced). The stored `status` is a cache
+// of that projection. `verify_proposal_decision_parity` is the gate that
+// pins the cache to the log — if someone hand-edits a `status` field, or a
+// decision exists with no signed event behind it, parity fails. That is
+// the tamper-evidence the mutable field never had.
+
+/// A decision reconstructed from the event log for one proposal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DerivedDecision {
+    /// `applied` | `rejected` | `needs_revision`.
+    pub status: String,
+    /// The reviewer that made the latest decision.
+    pub reviewer: String,
+    /// The latest decision event's timestamp.
+    pub decided_at: String,
+    /// The `review.*` event id that carried the decision, when one exists.
+    /// `None` for an accept whose only trace is its domain event (the
+    /// pre-`review.accepted` accept path; see module note).
+    pub review_event_id: Option<String>,
+    /// True when the backing review event is a legacy (unsigned) backfill.
+    pub legacy: bool,
+}
+
+/// Reduce the event log to the current decision for a single proposal.
+///
+/// Folds, in timestamp order:
+///   - `review.rejected` → rejected
+///   - `review.revision_requested` → needs_revision
+///   - `review.accepted` → applied
+///   - any domain event produced by an accept of this proposal
+///     (matched via the proposal's `applied_event_id`) → applied
+///
+/// The latest decision wins. Returns `None` when no decision event exists
+/// (the proposal is pending).
+pub fn proposal_status_from_log(
+    frontier: &Project,
+    proposal_id: &str,
+    applied_event_id: Option<&str>,
+) -> Option<DerivedDecision> {
+    let mut decisions: Vec<DerivedDecision> = Vec::new();
+    for event in &frontier.events {
+        let is_review_for_this = event.target.r#type == "proposal"
+            && event.target.id == proposal_id
+            && matches!(
+                event.kind.as_str(),
+                events::EVENT_KIND_REVIEW_ACCEPTED
+                    | events::EVENT_KIND_REVIEW_REJECTED
+                    | events::EVENT_KIND_REVIEW_REVISION_REQUESTED
+            );
+        if is_review_for_this {
+            let status = match event.kind.as_str() {
+                events::EVENT_KIND_REVIEW_ACCEPTED => "applied",
+                events::EVENT_KIND_REVIEW_REJECTED => "rejected",
+                _ => "needs_revision",
+            };
+            let legacy = event
+                .payload
+                .get("legacy_backfill")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            decisions.push(DerivedDecision {
+                status: status.to_string(),
+                reviewer: event.actor.id.clone(),
+                decided_at: event.timestamp.clone(),
+                review_event_id: Some(event.id.clone()),
+                legacy,
+            });
+            continue;
+        }
+        // An accept's domain event is its decision trace when no explicit
+        // review.accepted exists (the historical accept path).
+        if let Some(applied) = applied_event_id
+            && event.id == applied
+        {
+            decisions.push(DerivedDecision {
+                status: "applied".to_string(),
+                reviewer: event.actor.id.clone(),
+                decided_at: event.timestamp.clone(),
+                review_event_id: None,
+                legacy: false,
+            });
+        }
+    }
+    decisions.sort_by(|a, b| a.decided_at.cmp(&b.decided_at));
+    decisions.pop()
+}
+
+/// Verify that every proposal's stored decision state is backed by the
+/// event log, and vice versa. Returns a list of human-readable conflicts
+/// (empty == parity holds). This is the invariant the conformance gate
+/// runs: it makes the mutable `status` field a verifiable projection
+/// rather than an unconstrained side-table.
+///
+/// Checks, per proposal:
+///   - a decided status (`applied` / `rejected` / `needs_revision`) MUST
+///     have a backing event in the log (a `review.*` event, or for
+///     `applied` the referenced domain event);
+///   - the stored status MUST equal the status derived from the log;
+///   - `pending_review` MUST NOT have a decision event.
+/// And globally:
+///   - every `review.*` event MUST reference a proposal that exists.
+pub fn verify_proposal_decision_parity(frontier: &Project) -> Vec<String> {
+    let mut conflicts = Vec::new();
+    let proposal_ids: BTreeSet<&str> = frontier.proposals.iter().map(|p| p.id.as_str()).collect();
+
+    for proposal in &frontier.proposals {
+        let derived =
+            proposal_status_from_log(frontier, &proposal.id, proposal.applied_event_id.as_deref());
+        match proposal.status.as_str() {
+            "pending_review" => {
+                if let Some(d) = derived {
+                    conflicts.push(format!(
+                        "proposal {} is stored pending_review but the log carries a {} decision ({})",
+                        proposal.id,
+                        d.status,
+                        d.review_event_id.as_deref().unwrap_or("domain event")
+                    ));
+                }
+            }
+            "accepted" => {
+                // Transient in-memory state only; never persisted.
+                conflicts.push(format!(
+                    "proposal {} is stored in transient 'accepted' state (should be 'applied')",
+                    proposal.id
+                ));
+            }
+            stored @ ("applied" | "rejected" | "needs_revision") => match derived {
+                None => conflicts.push(format!(
+                    "proposal {} is stored '{}' but NO decision event backs it in the log \
+                     — a decision with no signed, replayable record (the silent-drop vector)",
+                    proposal.id, stored
+                )),
+                Some(d) if d.status != stored => conflicts.push(format!(
+                    "proposal {} is stored '{}' but the log's latest decision is '{}'",
+                    proposal.id, stored, d.status
+                )),
+                Some(_) => {}
+            },
+            other => conflicts.push(format!(
+                "proposal {} has unknown status '{}'",
+                proposal.id, other
+            )),
+        }
+    }
+
+    for event in &frontier.events {
+        if matches!(
+            event.kind.as_str(),
+            events::EVENT_KIND_REVIEW_ACCEPTED
+                | events::EVENT_KIND_REVIEW_REJECTED
+                | events::EVENT_KIND_REVIEW_REVISION_REQUESTED
+        ) && !proposal_ids.contains(event.target.id.as_str())
+        {
+            conflicts.push(format!(
+                "review event {} targets proposal {} which does not exist in the frontier",
+                event.id, event.target.id
+            ));
+        }
+    }
+
+    conflicts
+}
+
+/// Backfill signed-review history for a frontier whose decisions predate
+/// `review.*` events. For every proposal that is already `rejected` or
+/// `needs_revision` but has no backing review event, synthesize an
+/// UNSIGNED legacy event (`legacy_backfill: true`) so parity holds and the
+/// decision is at least replayable. Legacy events are honest about
+/// provenance: they are unsigned because no signature was ever produced
+/// for these pre-feature decisions, and `legacy_backfill` exempts them
+/// from the strict "decided proposals must be signed" check.
+///
+/// `applied` proposals are NOT backfilled: their accept already produced a
+/// domain event in the log, which `proposal_status_from_log` recognizes as
+/// the decision trace. Returns the number of events synthesized.
+pub fn backfill_legacy_review_events(frontier: &mut Project) -> Result<usize, String> {
+    // Collect the work first (immutable borrow), then mutate.
+    let mut to_add: Vec<(String, String, String, String, String)> = Vec::new();
+    for proposal in &frontier.proposals {
+        let verdict = match proposal.status.as_str() {
+            "rejected" => "rejected",
+            "needs_revision" => "revision_requested",
+            _ => continue,
+        };
+        let already = proposal_status_from_log(frontier, &proposal.id, None).is_some();
+        if already {
+            continue;
+        }
+        let reviewer = proposal
+            .reviewed_by
+            .clone()
+            .unwrap_or_else(|| "reviewer:unknown".to_string());
+        let decided_at = proposal
+            .reviewed_at
+            .clone()
+            .unwrap_or_else(|| proposal.created_at.clone());
+        let reason = proposal
+            .decision_reason
+            .clone()
+            .filter(|r| !r.trim().is_empty())
+            .unwrap_or_else(|| "legacy decision (backfilled; reason not recorded)".to_string());
+        to_add.push((
+            proposal.id.clone(),
+            proposal.kind.clone(),
+            verdict.to_string(),
+            reviewer,
+            format!("{decided_at}\u{0}{reason}"),
+        ));
+    }
+    let count = to_add.len();
+    for (proposal_id, proposal_kind, verdict, reviewer, packed) in to_add {
+        let (decided_at, reason) = packed.split_once('\u{0}').unwrap_or((&packed, ""));
+        let event = events::new_review_decision_event(
+            &proposal_id,
+            &proposal_kind,
+            &verdict,
+            None,
+            &reviewer,
+            reason,
+            Some(decided_at),
+            true, // legacy_backfill
+        )?;
+        frontier.events.push(event);
+    }
+    if count > 0 {
+        mark_proof_stale(
+            frontier,
+            format!("Backfilled {count} legacy review events after latest proof export"),
+        );
+    }
+    Ok(count)
 }
 
 #[cfg(test)]
@@ -6212,5 +6604,203 @@ mod tests {
         )
         .unwrap();
         assert_eq!(auth.actor.id, "reviewer:will-blair");
+    }
+
+    // ── Signed review events + decision parity ────────────────────────
+
+    fn review_events_for<'a>(project: &'a Project, proposal_id: &str) -> Vec<&'a StateEvent> {
+        project
+            .events
+            .iter()
+            .filter(|e| {
+                e.target.r#type == "proposal"
+                    && e.target.id == proposal_id
+                    && e.kind.starts_with("review.")
+            })
+            .collect()
+    }
+
+    #[test]
+    fn reject_emits_signed_review_event_and_parity_holds() {
+        let key = accept_keypair();
+        let pubkey = hex::encode(key.verifying_key().to_bytes());
+        let (mut project, proposal) =
+            frontier_with_proposal(vec![accept_actor("reviewer:will", &pubkey)]);
+        reject_proposal_in_frontier_signed(
+            &mut project,
+            &proposal.id,
+            "reviewer:will",
+            "automated draft, not adjudicated",
+            Some(&key),
+            false,
+        )
+        .unwrap();
+
+        // The decision is now a signed, log-resident event — the thing a
+        // reject used to lack entirely.
+        let reviews = review_events_for(&project, &proposal.id);
+        assert_eq!(reviews.len(), 1, "exactly one review event");
+        let ev = reviews[0];
+        assert_eq!(ev.kind, events::EVENT_KIND_REVIEW_REJECTED);
+        assert_eq!(ev.target.r#type, "proposal");
+        assert!(ev.signature.is_some(), "review.rejected must be signed");
+        assert!(
+            crate::sign::verify_event_signature(ev, &pubkey).unwrap(),
+            "signature must verify under the reviewer's registered key"
+        );
+        // Side-table: chain-transparent.
+        assert_eq!(ev.before_hash, NULL_HASH);
+        assert_eq!(ev.after_hash, NULL_HASH);
+        // Stored status agrees with the log.
+        let stored = &project
+            .proposals
+            .iter()
+            .find(|p| p.id == proposal.id)
+            .unwrap()
+            .status;
+        assert_eq!(stored, "rejected");
+        assert!(
+            verify_proposal_decision_parity(&project).is_empty(),
+            "parity must hold after a signed reject"
+        );
+    }
+
+    #[test]
+    fn reject_requires_key_for_keyed_reviewer() {
+        let key = accept_keypair();
+        let pubkey = hex::encode(key.verifying_key().to_bytes());
+        let (mut project, proposal) =
+            frontier_with_proposal(vec![accept_actor("reviewer:will", &pubkey)]);
+        // No key supplied → an agent cannot reject under a keyed identity.
+        let err = reject_proposal_in_frontier_signed(
+            &mut project,
+            &proposal.id,
+            "reviewer:will",
+            "no key here",
+            None,
+            false,
+        )
+        .unwrap_err();
+        assert!(
+            err.contains("require") && err.contains("key"),
+            "expected key-custody error, got: {err}"
+        );
+        // And nothing was recorded.
+        assert!(review_events_for(&project, &proposal.id).is_empty());
+    }
+
+    #[test]
+    fn reject_keyless_ok_for_unregistered_reviewer() {
+        // Bootstrap: a reviewer with no registered key can still reject
+        // (a brand-new frontier must be usable before any keys exist).
+        let (mut project, proposal) = frontier_with_proposal(vec![]);
+        reject_proposal_in_frontier_signed(
+            &mut project,
+            &proposal.id,
+            "reviewer:bootstrap",
+            "legacy reject",
+            None,
+            false,
+        )
+        .unwrap();
+        let reviews = review_events_for(&project, &proposal.id);
+        assert_eq!(reviews.len(), 1);
+        assert!(reviews[0].signature.is_none(), "keyless reject is unsigned");
+        assert!(verify_proposal_decision_parity(&project).is_empty());
+    }
+
+    #[test]
+    fn parity_flags_status_with_no_backing_event() {
+        // Hand-edit a status to "rejected" with no event behind it — the
+        // exact tamper the mutable field used to allow silently.
+        let (mut project, proposal) = frontier_with_proposal(vec![]);
+        let idx = project
+            .proposals
+            .iter()
+            .position(|p| p.id == proposal.id)
+            .unwrap();
+        project.proposals[idx].status = "rejected".to_string();
+        project.proposals[idx].reviewed_by = Some("reviewer:ghost".to_string());
+        let conflicts = verify_proposal_decision_parity(&project);
+        assert_eq!(conflicts.len(), 1);
+        assert!(conflicts[0].contains("NO decision event"));
+    }
+
+    #[test]
+    fn backfill_makes_parity_hold_and_is_idempotent() {
+        let (mut project, proposal) = frontier_with_proposal(vec![]);
+        let idx = project
+            .proposals
+            .iter()
+            .position(|p| p.id == proposal.id)
+            .unwrap();
+        project.proposals[idx].status = "rejected".to_string();
+        project.proposals[idx].reviewed_by = Some("reviewer:legacy".to_string());
+        project.proposals[idx].reviewed_at = Some("2026-06-01T00:00:00Z".to_string());
+        project.proposals[idx].decision_reason = Some("old reject".to_string());
+
+        assert!(!verify_proposal_decision_parity(&project).is_empty());
+        let n = backfill_legacy_review_events(&mut project).unwrap();
+        assert_eq!(n, 1);
+        assert!(verify_proposal_decision_parity(&project).is_empty());
+
+        // The backfilled event is honest about provenance: legacy + unsigned.
+        let ev = review_events_for(&project, &proposal.id)[0];
+        assert_eq!(ev.kind, events::EVENT_KIND_REVIEW_REJECTED);
+        assert!(ev.signature.is_none());
+        assert_eq!(
+            ev.payload.get("legacy_backfill").and_then(Value::as_bool),
+            Some(true)
+        );
+        // Idempotent: a second run adds nothing.
+        assert_eq!(backfill_legacy_review_events(&mut project).unwrap(), 0);
+    }
+
+    #[test]
+    fn accept_decision_is_recognized_by_its_domain_event() {
+        // An accept's trace is the domain event it produces; parity must
+        // recognize that without requiring a separate review.accepted.
+        let (mut project, proposal) = frontier_with_proposal(vec![]);
+        let event_id = accept_proposal_in_frontier_signed(
+            &mut project,
+            &proposal.id,
+            "reviewer:test",
+            "looks right",
+            None,
+        )
+        .unwrap();
+        let stored = project
+            .proposals
+            .iter()
+            .find(|p| p.id == proposal.id)
+            .unwrap();
+        assert_eq!(stored.status, "applied");
+        assert_eq!(stored.applied_event_id.as_deref(), Some(event_id.as_str()));
+        assert!(
+            verify_proposal_decision_parity(&project).is_empty(),
+            "an applied proposal backed by its domain event satisfies parity"
+        );
+    }
+
+    #[test]
+    fn review_event_targeting_missing_proposal_is_flagged() {
+        let (mut project, _proposal) = frontier_with_proposal(vec![]);
+        let orphan = events::new_review_decision_event(
+            "vpr_does_not_exist",
+            "finding.add",
+            "rejected",
+            None,
+            "reviewer:x",
+            "orphan",
+            Some("2026-06-01T00:00:00Z"),
+            false,
+        )
+        .unwrap();
+        project.events.push(orphan);
+        let conflicts = verify_proposal_decision_parity(&project);
+        assert!(
+            conflicts.iter().any(|c| c.contains("does not exist")),
+            "an orphan review event must be flagged: {conflicts:?}"
+        );
     }
 }

@@ -100,6 +100,24 @@ pub(crate) fn cmd_check(
                 println!("  - {diff}");
             }
         }
+        // Review-decision parity: every proposal's stored status must be
+        // backed by a signed, replayable decision event in the log (a
+        // `review.*` event, or for an accept its domain event). A rejected
+        // proposal with no `review.rejected` event behind it is a
+        // decision with no tamper-evident record — the silent-drop vector.
+        // This makes the mutable `status` field a verified projection.
+        let parity_conflicts = vela_protocol::proposals::verify_proposal_decision_parity(&frontier);
+        println!(
+            "review-decision parity: {}",
+            if parity_conflicts.is_empty() {
+                "ok".to_string()
+            } else {
+                format!("{} conflict(s)", parity_conflicts.len())
+            }
+        );
+        for conflict in parity_conflicts.iter().take(20) {
+            println!("  - {conflict}");
+        }
         // Key-custody audit: once a reviewer is registered WITH a key,
         // their accept events should carry a signature (key possession is
         // the accept authority). Unsigned accepts predating key
@@ -155,6 +173,7 @@ pub(crate) fn cmd_check(
         print_signal_summary(&signal_report, strict);
         if !replay_report.ok
             || !replay_verification.ok
+            || !parity_conflicts.is_empty()
             || (strict
                 && (!signal_report.review_queue.is_empty()
                     || signal_report.proof_readiness.status != "ready"))

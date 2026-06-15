@@ -769,6 +769,18 @@ def apply_event(state: dict, event: dict) -> None:
         "key.revoke",
     ):
         return
+    # Reviewer decision records (review.accepted / review.rejected /
+    # review.revision_requested). Audit-only on the finding-effects digest:
+    # they target a proposal, recording WHO decided and HOW. Proposal status
+    # is a separate projection over these events, verified by
+    # proposals::verify_proposal_decision_parity in Rust. The Rust mirror is
+    # the explicit no-op arm in reducer.rs.
+    elif kind in (
+        "review.accepted",
+        "review.rejected",
+        "review.revision_requested",
+    ):
+        return
     else:
         raise ValueError(f"reducer: unsupported event kind {kind!r}")
 

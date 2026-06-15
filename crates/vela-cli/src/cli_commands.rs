@@ -3662,6 +3662,21 @@ pub(crate) enum ProposalAction {
         reviewer: String,
         #[arg(long)]
         reason: String,
+        /// Path to the reviewer's Ed25519 private key (hex seed). REQUIRED
+        /// when the reviewer is registered with a public key: a reject is
+        /// now a signed, append-only event, so key custody is the reject
+        /// authority just as it is for accept.
+        #[arg(long)]
+        key: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Reconstruct signed-review history for decisions made before
+    /// `review.*` events existed. Synthesizes an unsigned legacy event for
+    /// every already-rejected / needs-revision proposal that lacks one, so
+    /// `verify_proposal_decision_parity` holds. Idempotent.
+    BackfillReviews {
+        frontier: PathBuf,
         #[arg(long)]
         json: bool,
     },

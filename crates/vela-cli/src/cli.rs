@@ -2366,9 +2366,31 @@ pub(crate) fn check_json_payload(src: &Path, schema_only: bool, strict: bool) ->
             })
         }));
     }
+    // Review-decision parity: a stored proposal status with no signed,
+    // replayable decision event behind it is a tamper-evidence failure.
+    let parity_conflicts: Vec<String> = loaded
+        .as_ref()
+        .map(vela_protocol::proposals::verify_proposal_decision_parity)
+        .unwrap_or_default();
+    if !parity_conflicts.is_empty() {
+        diagnostics.extend(parity_conflicts.iter().map(|conflict| {
+            json!({
+                "severity": "error",
+                "rule_id": "review_decision_parity",
+                "check": "proposals",
+                "finding_id": null,
+                "field_path": null,
+                "message": conflict,
+                "suggestion": "Every decided proposal must have a signed review.* event (or, for accepts, its domain event). Run `vela proposals backfill-reviews` for legacy frontiers, or re-issue the decision through `vela accept` / `vela proposals reject`.",
+                "fixable": false,
+                "normalize_action": null,
+            })
+        }));
+    }
     let event_errors = replay_report
         .as_ref()
-        .map_or(0, |replay| usize::from(!replay.ok));
+        .map_or(0, |replay| usize::from(!replay.ok))
+        + usize::from(!parity_conflicts.is_empty());
     let state_integrity_errors = state_integrity_report
         .as_ref()
         .map_or(0, |report| report.structural_errors.len());
@@ -4188,10 +4210,22 @@ fn cmd_proposals(action: ProposalAction) {
             proposal_id,
             reviewer,
             reason,
+            key,
             json,
         } => {
-            proposals::reject_at_path(&frontier, &proposal_id, &reviewer, &reason)
-                .unwrap_or_else(|e| fail_return(&e));
+            let signing_key = key.map(|p| {
+                let hex_seed = std::fs::read_to_string(&p)
+                    .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", p.display())));
+                parse_signing_key(hex_seed.trim())
+            });
+            proposals::reject_at_path_signed(
+                &frontier,
+                &proposal_id,
+                &reviewer,
+                &reason,
+                signing_key.as_ref(),
+            )
+            .unwrap_or_else(|e| fail_return(&e));
             let payload = json!({
                 "ok": true,
                 "command": "proposals.reject",
@@ -4199,14 +4233,40 @@ fn cmd_proposals(action: ProposalAction) {
                 "proposal_id": proposal_id,
                 "reviewer": reviewer,
                 "status": "rejected",
+                "signed": signing_key.is_some(),
             });
             if json {
                 print_json(&payload);
             } else {
                 println!(
-                    "{} rejected proposal {}",
+                    "{} rejected proposal {}{}",
                     style::warn("rejected"),
-                    proposal_id
+                    proposal_id,
+                    if signing_key.is_some() {
+                        " (signed review.rejected event)"
+                    } else {
+                        ""
+                    }
+                );
+            }
+        }
+        ProposalAction::BackfillReviews { frontier, json } => {
+            let count =
+                proposals::backfill_reviews_at_path(&frontier).unwrap_or_else(|e| fail_return(&e));
+            let payload = json!({
+                "ok": true,
+                "command": "proposals.backfill-reviews",
+                "frontier": frontier.display().to_string(),
+                "synthesized": count,
+            });
+            if json {
+                print_json(&payload);
+            } else {
+                println!(
+                    "{} backfilled {} legacy review event(s) on {}",
+                    style::ok("ok"),
+                    count,
+                    frontier.display()
                 );
             }
         }
@@ -4891,20 +4951,22 @@ fn sign_and_apply(
             use ed25519_dalek::Signer;
             let _signature = hex::encode(signing_key.sign(&bytes).to_bytes());
             if action.kind == "accept_proposal" {
-                let event_id = vela_protocol::proposals::accept_at_path(
+                let event_id = vela_protocol::proposals::accept_at_path_signed(
                     &action.frontier,
                     proposal_id,
                     actor,
                     reason,
+                    Some(signing_key),
                 )
                 .map_err(|e| format!("accept_at_path: {e}"))?;
                 Ok(format!("event {event_id}"))
             } else {
-                vela_protocol::proposals::reject_at_path(
+                vela_protocol::proposals::reject_at_path_signed(
                     &action.frontier,
                     proposal_id,
                     actor,
                     reason,
+                    Some(signing_key),
                 )
                 .map_err(|e| format!("reject_at_path: {e}"))?;
                 Ok(format!("rejected {proposal_id}"))

@@ -319,7 +319,17 @@ pub fn apply_event_indexed(
         | "frontier.observation_reviewed"
         | "correction_return.review"
         | "research_trace.review"
-        | "key.revoke" => Ok(()),
+        | "key.revoke"
+        // Reviewer decision records. Audit-only on the FINDING projection:
+        // the accept's effect on state is the domain event it produced
+        // (finding.asserted, …), already replayed by its own arm; the
+        // review.* event records WHO decided and HOW. Proposal `status` is
+        // a separate projection over these events, verified by
+        // `proposals::verify_proposal_decision_parity` — not reconstructed
+        // here, so verify_replay's finding hashes are untouched.
+        | "review.accepted"
+        | "review.rejected"
+        | "review.revision_requested" => Ok(()),
         other => Err(format!("reducer: unsupported event kind '{other}'")),
     }
 }

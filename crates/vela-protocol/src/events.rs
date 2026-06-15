@@ -242,6 +242,23 @@ pub const EVENT_KIND_ATTEMPT_CLAIMED: &str = "attempt.claimed";
 /// claim does not depend on trusting the hub.
 pub const EVENT_KIND_STATEMENT_REGISTERED: &str = "statement.registered";
 
+/// A reviewer's decision on a proposal, recorded as a first-class,
+/// signed, append-only event. Before these existed, an accept graduated
+/// into a signed domain event (`finding.asserted`, …) but a REJECT
+/// mutated only the proposal file's `status` field — leaving no
+/// tamper-evident, replayable trace of the decision. That asymmetry was
+/// the silent-drop vector (THREAT_MODEL A11): a maintainer could suppress
+/// an outside producer's proposal with no signed record. These three
+/// kinds close it: every decision a key-registered reviewer makes is now
+/// a side-table event (`before_hash == after_hash == NULL_HASH`, so it is
+/// transparent to the per-finding hash chain) targeting the proposal,
+/// signed by the reviewer key. Proposal `status` becomes a projection of
+/// these events, verified against the stored field by the parity gate
+/// (`verify_proposal_decision_parity`).
+pub const EVENT_KIND_REVIEW_ACCEPTED: &str = "review.accepted";
+pub const EVENT_KIND_REVIEW_REJECTED: &str = "review.rejected";
+pub const EVENT_KIND_REVIEW_REVISION_REQUESTED: &str = "review.revision_requested";
+
 /// The complete registry of event kinds the protocol can emit or store.
 /// This is the writer-side universe; the reducer must handle every kind
 /// here (a real arm or an explicit no-op) — `reducer::every_known_kind_reduces`
@@ -303,6 +320,9 @@ pub const KNOWN_EVENT_KINDS: &[&str] = &[
     "correction_return.review",
     "research_trace.review",
     "key.revoke",
+    "review.accepted",
+    "review.rejected",
+    "review.revision_requested",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -507,6 +527,97 @@ pub fn new_revocation_event(
     };
     event.id = event_id(&event);
     event
+}
+
+/// Payload of a `review.accepted` / `review.rejected` /
+/// `review.revision_requested` event. Records WHICH proposal was decided
+/// and HOW, binding the decision to the exact proposal by its
+/// content-addressed id (`vpr_…`). The event's `actor` is the deciding
+/// reviewer; the event's `signature` (set by the caller) is the
+/// non-repudiable proof the key holder made the call. `applied_event_id`
+/// is set only for accepts and points at the domain event the accept
+/// graduated into. `legacy_backfill` marks a decision reconstructed from
+/// a pre-`review.*` frontier (status was stored before signed-review
+/// events existed): such events are necessarily unsigned and are exempt
+/// from the strict-mode "decided proposals must be signed" check.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ReviewDecisionPayload {
+    /// The proposal this decision applies to (`vpr_…`, content-addressed).
+    pub proposal_id: String,
+    /// The proposal's kind (e.g. `finding.add`), copied for legibility so
+    /// a reviewer reading the log need not cross-reference the proposal.
+    pub proposal_kind: String,
+    /// `accepted` | `rejected` | `revision_requested`. Redundant with the
+    /// event kind but explicit in the payload so consumers that index by
+    /// payload need not parse the kind string.
+    pub verdict: String,
+    /// For accepts: the domain event id (`vev_…`) the accept produced.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub applied_event_id: Option<String>,
+    /// True when this event was synthesized by the migration backfill for
+    /// a decision made before signed-review events existed.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub legacy_backfill: bool,
+}
+
+/// Construct an unsigned `review.*` event for a proposal decision. The
+/// event is a side-table record (`before_hash == after_hash ==
+/// NULL_HASH`), so it is transparent to the per-finding hash chain. The
+/// caller signs it (under the reviewer key) before persisting; `event.id`
+/// is the content address of the unsigned shape, so signing never changes
+/// the id. `verdict` must be one of `accepted` / `rejected` /
+/// `revision_requested` and selects the event kind.
+pub fn new_review_decision_event(
+    proposal_id: &str,
+    proposal_kind: &str,
+    verdict: &str,
+    applied_event_id: Option<String>,
+    reviewer_id: &str,
+    reason: &str,
+    timestamp: Option<&str>,
+    legacy_backfill: bool,
+) -> Result<StateEvent, String> {
+    let kind = match verdict {
+        "accepted" => EVENT_KIND_REVIEW_ACCEPTED,
+        "rejected" => EVENT_KIND_REVIEW_REJECTED,
+        "revision_requested" => EVENT_KIND_REVIEW_REVISION_REQUESTED,
+        other => return Err(format!("unknown review verdict '{other}'")),
+    };
+    let payload = ReviewDecisionPayload {
+        proposal_id: proposal_id.to_string(),
+        proposal_kind: proposal_kind.to_string(),
+        verdict: verdict.to_string(),
+        applied_event_id,
+        legacy_backfill,
+    };
+    let payload_value =
+        serde_json::to_value(&payload).expect("ReviewDecisionPayload serializes to a JSON object");
+    let timestamp = timestamp
+        .map(|t| t.to_string())
+        .unwrap_or_else(|| Utc::now().to_rfc3339());
+    let mut event = StateEvent {
+        schema: EVENT_SCHEMA.to_string(),
+        id: String::new(),
+        kind: kind.to_string(),
+        target: StateTarget {
+            r#type: "proposal".to_string(),
+            id: proposal_id.to_string(),
+        },
+        actor: StateActor {
+            id: reviewer_id.to_string(),
+            r#type: actor_kind(reviewer_id).to_string(),
+        },
+        timestamp,
+        reason: reason.to_string(),
+        before_hash: NULL_HASH.to_string(),
+        after_hash: NULL_HASH.to_string(),
+        payload: payload_value,
+        caveats: Vec::new(),
+        signature: None,
+        schema_artifact_id: None,
+    };
+    event.id = event_id(&event);
+    Ok(event)
 }
 
 /// Construct an `evidence_atom.locator_repaired` event targeting an
@@ -1511,6 +1622,45 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
                 && replacement.eq_ignore_ascii_case(revoked)
             {
                 return Err("replacement_pubkey must differ from revoked_pubkey".to_string());
+            }
+        }
+        // Reviewer decision events. The proposal id binds the decision to
+        // content (it is content-addressed); verdict must agree with the
+        // kind so a consumer indexing by either field reads the same call.
+        EVENT_KIND_REVIEW_ACCEPTED
+        | EVENT_KIND_REVIEW_REJECTED
+        | EVENT_KIND_REVIEW_REVISION_REQUESTED => {
+            let proposal_id = require_str("proposal_id")?;
+            if !proposal_id.starts_with("vpr_") {
+                return Err(format!(
+                    "payload.proposal_id must start with 'vpr_', got '{proposal_id}'"
+                ));
+            }
+            require_str("proposal_kind")?;
+            let verdict = require_str("verdict")?;
+            let expected = match kind {
+                EVENT_KIND_REVIEW_ACCEPTED => "accepted",
+                EVENT_KIND_REVIEW_REJECTED => "rejected",
+                _ => "revision_requested",
+            };
+            if verdict != expected {
+                return Err(format!(
+                    "review event kind '{kind}' requires verdict '{expected}', got '{verdict}'"
+                ));
+            }
+            // applied_event_id only makes sense on an accept, and must be a
+            // vev_ when present.
+            if let Some(ev) = object.get("applied_event_id").and_then(Value::as_str) {
+                if kind != EVENT_KIND_REVIEW_ACCEPTED {
+                    return Err(format!(
+                        "applied_event_id is only valid on '{EVENT_KIND_REVIEW_ACCEPTED}'"
+                    ));
+                }
+                if !ev.starts_with("vev_") {
+                    return Err(format!(
+                        "payload.applied_event_id must start with 'vev_', got '{ev}'"
+                    ));
+                }
             }
         }
         // v0.49: NegativeResult deposit. Carries the full inline
