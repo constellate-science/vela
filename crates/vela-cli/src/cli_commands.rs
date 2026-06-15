@@ -2,6 +2,21 @@
 //! subcommand enums, split out of `cli.rs` so the ~5k lines of command
 //! definitions live apart from the handler functions and dispatch. Pure
 //! data: the handlers and `run_command` dispatch stay in `cli.rs`.
+//!
+//! ## Flag-naming conventions (one name per concept)
+//! - **Acting identity** → `--reviewer` (canonical). The legacy `--actor`
+//!   and `--by` spellings are accepted as hidden aliases on these commands,
+//!   so old scripts keep working; new help shows `--reviewer`. The value
+//!   defaults from the configured identity (`vela id`), so the flag is
+//!   usually omitted entirely. `--owner` stays distinct (registry
+//!   owner-role operations); `--actor` stays the canonical for the
+//!   lower-level verifier/author identities (lean verify-all, ingest) that
+//!   are NOT the reviewer concept.
+//! - **Signing key** → `--key` (canonical). `--private-key` is a hidden
+//!   alias on `sign apply`. Defaults from `vela id`.
+//! - **Targets** → `--hub` (a registry/peer base URL the client talks to),
+//!   `--to` (a publish/append destination), `--from` (a read source). One
+//!   meaning each; do not overload.
 
 use clap::Subcommand;
 use std::path::PathBuf;
@@ -874,7 +889,7 @@ pub(crate) enum Commands {
         proposal_id: String,
         /// Reviewer actor id. Optional: defaults to your configured
         /// identity (`vela id create`).
-        #[arg(long)]
+        #[arg(long, alias = "actor", alias = "by")]
         reviewer: Option<String>,
         #[arg(long)]
         reason: String,
@@ -946,7 +961,7 @@ pub(crate) enum Commands {
         note: String,
         /// The attesting reviewer (must be reviewer:…). Optional: defaults
         /// to your configured identity (`vela id`).
-        #[arg(long)]
+        #[arg(long = "reviewer", alias = "actor", alias = "by")]
         by: Option<String>,
         /// Path to the reviewer's Ed25519 private key. Optional: defaults to
         /// your configured identity's key.
@@ -994,7 +1009,7 @@ pub(crate) enum Commands {
         frontier: PathBuf,
         proposal_id: String,
         /// Recommending reviewer. Optional: defaults to your identity.
-        #[arg(long)]
+        #[arg(long = "reviewer", alias = "actor", alias = "by")]
         by: Option<String>,
         /// Reviewer key. Optional: defaults to your identity's key.
         #[arg(long)]
@@ -1027,7 +1042,7 @@ pub(crate) enum Commands {
         ttl: u64,
         /// Claiming actor (agent:… or reviewer:…). Optional: defaults to
         /// your configured identity (`vela id`).
-        #[arg(long)]
+        #[arg(long = "reviewer", alias = "actor", alias = "by")]
         by: Option<String>,
         /// Path to the claimant's Ed25519 private key. Optional: defaults to
         /// your configured identity's key.
@@ -1059,7 +1074,7 @@ pub(crate) enum Commands {
         #[arg(long)]
         finding: Option<String>,
         /// Recording actor. Optional: defaults to your configured identity.
-        #[arg(long)]
+        #[arg(long = "reviewer", alias = "actor", alias = "by")]
         by: Option<String>,
         /// Actor key. Optional: defaults to your configured identity's key.
         #[arg(long)]
@@ -1132,7 +1147,7 @@ pub(crate) enum Commands {
         #[arg(long = "scope")]
         scopes: Vec<String>,
         /// Local reviewer id, for example `reviewer:will-blair`.
-        #[arg(long)]
+        #[arg(long, alias = "actor", alias = "by")]
         reviewer: Option<String>,
         /// Reviewer role for this attestation, such as `domain_reviewer`.
         #[arg(long)]
@@ -1293,7 +1308,9 @@ pub(crate) enum SignAction {
     /// Sign unsigned findings in a frontier
     Apply {
         frontier: PathBuf,
-        #[arg(long)]
+        /// Path to the Ed25519 private key. Canonical flag is `--key`;
+        /// `--private-key` is accepted as a back-compat alias.
+        #[arg(long = "key", alias = "private-key")]
         private_key: PathBuf,
         #[arg(long)]
         json: bool,
@@ -1582,7 +1599,7 @@ pub(crate) enum BridgesAction {
         bridge_id: String,
         /// Reviewer identity attaching the verdict. Defaults to
         /// $VELA_REVIEWER_ID or `reviewer:will-blair`.
-        #[arg(long)]
+        #[arg(long, alias = "actor", alias = "by")]
         reviewer: Option<String>,
         /// Optional verdict note.
         #[arg(long)]
@@ -1595,7 +1612,7 @@ pub(crate) enum BridgesAction {
     Refute {
         frontier: PathBuf,
         bridge_id: String,
-        #[arg(long)]
+        #[arg(long, alias = "actor", alias = "by")]
         reviewer: Option<String>,
         #[arg(long)]
         note: Option<String>,
@@ -3738,7 +3755,7 @@ pub(crate) enum ProposalAction {
         frontier: PathBuf,
         proposal_id: String,
         /// Reviewer actor id. Optional: defaults to your configured identity.
-        #[arg(long)]
+        #[arg(long, alias = "actor", alias = "by")]
         reviewer: Option<String>,
         #[arg(long)]
         reason: String,
@@ -3754,7 +3771,7 @@ pub(crate) enum ProposalAction {
         frontier: PathBuf,
         proposal_id: String,
         /// Reviewer actor id. Optional: defaults to your configured identity.
-        #[arg(long)]
+        #[arg(long, alias = "actor", alias = "by")]
         reviewer: Option<String>,
         #[arg(long)]
         reason: String,
