@@ -363,10 +363,10 @@ pub fn project(projects: &[&Project]) -> Atlas {
             continue;
         };
         for (tgt_global, kind) in &m.links {
-            if let Some(&tgt) = global_to_class.get(tgt_global.as_str()) {
-                if src != tgt {
-                    edge_set.insert((src.to_string(), tgt.to_string(), kind.clone()));
-                }
+            if let Some(&tgt) = global_to_class.get(tgt_global.as_str())
+                && src != tgt
+            {
+                edge_set.insert((src.to_string(), tgt.to_string(), kind.clone()));
             }
         }
     }
