@@ -298,6 +298,7 @@ pub const KNOWN_EVENT_KINDS: &[&str] = &[
     "frontier.synced_with_peer",
     "frontier.conflict_detected",
     "frontier.conflict_resolved",
+    "frontier.forked_from",
     "frontier.observation_reviewed",
     "bridge.reviewed",
     "replication.deposited",
@@ -1380,6 +1381,27 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
                 .get("divergence_count")
                 .and_then(Value::as_u64)
                 .ok_or("missing required non-negative integer 'divergence_count'")?;
+        }
+        // A private fork is a recorded, replayable governance decision:
+        // `F_private = F_public@base_frontier@base_root ⊕ Δ_private`. Like the
+        // other `frontier.*` observations it mutates no finding state (reducer
+        // no-op); it pins the public checkpoint the private overlay extends, so
+        // a later frontier request can be diffed against the right base.
+        "frontier.forked_from" => {
+            let base = require_str("base_frontier")?;
+            if !base.starts_with("vfr_") {
+                return Err("payload.base_frontier must be a 'vfr_' frontier id".to_string());
+            }
+            require_str("base_root")?;
+            let reason = require_str("fork_reason")?;
+            if reason.trim().is_empty() {
+                return Err("payload.fork_reason must be a non-empty string".to_string());
+            }
+            if let Some(a) = object.get("triggering_ancestors")
+                && !a.is_array()
+            {
+                return Err("payload.triggering_ancestors must be an array when present".to_string());
+            }
         }
         "frontier.conflict_detected" => {
             require_str("peer_id")?;

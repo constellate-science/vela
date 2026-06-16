@@ -114,20 +114,38 @@ pub fn find_priority_registration<'a>(
 ///     support polynomial is zero, hence the status cannot be T).
 ///   - `finding.dependency_invalidated` contributes a refute variable.
 pub fn derive_status_provenance(events: &[StateEvent], id: &str) -> StatusProvenance {
+    derive_status_provenance_tiered(events, id, crate::access_tier::AccessTier::Public)
+}
+
+/// Visibility-aware [`derive_status_provenance`]: every support/refute variable
+/// is tagged with `tier` (the access tier of the finding whose status this is),
+/// so `StatusProvenance::derive_public_support(clearance)` can later project out
+/// the private derivations. `tier = Public` leaves variables bare and is
+/// byte-identical to the untagged path (so the canonical finding-effects digest
+/// and every cross-impl fixture are unaffected — visibility lives only in the
+/// derived projection, never in stored state). This is how "private memory is
+/// not public truth" becomes enforced rather than assumed.
+pub fn derive_status_provenance_tiered(
+    events: &[StateEvent],
+    id: &str,
+    tier: crate::access_tier::AccessTier,
+) -> StatusProvenance {
+    use crate::status_provenance::tag_visibility;
     let mut sp = StatusProvenance::empty();
+    let var = |e: &StateEvent| ProvenancePoly::singleton(tag_visibility(e.id.as_str(), tier));
     for e in events.iter().filter(|e| e.target.id == id) {
         match e.kind.as_str() {
-            "finding.asserted" => sp.add_support(&ProvenancePoly::singleton(e.id.as_str())),
+            "finding.asserted" => sp.add_support(&var(e)),
             "finding.reviewed" => {
                 if matches!(
                     e.payload.get("status").and_then(Value::as_str),
                     Some("accepted") | Some("approved")
                 ) {
-                    sp.add_support(&ProvenancePoly::singleton(e.id.as_str()));
+                    sp.add_support(&var(e));
                 }
             }
             "finding.dependency_invalidated" => {
-                sp.add_refute(&ProvenancePoly::singleton(e.id.as_str()));
+                sp.add_refute(&var(e));
             }
             "finding.superseded" | "finding.retracted" => {
                 let retracted: BTreeSet<String> = sp.support.support();

@@ -247,7 +247,8 @@ pub fn apply_event_indexed(
         // scripts.
         "frontier.synced_with_peer"
         | "frontier.conflict_detected"
-        | "frontier.conflict_resolved" => Ok(()),
+        | "frontier.conflict_resolved"
+        | "frontier.forked_from" => Ok(()),
         // v0.67: bridge review verdict. Bridges live in `.vela/bridges/`
         // as a side table; the reducer arm is a no-op on
         // `Project.findings`. Consumers (Workbench, audit scripts,
@@ -2327,6 +2328,7 @@ mod tests {
             "frontier.synced_with_peer",
             "frontier.conflict_detected",
             "frontier.conflict_resolved",
+            "frontier.forked_from",
         ] {
             let mut state = project::assemble("test", vec![], 0, 0, "test");
             let snapshot_before = events::snapshot_hash(&state);

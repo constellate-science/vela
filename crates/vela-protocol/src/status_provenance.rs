@@ -38,7 +38,40 @@ use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
 
+use crate::access_tier::AccessTier;
 use crate::provenance_poly::ProvenancePoly;
+
+/// Separator between a provenance variable and its visibility tag. `#` cannot
+/// appear in a `vev_`/`vf_` id (`[a-z0-9_]`), so the split is unambiguous and
+/// round-trips. A bare variable (no separator) is `Public` — so every
+/// pre-existing polynomial is already correctly public-tagged at zero cost.
+pub const VISIBILITY_SEP: char = '#';
+
+/// Tag a provenance variable with the originating object's access tier. `Public`
+/// is left bare (the canonical, unsuffixed form); `Restricted`/`Classified`
+/// append `#restricted` / `#classified`. This is the ONLY place visibility
+/// enters a variable, and it happens at build time, never mutating a stored
+/// polynomial. The public projection is then a literal instance of the proven
+/// retraction homomorphism (`docs/THEORY.md`, Theorem 3): "private memory is not
+/// public truth" becomes a derived fact, not a slogan.
+#[must_use]
+pub fn tag_visibility(var: &str, tier: AccessTier) -> String {
+    match tier {
+        AccessTier::Public => var.to_string(),
+        other => format!("{var}{VISIBILITY_SEP}{}", other.canonical()),
+    }
+}
+
+/// The visibility tier carried by a (possibly tagged) variable. A bare variable
+/// is `Public`; an unrecognized suffix is treated as the most-restrictive tier
+/// (fail-closed — a malformed tag never leaks as public support).
+#[must_use]
+pub fn variable_tier(var: &str) -> AccessTier {
+    match var.rsplit_once(VISIBILITY_SEP) {
+        None => AccessTier::Public,
+        Some((_, suffix)) => AccessTier::parse(suffix).unwrap_or(AccessTier::Classified),
+    }
+}
 
 /// Belnap four-valued status.
 ///
@@ -176,6 +209,68 @@ impl StatusProvenance {
             support: self.support.retract(retracted),
             refute: self.refute.retract(retracted),
         }
+    }
+
+    /// Variables across support+refute tagged ABOVE `clearance` (the set a
+    /// public/lower-clearance reader may not count).
+    fn over_clearance_vars(&self, clearance: AccessTier) -> BTreeSet<String> {
+        self.support
+            .support()
+            .into_iter()
+            .chain(self.refute.support())
+            .filter(|v| variable_tier(v) > clearance)
+            .collect()
+    }
+
+    /// Project the support polynomial to what a reader at `clearance` may count:
+    /// every monomial touching an over-clearance variable is dropped. This is a
+    /// LITERAL instance of [`Self::retract`] (the proven homomorphism `rho_Y`),
+    /// so its subset bound holds for free — there is nothing new to prove about
+    /// the algebra. **The canonical `self.support` is never mutated**; visibility
+    /// filtering happens only at projection time (auditability preserved). With
+    /// `clearance = Public` this is the law's `State_public`; with `Classified`
+    /// it returns the full support unchanged (`State_private`).
+    #[must_use]
+    pub fn derive_public_support(&self, clearance: AccessTier) -> ProvenancePoly {
+        self.support.retract(&self.over_clearance_vars(clearance))
+    }
+
+    /// The refute analogue of [`Self::derive_public_support`].
+    #[must_use]
+    pub fn derive_public_refute(&self, clearance: AccessTier) -> ProvenancePoly {
+        self.refute.retract(&self.over_clearance_vars(clearance))
+    }
+
+    /// The whole status-provenance projected to a clearance: both polynomials
+    /// filtered of over-clearance variables. The public Belnap corner
+    /// (`project_to_clearance(Public).derive_status()`) is exactly the law's
+    /// public truth — a restricted-only-supported claim reads `N` publicly while
+    /// a cleared reader sees `T`.
+    #[must_use]
+    pub fn project_to_clearance(&self, clearance: AccessTier) -> Self {
+        let over = self.over_clearance_vars(clearance);
+        Self {
+            support: self.support.retract(&over),
+            refute: self.refute.retract(&over),
+        }
+    }
+
+    /// The graded (bilattice) status a reader at `clearance` derives — the
+    /// visibility-scoped analogue of [`Self::derive_graded_status`]. Feeds the
+    /// clearance-filtered support/refute polynomials into the same `status_point`
+    /// evaluation, so the public graded corner differs from the private one
+    /// exactly when a restricted derivation is the only thing holding a claim up.
+    #[must_use]
+    pub fn derive_public_graded_status(
+        &self,
+        clearance: AccessTier,
+        confidence: &std::collections::BTreeMap<String, crate::frontier_calculus::Rational>,
+    ) -> crate::frontier_calculus::BilatticePoint {
+        crate::frontier_calculus::status_point(
+            &self.derive_public_support(clearance),
+            &self.derive_public_refute(clearance),
+            confidence,
+        )
     }
 
     /// Whether the support set contains the given variable.
@@ -391,5 +486,78 @@ mod tests {
         // Cannot become T from F by retraction alone.
         assert_ne!(retracted.derive_status(), BelnapStatus::True);
         assert_eq!(retracted.derive_status(), BelnapStatus::None);
+    }
+
+    // ── Visibility-scoped provenance: "private memory is not public truth" ──
+
+    #[test]
+    fn variable_tag_round_trips() {
+        assert_eq!(tag_visibility("vev_x", AccessTier::Public), "vev_x");
+        assert_eq!(tag_visibility("vev_x", AccessTier::Restricted), "vev_x#restricted");
+        assert_eq!(variable_tier("vev_x"), AccessTier::Public);
+        assert_eq!(variable_tier("vev_x#restricted"), AccessTier::Restricted);
+        assert_eq!(variable_tier("vev_x#classified"), AccessTier::Classified);
+        // fail-closed: a malformed tag never leaks as public
+        assert_eq!(variable_tier("vev_x#garbage"), AccessTier::Classified);
+    }
+
+    #[test]
+    fn public_projection_drops_restricted_support_keeps_public() {
+        let mut sp = StatusProvenance::empty();
+        sp.add_support(&ProvenancePoly::singleton(tag_visibility("vev_pub", AccessTier::Public)));
+        sp.add_support(&ProvenancePoly::singleton(tag_visibility(
+            "vev_priv",
+            AccessTier::Restricted,
+        )));
+
+        // Public reader: the restricted derivation is projected OUT.
+        let pubs = sp.derive_public_support(AccessTier::Public).support();
+        assert!(pubs.contains("vev_pub"));
+        assert!(!pubs.iter().any(|v| v.starts_with("vev_priv")));
+
+        // Classified reader: the full support set is visible.
+        let clss = sp.derive_public_support(AccessTier::Classified).support();
+        assert!(clss.iter().any(|v| v.starts_with("vev_priv")));
+
+        // The canonical stored support is NEVER mutated (auditability).
+        assert_eq!(sp.support.support().len(), 2);
+    }
+
+    #[test]
+    fn restricted_only_support_is_none_publicly_true_privately() {
+        let mut sp = StatusProvenance::empty();
+        sp.add_support(&ProvenancePoly::singleton(tag_visibility(
+            "vev_priv",
+            AccessTier::Restricted,
+        )));
+        // The law's State_public vs State_private: a claim held up only by a
+        // private derivation reads N to the public, T to a cleared reader.
+        assert_eq!(
+            sp.project_to_clearance(AccessTier::Public).derive_status(),
+            BelnapStatus::None
+        );
+        assert_eq!(
+            sp.project_to_clearance(AccessTier::Classified).derive_status(),
+            BelnapStatus::True
+        );
+    }
+
+    #[test]
+    fn public_graded_corner_differs_from_private_for_restricted_support() {
+        let conf = std::collections::BTreeMap::new();
+        let mut sp = StatusProvenance::empty();
+        sp.add_support(&ProvenancePoly::singleton(tag_visibility(
+            "vev_priv",
+            AccessTier::Restricted,
+        )));
+        let public_corner = sp
+            .derive_public_graded_status(AccessTier::Public, &conf)
+            .corner();
+        let private_corner = sp
+            .derive_public_graded_status(AccessTier::Classified, &conf)
+            .corner();
+        assert_ne!(public_corner, private_corner);
+        assert_eq!(public_corner, BelnapStatus::None);
+        assert_eq!(private_corner, BelnapStatus::True);
     }
 }
