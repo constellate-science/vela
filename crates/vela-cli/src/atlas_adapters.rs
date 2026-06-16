@@ -25,6 +25,11 @@ pub struct SourceRecord {
     pub assertion_text: String,
     /// Assertion type tag (e.g. "lean-formalization").
     pub assertion_type: String,
+    /// Cross-problem reduction targets in the SAME namespace (e.g. ["28"] when
+    /// this problem's Lean file proves `implies_erdos_28`). The command resolves
+    /// these to a typed `implies` link once all finding ids are known. Sparse —
+    /// see `scan_cross_problem_edges.py` (today: 2 across the whole corpus).
+    pub implies: Vec<String>,
 }
 
 /// Build a real, content-addressed finding bundle from a source record. The id
@@ -128,6 +133,23 @@ fn leading_number(stem: &str) -> Option<String> {
     (!digits.is_empty()).then_some(digits)
 }
 
+/// Cross-problem reduction targets named in a Lean file: every distinct `M` in
+/// `implies_erdos_<M>` other than the file's own problem `self_id` (drop
+/// self-loops). The honest reduction structure of the formalized corpus.
+fn implied_problems(text: &str, self_id: &str) -> Vec<String> {
+    const MARK: &str = "implies_erdos_";
+    let mut out: Vec<String> = Vec::new();
+    let mut rest = text;
+    while let Some(pos) = rest.find(MARK) {
+        rest = &rest[pos + MARK.len()..];
+        let digits: String = rest.chars().take_while(char::is_ascii_digit).collect();
+        if !digits.is_empty() && digits != self_id && !out.contains(&digits) {
+            out.push(digits);
+        }
+    }
+    out
+}
+
 /// formal-conjectures: `<dir>/N.lean` is the Lean formalization of Erdős #N; its
 /// `@[category research solved|open]` annotation is the declared status.
 pub fn read_formal(dir: &Path, rev: &str) -> Result<Vec<SourceRecord>, String> {
@@ -153,6 +175,7 @@ pub fn read_formal(dir: &Path, rev: &str) -> Result<Vec<SourceRecord>, String> {
                  declared status '{status}'."
             ),
             assertion_type: "lean-formalization".into(),
+            implies: implied_problems(&text, stem),
         });
     }
     Ok(out)
@@ -175,6 +198,7 @@ pub fn read_alphaproof(dir: &Path, rev: &str) -> Result<Vec<SourceRecord>, Strin
                  ({fname} @ {rev}). A corroborating Lean artifact."
             ),
             assertion_type: "lean-formalization".into(),
+            implies: Vec::new(),
         });
     }
     Ok(out)
@@ -208,11 +232,22 @@ mod tests {
     }
 
     #[test]
+    fn implied_problems_finds_cross_refs_and_drops_self_loops() {
+        let text = "theorem erdos_40.variants.implies_erdos_28 : ... \n import «28»";
+        assert_eq!(implied_problems(text, "40"), vec!["28".to_string()]);
+        // self-loop dropped
+        assert!(implied_problems("erdos_90 implies_erdos_90", "90").is_empty());
+        // none
+        assert!(implied_problems("no refs here", "5").is_empty());
+    }
+
+    #[test]
     fn build_finding_is_content_addressed_and_deterministic() {
         let rec = SourceRecord {
             external_id: "40".into(),
             assertion_text: "Erdős Problem #40: declared status 'solved'.".into(),
             assertion_type: "lean-formalization".into(),
+            implies: vec![],
         };
         let a = build_finding(&rec, "formal");
         let b = build_finding(&rec, "formal");

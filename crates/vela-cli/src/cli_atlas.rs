@@ -328,12 +328,15 @@ fn run_ingest_source(args: &[String]) {
     let mut findings = Vec::new();
     let mut plan: Vec<(String, Anchor)> = Vec::new();
     let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut id_by_extid: std::collections::BTreeMap<String, String> =
+        std::collections::BTreeMap::new();
     for rec in &records {
         let finding = crate::atlas_adapters::build_finding(rec, &adapter);
         let fid = finding.id.clone();
         if !seen.insert(fid.clone()) {
             continue; // duplicate content-address (same text+type+id)
         }
+        id_by_extid.entry(rec.external_id.clone()).or_insert(fid.clone());
         findings.push(finding);
         plan.push((
             fid,
@@ -350,10 +353,36 @@ fn run_ingest_source(args: &[String]) {
         ));
     }
 
+    // Second pass: resolve cross-problem `implies` edges now that every finding
+    // id is known. A typed `implies` link from the source finding to the target
+    // problem's finding lifts to a real erdos→erdos edge in `vela atlas`. Sparse.
+    let mut edges = 0usize;
+    for rec in &records {
+        if rec.implies.is_empty() {
+            continue;
+        }
+        let Some(src_id) = id_by_extid.get(&rec.external_id).cloned() else {
+            continue;
+        };
+        for tgt_ext in &rec.implies {
+            if let Some(tgt_id) = id_by_extid.get(tgt_ext)
+                && let Some(f) = findings.iter_mut().find(|f| f.id == src_id)
+            {
+                f.add_link(
+                    tgt_id,
+                    "implies",
+                    &format!("Lean: erdos_{} implies_erdos_{}", rec.external_id, tgt_ext),
+                );
+                edges += 1;
+            }
+        }
+    }
+
     if dry {
         print_json(&json!({
             "dry_run": true, "adapter": adapter, "namespace": ns,
             "records": records.len(), "findings": findings.len(), "anchors": plan.len(),
+            "cross_problem_edges": edges,
         }));
         return;
     }
@@ -386,6 +415,7 @@ fn run_ingest_source(args: &[String]) {
     print_json(&json!({
         "ok": true, "adapter": adapter, "namespace": ns,
         "findings": project.findings.len(), "anchored": anchored,
+        "cross_problem_edges": edges,
         "out": out, "verify_replay_ok": replay.ok, "signer": actor,
     }));
 }
