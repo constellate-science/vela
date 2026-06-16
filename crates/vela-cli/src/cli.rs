@@ -5845,6 +5845,12 @@ pub fn run_from_args() {
             crate::cli_claim::run_anchor(&args);
             return;
         }
+        // Math Atlas projection: `vela atlas <frontier>...`. Read-only,
+        // cross-frontier; unions claims into cells by HardIdentity anchors.
+        Some("atlas") => {
+            crate::cli_atlas::run(&args);
+            return;
+        }
         Some(cmd) if !is_science_subcommand(cmd) => {
             eprintln!(
                 "{} unknown or non-release command: {cmd}",
