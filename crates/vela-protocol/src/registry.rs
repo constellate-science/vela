@@ -871,7 +871,8 @@ mod tests {
     #[test]
     fn event_first_snapshot_locator_normalizes_hub_registry_urls() {
         assert_eq!(
-            event_first_snapshot_locator("https://hub.constellate.science/entries", "vfr_demo").as_deref(),
+            event_first_snapshot_locator("https://hub.constellate.science/entries", "vfr_demo")
+                .as_deref(),
             Some("https://hub.constellate.science/entries/vfr_demo/snapshot")
         );
         assert_eq!(

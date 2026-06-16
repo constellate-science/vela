@@ -2355,9 +2355,8 @@ async fn get_finding_context(
             .get("links")
             .and_then(|v| v.as_array())
             .map(|ls| {
-                ls.iter().any(|l| {
-                    l.get("target").and_then(|v| v.as_str()) == Some(vf_id.as_str())
-                })
+                ls.iter()
+                    .any(|l| l.get("target").and_then(|v| v.as_str()) == Some(vf_id.as_str()))
             })
             .unwrap_or(false);
         if links_in {
@@ -2375,7 +2374,9 @@ async fn get_finding_context(
         arr(k)
             .into_iter()
             .filter(|a| {
-                a.get("target").and_then(|t| t.get("id")).and_then(|v| v.as_str())
+                a.get("target")
+                    .and_then(|t| t.get("id"))
+                    .and_then(|v| v.as_str())
                     == Some(vf_id.as_str())
             })
             .collect()
