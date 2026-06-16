@@ -13,7 +13,7 @@
 use std::path::Path;
 
 use serde_json::json;
-use vela_protocol::{atlas, repo};
+use vela_protocol::{atlas, boundary, frontier_graph::FrontierGraph, pathfind, repo};
 
 use crate::cli::{fail, print_json};
 
@@ -29,6 +29,18 @@ pub(crate) fn run(args: &[String]) {
     }
     if args.get(2).map(String::as_str) == Some("frontier") {
         run_frontier(args);
+        return;
+    }
+    if args.get(2).map(String::as_str) == Some("graph") {
+        run_graph(args);
+        return;
+    }
+    if args.get(2).map(String::as_str) == Some("boundary") {
+        run_boundary(args);
+        return;
+    }
+    if args.get(2).map(String::as_str) == Some("pathfind") {
+        run_pathfind(args);
         return;
     }
     let frontiers: Vec<&str> = args
@@ -120,6 +132,62 @@ fn run_frontier(args: &[String]) {
             "cells": stale_open,
         },
     }));
+}
+
+/// Load a single frontier project from the path that follows the subcommand,
+/// failing with a usage message when absent. Shared by graph/boundary/pathfind.
+fn load_one(args: &[String], usage: &str) -> vela_protocol::project::Project {
+    let frontier = args
+        .iter()
+        .skip(3)
+        .find(|a| !a.starts_with('-'))
+        .unwrap_or_else(|| fail(usage));
+    repo::load_from_path(Path::new(frontier))
+        .unwrap_or_else(|e| fail(&format!("load {frontier}: {e}")))
+}
+
+/// `vela atlas graph <frontier>` — the typed claim-level graph (memo §11):
+/// findings as nodes carrying their derived state (open/established/refuted/
+/// contested/fragile), typed edges, contradiction-pair count. The richer emit
+/// the map renders.
+fn run_graph(args: &[String]) {
+    let project = load_one(args, "usage: vela atlas graph <frontier>");
+    let graph = FrontierGraph::from_project(&project);
+    print_json(&graph.to_json());
+}
+
+/// `vela atlas boundary <frontier>` — the dark-matter boundary (memo §3):
+/// one-premise-away, fragile, contested, stale-open. Each item points at a
+/// real finding a submission can be opened against.
+fn run_boundary(args: &[String]) {
+    let project = load_one(args, "usage: vela atlas boundary <frontier>");
+    print_json(&boundary::Boundary::derive(&project).to_json());
+}
+
+/// `vela atlas pathfind <frontier> <from> <to>` — the golden thread (memo
+/// §11.7): the shortest support/reduction path between two findings. Emits the
+/// path, or a `found: false` object when none exists.
+fn run_pathfind(args: &[String]) {
+    let positional: Vec<&str> = args
+        .iter()
+        .skip(3)
+        .filter(|a| !a.starts_with('-'))
+        .map(String::as_str)
+        .collect();
+    let [frontier, from, to] = positional.as_slice() else {
+        fail("usage: vela atlas pathfind <frontier> <from-finding> <to-finding>");
+    };
+    let project = repo::load_from_path(Path::new(frontier))
+        .unwrap_or_else(|e| fail(&format!("load {frontier}: {e}")));
+    let graph = FrontierGraph::from_project(&project);
+    match pathfind::shortest_path(&graph, from, to, &pathfind::SUPPORT_KINDS) {
+        Some(path) => print_json(&path.to_json()),
+        None => print_json(&json!({
+            "schema": "vela.golden_thread.v0.1",
+            "from": from, "to": to, "found": false,
+            "note": "no support/reduction path between these findings",
+        })),
+    }
 }
 
 /// Extract a problem/sequence number from a finding's assertion text. Handles

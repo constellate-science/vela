@@ -127,6 +127,96 @@ pub struct Edge {
     pub target_in_frontier: bool,
 }
 
+/// The product-facing state of a finding (memo §6). A pure, derived
+/// classification of a finding's review verdict + confidence into the
+/// five words the platform speaks — never persisted, recomputed on read.
+/// `Refuted`/`Contested` are live disagreement; `Fragile` is established
+/// but thin; `Established` is accepted with real support; `Open` is the
+/// default working state. State is orthogonal to the verifier gate: it
+/// reads the *review* verdict, not the trust gate, and never collapses
+/// to green/red (§8).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FindingState {
+    Open,
+    Established,
+    Refuted,
+    Contested,
+    Fragile,
+}
+
+impl FindingState {
+    /// Lowercase canonical string.
+    #[must_use]
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Open => "open",
+            Self::Established => "established",
+            Self::Refuted => "refuted",
+            Self::Contested => "contested",
+            Self::Fragile => "fragile",
+        }
+    }
+
+    /// Derive a finding's state from its flags + confidence + verifier gate.
+    /// Pure and total. The gate is the substrate's establishment signal on a
+    /// verifier-gated frontier (most math findings carry no human "accept" but
+    /// a passing frozen-verifier attachment), so it is folded in alongside the
+    /// review verdict. Precedence, strongest disqualifier first:
+    /// 1. an adversarial probe refuted the claim (`gate == Refuted`) → `Refuted`;
+    /// 2. a rejected review verdict → `Refuted`;
+    /// 3. a contested/needs-revision verdict or the legacy `contested` flag →
+    ///    `Contested`;
+    /// 4. the verifier gate passed, or the verdict is accepted → `Established`,
+    ///    or `Fragile` when confidence sits below `FRAGILE_CONFIDENCE`;
+    /// 5. everything else → `Open`.
+    ///
+    /// `gate` is `None` when no gate was computed (e.g. a graph built without
+    /// attachment context); then only the review verdict drives the state.
+    #[must_use]
+    pub fn derive(
+        flags: &crate::bundle::Flags,
+        confidence: f64,
+        gate: Option<crate::verifier_attachment::GateStatus>,
+    ) -> Self {
+        use crate::bundle::ReviewState;
+        use crate::verifier_attachment::GateStatus;
+        if gate == Some(GateStatus::Refuted) {
+            return Self::Refuted;
+        }
+        match flags.review_state {
+            Some(ReviewState::Rejected) => return Self::Refuted,
+            Some(ReviewState::Contested) | Some(ReviewState::NeedsRevision) => {
+                return Self::Contested;
+            }
+            None if flags.contested => return Self::Contested,
+            _ => {}
+        }
+        let established =
+            gate == Some(GateStatus::Verified) || flags.review_state == Some(ReviewState::Accepted);
+        if established {
+            if confidence < FRAGILE_CONFIDENCE {
+                Self::Fragile
+            } else {
+                Self::Established
+            }
+        } else {
+            Self::Open
+        }
+    }
+
+    /// Verdict-only state derivation (no verifier gate). Equivalent to
+    /// [`Self::derive`] with `gate = None`.
+    #[must_use]
+    pub fn of(flags: &crate::bundle::Flags, confidence: f64) -> Self {
+        Self::derive(flags, confidence, None)
+    }
+}
+
+/// An accepted finding below this confidence is `Fragile` rather than
+/// `Established` — established support exists but rests on thin ground.
+pub const FRAGILE_CONFIDENCE: f64 = 0.6;
+
 /// A claim node: a finding plus the small slice of state the graph
 /// queries report.
 #[derive(Debug, Clone, Serialize)]
@@ -136,6 +226,10 @@ pub struct Node {
     pub contested: bool,
     pub gap: bool,
     pub confidence: f64,
+    /// The product-facing finding state (§6), derived from the verdict +
+    /// confidence at build time so the graph is self-describing for the
+    /// map's state lens and the boundary query.
+    pub state: FindingState,
 }
 
 /// The typed claim-level graph for one frontier (or one merged
@@ -152,9 +246,29 @@ impl FrontierGraph {
     /// known [`EdgeKind`] becomes a typed edge.
     #[must_use]
     pub fn from_project(project: &Project) -> Self {
+        // Index verifier attachments by target so each finding's state can
+        // fold in its derived gate status — the establishment signal on a
+        // verifier-gated frontier. The gate is recomputed (never a stored
+        // flag), so the graph never trusts a persisted "verified" bit.
+        let mut attachments_by_target: HashMap<&str, Vec<crate::verifier_attachment::VerifierAttachment>> =
+            HashMap::new();
+        for a in &project.verifier_attachments {
+            attachments_by_target
+                .entry(a.target.as_str())
+                .or_default()
+                .push(a.clone());
+        }
+
         let mut nodes = BTreeMap::new();
         for f in &project.findings {
             let label = f.assertion.text.chars().take(120).collect::<String>();
+            let gate = attachments_by_target.get(f.id.as_str()).map(|atts| {
+                crate::verifier_attachment::derive_gate_status(
+                    &crate::verifier_attachment::claim_digest(&f.assertion.text),
+                    atts,
+                )
+                .status
+            });
             nodes.insert(
                 f.id.clone(),
                 Node {
@@ -163,6 +277,7 @@ impl FrontierGraph {
                     contested: f.flags.contested,
                     gap: f.flags.gap,
                     confidence: f.confidence.score,
+                    state: FindingState::derive(&f.flags, f.confidence.score, gate),
                 },
             );
         }
@@ -222,6 +337,25 @@ impl FrontierGraph {
     /// All edges of a given kind.
     pub fn edges_of_kind(&self, kind: EdgeKind) -> impl Iterator<Item = &Edge> {
         self.edges.iter().filter(move |e| e.kind == kind)
+    }
+
+    /// All typed edges, in build order. The read accessor the boundary
+    /// query and the path-finder traverse over (they live in sibling
+    /// modules and cannot see the private field).
+    #[must_use]
+    pub fn all_edges(&self) -> &[Edge] {
+        &self.edges
+    }
+
+    /// One node by id, if present.
+    #[must_use]
+    pub fn node(&self, id: &str) -> Option<&Node> {
+        self.nodes.get(id)
+    }
+
+    /// Every node, in stable id order.
+    pub fn nodes(&self) -> impl Iterator<Item = &Node> {
+        self.nodes.values()
     }
 
     /// Per-edge-kind counts, for summaries.
