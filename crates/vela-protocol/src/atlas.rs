@@ -56,6 +56,14 @@ pub struct AtlasCell {
     pub refutation_kappa: String,
     /// A human label (a member's assertion, truncated).
     pub label: String,
+    /// The claim's **self-declared** resolution status, read descriptively from
+    /// the claim text ("open" | "solved" | "proved" | "disproved"), `None` when
+    /// undeclared. This is NOT the verifier gate: `belnap` is the verifier-backed
+    /// support state; `status` is what the claim says about the problem. Both are
+    /// shown so the solved/unsolved boundary is legible without conflating
+    /// "supported claim" with "solved problem".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -75,6 +83,7 @@ struct Member {
     support_x: Rational,
     refute_y: Rational,
     belnap: BelnapStatus,
+    status: Option<&'static str>,
 }
 
 /// The identity-bearing key of an anchor (must mirror `anchor::anchors_equal`).
@@ -121,6 +130,24 @@ fn belnap_str(b: BelnapStatus) -> &'static str {
     }
 }
 
+/// The claim's self-declared resolution status, read descriptively from its text.
+/// NOT the verifier gate (that is `belnap`); this is what the claim asserts about
+/// the problem. `disproved` is checked before `proved` because it contains it.
+fn declared_status(text: &str) -> Option<&'static str> {
+    let t = text.to_ascii_lowercase();
+    if t.contains("disproved") {
+        Some("disproved")
+    } else if t.contains("solved") {
+        Some("solved")
+    } else if t.contains("proved") {
+        Some("proved")
+    } else if t.contains("open") {
+        Some("open")
+    } else {
+        None
+    }
+}
+
 /// Project the cross-frontier atlas over a set of loaded frontiers.
 #[must_use]
 pub fn project(projects: &[&Project]) -> Atlas {
@@ -152,6 +179,7 @@ pub fn project(projects: &[&Project]) -> Atlas {
                 support_x: pt.x,
                 refute_y: pt.y,
                 belnap,
+                status: declared_status(&f.assertion.text),
             });
         }
     }
@@ -245,6 +273,17 @@ pub fn project(projects: &[&Project]) -> Atlas {
                 .min()
                 .unwrap_or_default();
 
+            // Joined declared status: the distinct non-None statuses across
+            // members. One status → that; several → "contested" (the members
+            // disagree about resolution); none → None.
+            let statuses: std::collections::BTreeSet<&str> =
+                idxs.iter().filter_map(|&i| members[i].status).collect();
+            let status = match statuses.len() {
+                0 => None,
+                1 => statuses.iter().next().map(|s| s.to_string()),
+                _ => Some("contested".to_string()),
+            };
+
             let class_id = format!(
                 "vac_{}",
                 &hex::encode(Sha256::digest(member_ids.join(",").as_bytes()))[..16]
@@ -263,6 +302,7 @@ pub fn project(projects: &[&Project]) -> Atlas {
                 support_kappa: rat_str(&support_kappa),
                 refutation_kappa: rat_str(&refutation_kappa),
                 label,
+                status,
             }
         })
         .collect();
