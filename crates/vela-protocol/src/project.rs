@@ -222,6 +222,12 @@ pub struct Project {
     /// Events-only storage (the replay loader grafts them).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub statement_attestations: Vec<crate::statement_attestation::StatementAttestation>,
+    /// Math-atlas anchor links: signed, retractable `val_` assertions that a
+    /// claim carries an external-catalogue anchor (OEIS / Erdős / mathlib / ...).
+    /// Events-only storage (the replay loader grafts them); the cross-frontier
+    /// identity join reads these. See `crate::anchor`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub anchor_links: Vec<crate::anchor::AnchorLink>,
     /// Active obligation leases (events-only; replay-grafted). Expiry is
     /// computed at read time from claimed_at + ttl.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -453,6 +459,7 @@ pub fn assemble(
         transfers: Vec::new(),
         endorsements: Vec::new(),
         statement_attestations: Vec::new(),
+        anchor_links: Vec::new(),
         attempt_claims: Vec::new(),
         statement_registrations: Vec::new(),
     };

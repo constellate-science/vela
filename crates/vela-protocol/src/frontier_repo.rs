@@ -876,6 +876,7 @@ fn empty_project(name: &str, description: &str, compiled_at: &str) -> Project {
         transfers: Vec::new(),
         endorsements: Vec::new(),
         statement_attestations: Vec::new(),
+        anchor_links: Vec::new(),
         attempt_claims: Vec::new(),
         statement_registrations: Vec::new(),
     }

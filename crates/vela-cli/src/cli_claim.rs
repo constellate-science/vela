@@ -1,4 +1,8 @@
-//! Read-side claim projections: `vela claim {state,trust,pack,diff}`.
+//! Read-side claim projections: `vela claim {state,trust,pack,diff}`, plus the
+//! math-atlas anchor verbs `vela claim {anchor,anchors,unanchor}` (`run_anchor`).
+//! The projections never write; `anchor`/`unanchor` are the one write pair here
+//! (signed `anchor.attached`/`anchor.retracted` events), kept in their own
+//! entrypoint so the projection contract stays pure.
 //!
 //! These are DERIVED projections over the accepted event log — they
 //! never write, never store, and mint no new event kinds. Each loads the
@@ -93,7 +97,17 @@ pub(crate) fn run(args: &[String]) {
 
     match verb {
         "state" => {
-            let cell = state_cell(&project, finding);
+            let mut cell = state_cell(&project, finding);
+            // Graft the claim's math-atlas anchor links (read-only): the
+            // external-catalogue coordinates this claim carries.
+            let anchors: Vec<_> = project
+                .anchor_links
+                .iter()
+                .filter(|l| l.target == vf_id)
+                .collect();
+            if !anchors.is_empty() {
+                cell["anchors"] = serde_json::to_value(&anchors).unwrap_or_else(|_| json!([]));
+            }
             if json {
                 print_json(&cell);
             } else {
@@ -115,6 +129,211 @@ pub(crate) fn run(args: &[String]) {
             print_json(&pack);
         }
         other => fail(&format!("unknown claim projection '{other}'")),
+    }
+}
+
+/// `vela claim anchor|anchors|unanchor` — the math-atlas anchor-link verbs.
+///
+/// `anchor` attaches a signed `val_` (an external-catalogue anchor: OEIS,
+/// Erdős, mathlib, arXiv, MSC) to a claim; `unanchor` retracts one by id;
+/// `anchors` lists. The two writes emit `anchor.attached` / `anchor.retracted`
+/// events (loader = reducer); this is the un-deferral of frontier-calculus
+/// Law 22 (claim-identity is a signed, retractable event, never a silent
+/// reducer input).
+pub(crate) fn run_anchor(args: &[String]) {
+    use vela_protocol::anchor::{Anchor, AnchorKind, AnchorLink, AnchorLinkDraft, JoinPolicy};
+    let verb = args.get(2).map(String::as_str).unwrap_or("");
+    let json = args.iter().any(|a| a == "--json");
+    let positionals: Vec<&str> = args
+        .iter()
+        .skip(3)
+        .filter(|a| !a.starts_with('-'))
+        .map(String::as_str)
+        .collect();
+    let flag = |name: &str| -> Option<String> {
+        args.iter()
+            .position(|a| a == name)
+            .and_then(|i| args.get(i + 1))
+            .map(|s| s.to_string())
+    };
+
+    let frontier = positionals.first().copied().unwrap_or_else(|| {
+        fail("usage: vela claim anchor <frontier> <vf_id> --ns <ns> --id <id> --role <role>")
+    });
+
+    // ── anchors: read-only list ──
+    if verb == "anchors" {
+        let project = repo::load_from_path(Path::new(frontier)).unwrap_or_else(|e| fail(&e));
+        let target = positionals.get(1).copied();
+        let links: Vec<&AnchorLink> = project
+            .anchor_links
+            .iter()
+            .filter(|l| target.is_none_or(|t| l.target == t))
+            .collect();
+        if json {
+            print_json(&serde_json::to_value(&links).unwrap_or_else(|_| json!([])));
+        } else if links.is_empty() {
+            println!(
+                "no anchor links{}",
+                target.map(|t| format!(" on {t}")).unwrap_or_default()
+            );
+        } else {
+            for l in &links {
+                println!(
+                    "{}  {}  {}:{} #{}  ({:?})",
+                    l.id,
+                    l.target,
+                    l.anchor.namespace,
+                    l.anchor.id,
+                    l.anchor.role,
+                    l.anchor.join_policy
+                );
+            }
+        }
+        return;
+    }
+
+    // ── unanchor: retract a link by id ──
+    if verb == "unanchor" {
+        let val_id = positionals
+            .get(1)
+            .copied()
+            .unwrap_or_else(|| fail("usage: vela claim unanchor <frontier> <val_id>"));
+        let by = crate::cli_identity::resolve_actor(flag("--reviewer").as_deref());
+        let mut project = repo::load_from_path(Path::new(frontier)).unwrap_or_else(|e| fail(&e));
+        let target = project
+            .anchor_links
+            .iter()
+            .find(|l| l.id == val_id)
+            .map(|l| l.target.clone())
+            .unwrap_or_else(|| fail(&format!("anchor link {val_id} not found in {frontier}")));
+        let event =
+            vela_protocol::events::new_finding_event(vela_protocol::events::FindingEventInput {
+                kind: "anchor.retracted",
+                finding_id: &target,
+                actor_id: &by,
+                actor_type: actor_kind(&by),
+                reason: "anchor link retracted",
+                before_hash: "sha256:null",
+                after_hash: "sha256:null",
+                payload: json!({ "anchor_link_id": val_id }),
+                caveats: Vec::new(),
+                timestamp: None,
+            });
+        vela_protocol::reducer::apply_event(&mut project, &event).unwrap_or_else(|e| fail(&e));
+        project.events.push(event);
+        repo::save_to_path(Path::new(frontier), &project).unwrap_or_else(|e| fail(&e));
+        if json {
+            print_json(&json!({"ok": true, "command": "unanchor", "anchor_link_id": val_id}));
+        } else {
+            println!("ok anchor link {val_id} retracted from {target}");
+        }
+        return;
+    }
+
+    // ── anchor: attach a signed external-catalogue anchor ──
+    let vf_id = positionals.get(1).copied().unwrap_or_else(|| {
+        fail("usage: vela claim anchor <frontier> <vf_id> --ns <ns> --id <id> --role <role>")
+    });
+    let ns = flag("--ns")
+        .or_else(|| flag("--namespace"))
+        .unwrap_or_else(|| fail("--ns is required (oeis|erdos|mathlib|arxiv|msc|dblp)"));
+    let ext_id =
+        flag("--id").unwrap_or_else(|| fail("--id is required (the external id, e.g. A309370)"));
+    let role =
+        flag("--role").unwrap_or_else(|| fail("--role is required (e.g. \"lower-bound a(n)\")"));
+
+    // Default kind + join policy by namespace; --kind / --join override.
+    // MSC/arXiv/DBLP/DOI are search affordances, never identity (the spec's
+    // JoinPolicy gate); OEIS/Erdős/mathlib may induce identity.
+    let kind = match flag("--kind").as_deref() {
+        None => match ns.as_str() {
+            "oeis" => AnchorKind::Sequence,
+            "erdos" => AnchorKind::ProblemEntry,
+            "mathlib" => AnchorKind::FormalDeclaration,
+            "arxiv" => AnchorKind::Work,
+            "msc" => AnchorKind::Taxonomy,
+            _ => AnchorKind::Statement,
+        },
+        Some("statement") => AnchorKind::Statement,
+        Some("formal_declaration") | Some("decl") => AnchorKind::FormalDeclaration,
+        Some("object") | Some("mathematical_object") => AnchorKind::MathematicalObject,
+        Some("problem") | Some("problem_entry") => AnchorKind::ProblemEntry,
+        Some("work") => AnchorKind::Work,
+        Some("taxonomy") => AnchorKind::Taxonomy,
+        Some("sequence") => AnchorKind::Sequence,
+        Some("dataset") => AnchorKind::Dataset,
+        Some(o) => fail(&format!("unknown --kind '{o}'")),
+    };
+    let join_policy = match flag("--join").as_deref() {
+        None => match ns.as_str() {
+            "msc" | "arxiv" | "dblp" | "doi" => JoinPolicy::SearchOnly,
+            _ => JoinPolicy::HardIdentity,
+        },
+        Some("hard") | Some("hard_identity") => JoinPolicy::HardIdentity,
+        Some("soft") | Some("soft_candidate") => JoinPolicy::SoftCandidate,
+        Some("search") | Some("search_only") => JoinPolicy::SearchOnly,
+        Some(o) => fail(&format!("unknown --join '{o}' (hard|soft|search)")),
+    };
+
+    let by = crate::cli_identity::resolve_actor(flag("--reviewer").as_deref());
+    let signing_key =
+        crate::cli_identity::resolve_signing_key(flag("--key").as_deref().map(Path::new));
+    let mut project = repo::load_from_path(Path::new(frontier)).unwrap_or_else(|e| fail(&e));
+    if !project.findings.iter().any(|f| f.id == vf_id) {
+        fail(&format!("target finding {vf_id} not found in {frontier}"));
+    }
+
+    let link = AnchorLink::build(
+        AnchorLinkDraft {
+            target: vf_id.to_string(),
+            anchor: Anchor {
+                namespace: ns.clone(),
+                id: ext_id.clone(),
+                role: role.clone(),
+                kind,
+                join_policy,
+                namespace_version: flag("--namespace-version"),
+                source_revision: flag("--source-revision"),
+                statement_fingerprint: flag("--statement-fingerprint"),
+            },
+            attached_by: by.clone(),
+            attached_at: chrono::Utc::now().to_rfc3339(),
+        },
+        &signing_key,
+    )
+    .unwrap_or_else(|e| fail(&e));
+
+    let event =
+        vela_protocol::events::new_finding_event(vela_protocol::events::FindingEventInput {
+            kind: "anchor.attached",
+            finding_id: vf_id,
+            actor_id: &by,
+            actor_type: actor_kind(&by),
+            reason: "external-catalogue anchor attached",
+            before_hash: "sha256:null",
+            after_hash: "sha256:null",
+            payload: json!({ "anchor_link": link }),
+            caveats: Vec::new(),
+            timestamp: None,
+        });
+    vela_protocol::reducer::apply_event(&mut project, &event).unwrap_or_else(|e| fail(&e));
+    project.events.push(event);
+    repo::save_to_path(Path::new(frontier), &project).unwrap_or_else(|e| fail(&e));
+
+    if json {
+        print_json(&json!({
+            "ok": true,
+            "command": "anchor",
+            "anchor_link_id": link.id,
+            "target": vf_id,
+            "anchor": { "namespace": ns, "id": ext_id, "role": role },
+        }));
+    } else {
+        println!(
+            "ok anchor {} ({ns}:{ext_id} #{role}) attached to {vf_id}",
+            link.id
+        );
     }
 }
 

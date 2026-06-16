@@ -1,5 +1,6 @@
 pub mod access_tier;
 pub mod ancestor_closure;
+pub mod anchor;
 pub mod attempt;
 pub mod bundle;
 pub mod canonical;

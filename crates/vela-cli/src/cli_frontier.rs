@@ -73,6 +73,7 @@ pub(crate) fn cmd_frontier(action: FrontierAction) {
                 transfers: Vec::new(),
                 endorsements: Vec::new(),
                 statement_attestations: Vec::new(),
+                anchor_links: Vec::new(),
                 attempt_claims: Vec::new(),
                 statement_registrations: Vec::new(),
             };

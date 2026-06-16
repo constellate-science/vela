@@ -154,6 +154,10 @@ pub const REDUCER_MUTATION_KINDS: &[&str] = &[
     // Priority registration: append a content-addressed statement hash
     // (idempotent on hash).
     "statement.registered",
+    // Math-atlas anchor link: upsert/remove a signed val_ record into
+    // state.anchor_links (idempotent by id; signature re-verified on apply).
+    "anchor.attached",
+    "anchor.retracted",
 ];
 
 /// Apply one canonical event to `state`, mutating it in place.
@@ -290,6 +294,8 @@ pub fn apply_event_indexed(
         "endorsement.deposited" => apply_endorsement_deposited(state, event),
         "attempt.resolved" => apply_attempt_resolved(state, event),
         "statement.attested" => apply_statement_attested(state, event),
+        "anchor.attached" => apply_anchor_attached(state, event),
+        "anchor.retracted" => apply_anchor_retracted(state, event),
         "attempt.claimed" => apply_attempt_claimed(state, event),
         "statement.registered" => apply_statement_registered(state, event),
         // Supersession: the event targets the *old* finding and flips its
@@ -389,6 +395,7 @@ pub fn replay_from_genesis(
         transfers: Vec::new(),
         endorsements: Vec::new(),
         statement_attestations: Vec::new(),
+        anchor_links: Vec::new(),
         attempt_claims: Vec::new(),
         statement_registrations: Vec::new(),
     };
@@ -1785,6 +1792,42 @@ fn apply_statement_attested(state: &mut Project, event: &StateEvent) -> Result<(
     } else {
         state.statement_attestations.push(att);
     }
+    Ok(())
+}
+
+/// `anchor.attached`: upsert a signed `val_` anchor link from
+/// `payload.anchor_link`. The link's own signature + content address are
+/// re-verified on every apply, so a tampered anchor cannot enter state.
+fn apply_anchor_attached(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    use crate::anchor::AnchorLink;
+    let value = event
+        .payload
+        .get("anchor_link")
+        .ok_or("anchor.attached event missing payload.anchor_link")?
+        .clone();
+    let link: AnchorLink =
+        serde_json::from_value(value).map_err(|e| format!("anchor.attached payload parse: {e}"))?;
+    link.verify()
+        .map_err(|e| format!("anchor.attached rejected: {e}"))?;
+    if let Some(existing) = state.anchor_links.iter_mut().find(|a| a.id == link.id) {
+        *existing = link;
+    } else {
+        state.anchor_links.push(link);
+    }
+    Ok(())
+}
+
+/// `anchor.retracted`: remove the anchor link named by
+/// `payload.anchor_link_id`. Anchor attachment is fallible and therefore
+/// retractable (frontier-calculus Law 22). Retracting an absent id is a
+/// no-op, so replay stays idempotent.
+fn apply_anchor_retracted(state: &mut Project, event: &StateEvent) -> Result<(), String> {
+    let id = event
+        .payload
+        .get("anchor_link_id")
+        .and_then(|v| v.as_str())
+        .ok_or("anchor.retracted event missing payload.anchor_link_id")?;
+    state.anchor_links.retain(|a| a.id != id);
     Ok(())
 }
 

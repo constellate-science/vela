@@ -1135,6 +1135,7 @@ mod tests {
             transfers: vec![],
             endorsements: vec![],
             statement_attestations: Vec::new(),
+            anchor_links: Vec::new(),
             attempt_claims: Vec::new(),
             statement_registrations: Vec::new(),
         };
@@ -1194,6 +1195,7 @@ mod tests {
             transfers: vec![],
             endorsements: vec![],
             statement_attestations: Vec::new(),
+            anchor_links: Vec::new(),
             attempt_claims: Vec::new(),
             statement_registrations: Vec::new(),
         }

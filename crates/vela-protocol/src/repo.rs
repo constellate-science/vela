@@ -742,6 +742,7 @@ fn load_vela_repo(dir: &Path) -> Result<Project, String> {
             c.transfers = replayed.transfers;
             c.endorsements = replayed.endorsements;
             c.statement_attestations = replayed.statement_attestations;
+            c.anchor_links = replayed.anchor_links;
             c.attempt_claims = replayed.attempt_claims;
             c.statement_registrations = replayed.statement_registrations;
             // Locator repairs land on the replayed atoms (the reducer

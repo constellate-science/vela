@@ -314,6 +314,8 @@ pub const KNOWN_EVENT_KINDS: &[&str] = &[
     "statement.attested",
     "attempt.claimed",
     "statement.registered",
+    "anchor.attached",
+    "anchor.retracted",
     "proposal.recommended",
     "correction_return.review",
     "research_trace.review",
@@ -2158,6 +2160,20 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
         }
         "proposal.recommended" => {
             require_str("proposal_id")?;
+        }
+        "anchor.attached" => {
+            if !payload.get("anchor_link").is_some_and(Value::is_object) {
+                return Err("anchor.attached payload.anchor_link must be an object".to_string());
+            }
+        }
+        "anchor.retracted" => {
+            if !payload
+                .get("anchor_link_id")
+                .and_then(Value::as_str)
+                .is_some_and(|s| !s.trim().is_empty())
+            {
+                return Err("anchor.retracted payload.anchor_link_id must be non-empty".to_string());
+            }
         }
         // Historical audit-record kinds: the reducer replays them as
         // no-ops; the payload shape is whatever the retired surface

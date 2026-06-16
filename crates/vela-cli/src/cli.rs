@@ -5832,6 +5832,19 @@ pub fn run_from_args() {
             crate::cli_claim::run(&args);
             return;
         }
+        // Math-atlas anchor links: `vela claim anchor|anchors|unanchor`.
+        // `anchor`/`unanchor` WRITE a signed `val_` event (attach/retract an
+        // external-catalogue anchor); `anchors` lists (read). Kept on a
+        // separate arm so the read-only projections above stay pure.
+        Some("claim")
+            if matches!(
+                args.get(2).map(String::as_str),
+                Some("anchor" | "anchors" | "unanchor")
+            ) =>
+        {
+            crate::cli_claim::run_anchor(&args);
+            return;
+        }
         Some(cmd) if !is_science_subcommand(cmd) => {
             eprintln!(
                 "{} unknown or non-release command: {cmd}",

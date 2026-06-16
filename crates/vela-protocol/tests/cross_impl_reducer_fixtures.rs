@@ -1897,6 +1897,60 @@ fn build_statement_attested_log(
     }]
 }
 
+/// `anchor.attached` / `anchor.retracted` builder. A signed `val_` anchor
+/// link rides in payload.anchor_link; the reducer re-verifies its signature
+/// and upserts it, and the retract removes it by id. Coverage proves no
+/// reducer errors on either kind; upsert/remove + signature semantics are
+/// pinned by anchor.rs and the reducer unit tests.
+fn build_anchor_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<events::StateEvent> {
+    use vela_protocol::anchor::{Anchor, AnchorKind, AnchorLink, AnchorLinkDraft, JoinPolicy};
+    let key = ed25519_dalek::SigningKey::from_bytes(&[13u8; 32]);
+    let link = AnchorLink::build(
+        AnchorLinkDraft {
+            target: findings[0].id.clone(),
+            anchor: Anchor {
+                namespace: "oeis".to_string(),
+                id: format!("A{frontier_idx:06}"),
+                role: "fixture-bound".to_string(),
+                kind: AnchorKind::Sequence,
+                join_policy: JoinPolicy::HardIdentity,
+                namespace_version: None,
+                source_revision: None,
+                statement_fingerprint: None,
+            },
+            attached_by: "reviewer:anchor-fixture".to_string(),
+            attached_at: fixture_timestamp(frontier_idx, 0),
+        },
+        &key,
+    )
+    .expect("build fixture anchor link");
+    let mk = |kind: &str, payload: serde_json::Value, t: usize| StateEvent {
+        schema: events::EVENT_SCHEMA.to_string(),
+        id: String::new(),
+        kind: kind.to_string(),
+        target: StateTarget {
+            r#type: "finding".to_string(),
+            id: findings[0].id.clone(),
+        },
+        actor: StateActor {
+            id: "reviewer:anchor-fixture".to_string(),
+            r#type: "human".to_string(),
+        },
+        timestamp: fixture_timestamp(frontier_idx, t),
+        reason: format!("Fixture {kind} for cross-impl coverage"),
+        before_hash: NULL_HASH.to_string(),
+        after_hash: NULL_HASH.to_string(),
+        payload,
+        caveats: vec![],
+        signature: None,
+        schema_artifact_id: None,
+    };
+    vec![
+        mk("anchor.attached", json!({ "anchor_link": link }), 2),
+        mk("anchor.retracted", json!({ "anchor_link_id": link.id }), 3),
+    ]
+}
+
 /// `attempt.claimed` + `statement.registered` builders: side-table
 /// kinds outside the finding-effects digest; coverage proves no reducer
 /// errors. Lease/registration semantics are pinned by Rust unit tests.
@@ -3054,6 +3108,9 @@ fn fixture_coverage_includes_every_reducer_arm() {
         all_kinds.insert(ev.kind);
     }
     for ev in build_claim_and_register_log(frontier_idx, &findings) {
+        all_kinds.insert(ev.kind);
+    }
+    for ev in build_anchor_log(frontier_idx, &findings) {
         all_kinds.insert(ev.kind);
     }
 

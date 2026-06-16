@@ -923,6 +923,7 @@ mod tests {
             transfers: vec![],
             endorsements: vec![],
             statement_attestations: vec![],
+            anchor_links: vec![],
             attempt_claims: vec![],
             statement_registrations: vec![],
         }
