@@ -1,0 +1,223 @@
+//! Atlas source adapters: external catalogues → `SourceRecord`s, the native
+//! production path that replaces the synthetic-id Python prototypes
+//! (`scripts/atlas/ingest_*.py`). Each adapter reads one catalogue of
+//! per-problem records; `vela atlas ingest-source` turns them into real,
+//! content-addressed finding bundles plus signed `anchor.attached` events.
+//!
+//! Scope: the simple per-problem sources (formal-conjectures Lean corpus,
+//! AlphaProof Nexus). The Tao adapter (`ingest_tao.py`) also synthesizes the
+//! OEIS sequence frontier and the cross-frontier reference bridge, which is
+//! materially more involved; it stays a Python prototype for now.
+
+use std::path::Path;
+
+use vela_protocol::bundle::{
+    Assertion, Conditions, Confidence, ConfidenceKind, ConfidenceMethod, Evidence, Extraction,
+    FindingBundle, Flags, Provenance,
+};
+
+/// One external-catalogue record an adapter yields. The namespace and role are
+/// supplied by the command (`--namespace`), so a record is just the id + claim.
+pub struct SourceRecord {
+    /// Catalogue id digits (e.g. "40" for Erdős #40).
+    pub external_id: String,
+    /// Human-readable claim text (carries the declared status).
+    pub assertion_text: String,
+    /// Assertion type tag (e.g. "lean-formalization").
+    pub assertion_type: String,
+}
+
+/// Build a real, content-addressed finding bundle from a source record. The id
+/// derives from `normalize(text)+type+provenance` via
+/// `FindingBundle::content_address` (not a hash of an arbitrary string), so it
+/// is reproducible and collision-safe. `created` is pinned so regeneration is
+/// deterministic. The finding rides as a genesis remnant (no introducing event
+/// needed — see `reducer::seed_genesis_with_remnants`); the anchor is the signed
+/// part.
+pub fn build_finding(rec: &SourceRecord, source_tag: &str) -> FindingBundle {
+    let assertion = Assertion {
+        text: rec.assertion_text.clone(),
+        assertion_type: rec.assertion_type.clone(),
+        entities: vec![],
+        relation: None,
+        direction: None,
+        causal_claim: None,
+        causal_evidence_grade: None,
+    };
+    let evidence = Evidence {
+        evidence_type: "catalogue".into(),
+        model_system: "n/a".into(),
+        species: None,
+        method: source_tag.into(),
+        sample_size: None,
+        effect_size: None,
+        p_value: None,
+        replicated: false,
+        replication_count: None,
+        evidence_spans: vec![],
+    };
+    let conditions = Conditions {
+        text: String::new(),
+        species_verified: vec![],
+        species_unverified: vec![],
+        in_vitro: false,
+        in_vivo: false,
+        human_data: false,
+        clinical_trial: false,
+        concentration_range: None,
+        duration: None,
+        age_group: None,
+        cell_type: None,
+    };
+    let confidence = Confidence {
+        kind: ConfidenceKind::FrontierEpistemic,
+        score: 0.5,
+        basis: "external catalogue record".into(),
+        method: ConfidenceMethod::LlmInitial,
+        components: None,
+        extraction_confidence: 1.0,
+    };
+    let provenance = Provenance {
+        source_type: "catalogue".into(),
+        doi: None,
+        pmid: None,
+        pmc: None,
+        openalex_id: None,
+        url: None,
+        // The content-address prov id; unique per record so ids never collide.
+        title: format!("{source_tag}:{}", rec.external_id),
+        authors: vec![],
+        year: None,
+        journal: None,
+        license: None,
+        publisher: None,
+        funders: vec![],
+        extraction: Extraction::default(),
+        review: None,
+        citation_count: None,
+    };
+    let mut bundle = FindingBundle::new(
+        assertion,
+        evidence,
+        conditions,
+        confidence,
+        provenance,
+        Flags::default(),
+    );
+    bundle.created = "2026-06-16T00:00:00Z".into();
+    bundle
+}
+
+/// `.lean` files in `dir` whose stem matches a predicate, sorted for determinism.
+fn lean_files(dir: &Path) -> Result<Vec<std::path::PathBuf>, String> {
+    let mut out: Vec<_> = std::fs::read_dir(dir)
+        .map_err(|e| format!("read dir {}: {e}", dir.display()))?
+        .filter_map(Result::ok)
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|s| s.to_str()) == Some("lean"))
+        .collect();
+    out.sort();
+    Ok(out)
+}
+
+/// Leading ASCII digits of `s` after an optional prefix, e.g. "40" from "40",
+/// "152" from "erdos_152", "12" from "erdos_12.parts.i".
+fn leading_number(stem: &str) -> Option<String> {
+    let s = stem.strip_prefix("erdos_").unwrap_or(stem);
+    let digits: String = s.chars().take_while(char::is_ascii_digit).collect();
+    (!digits.is_empty()).then_some(digits)
+}
+
+/// formal-conjectures: `<dir>/N.lean` is the Lean formalization of Erdős #N; its
+/// `@[category research solved|open]` annotation is the declared status.
+pub fn read_formal(dir: &Path, rev: &str) -> Result<Vec<SourceRecord>, String> {
+    let mut out = Vec::new();
+    for path in lean_files(dir)? {
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        if !stem.chars().all(|c| c.is_ascii_digit()) || stem.is_empty() {
+            continue; // numbered problem files only
+        }
+        let text = std::fs::read_to_string(&path).unwrap_or_default();
+        let status = if text.contains("category research open") {
+            "open"
+        } else if text.contains("category research solved") {
+            "solved"
+        } else {
+            "open"
+        };
+        out.push(SourceRecord {
+            external_id: stem.to_string(),
+            assertion_text: format!(
+                "Erdős Problem #{stem}: Lean formalization in \
+                 google-deepmind/formal-conjectures (ErdosProblems/{stem}.lean @ {rev}), \
+                 declared status '{status}'."
+            ),
+            assertion_type: "lean-formalization".into(),
+        });
+    }
+    Ok(out)
+}
+
+/// AlphaProof Nexus: `<dir>/erdos_<N>*.lean` variant formalizations of Erdős #N.
+/// A corroborating member (status from the namespace, not a new resolution word).
+pub fn read_alphaproof(dir: &Path, rev: &str) -> Result<Vec<SourceRecord>, String> {
+    let mut out = Vec::new();
+    for path in lean_files(dir)? {
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        let Some(n) = leading_number(stem) else {
+            continue;
+        };
+        let fname = path.file_name().and_then(|s| s.to_str()).unwrap_or("");
+        out.push(SourceRecord {
+            external_id: n.clone(),
+            assertion_text: format!(
+                "Erdős Problem #{n}: AlphaProof Nexus variant formalization \
+                 ({fname} @ {rev}). A corroborating Lean artifact."
+            ),
+            assertion_type: "lean-formalization".into(),
+        });
+    }
+    Ok(out)
+}
+
+/// Dispatch an adapter by name.
+pub fn read_adapter(adapter: &str, input: &Path, rev: &str) -> Result<Vec<SourceRecord>, String> {
+    match adapter {
+        "formal" => read_formal(input, rev),
+        "alphaproof" => read_alphaproof(input, rev),
+        other => Err(format!(
+            "unknown adapter '{other}' (supported: formal | alphaproof; tao stays scripts/atlas/ingest_tao.py)"
+        )),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn leading_number_handles_alphaproof_filenames() {
+        assert_eq!(leading_number("erdos_152").as_deref(), Some("152"));
+        assert_eq!(leading_number("erdos_12.parts.i").as_deref(), Some("12"));
+        assert_eq!(
+            leading_number("erdos_125.variants.positive_lower_density").as_deref(),
+            Some("125")
+        );
+        assert_eq!(leading_number("40").as_deref(), Some("40"));
+        assert_eq!(leading_number("readme"), None);
+    }
+
+    #[test]
+    fn build_finding_is_content_addressed_and_deterministic() {
+        let rec = SourceRecord {
+            external_id: "40".into(),
+            assertion_text: "Erdős Problem #40: declared status 'solved'.".into(),
+            assertion_type: "lean-formalization".into(),
+        };
+        let a = build_finding(&rec, "formal");
+        let b = build_finding(&rec, "formal");
+        assert_eq!(a.id, b.id, "same record → same content-addressed id");
+        assert!(a.id.starts_with("vf_"));
+        assert_eq!(a.created, "2026-06-16T00:00:00Z", "created is pinned");
+    }
+}

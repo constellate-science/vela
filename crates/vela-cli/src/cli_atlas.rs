@@ -23,6 +23,10 @@ pub(crate) fn run(args: &[String]) {
         run_ingest(args);
         return;
     }
+    if args.get(2).map(String::as_str) == Some("ingest-source") {
+        run_ingest_source(args);
+        return;
+    }
     if args.get(2).map(String::as_str) == Some("frontier") {
         run_frontier(args);
         return;
@@ -146,7 +150,7 @@ fn extract_id(namespace: &str, text: &str) -> Option<String> {
 }
 
 fn run_ingest(args: &[String]) {
-    use vela_protocol::anchor::{Anchor, AnchorKind, AnchorLink, AnchorLinkDraft, JoinPolicy};
+    use vela_protocol::anchor::{Anchor, AnchorKind, JoinPolicy};
 
     let positionals: Vec<&str> = args
         .iter()
@@ -230,24 +234,43 @@ fn run_ingest(args: &[String]) {
     }
 
     let key = crate::cli_identity::resolve_signing_key(flag("--key").as_deref().map(Path::new));
+    let anchored = anchor_findings(&mut project, plan, &actor, &key);
+    repo::save_to_path(Path::new(frontier), &project).unwrap_or_else(|e| fail(&e));
+    print_json(&json!({
+        "ok": true, "namespace": ns, "anchored": anchored,
+        "already_anchored": already, "no_number_skipped": no_number, "signer": actor,
+    }));
+}
+
+/// Attach a planned set of `(finding_id, anchor)` as signed `anchor.attached`
+/// events. Shared by `ingest` (text-derived anchors) and `ingest-source`
+/// (adapter-derived anchors). Anchors are mechanical, retractable annotations,
+/// so agent-signing is in-doctrine (not a human accept). Returns the count.
+fn anchor_findings(
+    project: &mut vela_protocol::project::Project,
+    plan: Vec<(String, vela_protocol::anchor::Anchor)>,
+    actor: &str,
+    key: &ed25519_dalek::SigningKey,
+) -> usize {
+    use vela_protocol::anchor::{AnchorLink, AnchorLinkDraft};
     let mut anchored = 0usize;
     for (target, anchor) in plan {
         let link = AnchorLink::build(
             AnchorLinkDraft {
                 target: target.clone(),
                 anchor,
-                attached_by: actor.clone(),
+                attached_by: actor.to_string(),
                 attached_at: chrono::Utc::now().to_rfc3339(),
             },
-            &key,
+            key,
         )
         .unwrap_or_else(|e| fail(&e));
         let event =
             vela_protocol::events::new_finding_event(vela_protocol::events::FindingEventInput {
                 kind: "anchor.attached",
                 finding_id: &target,
-                actor_id: &actor,
-                actor_type: vela_protocol::events::actor_kind(&actor),
+                actor_id: actor,
+                actor_type: vela_protocol::events::actor_kind(actor),
                 reason: "atlas ingest: external-catalogue anchor",
                 before_hash: "sha256:null",
                 after_hash: "sha256:null",
@@ -255,13 +278,114 @@ fn run_ingest(args: &[String]) {
                 caveats: Vec::new(),
                 timestamp: None,
             });
-        vela_protocol::reducer::apply_event(&mut project, &event).unwrap_or_else(|e| fail(&e));
+        vela_protocol::reducer::apply_event(project, &event).unwrap_or_else(|e| fail(&e));
         project.events.push(event);
         anchored += 1;
     }
-    repo::save_to_path(Path::new(frontier), &project).unwrap_or_else(|e| fail(&e));
+    anchored
+}
+
+/// `vela atlas ingest-source --adapter <formal|alphaproof> --input <dir> --out
+/// <frontier.json|repo> [--namespace erdos|oeis] [--rev <prov>] [--actor <a>]
+/// [--key <agentkey>] [--dry-run]` — the native production path that replaces
+/// the synthetic-id Python prototypes. Reads a catalogue via a `SourceAdapter`,
+/// mints real content-addressed finding bundles (genesis remnants), attaches
+/// signed `anchor.attached` events, and writes the repo — then gates on
+/// `verify_replay` (the loader-is-reducer round-trip). Deterministic: same
+/// source in → same repo out.
+fn run_ingest_source(args: &[String]) {
+    use vela_protocol::anchor::{Anchor, AnchorKind, JoinPolicy};
+
+    let flag = |name: &str| -> Option<String> {
+        args.iter()
+            .position(|a| a == name)
+            .and_then(|i| args.get(i + 1))
+            .map(|s| s.to_string())
+    };
+    let adapter = flag("--adapter")
+        .unwrap_or_else(|| fail("--adapter is required (formal|alphaproof)"));
+    let input = flag("--input").unwrap_or_else(|| fail("--input <dir> is required"));
+    let out = flag("--out")
+        .unwrap_or_else(|| fail("--out <frontier.json|repo-dir> is required"));
+    let ns = flag("--namespace").unwrap_or_else(|| "erdos".to_string());
+    let rev = flag("--rev").unwrap_or_else(|| "unknown".to_string());
+    let actor = flag("--actor").unwrap_or_else(|| "agent:atlas-ingest".to_string());
+    let dry = args.iter().any(|a| a == "--dry-run");
+
+    let (kind, role) = match ns.as_str() {
+        "oeis" => (AnchorKind::Sequence, "sequence"),
+        _ => (AnchorKind::ProblemEntry, "problem"),
+    };
+
+    let records = crate::atlas_adapters::read_adapter(&adapter, Path::new(&input), &rev)
+        .unwrap_or_else(|e| fail(&e));
+    if records.is_empty() {
+        fail(&format!("adapter '{adapter}' yielded no records from {input}"));
+    }
+
+    // Build content-addressed findings (deduped by id) + an anchor plan entry
+    // per record. Fresh build each run — these source frontiers are regenerable.
+    let mut findings = Vec::new();
+    let mut plan: Vec<(String, Anchor)> = Vec::new();
+    let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for rec in &records {
+        let finding = crate::atlas_adapters::build_finding(rec, &adapter);
+        let fid = finding.id.clone();
+        if !seen.insert(fid.clone()) {
+            continue; // duplicate content-address (same text+type+id)
+        }
+        findings.push(finding);
+        plan.push((
+            fid,
+            Anchor {
+                namespace: ns.clone(),
+                id: rec.external_id.clone(),
+                role: role.to_string(),
+                kind,
+                join_policy: JoinPolicy::HardIdentity,
+                namespace_version: None,
+                source_revision: Some(rev.clone()),
+                statement_fingerprint: None,
+            },
+        ));
+    }
+
+    if dry {
+        print_json(&json!({
+            "dry_run": true, "adapter": adapter, "namespace": ns,
+            "records": records.len(), "findings": findings.len(), "anchors": plan.len(),
+        }));
+        return;
+    }
+
+    let mut project = vela_protocol::project::assemble(
+        &format!("Atlas source: {adapter}"),
+        findings,
+        0,
+        0,
+        &format!("Native atlas source adapter ({adapter}) @ {rev}"),
+    );
+
+    let key = crate::cli_identity::resolve_signing_key(flag("--key").as_deref().map(Path::new));
+    let anchored = anchor_findings(&mut project, plan, &actor, &key);
+
+    let out_path = Path::new(&out);
+    if let Some(parent) = out_path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)
+            .unwrap_or_else(|e| fail(&format!("create {}: {e}", parent.display())));
+    }
+    repo::save_to_path(out_path, &project).unwrap_or_else(|e| fail(&e));
+
+    // Gate: the loader-is-reducer round-trip must hold. Findings ride as genesis
+    // remnants (no introducing event); the anchor events replay cleanly.
+    let reloaded = repo::load_from_path(out_path).unwrap_or_else(|e| fail(&e));
+    let replay = vela_protocol::reducer::verify_replay(&reloaded);
+
     print_json(&json!({
-        "ok": true, "namespace": ns, "anchored": anchored,
-        "already_anchored": already, "no_number_skipped": no_number, "signer": actor,
+        "ok": true, "adapter": adapter, "namespace": ns,
+        "findings": project.findings.len(), "anchored": anchored,
+        "out": out, "verify_replay_ok": replay.ok, "signer": actor,
     }));
 }

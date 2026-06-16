@@ -11,6 +11,7 @@ use colored::Colorize;
 // before; they now live here and reach into the substrate via
 // `vela_protocol::*`.
 pub mod cli;
+mod atlas_adapters;
 mod cli_admin;
 mod cli_atlas;
 mod cli_check;
