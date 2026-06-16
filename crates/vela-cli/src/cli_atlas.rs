@@ -171,11 +171,18 @@ fn run_ingest(args: &[String]) {
         "oeis" => AnchorKind::Sequence,
         _ => AnchorKind::Statement,
     };
+    // The anchor role is part of the join key, so it must be namespace-correct: an
+    // OEIS node is a sequence, an Erdős node is a problem. A different source
+    // anchoring the same sequence with role "sequence" must land on the same cell.
+    let role = match ns.as_str() {
+        "oeis" => "sequence",
+        _ => "problem",
+    }
+    .to_string();
 
     let mut project = repo::load_from_path(Path::new(frontier)).unwrap_or_else(|e| fail(&e));
 
     // Plan the anchors (idempotent: skip findings already carrying this anchor).
-    let role = "problem".to_string();
     let mut plan: Vec<(String, Anchor)> = Vec::new();
     let (mut already, mut no_number) = (0usize, 0usize);
     for f in &project.findings {
