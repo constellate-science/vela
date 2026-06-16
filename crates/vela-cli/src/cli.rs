@@ -228,6 +228,7 @@ pub async fn run_command() {
             let _ = conformance::run(&dir);
         }
         Commands::Gate { action } => cmd_gate(action),
+        Commands::Campaign { action } => crate::cli_campaign::cmd_campaign(action),
         Commands::Onboard { frontier, json } => {
             let project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
             let name = project.project.name.clone();
@@ -5386,6 +5387,7 @@ Verification:
   conformance   Run protocol conformance vectors
   gate          Verification gate: deliverable-grade + verifier-attachment checks
   reproduce     Re-verify stored witnesses from scratch (frozen exact verifiers)
+  campaign      Discovery engine: search verifier-gated constructions, verify, propose
   attach        Bind a verifier attachment to a finding (propose -> accept in one step)
   attempt       Verify banked attempts (vat_): id re-derivation + signature + claim digest
   transfer      Verify cross-domain transfers (vtr_): id re-derivation + signature

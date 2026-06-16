@@ -12,8 +12,10 @@ use colored::Colorize;
 // `vela_protocol::*`.
 pub mod cli;
 mod atlas_adapters;
+mod campaign;
 mod cli_admin;
 mod cli_atlas;
+mod cli_campaign;
 mod cli_check;
 mod cli_claim;
 mod cli_commands;

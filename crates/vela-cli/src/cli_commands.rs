@@ -311,6 +311,15 @@ pub(crate) enum Commands {
         #[arg(long)]
         json: bool,
     },
+    /// The discovery engine: search for verifier-gated constructions, then
+    /// verify them with the frozen `vela-verify` and (optionally) propose the
+    /// result. Search *produces* candidates; the frozen verifier is the gate —
+    /// nothing is reported that does not re-check. Deterministic: the same
+    /// `--seed` reproduces the same find. AI proposes; a key-holder accepts.
+    Campaign {
+        #[command(subcommand)]
+        action: CampaignAction,
+    },
     /// Show version information
     Version,
     /// Optional signing and signature verification
@@ -1264,6 +1273,63 @@ pub(crate) enum SignAction {
         /// Number of unique valid signatures required (>= 1).
         #[arg(long)]
         to: u32,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+/// `vela campaign` — the discovery engine over verifier-gated constructions.
+#[derive(Subcommand)]
+pub(crate) enum CampaignAction {
+    /// Run the engine and report the best verified construction found. Writes
+    /// nothing. `--kind` is a verifier kind: gf2_sidon, union_free,
+    /// rook_directions, sidon, bh (with `--h`), golomb, costas.
+    Search {
+        /// Verifier kind to search (gf2_sidon | union_free | rook_directions |
+        /// sidon | bh | golomb | costas).
+        kind: String,
+        /// Target parameter n (set size domain / order, kind-dependent).
+        #[arg(long)]
+        n: usize,
+        /// For `bh`: the order h (h=2 is Sidon). Ignored by other kinds.
+        #[arg(long, default_value_t = 2)]
+        h: usize,
+        /// Number of randomized restarts (the work budget).
+        #[arg(long, default_value_t = 200)]
+        restarts: u64,
+        /// RNG seed; the same seed reproduces the same search.
+        #[arg(long, default_value_t = 24221)]
+        seed: u64,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Search, write the verified witness (so `vela reproduce` covers it), and
+    /// optionally land a *pending* `finding.add` proposal (no key — a
+    /// key-holder accepts).
+    Run {
+        /// Verifier kind to search (see `search`).
+        kind: String,
+        #[arg(long)]
+        n: usize,
+        #[arg(long, default_value_t = 2)]
+        h: usize,
+        #[arg(long, default_value_t = 200)]
+        restarts: u64,
+        #[arg(long, default_value_t = 24221)]
+        seed: u64,
+        /// Witness output path. Defaults to
+        /// `<frontier>/witnesses/<kind>-n<N>.witness.json`.
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Frontier directory (required for `--propose`, or to derive `--out`).
+        #[arg(long)]
+        frontier: Option<PathBuf>,
+        /// Also land a pending `finding.add` proposal for the verified bound.
+        #[arg(long)]
+        propose: bool,
+        /// Reviewer/author identity for the proposal.
+        #[arg(long, default_value = "reviewer:will-blair")]
+        reviewer: String,
         #[arg(long)]
         json: bool,
     },
