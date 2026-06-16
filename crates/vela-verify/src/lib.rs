@@ -110,6 +110,36 @@ pub enum Witness {
     /// A Costas array: a permutation whose displacement vectors are all
     /// distinct.
     Costas { perm: Vec<i64> },
+    /// A Sidon set in `GF(2)^n` (OEIS A394031): `elements` are integer
+    /// bitmasks; the set is Sidon iff all pairwise XORs are distinct (no
+    /// four distinct elements XOR to zero). Pure integer arithmetic.
+    Gf2Sidon {
+        elements: Vec<u64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        claimed_size: Option<usize>,
+    },
+    /// A union-free family (OEIS A347025): nonempty subsets of `{1..n}` such
+    /// that no member equals the union of a sub-collection of the others.
+    /// `sets` lists the members (1-based elements). The witness certifies the
+    /// LOWER bound a(n) >= |sets|; optimality (no larger family) is a separate
+    /// exhaustive search, not a witness-checkable property.
+    UnionFree {
+        n: usize,
+        sets: Vec<Vec<u32>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        claimed_size: Option<usize>,
+    },
+    /// A non-attacking rook placement (OEIS A321531): `perm` is 1-based columns
+    /// (rook i sits in row i, column `perm[i]`). The verifier counts distinct
+    /// direction classes `sorted(|Δcol|,|Δrow|)/gcd` over all rook pairs. The
+    /// witness certifies the LOWER bound a(n) >= count; optimality is a
+    /// separate exhaustive search, not a witness-checkable property.
+    RookDirections {
+        n: usize,
+        perm: Vec<i64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        claimed_directions: Option<usize>,
+    },
     /// A linear `[n, k, d]_q` code given by a `k x n` generator matrix
     /// over a prime field `GF(q)`.
     LinearCode {
@@ -246,6 +276,9 @@ impl Witness {
             Witness::Covering { .. } => "covering",
             Witness::ConstantWeight { .. } => "constant_weight",
             Witness::Costas { .. } => "costas",
+            Witness::Gf2Sidon { .. } => "gf2_sidon",
+            Witness::UnionFree { .. } => "union_free",
+            Witness::RookDirections { .. } => "rook_directions",
             Witness::LinearCode { .. } => "linear_code",
             Witness::IntervalProduct { .. } => "interval_product",
             Witness::BalancedColoring { .. } => "balanced_coloring",
@@ -349,6 +382,20 @@ pub fn verify_witness(witness: &Witness) -> VerifyResult {
             *claimed_size,
         ),
         Witness::Costas { perm } => verify_costas(perm),
+        Witness::Gf2Sidon {
+            elements,
+            claimed_size,
+        } => with_size(verify_gf2_sidon(elements), elements.len(), *claimed_size),
+        Witness::UnionFree {
+            n,
+            sets,
+            claimed_size,
+        } => with_size(verify_union_free(*n, sets), sets.len(), *claimed_size),
+        Witness::RookDirections {
+            n,
+            perm,
+            claimed_directions,
+        } => verify_rook_directions(*n, perm, *claimed_directions),
         Witness::LinearCode {
             q,
             claimed_d,
@@ -409,6 +456,136 @@ pub fn verify_sidon(points: &[Vec<i64>], n: usize) -> VerifyResult {
     }
     VerifyResult::ok(format!(
         "Sidon verified: {m} points, {count} pairwise sums all distinct"
+    ))
+}
+
+/// Verify a Sidon set in `GF(2)^n` (OEIS A394031): `elements` are integer
+/// bitmasks; the set is Sidon iff the elements are distinct and all pairwise
+/// XORs are distinct and nonzero (equivalently, no four distinct elements XOR
+/// to zero). Mirrors the reference `is_gf2_sidon`; pure integer arithmetic.
+#[must_use]
+pub fn verify_gf2_sidon(elements: &[u64]) -> VerifyResult {
+    let m = elements.len();
+    let distinct: HashSet<u64> = elements.iter().copied().collect();
+    if distinct.len() != m {
+        return VerifyResult::fail("duplicate element (not a set)");
+    }
+    let mut xors: HashSet<u64> = HashSet::new();
+    let mut count = 0usize;
+    for i in 0..m {
+        for j in (i + 1)..m {
+            let x = elements[i] ^ elements[j];
+            if x == 0 {
+                return VerifyResult::fail("zero XOR (equal elements)");
+            }
+            if !xors.insert(x) {
+                return VerifyResult::fail("pairwise-XOR collision (not a GF(2) Sidon set)");
+            }
+            count += 1;
+        }
+    }
+    VerifyResult::ok(format!(
+        "GF(2)-Sidon verified: {m} elements, {count} pairwise XORs all distinct"
+    ))
+}
+
+/// Greatest common divisor of two non-negative integers (0 maps to 1 so a
+/// normalized direction class is always well-defined).
+fn gcd_pos(a: i64, b: i64) -> i64 {
+    let (mut a, mut b) = (a.abs(), b.abs());
+    while b != 0 {
+        let t = b;
+        b = a % b;
+        a = t;
+    }
+    if a == 0 { 1 } else { a }
+}
+
+/// Verify a union-free family (OEIS A347025): `sets` are nonempty subsets of
+/// `{1..n}` and no member is the union of a sub-collection of the others.
+/// Polynomial check: a member C is expressible iff the union of every OTHER
+/// member that is a subset of C equals C (any super-C member would overshoot).
+/// Certifies the lower bound a(n) >= |sets| only.
+#[must_use]
+pub fn verify_union_free(n: usize, sets: &[Vec<u32>]) -> VerifyResult {
+    if n == 0 || n > 63 {
+        return VerifyResult::fail("n out of range (1..=63)");
+    }
+    let mut masks: Vec<u64> = Vec::with_capacity(sets.len());
+    for s in sets {
+        if s.is_empty() {
+            return VerifyResult::fail("empty set (members must be nonempty)");
+        }
+        let mut m = 0u64;
+        for &e in s {
+            if e < 1 || (e as usize) > n {
+                return VerifyResult::fail(format!("element {e} out of {{1..{n}}}"));
+            }
+            m |= 1u64 << (e - 1);
+        }
+        masks.push(m);
+    }
+    let distinct: HashSet<u64> = masks.iter().copied().collect();
+    if distinct.len() != masks.len() {
+        return VerifyResult::fail("duplicate set (members must be distinct)");
+    }
+    for (i, &c) in masks.iter().enumerate() {
+        let mut u = 0u64;
+        for (j, &s) in masks.iter().enumerate() {
+            if i != j && (s & c) == s {
+                u |= s;
+            }
+        }
+        if u == c {
+            return VerifyResult::fail(
+                "a member is the union of a sub-collection of the others (not union-free)",
+            );
+        }
+    }
+    VerifyResult::ok(format!(
+        "union-free verified: {} sets over {{1..{n}}}, no member is a union of others",
+        masks.len()
+    ))
+}
+
+/// Verify a non-attacking rook placement (OEIS A321531): `perm` is a
+/// permutation of `1..=n` (one rook per row, distinct columns), and the count
+/// of distinct direction classes `sorted(|Δcol|,|Δrow|)/gcd` over all rook
+/// pairs equals `claimed` (when given). Certifies the lower bound a(n) >=
+/// count only.
+#[must_use]
+pub fn verify_rook_directions(n: usize, perm: &[i64], claimed: Option<usize>) -> VerifyResult {
+    if perm.len() != n {
+        return VerifyResult::fail("perm length != n");
+    }
+    let mut seen = vec![false; n + 1];
+    for &c in perm {
+        if c < 1 || (c as usize) > n {
+            return VerifyResult::fail("column out of 1..=n");
+        }
+        if seen[c as usize] {
+            return VerifyResult::fail("repeated column (attacking rooks)");
+        }
+        seen[c as usize] = true;
+    }
+    let mut classes: HashSet<(i64, i64)> = HashSet::new();
+    for i in 0..n {
+        for j in (i + 1)..n {
+            let drow = (j as i64) - (i as i64);
+            let dcol = perm[j] - perm[i];
+            let g = gcd_pos(dcol, drow);
+            let (a, b) = (dcol.abs() / g, drow.abs() / g);
+            classes.insert(if a <= b { (a, b) } else { (b, a) });
+        }
+    }
+    let count = classes.len();
+    if let Some(cl) = claimed
+        && count != cl
+    {
+        return VerifyResult::fail(format!("direction count {count} != claimed {cl}"));
+    }
+    VerifyResult::ok(format!(
+        "rook-directions verified: {n} non-attacking rooks realize {count} distinct direction classes"
     ))
 }
 
@@ -1546,6 +1723,71 @@ mod tests {
         // sums include 000,100,010,001 (i=j) and 110,101,011 (i<j) — all
         // distinct. A valid (small) Sidon set.
         vec![vec![0, 0, 0], vec![1, 0, 0], vec![0, 1, 0], vec![0, 0, 1]]
+    }
+
+    #[test]
+    fn gf2_sidon_accepts_distinct_xors_and_rejects_collision() {
+        // {0,1,2}: XORs 1,2,3 all distinct -> GF(2) Sidon.
+        let ok = Witness::Gf2Sidon {
+            elements: vec![0, 1, 2],
+            claimed_size: Some(3),
+        };
+        assert!(verify_witness(&ok).ok);
+        // {0,1,2,3}: 0^3 = 3 and 1^2 = 3 collide -> not Sidon.
+        let bad = Witness::Gf2Sidon {
+            elements: vec![0, 1, 2, 3],
+            claimed_size: None,
+        };
+        assert!(!verify_witness(&bad).ok);
+        // duplicate element rejected.
+        let dup = Witness::Gf2Sidon {
+            elements: vec![5, 5],
+            claimed_size: None,
+        };
+        assert!(!verify_witness(&dup).ok);
+    }
+
+    #[test]
+    fn union_free_accepts_and_rejects_union_member() {
+        // {1,2},{1,3},{2,3}: no member is a union of others over {1,2,3}.
+        let ok = Witness::UnionFree {
+            n: 3,
+            sets: vec![vec![1, 2], vec![1, 3], vec![2, 3]],
+            claimed_size: Some(3),
+        };
+        assert!(verify_witness(&ok).ok);
+        // {1},{2},{1,2}: {1,2} = {1} ∪ {2} -> not union-free.
+        let bad = Witness::UnionFree {
+            n: 2,
+            sets: vec![vec![1], vec![2], vec![1, 2]],
+            claimed_size: None,
+        };
+        assert!(!verify_witness(&bad).ok);
+    }
+
+    #[test]
+    fn rook_directions_counts_classes_and_checks_claim() {
+        // n=2, perm [1,2]: one pair, one direction class (1,1). a(2)=1.
+        let ok = Witness::RookDirections {
+            n: 2,
+            perm: vec![1, 2],
+            claimed_directions: Some(1),
+        };
+        assert!(verify_witness(&ok).ok);
+        // wrong claimed count rejected.
+        let bad = Witness::RookDirections {
+            n: 2,
+            perm: vec![1, 2],
+            claimed_directions: Some(2),
+        };
+        assert!(!verify_witness(&bad).ok);
+        // repeated column (attacking rooks) rejected.
+        let attack = Witness::RookDirections {
+            n: 2,
+            perm: vec![1, 1],
+            claimed_directions: None,
+        };
+        assert!(!verify_witness(&attack).ok);
     }
 
     #[test]

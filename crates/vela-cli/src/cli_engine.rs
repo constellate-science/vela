@@ -161,6 +161,169 @@ pub(crate) fn cmd_gate(action: GateAction) {
                 }
             }
         }
+        GateAction::Backfill {
+            frontier,
+            reviewer,
+            dry_run,
+            json,
+        } => cmd_gate_backfill(&frontier, &reviewer, dry_run, json),
+    }
+}
+
+/// Backfill frozen-verifier attachments over a frontier's witness artifacts.
+/// For each artifact that carries a `verifier` tag and parses as a `vela-verify`
+/// Witness, re-run the frozen verifier and, on pass, land a signed
+/// `verifier.attach` (ComputationalSearch / vela-verify / Sound) bound to each
+/// target finding's claim. Records the machine re-check; the gate still needs
+/// >=2 independent attachments for `verified`. Local-first: inspect with
+/// --dry-run, then run once.
+fn cmd_gate_backfill(frontier: &Path, reviewer: &str, dry_run: bool, json_output: bool) {
+    use std::collections::HashMap;
+    use vela_protocol::events::StateTarget;
+    use vela_protocol::verifier_attachment::{
+        AdversarialProbe, AttachmentDraft, AttachmentOutcome, MatchToClaim, MethodIntegrity,
+        ProbeKind, ProbeResult, VerifierAttachment, VerifierMethod, claim_digest,
+    };
+
+    let source = repo::detect(frontier).unwrap_or_else(|e| fail_return(&e));
+    let proj = repo::load(&source).unwrap_or_else(|e| fail_return(&e));
+
+    // Claim text per finding id; claim_digest binds the attachment to it (G2).
+    let claim_by_finding: HashMap<String, String> = proj
+        .findings
+        .iter()
+        .map(|f| (f.id.clone(), f.assertion.text.clone()))
+        .collect();
+
+    // (finding, witness kind, claim_digest) for each landed/planned check.
+    let mut done: Vec<(String, String, String)> = Vec::new();
+    let mut failed: Vec<(String, String)> = Vec::new();
+    let mut skipped: usize = 0;
+
+    for art in &proj.artifacts {
+        // Witness artifacts: a JSON payload tagged with a `verifier` in metadata.
+        let is_json = art.media_type.as_deref() == Some("application/json");
+        if !(is_json && art.metadata.contains_key("verifier")) {
+            continue;
+        }
+        // Resolve content. local_blob / local_file locators are relative to the
+        // frontier dir; remote / pointer artifacts are not re-checkable here.
+        let content = match (art.storage_mode.as_str(), &art.locator) {
+            ("local_blob" | "local_file", Some(loc)) => {
+                match std::fs::read_to_string(frontier.join(loc.as_str())) {
+                    Ok(c) => c,
+                    Err(_) => {
+                        skipped += 1;
+                        continue;
+                    }
+                }
+            }
+            _ => {
+                skipped += 1;
+                continue;
+            }
+        };
+        let witness = match parse_witness(&content) {
+            Ok(w) => w,
+            Err(_) => {
+                skipped += 1;
+                continue;
+            }
+        };
+        let result = vela_verify::verify_witness(&witness);
+        let kind = witness.kind().to_string();
+        for tf in &art.target_findings {
+            let Some(claim) = claim_by_finding.get(tf) else {
+                continue;
+            };
+            if !result.ok {
+                failed.push((tf.clone(), result.message.clone()));
+                continue;
+            }
+            let digest = claim_digest(claim);
+            if dry_run {
+                done.push((tf.clone(), kind.clone(), digest));
+                continue;
+            }
+            let att = VerifierAttachment::build(AttachmentDraft {
+                target: tf.clone(),
+                claim_digest: digest.clone(),
+                verifier_method: VerifierMethod::ComputationalSearch,
+                solver_id: "vela-verify".to_string(),
+                independent_of: Vec::new(),
+                match_to_claim: MatchToClaim {
+                    matches: true,
+                    checker_actor: "vela-verify".to_string(),
+                },
+                adversarial_probes: vec![AdversarialProbe {
+                    kind: ProbeKind::CounterexampleSearch,
+                    result: ProbeResult::Survived,
+                    note: String::new(),
+                }],
+                outcome: AttachmentOutcome::Passed,
+                verifier_actor: "vela-verify".to_string(),
+                note: format!("frozen verifier re-check: {kind}"),
+            })
+            .and_then(|a| a.with_method_integrity(MethodIntegrity::Sound))
+            .unwrap_or_else(|e| fail_return(&format!("build attachment for {tf}: {e}")));
+            let att_value = serde_json::to_value(&att)
+                .unwrap_or_else(|e| fail_return(&format!("serialize attachment: {e}")));
+            let actor_type = if reviewer.starts_with("agent:") {
+                "agent"
+            } else {
+                "human"
+            };
+            let proposal = proposals::new_proposal(
+                "verifier.attach",
+                StateTarget {
+                    r#type: "finding".to_string(),
+                    id: tf.clone(),
+                },
+                reviewer,
+                actor_type,
+                "backfill frozen verifier re-check",
+                json!({ "attachment": att_value }),
+                Vec::new(),
+                Vec::new(),
+            );
+            match proposals::create_or_apply(frontier, proposal, true) {
+                Ok(_) => done.push((tf.clone(), kind.clone(), digest)),
+                Err(e) => failed.push((tf.clone(), e)),
+            }
+        }
+    }
+
+    if json_output {
+        let findings: Vec<Value> = done
+            .iter()
+            .map(|(f, k, d)| json!({ "finding": f, "kind": k, "claim_digest": d }))
+            .collect();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "command": "gate backfill",
+                "dry_run": dry_run,
+                "attached": done.len(),
+                "failed": failed.len(),
+                "skipped_artifacts": skipped,
+                "findings": findings,
+            }))
+            .expect("serialize gate backfill response")
+        );
+    } else {
+        let verb = if dry_run { "would attach" } else { "attached" };
+        println!(
+            "· gate backfill: {verb} {} frozen-verifier check{} ({skipped} artifacts skipped, {} verify-failures)",
+            done.len(),
+            if done.len() == 1 { "" } else { "s" },
+            failed.len(),
+        );
+        for (f, k, d) in &done {
+            println!("  {f} · {k} · claim {d}");
+        }
+        for (f, e) in &failed {
+            println!("  ! {f}: {e}");
+        }
     }
 }
 

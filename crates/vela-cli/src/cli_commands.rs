@@ -1309,6 +1309,25 @@ pub(crate) enum GateAction {
         #[arg(long)]
         json: bool,
     },
+    /// Backfill frozen-verifier attachments. For each witness artifact in the
+    /// frontier, re-run the matching frozen verifier (vela-verify) and, on
+    /// pass, land a signed `verifier.attach` recording the check
+    /// (ComputationalSearch / vela-verify / Sound). Makes the frozen verifier
+    /// legible per finding; the gate still needs >=2 independent attachments to
+    /// derive `verified`, so this records the check, it does not flip the gate.
+    Backfill {
+        /// Frontier directory (e.g. `examples/sidon-sets`).
+        frontier: PathBuf,
+        /// Reviewer authority landing the attachments (e.g.
+        /// `reviewer:will-blair`). A signing key is required to apply.
+        #[arg(long)]
+        reviewer: String,
+        /// Report the plan without writing.
+        #[arg(long)]
+        dry_run: bool,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
