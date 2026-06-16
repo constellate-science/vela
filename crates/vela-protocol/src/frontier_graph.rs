@@ -127,9 +127,12 @@ pub struct Edge {
     pub target_in_frontier: bool,
 }
 
-/// The product-facing state of a finding (memo §6). A pure, derived
-/// classification of a finding's review verdict + confidence into the
-/// five words the platform speaks — never persisted, recomputed on read.
+/// The product-facing state of a finding (memo §6) — **Plane 2** of the four
+/// status planes (see `docs/STATUS_PLANES.md`): distinct from the cross-source
+/// resolution words (Plane 1), the Belnap/bilattice epistemic status (Plane 3),
+/// and the review-lifecycle signals (Plane 4). A pure, derived classification
+/// of a finding's review verdict + confidence into the five words the platform
+/// speaks — never persisted, recomputed on read.
 /// `Refuted`/`Contested` are live disagreement; `Fragile` is established
 /// but thin; `Established` is accepted with real support; `Open` is the
 /// default working state. State is orthogonal to the verifier gate: it
