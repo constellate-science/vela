@@ -84,7 +84,7 @@ signed.
 The public hub mirrors signed frontier state:
 
 ```text
-https://vela-hub.fly.dev
+https://hub.constellate.science
 ```
 
 For a fresh frontier file, publish with:
@@ -97,7 +97,7 @@ vela actor add ./frontier.json reviewer:you \
 vela registry publish ./frontier.json \
   --owner reviewer:you \
   --key keys/private.key \
-  --to https://vela-hub.fly.dev \
+  --to https://hub.constellate.science \
   --json
 ```
 

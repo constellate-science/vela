@@ -9,7 +9,7 @@ Clients verify locally on read, so a compromised hub can withhold or
 reorder, but cannot fabricate or tamper without breaking signatures and
 hashes.
 
-The public hub is **<https://vela-hub.fly.dev>**.
+The public hub is **<https://hub.constellate.science>**.
 
 ## Doctrine
 
@@ -59,7 +59,7 @@ in its `frontier.dependencies` array, pinning each remote frontier by
 can then link to findings in the dep via `vf_<id>@vfr_<id>` link
 targets. The hub renders such links as clickable navigation between
 entries; clients use `vela registry pull <vfr> --transitive --from
-https://vela-hub.fly.dev/entries` to fetch and verify the whole chain.
+https://hub.constellate.science/entries` to fetch and verify the whole chain.
 
 The hub does not invent cross-frontier answers at storage time.
 Resolution happens client-side at pull time, where the canonical-JSON
@@ -77,7 +77,7 @@ latest-publish-wins read returns the newer.
 vela registry publish frontier.json \
   --owner reviewer:my-id \
   --key ~/.vela/keys/private.key \
-  --to https://vela-hub.fly.dev
+  --to https://hub.constellate.science
 ```
 
 When publishing to an HTTP hub, the CLI includes the frontier substrate
@@ -89,8 +89,8 @@ in the frontier with a matching pubkey.
 ## Pulling
 
 ```bash
-vela registry list --from https://vela-hub.fly.dev/entries
-vela registry pull vfr_… --from https://vela-hub.fly.dev/entries --out ./pulled.json
+vela registry list --from https://hub.constellate.science/entries
+vela registry pull vfr_… --from https://hub.constellate.science/entries --out ./pulled.json
 ```
 
 For an HTTP hub, `pull` first fetches
@@ -118,7 +118,7 @@ Multi-hub witness checks remain optional. Set both environment variables
 when two hubs are expected to carry the same witness pack:
 
 ```bash
-VELA_HUB_URLS=https://vela-hub.fly.dev,https://vela-hub-eu.fly.dev \
+VELA_HUB_URLS=https://hub.constellate.science,https://vela-hub-eu.fly.dev \
   VELA_WITNESS_PACK_ID=vsd_b6647b7d9bee0b0e \
   ./scripts/test-multi-hub-witness.sh
 ```
@@ -179,7 +179,7 @@ The SQLite backend serves every endpoint the Postgres one does:
 `POST /entries`, `vela registry pull --from`, `vela registry mirror --to`.
 Verified end-to-end against the public hub: pulling a BBB-mirrored
 frontier from a SQLite hub returns byte-identical bytes with
-`verified=true`, same as pulling from `vela-hub.fly.dev`.
+`verified=true`, same as pulling from `hub.constellate.science`.
 
 ### Postgres (production)
 
@@ -337,9 +337,9 @@ Use these checks before and after any hub deploy:
 ```bash
 cargo build --release -p vela-hub -p vela-protocol
 ./scripts/audit-live-frontiers.sh --frontier vfr_5076e7b3ff8e6b0f --json | jq
-curl -fsS https://vela-hub.fly.dev/healthz | jq
-curl -fsS https://vela-hub.fly.dev/entries/vfr_5076e7b3ff8e6b0f | jq '.vfr_id'
-curl -fsS 'https://vela-hub.fly.dev/entries/vfr_5076e7b3ff8e6b0f/events?limit=1' | jq '.events[0].id'
+curl -fsS https://hub.constellate.science/healthz | jq
+curl -fsS https://hub.constellate.science/entries/vfr_5076e7b3ff8e6b0f | jq '.vfr_id'
+curl -fsS 'https://hub.constellate.science/entries/vfr_5076e7b3ff8e6b0f/events?limit=1' | jq '.events[0].id'
 ```
 
 The focused anti-amyloid frontier is the public canary. It must be live,
@@ -410,14 +410,14 @@ operational requirement. The doctrinal claim — *the signature is the
 bind, not the hub identity* — was empirically validated end-to-end in
 v0.20 against a second hub instance (`vela-hub-2`, since retired during
 the current release consolidation: one canonical public hub at
-<https://vela-hub.fly.dev>, federation peers spun up by institutions
+<https://hub.constellate.science>, federation peers spun up by institutions
 that need them).
 
 The federation primitive remains:
 
 ```bash
 vela registry mirror <vfr_id> \
-  --from https://vela-hub.fly.dev \
+  --from https://hub.constellate.science \
   --to https://your-hub.example.com
 ```
 
