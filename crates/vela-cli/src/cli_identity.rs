@@ -25,7 +25,7 @@ use crate::cli::{fail_return, parse_signing_key};
 
 /// The default public hub. Matches the constant baked into the registry
 /// commands so an unconfigured user still reaches the live hub.
-pub(crate) const DEFAULT_HUB: &str = "https://vela-hub.fly.dev";
+pub(crate) const DEFAULT_HUB: &str = "https://hub.constellate.science";
 
 /// One stored identity. Written to `~/.vela/identity.json`. The private
 /// key itself lives in its own file (`key_path`), never inline here, so

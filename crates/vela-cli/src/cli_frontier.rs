@@ -88,7 +88,7 @@ pub(crate) fn cmd_frontier(action: FrontierAction) {
                     "vela finding add <path> --assertion '...' --author 'reviewer:you' --apply",
                     "vela sign generate-keypair --out keys",
                     "vela actor add <path> reviewer:you --pubkey \"$(cat keys/public.key)\"",
-                    "vela registry publish <path> --owner reviewer:you --key keys/private.key --locator <url> --to https://vela-hub.fly.dev",
+                    "vela registry publish <path> --owner reviewer:you --key keys/private.key --locator <url> --to https://hub.constellate.science",
                 ],
             });
             if json {
@@ -110,7 +110,7 @@ pub(crate) fn cmd_frontier(action: FrontierAction) {
                     path.display()
                 );
                 println!(
-                    "    4. vela registry publish {} --owner reviewer:you --key keys/private.key --locator <url> --to https://vela-hub.fly.dev",
+                    "    4. vela registry publish {} --owner reviewer:you --key keys/private.key --locator <url> --to https://hub.constellate.science",
                     path.display()
                 );
             }

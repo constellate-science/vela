@@ -125,7 +125,7 @@ mod tests {
         HubSpecDraft {
             hub_id: "vela-hub".to_string(),
             display_name: "Vela Hub".to_string(),
-            base_url: "https://vela-hub.fly.dev".to_string(),
+            base_url: "https://hub.constellate.science".to_string(),
             operator_pubkey_hex: "a".repeat(64),
             substrate_version: "0.167.0".to_string(),
             contact: Some("ops@example.org".to_string()),

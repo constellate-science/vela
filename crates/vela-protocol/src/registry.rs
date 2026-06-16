@@ -571,8 +571,8 @@ pub struct PublishResponse {
 /// canonical JSON over HTTPS POST. The hub verifies the signature and
 /// stores the bytes verbatim.
 ///
-/// `hub_url` may be either the hub root (`https://vela-hub.fly.dev`) or
-/// the entries endpoint (`https://vela-hub.fly.dev/entries`); we append
+/// `hub_url` may be either the hub root (`https://hub.constellate.science`) or
+/// the entries endpoint (`https://hub.constellate.science/entries`); we append
 /// `/entries` if missing.
 ///
 /// v0.55: when `substrate` is `Some`, the full Project is included
@@ -871,12 +871,12 @@ mod tests {
     #[test]
     fn event_first_snapshot_locator_normalizes_hub_registry_urls() {
         assert_eq!(
-            event_first_snapshot_locator("https://vela-hub.fly.dev/entries", "vfr_demo").as_deref(),
-            Some("https://vela-hub.fly.dev/entries/vfr_demo/snapshot")
+            event_first_snapshot_locator("https://hub.constellate.science/entries", "vfr_demo").as_deref(),
+            Some("https://hub.constellate.science/entries/vfr_demo/snapshot")
         );
         assert_eq!(
-            event_first_snapshot_locator("https://vela-hub.fly.dev/", "vfr_demo").as_deref(),
-            Some("https://vela-hub.fly.dev/entries/vfr_demo/snapshot")
+            event_first_snapshot_locator("https://hub.constellate.science/", "vfr_demo").as_deref(),
+            Some("https://hub.constellate.science/entries/vfr_demo/snapshot")
         );
         assert_eq!(
             event_first_snapshot_locator("file:///tmp/registry.json", "vfr_demo"),
@@ -887,16 +887,16 @@ mod tests {
     #[test]
     fn registry_listing_url_accepts_hub_roots() {
         assert_eq!(
-            registry_listing_url("https://vela-hub.fly.dev"),
-            "https://vela-hub.fly.dev/entries"
+            registry_listing_url("https://hub.constellate.science"),
+            "https://hub.constellate.science/entries"
         );
         assert_eq!(
-            registry_listing_url("https://vela-hub.fly.dev/"),
-            "https://vela-hub.fly.dev/entries"
+            registry_listing_url("https://hub.constellate.science/"),
+            "https://hub.constellate.science/entries"
         );
         assert_eq!(
-            registry_listing_url("https://vela-hub.fly.dev/entries"),
-            "https://vela-hub.fly.dev/entries"
+            registry_listing_url("https://hub.constellate.science/entries"),
+            "https://hub.constellate.science/entries"
         );
         assert_eq!(
             registry_listing_url("https://example.com/registry.json"),

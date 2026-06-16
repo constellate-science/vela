@@ -108,9 +108,9 @@ const ACCEPT_RATE_LIMIT: u32 = 30;
 const APPEND_RATE_LIMIT: u32 = 30;
 const RATE_WINDOW: Duration = Duration::from_secs(60);
 
-const DEFAULT_PUBLIC_URL: &str = "https://vela-hub.fly.dev";
+const DEFAULT_PUBLIC_URL: &str = "https://hub.constellate.science";
 const DEFAULT_REPO_URL: &str = "https://github.com/vela-science/vela";
-const DEFAULT_SITE_URL: &str = "https://vela-site.fly.dev";
+const DEFAULT_SITE_URL: &str = "https://app.constellate.science";
 
 /// Cache key: (vfr_id, signed_publish_at). A fresh publish gets a new
 /// timestamp, so the key changes and the next read re-fetches.
@@ -693,6 +693,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/diff-packs", post(publish_diff_pack))
         .route("/diff-packs/{pack_id}", get(get_diff_pack))
         .route("/entries/{vfr_id}/findings/{vf_id}", get(get_finding))
+        .route(
+            "/entries/{vfr_id}/findings/{vf_id}/context",
+            get(get_finding_context),
+        )
         .route(
             "/entries/{vfr_id}/findings/{vf_id}/gate-status",
             get(get_finding_gate_status),
@@ -2260,6 +2264,169 @@ async fn get_finding(
                 .into_response(),
         }
     }
+}
+
+/// `GET /entries/{vfr_id}/findings/{vf_id}/context`
+///
+/// Returns a *project-shaped slice* scoped to one finding: the target finding
+/// plus the source findings that link into it (so the web's incoming-link scan
+/// resolves), with evidence atoms / events / proposals / verifier attachments /
+/// statement attestations filtered to the target, and the small shared metadata
+/// (sources, actors, frontier meta, proof_state) carried whole. The finding page
+/// consumes this in hub mode instead of pulling the whole multi-MB snapshot per
+/// request (the erdos snapshot is ~15 MB; a finding page needs a few KB of it).
+/// The shape is a strict subset of the snapshot `Project`, so the same web-side
+/// normalizer applies unchanged. Filtering is done on the serialized JSON using
+/// the exact field names the web consumes, so this never couples to the Rust
+/// struct layout.
+async fn get_finding_context(
+    State(state): State<AppState>,
+    Path((vfr_id, vf_id)): Path<(String, String)>,
+) -> Response {
+    let entry = match state.db.get_live_entry(&vfr_id).await {
+        Ok(Some(v)) => v,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": format!("{vfr_id} not found")})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("query: {e}")})),
+            )
+                .into_response();
+        }
+    };
+    let signed_at = entry
+        .get("signed_publish_at")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let Some(project) = load_substrate(&state, &vfr_id, signed_at).await else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"error": "frontier projection unavailable; pull via the CLI to inspect"})),
+        )
+            .into_response();
+    };
+
+    let full = match serde_json::to_value(&*project) {
+        Ok(v) => v,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("serialize: {e}")})),
+            )
+                .into_response();
+        }
+    };
+    let obj = full.as_object().cloned().unwrap_or_default();
+    let arr = |k: &str| -> Vec<serde_json::Value> {
+        obj.get(k)
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default()
+    };
+
+    let findings = arr("findings");
+    let Some(target) = findings
+        .iter()
+        .find(|f| f.get("id").and_then(|v| v.as_str()) == Some(vf_id.as_str()))
+        .cloned()
+    else {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("{vf_id} not in {vfr_id}")})),
+        )
+            .into_response();
+    };
+
+    // Target first, then the source findings whose links point at it, so the
+    // web's `bundle.findings.flatMap(... link.target === id)` incoming-link scan
+    // resolves against the slice without shipping every finding.
+    let mut sliced_findings = vec![target];
+    for f in &findings {
+        if f.get("id").and_then(|v| v.as_str()) == Some(vf_id.as_str()) {
+            continue;
+        }
+        let links_in = f
+            .get("links")
+            .and_then(|v| v.as_array())
+            .map(|ls| {
+                ls.iter().any(|l| {
+                    l.get("target").and_then(|v| v.as_str()) == Some(vf_id.as_str())
+                })
+            })
+            .unwrap_or(false);
+        if links_in {
+            sliced_findings.push(f.clone());
+        }
+    }
+
+    let by_finding_id = |k: &str| -> Vec<serde_json::Value> {
+        arr(k)
+            .into_iter()
+            .filter(|a| a.get("finding_id").and_then(|v| v.as_str()) == Some(vf_id.as_str()))
+            .collect()
+    };
+    let by_target_id = |k: &str| -> Vec<serde_json::Value> {
+        arr(k)
+            .into_iter()
+            .filter(|a| {
+                a.get("target").and_then(|t| t.get("id")).and_then(|v| v.as_str())
+                    == Some(vf_id.as_str())
+            })
+            .collect()
+    };
+    let by_target_str = |k: &str| -> Vec<serde_json::Value> {
+        arr(k)
+            .into_iter()
+            .filter(|a| a.get("target").and_then(|v| v.as_str()) == Some(vf_id.as_str()))
+            .collect()
+    };
+
+    let mut slice = serde_json::Map::new();
+    // Envelope fields the web normalizer reads (frontier meta + proof state).
+    for k in [
+        "vela_version",
+        "schema",
+        "frontier_id",
+        "frontier",
+        "stats",
+        "proof_state",
+    ] {
+        if let Some(v) = obj.get(k) {
+            slice.insert(k.to_string(), v.clone());
+        }
+    }
+    slice.insert("findings".into(), serde_json::Value::Array(sliced_findings));
+    slice.insert(
+        "evidence_atoms".into(),
+        serde_json::Value::Array(by_finding_id("evidence_atoms")),
+    );
+    slice.insert(
+        "events".into(),
+        serde_json::Value::Array(by_target_id("events")),
+    );
+    slice.insert(
+        "proposals".into(),
+        serde_json::Value::Array(by_target_id("proposals")),
+    );
+    slice.insert(
+        "verifier_attachments".into(),
+        serde_json::Value::Array(by_target_str("verifier_attachments")),
+    );
+    slice.insert(
+        "statement_attestations".into(),
+        serde_json::Value::Array(by_target_str("statement_attestations")),
+    );
+    // Small shared metadata, carried whole (bibliography + actor key map).
+    slice.insert("sources".into(), serde_json::Value::Array(arr("sources")));
+    slice.insert("actors".into(), serde_json::Value::Array(arr("actors")));
+
+    (StatusCode::OK, Json(serde_json::Value::Object(slice))).into_response()
 }
 
 /// `GET /entries/{vfr_id}/findings/{vf_id}/gate-status`

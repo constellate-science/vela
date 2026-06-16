@@ -483,7 +483,7 @@ pub fn all_tools() -> Vec<ToolDefinition> {
             "vela_agent_propose_to_hub",
             "Submit a signed StateProposal to a remote Vela hub over MCP. The agent signs with VELA_AGENT_KEY_HEX (the same canonical bytes the hub verifies) and POSTs to {hub}/entries/{vfr}/proposals. The proposal is authored by the agent's `agent:*` id and lands as pending_review; a human reviewer must accept it through the strict gate before it changes state. Proposes only — never accepts.",
             json!({"type": "object", "properties": {
-                "hub": {"type": "string", "description": "Hub base URL (or set VELA_HUB env), e.g. https://vela-hub.fly.dev"},
+                "hub": {"type": "string", "description": "Hub base URL (or set VELA_HUB env), e.g. https://hub.constellate.science"},
                 "vfr": {"type": "string", "description": "The vfr_ frontier id on the hub."},
                 "kind": {"type": "string", "description": "Proposal kind, e.g. finding.note, finding.caveat, finding.confidence_revise, finding.retract."},
                 "target": {"type": "string", "description": "The vf_ finding id this change targets."},

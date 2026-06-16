@@ -905,7 +905,7 @@ pub(crate) enum Commands {
     #[command(hide = true)]
     Stash {
         file: PathBuf,
-        #[arg(long, default_value = "https://vela-hub.fly.dev")]
+        #[arg(long, default_value = "https://hub.constellate.science")]
         to: String,
         /// Your public key hex (rate-limit identity; content stays untrusted).
         #[arg(long)]
@@ -918,7 +918,7 @@ pub(crate) enum Commands {
     #[command(hide = true)]
     Events {
         vfr_id: String,
-        #[arg(long, default_value = "https://vela-hub.fly.dev")]
+        #[arg(long, default_value = "https://hub.constellate.science")]
         from: String,
         /// Keep following (SSE); without it, print the page after --since.
         #[arg(long)]
@@ -2867,7 +2867,7 @@ pub(crate) enum RegistryAction {
     Deprecate {
         /// The frontier to deprecate (vfr_…)
         vfr_id: String,
-        /// Hub base URL (e.g. https://vela-hub.fly.dev)
+        /// Hub base URL (e.g. https://hub.constellate.science)
         #[arg(long)]
         to: String,
         /// Path to the owner's Ed25519 private key. Optional: defaults to
@@ -3153,7 +3153,7 @@ pub(crate) enum RegistryAction {
     VerifyLog {
         /// The frontier (vfr_…) whose log to verify.
         vfr_id: String,
-        /// Hub base URL (e.g. https://vela-hub.fly.dev). `--to` is an accepted
+        /// Hub base URL (e.g. https://hub.constellate.science). `--to` is an accepted
         /// alias (harmonized with `registry propose --to`).
         #[arg(long, visible_alias = "to")]
         hub: String,

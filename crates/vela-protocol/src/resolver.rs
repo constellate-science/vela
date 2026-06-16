@@ -83,7 +83,7 @@ pub struct ResolvedRef {
 }
 
 /// Resolve a handle against the substrate URL conventions. The
-/// `site_base` is the live-site origin (e.g. `https://vela-site.fly.dev`).
+/// `site_base` is the live-site origin (e.g. `https://app.constellate.science`).
 pub fn resolve(handle: &str, site_base: &str) -> ResolvedRef {
     let trimmed = handle.trim();
     let base = site_base.trim_end_matches('/');
@@ -252,7 +252,7 @@ fn is_orcid(s: &str) -> bool {
 mod tests {
     use super::*;
 
-    const BASE: &str = "https://vela-site.fly.dev";
+    const BASE: &str = "https://app.constellate.science";
 
     #[test]
     fn resolves_frontier() {
@@ -260,7 +260,7 @@ mod tests {
         assert_eq!(r.kind, HandleKind::Frontier);
         assert_eq!(
             r.url.as_deref(),
-            Some("https://vela-site.fly.dev/frontier/vfr_abcdef0123456789")
+            Some("https://app.constellate.science/frontier/vfr_abcdef0123456789")
         );
     }
 

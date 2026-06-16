@@ -1,7 +1,7 @@
 //! v0.39: Hub federation — peer registry + conflict detection.
 //!
 //! Pre-v0.39, every Vela frontier had exactly one source of truth: the
-//! single hub it was published to (`vela-hub.fly.dev`). The substrate
+//! single hub it was published to (`hub.constellate.science`). The substrate
 //! claimed the kernel was content-addressed and signed, but the
 //! distribution layer was centralized — there was no way for a second
 //! hub to mirror a frontier and detect when its view diverged from

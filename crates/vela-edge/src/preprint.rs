@@ -96,7 +96,7 @@ pub fn render_preprint(project: &Project, released_at: &str) -> String {
         "Generated from Vela frontier `{frontier_id}` at {released_at}.  \n"
     ));
     out.push_str(&format!(
-        "Substrate-side state at <https://vela-site.fly.dev/frontier/{frontier_id}>.\n"
+        "Substrate-side state at <https://app.constellate.science/frontier/{frontier_id}>.\n"
     ));
 
     out

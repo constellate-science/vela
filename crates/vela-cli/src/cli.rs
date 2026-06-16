@@ -5465,7 +5465,7 @@ Publish your own frontier (see docs/PUBLISHING.md):
   vela sign generate-keypair --out keys
   vela actor add ./frontier.json reviewer:you --pubkey "$(cat keys/public.key)"
   vela registry publish ./frontier.json --owner reviewer:you --key keys/private.key \
-      --to https://vela-hub.fly.dev
+      --to https://hub.constellate.science
 "#,
         env!("CARGO_PKG_VERSION")
     )
