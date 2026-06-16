@@ -45,12 +45,35 @@ pub(crate) fn run(args: &[String]) {
     print_json(&serde_json::to_value(&out).unwrap_or_else(|e| fail(&format!("serialize: {e}"))));
 }
 
-/// Extract a problem/sequence number from a finding's assertion text.
-/// Handles "Erdős Problem #105", "#105", "Problem 105", "A309370".
+/// The digits that follow `keyword` (ASCII, case-insensitive) in `text`, after
+/// skipping up to `max_skip` non-digit separators. e.g. `("erdos", 2)` finds the
+/// number in "Erdos257", "erdos_257", "Erdős-642" (ASCII match on "erdos").
+fn digits_after(text: &str, keyword: &str, max_skip: usize) -> Option<String> {
+    let lower = text.to_ascii_lowercase();
+    let pos = lower.find(keyword)?;
+    let mut chars = text[pos + keyword.len()..].chars().peekable();
+    let mut skipped = 0;
+    while let Some(&c) = chars.peek() {
+        if c.is_ascii_digit() {
+            break;
+        }
+        if skipped >= max_skip {
+            return None;
+        }
+        chars.next();
+        skipped += 1;
+    }
+    let digits: String = chars.take_while(char::is_ascii_digit).collect();
+    (!digits.is_empty()).then_some(digits)
+}
+
+/// Extract a problem/sequence number from a finding's assertion text. Handles
+/// "Erdős Problem #105", "#105", "Problem 105", "Erdos257", "erdos_1150",
+/// "A309370" — so the same problem written different ways in different databases
+/// lands on the same anchor.
 fn extract_id(namespace: &str, text: &str) -> Option<String> {
     match namespace {
         "oeis" => {
-            // An OEIS A-number: 'A' followed by digits.
             let bytes = text.as_bytes();
             for (i, &b) in bytes.iter().enumerate() {
                 if b == b'A' {
@@ -65,28 +88,9 @@ fn extract_id(namespace: &str, text: &str) -> Option<String> {
             }
             None
         }
-        _ => {
-            // erdos (and the generic case): "#N" first, then "Problem N".
-            if let Some(pos) = text.find('#') {
-                let digits: String = text[pos + 1..]
-                    .chars()
-                    .take_while(char::is_ascii_digit)
-                    .collect();
-                if !digits.is_empty() {
-                    return Some(digits);
-                }
-            }
-            if let Some(pos) = text.find("Problem ") {
-                let digits: String = text[pos + 8..]
-                    .chars()
-                    .take_while(char::is_ascii_digit)
-                    .collect();
-                if !digits.is_empty() {
-                    return Some(digits);
-                }
-            }
-            None
-        }
+        _ => digits_after(text, "#", 0)
+            .or_else(|| digits_after(text, "erdos", 2))
+            .or_else(|| digits_after(text, "problem ", 0)),
     }
 }
 

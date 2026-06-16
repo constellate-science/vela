@@ -135,11 +135,11 @@ fn belnap_str(b: BelnapStatus) -> &'static str {
 /// the problem. `disproved` is checked before `proved` because it contains it.
 fn declared_status(text: &str) -> Option<&'static str> {
     let t = text.to_ascii_lowercase();
-    if t.contains("disproved") {
+    if t.contains("disproved") || t.contains("disproven") {
         Some("disproved")
     } else if t.contains("solved") {
         Some("solved")
-    } else if t.contains("proved") {
+    } else if t.contains("proved") || t.contains("proven") {
         Some("proved")
     } else if t.contains("open") {
         Some("open")
@@ -198,7 +198,18 @@ pub fn project(projects: &[&Project]) -> Atlas {
     let mut seen: BTreeMap<(String, String), usize> = BTreeMap::new();
     for (i, m) in members.iter().enumerate() {
         for a in &m.hard_anchors {
-            let key = (anchor_join_key(a), m.context_key.clone());
+            // A ProblemEntry anchor IS the problem's identity, so it joins by
+            // anchor alone — the same problem in different databases phrases its
+            // conditions differently, and that incidental difference must not
+            // fragment the node ("one location per problem"). Claim-level anchors
+            // (a specific statement) stay context-indexed: the calculus context
+            // wall still forbids merging a claim across genuinely different scopes.
+            let ctx = if a.kind == crate::anchor::AnchorKind::ProblemEntry {
+                String::new()
+            } else {
+                m.context_key.clone()
+            };
+            let key = (anchor_join_key(a), ctx);
             if let Some(&j) = seen.get(&key) {
                 let (ri, rj) = (find(&mut parent, i), find(&mut parent, j));
                 if ri != rj {
