@@ -23,6 +23,10 @@ pub(crate) fn run(args: &[String]) {
         run_ingest(args);
         return;
     }
+    if args.get(2).map(String::as_str) == Some("frontier") {
+        run_frontier(args);
+        return;
+    }
     let frontiers: Vec<&str> = args
         .iter()
         .skip(2)
@@ -65,6 +69,53 @@ fn digits_after(text: &str, keyword: &str, max_skip: usize) -> Option<String> {
     }
     let digits: String = chars.take_while(char::is_ascii_digit).collect();
     (!digits.is_empty()).then_some(digits)
+}
+
+/// `vela atlas frontier <frontier>...` — the router view: the status landscape,
+/// the edge count, and the **stale-open frontier** (problems marked open in one
+/// source but resolved in another — the registry-stale wedge, an adoption queue).
+fn run_frontier(args: &[String]) {
+    let frontiers: Vec<&str> = args
+        .iter()
+        .skip(3)
+        .filter(|a| !a.starts_with('-'))
+        .map(String::as_str)
+        .collect();
+    if frontiers.is_empty() {
+        fail("usage: vela atlas frontier <frontier> [<frontier> ...]");
+    }
+    let projects: Vec<_> = frontiers
+        .iter()
+        .map(|f| {
+            repo::load_from_path(Path::new(f)).unwrap_or_else(|e| fail(&format!("load {f}: {e}")))
+        })
+        .collect();
+    let refs: Vec<&_> = projects.iter().collect();
+    let out = atlas::project(&refs);
+
+    let mut by_status: std::collections::BTreeMap<String, usize> =
+        std::collections::BTreeMap::new();
+    let mut stale_open: Vec<serde_json::Value> = Vec::new();
+    for c in &out.cells {
+        let s = c.status.clone().unwrap_or_else(|| "undeclared".to_string());
+        *by_status.entry(s.clone()).or_default() += 1;
+        if s == "contested" {
+            stale_open.push(json!({
+                "handle": c.stable_handle, "members": c.members.len(), "label": c.label,
+            }));
+        }
+    }
+    print_json(&json!({
+        "frontiers": out.frontiers,
+        "cells": out.cells.len(),
+        "edges": out.edges.len(),
+        "status_landscape": by_status,
+        "stale_open_frontier": {
+            "note": "open in one source, resolved in another — the registry-stale wedge (an adoption queue)",
+            "count": stale_open.len(),
+            "cells": stale_open,
+        },
+    }));
 }
 
 /// Extract a problem/sequence number from a finding's assertion text. Handles

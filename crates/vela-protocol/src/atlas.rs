@@ -66,6 +66,17 @@ pub struct AtlasCell {
     pub status: Option<String>,
 }
 
+/// A typed edge between two atlas cells, lifted from finding links. `depends`
+/// is state-carrying (the target's support rests on the source); the rest are
+/// organizational until the calculus licenses them. Sparse today (the reduction
+/// structure between problems is mostly un-ingested); grows as sources are added.
+#[derive(Debug, Clone, Serialize)]
+pub struct AtlasEdge {
+    pub source: String,
+    pub target: String,
+    pub kind: String,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Atlas {
     pub schema: String,
@@ -73,6 +84,7 @@ pub struct Atlas {
     /// The frontier ids unioned into this atlas.
     pub frontiers: Vec<String>,
     pub cells: Vec<AtlasCell>,
+    pub edges: Vec<AtlasEdge>,
 }
 
 struct Member {
@@ -84,6 +96,8 @@ struct Member {
     refute_y: Rational,
     belnap: BelnapStatus,
     status: Option<&'static str>,
+    /// Outgoing links as (target_global_id, kind).
+    links: Vec<(String, String)>,
 }
 
 /// The identity-bearing key of an anchor (must mirror `anchor::anchors_equal`).
@@ -180,6 +194,20 @@ pub fn project(projects: &[&Project]) -> Atlas {
                 refute_y: pt.y,
                 belnap,
                 status: declared_status(&f.assertion.text),
+                links: f
+                    .links
+                    .iter()
+                    .map(|l| {
+                        // Link targets are within-frontier vf ids unless they
+                        // already carry an @vfr qualifier.
+                        let tgt = if l.target.contains('@') {
+                            l.target.clone()
+                        } else {
+                            format!("{}@{}", l.target, vfr)
+                        };
+                        (tgt, l.link_type.clone())
+                    })
+                    .collect(),
             });
         }
     }
@@ -319,11 +347,44 @@ pub fn project(projects: &[&Project]) -> Atlas {
         .collect();
     cells.sort_by(|a, b| a.class_id.cmp(&b.class_id));
 
+    // Lift finding links to cell edges: map each member's global id to its class,
+    // then re-target each link to the class graph (dropping intra-cell self-loops
+    // and deduping). Sparse today; the projection is ready as reduction data grows.
+    let mut global_to_class: BTreeMap<&str, &str> = BTreeMap::new();
+    for c in &cells {
+        for m in &c.members {
+            global_to_class.insert(m.as_str(), c.class_id.as_str());
+        }
+    }
+    let mut edge_set: std::collections::BTreeSet<(String, String, String)> =
+        std::collections::BTreeSet::new();
+    for m in &members {
+        let Some(&src) = global_to_class.get(m.global_id.as_str()) else {
+            continue;
+        };
+        for (tgt_global, kind) in &m.links {
+            if let Some(&tgt) = global_to_class.get(tgt_global.as_str()) {
+                if src != tgt {
+                    edge_set.insert((src.to_string(), tgt.to_string(), kind.clone()));
+                }
+            }
+        }
+    }
+    let edges: Vec<AtlasEdge> = edge_set
+        .into_iter()
+        .map(|(source, target, kind)| AtlasEdge {
+            source,
+            target,
+            kind,
+        })
+        .collect();
+
     Atlas {
         schema: ATLAS_SCHEMA.to_string(),
         projection_version: ATLAS_PROJECTION_VERSION.to_string(),
         frontiers,
         cells,
+        edges,
     }
 }
 
