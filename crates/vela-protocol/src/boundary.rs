@@ -16,6 +16,7 @@ use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::frontier_graph::{EdgeKind, FindingState, FrontierGraph};
+use crate::pathfind::SUPPORT_KINDS;
 use crate::project::Project;
 
 /// One boundary finding: the finding itself, why it sits on the boundary, and
@@ -29,8 +30,25 @@ pub struct BoundaryItem {
     pub related: Vec<String>,
 }
 
-/// The boundary of a frontier, partitioned into the four dark-matter
-/// categories. Each list is sorted by finding id for stable output.
+/// A finding whose support funnels entirely through one load-bearing
+/// dependency that is not itself established (GPT §11): a single point of
+/// failure. If that dependency falls, the finding's whole support falls with
+/// it. The kintsugi crack — where the frontier is one correction from a cascade.
+#[derive(Debug, Clone, Serialize)]
+pub struct BrittleItem {
+    pub finding: String,
+    pub label: String,
+    /// The load-bearing dependency every support path runs through.
+    pub dominator: String,
+    pub dominator_label: String,
+    /// The dominator's own state (why it is a risk).
+    pub dominator_state: String,
+    /// How many support nodes vanish if the dominator is removed.
+    pub support_size: usize,
+}
+
+/// The boundary of a frontier, partitioned into the dark-matter categories.
+/// Each list is sorted by finding id for stable output.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Boundary {
     /// Open findings whose every in-frontier premise is already established —
@@ -39,6 +57,9 @@ pub struct Boundary {
     /// Established findings resting on thin ground (low confidence, or a
     /// single supporting thread).
     pub fragile: Vec<BoundaryItem>,
+    /// Findings whose entire support funnels through one un-established
+    /// load-bearing dependency (a single point of failure).
+    pub brittle: Vec<BrittleItem>,
     /// Findings in live disagreement — a contradiction partner or a contested
     /// review verdict. Never auto-resolved.
     pub contested: Vec<BoundaryItem>,
@@ -140,6 +161,34 @@ impl Boundary {
             }
         }
 
+        // Brittle: a finding whose support funnels entirely through one
+        // load-bearing dependency that is not itself established. Computed over
+        // the support-bearing edge kinds; only single-points-of-failure with a
+        // risky dominator surface (an established dominator is sound footing).
+        for node in graph.nodes() {
+            let doms = graph.support_dominators(&node.id, &SUPPORT_KINDS);
+            let Some(spof) = doms.iter().find(|d| d.single_point_of_failure) else {
+                continue;
+            };
+            let dom_state = spof.state.unwrap_or(FindingState::Open);
+            if dom_state == FindingState::Established {
+                continue;
+            }
+            boundary.brittle.push(BrittleItem {
+                finding: node.id.clone(),
+                label: node.label.clone(),
+                dominator: spof.node.clone(),
+                dominator_label: spof.label.clone(),
+                dominator_state: dom_state.as_str().to_string(),
+                support_size: spof.weight,
+            });
+        }
+        boundary.brittle.sort_by(|a, b| {
+            b.support_size
+                .cmp(&a.support_size)
+                .then(a.finding.cmp(&b.finding))
+        });
+
         // Contradiction pairs add any node not already flagged contested, with
         // its partner as the related finding. Each endpoint is listed once.
         let already: BTreeSet<String> =
@@ -168,6 +217,7 @@ impl Boundary {
     pub fn total(&self) -> usize {
         self.one_premise_away.len()
             + self.fragile.len()
+            + self.brittle.len()
             + self.contested.len()
             + self.stale_open.len()
     }
@@ -180,12 +230,14 @@ impl Boundary {
             "summary": {
                 "one_premise_away": self.one_premise_away.len(),
                 "fragile": self.fragile.len(),
+                "brittle": self.brittle.len(),
                 "contested": self.contested.len(),
                 "stale_open": self.stale_open.len(),
                 "total": self.total(),
             },
             "one_premise_away": self.one_premise_away,
             "fragile": self.fragile,
+            "brittle": self.brittle,
             "contested": self.contested,
             "stale_open": self.stale_open,
             "boundary_is_derived": true,
@@ -255,6 +307,42 @@ mod tests {
         let boundary = Boundary::derive(&project);
         assert_eq!(boundary.fragile.len(), 1);
         assert!(boundary.stale_open.is_empty());
+    }
+
+    #[test]
+    fn brittle_when_support_funnels_through_one_open_dependency() {
+        // z depends_on a depends_on b, none established: z's whole support
+        // funnels through a (a single point of failure that is itself open).
+        let b = synth_finding(0, vec![]);
+        let a = synth_finding(1, vec![link_typed(&b.id, "depends")]);
+        let z = synth_finding(2, vec![link_typed(&a.id, "depends")]);
+        let (a_id, z_id) = (a.id.clone(), z.id.clone());
+        let mut project = assemble("brit", vec![], 0, 0, "test");
+        project.findings = vec![b, a, z];
+
+        let boundary = Boundary::derive(&project);
+        let item = boundary
+            .brittle
+            .iter()
+            .find(|i| i.finding == z_id)
+            .expect("z is brittle");
+        assert_eq!(item.dominator, a_id);
+        assert_eq!(item.dominator_state, "open");
+        assert_eq!(item.support_size, 2);
+    }
+
+    #[test]
+    fn not_brittle_when_load_bearing_dependency_is_established() {
+        let mut a = synth_finding(0, vec![]);
+        a.flags.review_state = Some(ReviewState::Accepted);
+        a.confidence.score = 0.9;
+        let z = synth_finding(1, vec![link_typed(&a.id, "depends")]);
+        let z_id = z.id.clone();
+        let mut project = assemble("brit2", vec![], 0, 0, "test");
+        project.findings = vec![a, z];
+        let boundary = Boundary::derive(&project);
+        // a is established → z is one-premise-away, not brittle.
+        assert!(boundary.brittle.iter().all(|i| i.finding != z_id));
     }
 
     #[test]

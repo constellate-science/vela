@@ -232,6 +232,21 @@ pub struct Node {
     pub state: FindingState,
 }
 
+/// A load-bearing dependency of a claim (GPT §11): a node every (or much) of
+/// the claim's support funnels through. `weight` is how many support nodes
+/// vanish if it is removed; `single_point_of_failure` is true when that is the
+/// claim's entire support.
+#[derive(Debug, Clone, Serialize)]
+pub struct Dominator {
+    pub node: String,
+    pub label: String,
+    /// The dominator's own finding state, when it is a finding in this graph.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<FindingState>,
+    pub weight: usize,
+    pub single_point_of_failure: bool,
+}
+
 /// The typed claim-level graph for one frontier (or one merged
 /// multi-frontier Project).
 #[derive(Debug, Clone, Default)]
@@ -458,6 +473,68 @@ impl FrontierGraph {
         self.nodes.get(id).map(|n| n.label.as_str())
     }
 
+    /// Support-reachable nodes from `start` following only `kinds`, in stored
+    /// `source → target` direction (the premises `start` rests on), optionally
+    /// removing one node from the graph. Excludes `start` itself.
+    fn support_reach(
+        &self,
+        start: &str,
+        kinds: &[EdgeKind],
+        remove: Option<&str>,
+    ) -> BTreeSet<String> {
+        let mut seen = BTreeSet::new();
+        let mut stack = vec![start.to_string()];
+        while let Some(node) = stack.pop() {
+            for e in &self.edges {
+                if e.source != node || !kinds.contains(&e.kind) {
+                    continue;
+                }
+                if remove == Some(e.target.as_str()) {
+                    continue;
+                }
+                if e.target.as_str() == start {
+                    continue;
+                }
+                if seen.insert(e.target.clone()) {
+                    stack.push(e.target.clone());
+                }
+            }
+        }
+        seen
+    }
+
+    /// The support-graph dominators of a claim (GPT §11): the load-bearing
+    /// dependencies its support funnels through. A node `d` (≠ `z`) is a
+    /// dominator with `weight` = how many of `z`'s support-reachable nodes
+    /// vanish if `d` is removed (including `d` itself). A dominator whose
+    /// weight equals the full support size is a single point of failure —
+    /// every support path out of `z` runs through it. Sorted by weight
+    /// descending, then id. Pure; recomputed on read.
+    #[must_use]
+    pub fn support_dominators(&self, z: &str, kinds: &[EdgeKind]) -> Vec<Dominator> {
+        let full = self.support_reach(z, kinds, None);
+        if full.is_empty() {
+            return vec![];
+        }
+        let total = full.len();
+        let mut doms: Vec<Dominator> = full
+            .iter()
+            .map(|d| {
+                let without = self.support_reach(z, kinds, Some(d));
+                let weight = full.iter().filter(|n| !without.contains(*n)).count();
+                Dominator {
+                    node: d.clone(),
+                    label: self.label_of(d).unwrap_or("").to_string(),
+                    state: self.nodes.get(d).map(|n| n.state),
+                    weight,
+                    single_point_of_failure: weight == total && total >= 2,
+                }
+            })
+            .collect();
+        doms.sort_by(|a, b| b.weight.cmp(&a.weight).then(a.node.cmp(&b.node)));
+        doms
+    }
+
     /// Serialize to a stable claim-level JSON view. This is a focused
     /// `vela.frontier_graph.claims.v0.1` artifact — deliberately
     /// distinct from the broad provenance `vela.frontier_graph.v0.1`
@@ -624,6 +701,41 @@ mod tests {
 
         // Bounded by max_hops: depth 1 reaches only the immediate neighbor.
         assert_eq!(g.explore(&base_id, 1).node_count(), 2);
+    }
+
+    #[test]
+    fn support_dominators_find_the_single_point_of_failure() {
+        // z depends_on a depends_on b: every support path out of z funnels
+        // through a, so a is a single point of failure (weight = full = 2);
+        // b is a leaf (weight 1).
+        let b = synth_finding(0, vec![]);
+        let a = synth_finding(1, vec![link_typed(&b.id, "depends")]);
+        let z = synth_finding(2, vec![link_typed(&a.id, "depends")]);
+        let (a_id, b_id, z_id) = (a.id.clone(), b.id.clone(), z.id.clone());
+        let mut project = assemble("dom", vec![], 0, 0, "test");
+        project.findings = vec![b, a, z];
+
+        let g = FrontierGraph::from_project(&project);
+        let doms = g.support_dominators(&z_id, &[EdgeKind::DependsOn]);
+        // a and b are both reachable; a dominates everything.
+        let a_dom = doms.iter().find(|d| d.node == a_id).unwrap();
+        let b_dom = doms.iter().find(|d| d.node == b_id).unwrap();
+        assert_eq!(a_dom.weight, 2);
+        assert!(a_dom.single_point_of_failure);
+        assert_eq!(b_dom.weight, 1);
+        assert!(!b_dom.single_point_of_failure);
+        // top dominator is `a`.
+        assert_eq!(doms.first().unwrap().node, a_id);
+    }
+
+    #[test]
+    fn support_dominators_empty_for_unsupported_claim() {
+        let z = synth_finding(0, vec![]);
+        let z_id = z.id.clone();
+        let mut project = assemble("dom2", vec![], 0, 0, "test");
+        project.findings = vec![z];
+        let g = FrontierGraph::from_project(&project);
+        assert!(g.support_dominators(&z_id, &[EdgeKind::DependsOn]).is_empty());
     }
 
     #[test]
