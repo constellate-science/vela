@@ -133,6 +133,7 @@ pub async fn run_command() {
             setup,
             check_tools,
             adoption,
+            profile,
             json,
         } => {
             if setup {
@@ -151,12 +152,14 @@ pub async fn run_command() {
                     Err(e) => fail(&format!("Tool check failed: {e}")),
                 }
             } else {
+                let mcp_profile = vela_edge::tool_registry::McpProfile::parse(&profile)
+                    .unwrap_or_else(|e| fail_return(&e));
                 let source =
                     serve::ProjectSource::from_args(frontier.as_deref(), frontiers.as_deref());
                 if let Some(port) = http {
-                    serve::run_http(source, backend.as_deref(), port).await;
+                    serve::run_http(source, backend.as_deref(), port, mcp_profile).await;
                 } else {
-                    serve::run(source, backend.as_deref()).await;
+                    serve::run(source, backend.as_deref(), mcp_profile).await;
                 }
             }
         }
@@ -228,6 +231,7 @@ pub async fn run_command() {
             let _ = conformance::run(&dir);
         }
         Commands::Gate { action } => cmd_gate(action),
+        Commands::Agents { action } => crate::cli_agents::cmd_agents(action),
         Commands::Campaign { action } => crate::cli_campaign::cmd_campaign(action),
         Commands::Onboard { frontier, json } => {
             let project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));

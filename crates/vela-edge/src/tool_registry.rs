@@ -640,22 +640,83 @@ pub fn tool_caveats(name: &str) -> Vec<String> {
     get_tool(name).map(|tool| tool.caveats).unwrap_or_default()
 }
 
+/// MCP exposure profile (memo §9.1). A served frontier scopes which tools an
+/// agent can see and call. `MCP exposes tools; Vela governs state` — even the
+/// maintainer profile only drafts proposals; accepted public state still
+/// requires a key-custody human accept off the MCP surface.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum McpProfile {
+    /// Inspect state, graph, provenance, tasks, schemas. The default.
+    ReadOnly,
+    /// Read + non-finalizing writes: runs, observations, draft findings,
+    /// draft submissions (the `propose_*` surface).
+    Draft,
+    /// Everything the server exposes, including the finalizing tier.
+    Maintainer,
+}
+
+impl McpProfile {
+    pub fn parse(s: &str) -> Result<Self, String> {
+        match s.trim().to_ascii_lowercase().replace('_', "-").as_str() {
+            "read-only" | "readonly" | "read" => Ok(Self::ReadOnly),
+            "draft" => Ok(Self::Draft),
+            "maintainer" => Ok(Self::Maintainer),
+            other => Err(format!(
+                "unknown MCP profile `{other}`; valid: read-only (default), draft, maintainer"
+            )),
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::ReadOnly => "read-only",
+            Self::Draft => "draft",
+            Self::Maintainer => "maintainer",
+        }
+    }
+
+    /// Whether this profile may expose AND execute `tool`. Read-only admits
+    /// only non-mutating reads; draft admits everything except the finalizing
+    /// `Dangerous` tier; maintainer admits all.
+    pub fn allows(self, tool: &ToolDefinition) -> bool {
+        match self {
+            Self::ReadOnly => matches!(tool.permission_level, PermissionLevel::ReadOnly),
+            Self::Draft => !matches!(tool.permission_level, PermissionLevel::Dangerous),
+            Self::Maintainer => true,
+        }
+    }
+}
+
+pub fn tools_for_profile(profile: McpProfile) -> Vec<ToolDefinition> {
+    all_tools()
+        .into_iter()
+        .filter(|tool| profile.allows(tool))
+        .collect()
+}
+
+fn tool_to_mcp_json(tool: &ToolDefinition) -> Value {
+    json!({
+        "name": tool.name,
+        "description": tool.description,
+        "inputSchema": tool.parameters,
+        "metadata": {
+            "permission_level": tool.permission_level,
+            "mutating": tool.mutating,
+            "caveats": tool.caveats,
+        }
+    })
+}
+
 pub fn mcp_tools_json() -> Value {
+    Value::Array(all_tools().iter().map(tool_to_mcp_json).collect())
+}
+
+/// `tools/list` payload scoped to a profile (memo §9.1).
+pub fn mcp_tools_json_for_profile(profile: McpProfile) -> Value {
     Value::Array(
-        all_tools()
-            .into_iter()
-            .map(|tool| {
-                json!({
-                    "name": tool.name,
-                    "description": tool.description,
-                    "inputSchema": tool.parameters,
-                    "metadata": {
-                        "permission_level": tool.permission_level,
-                        "mutating": tool.mutating,
-                        "caveats": tool.caveats,
-                    }
-                })
-            })
+        tools_for_profile(profile)
+            .iter()
+            .map(tool_to_mcp_json)
             .collect(),
     )
 }
@@ -675,5 +736,37 @@ fn tool(
         permission_level,
         mutating,
         caveats: caveats.into_iter().map(str::to_string).collect(),
+    }
+}
+
+#[cfg(test)]
+mod profile_tests {
+    use super::*;
+
+    #[test]
+    fn profiles_nest_and_readonly_excludes_writes() {
+        let ro = tools_for_profile(McpProfile::ReadOnly);
+        let draft = tools_for_profile(McpProfile::Draft);
+        let maint = tools_for_profile(McpProfile::Maintainer);
+        // read-only ⊆ draft ⊆ maintainer
+        assert!(ro.len() < draft.len(), "read-only must be a strict subset of draft");
+        assert!(draft.len() < maint.len(), "draft must be a strict subset of maintainer");
+        assert_eq!(maint.len(), all_tools().len(), "maintainer exposes every tool");
+        // read-only admits no mutating tool
+        assert!(ro.iter().all(|t| !t.mutating), "read-only must expose no mutating tool");
+        // the finalizing (Dangerous) tier is maintainer-only
+        let dangerous_in_draft = draft
+            .iter()
+            .any(|t| matches!(t.permission_level, crate::permission::PermissionLevel::Dangerous));
+        assert!(!dangerous_in_draft, "draft must not expose the finalizing tier");
+    }
+
+    #[test]
+    fn profile_parse_roundtrips() {
+        assert_eq!(McpProfile::parse("read-only").unwrap(), McpProfile::ReadOnly);
+        assert_eq!(McpProfile::parse("read_only").unwrap(), McpProfile::ReadOnly);
+        assert_eq!(McpProfile::parse("draft").unwrap(), McpProfile::Draft);
+        assert_eq!(McpProfile::parse("maintainer").unwrap(), McpProfile::Maintainer);
+        assert!(McpProfile::parse("god-mode").is_err());
     }
 }

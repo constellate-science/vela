@@ -156,6 +156,12 @@ pub(crate) enum Commands {
         /// Include first external frontier adoption guidance in --check-tools output
         #[arg(long)]
         adoption: bool,
+        /// MCP exposure profile (memo §9.1): `read-only` (default), `draft`
+        /// (adds the propose/draft write tools), or `maintainer` (all tools).
+        /// Scopes which tools are listed AND executable. Agents should get
+        /// read-only unless a human starts a scoped session.
+        #[arg(long, default_value = "read-only")]
+        profile: String,
         /// Output stable JSON for --check-tools
         #[arg(long)]
         json: bool,
@@ -296,6 +302,15 @@ pub(crate) enum Commands {
     Gate {
         #[command(subcommand)]
         action: GateAction,
+    },
+    /// Generate vendor agent-config adapters from the canonical `VELA.md`
+    /// (one source of truth; the adapter files are disposable, regenerable
+    /// leaves). `AGENTS.md`, `CLAUDE.md`, `.cursor/rules/vela.mdc`,
+    /// `.github/copilot-instructions.md`, and `.mcp.json` regenerate from
+    /// VELA.md; the deletion test holds (delete them, sync, they return).
+    Agents {
+        #[command(subcommand)]
+        action: AgentsAction,
     },
     /// Re-verify stored witnesses from scratch with the frozen exact
     /// verifiers (`vela-verify`). Trust is never self-reported: a stranger
@@ -1350,6 +1365,35 @@ pub(crate) enum CampaignAction {
         /// Reviewer/author identity for the proposal.
         #[arg(long, default_value = "reviewer:will-blair")]
         reviewer: String,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+/// `vela agents` — keep vendor agent-config files generated from `VELA.md`.
+#[derive(Subcommand)]
+pub(crate) enum AgentsAction {
+    /// Regenerate the adapter files from VELA.md (idempotent; writes only
+    /// what changed).
+    Sync {
+        /// Worktree root holding VELA.md (default: current directory).
+        #[arg(default_value = ".")]
+        root: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Check that the adapters are in sync with VELA.md. Exit 1 on drift or
+    /// a missing adapter (use in CI).
+    Doctor {
+        #[arg(default_value = ".")]
+        root: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Show which adapters would change on the next `sync`.
+    Diff {
+        #[arg(default_value = ".")]
+        root: PathBuf,
         #[arg(long)]
         json: bool,
     },

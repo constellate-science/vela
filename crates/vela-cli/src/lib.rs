@@ -14,6 +14,7 @@ pub mod cli;
 mod atlas_adapters;
 mod campaign;
 mod cli_admin;
+mod cli_agents;
 mod cli_atlas;
 mod cli_campaign;
 mod cli_check;

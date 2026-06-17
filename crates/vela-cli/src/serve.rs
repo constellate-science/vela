@@ -338,7 +338,11 @@ fn merge_projects(frontiers: Vec<(String, Project)>) -> Project {
     project
 }
 
-pub async fn run(source: ProjectSource, _backend: Option<&str>) {
+pub async fn run(
+    source: ProjectSource,
+    _backend: Option<&str>,
+    profile: tool_registry::McpProfile,
+) {
     dotenvy::dotenv().ok();
     let (frontier, project_infos) = load_projects(&source);
     let source_path: Option<PathBuf> = match &source {
@@ -372,20 +376,27 @@ pub async fn run(source: ProjectSource, _backend: Option<&str>) {
                 }),
             ),
             "notifications/initialized" => continue,
-            "tools/list" => json_rpc_result(&id, json!({"tools": tool_registry::mcp_tools_json()})),
+            "tools/list" => json_rpc_result(
+                &id,
+                json!({"tools": tool_registry::mcp_tools_json_for_profile(profile)}),
+            ),
             "tools/call" => {
                 let name = request["params"]["name"].as_str().unwrap_or_default();
                 let args = request["params"]["arguments"].clone();
-                handle_tool_call(
-                    &id,
-                    name,
-                    &args,
-                    &frontier,
-                    &client,
-                    &project_infos,
-                    source_path.as_deref(),
-                )
-                .await
+                if let Some(err) = profile_gate(&id, name, profile) {
+                    err
+                } else {
+                    handle_tool_call(
+                        &id,
+                        name,
+                        &args,
+                        &frontier,
+                        &client,
+                        &project_infos,
+                        source_path.as_deref(),
+                    )
+                    .await
+                }
             }
             "ping" => json_rpc_result(&id, json!({})),
             _ => json_rpc_error(&id, -32601, "Method not found"),
@@ -397,7 +408,12 @@ pub async fn run(source: ProjectSource, _backend: Option<&str>) {
     }
 }
 
-pub async fn run_http(source: ProjectSource, backend: Option<&str>, port: u16) {
+pub async fn run_http(
+    source: ProjectSource,
+    backend: Option<&str>,
+    port: u16,
+    profile: tool_registry::McpProfile,
+) {
     let _ = backend;
     dotenvy::dotenv().ok();
     let (frontier, project_infos) = load_projects(&source);
@@ -409,6 +425,7 @@ pub async fn run_http(source: ProjectSource, backend: Option<&str>, port: u16) {
         project: Arc::new(Mutex::new(frontier)),
         project_infos,
         client: Client::new(),
+        profile,
         source_path,
     };
 
@@ -704,6 +721,9 @@ struct AppState {
     project: Arc<Mutex<Project>>,
     project_infos: Vec<ProjectInfo>,
     client: Client,
+    /// MCP exposure profile (memo §9.1). Scopes which tools `/api/tools`
+    /// lists and `/api/tool` will execute. Defaults to read-only.
+    profile: tool_registry::McpProfile,
     /// Phase Q-w (v0.5): when serving a single frontier file, this is
     /// the path to write back to after a successful signed write. None
     /// when `--frontiers <dir>` is used; in that mode all writes are
@@ -759,6 +779,36 @@ impl ToolResult {
     fn to_json_text(&self) -> String {
         serde_json::to_string_pretty(self).unwrap_or_else(|_| "{}".to_string())
     }
+}
+
+/// MCP profile gate (memo §9.4): refuse to execute a tool the active profile
+/// does not admit, returning a structured next-action error. `None` means the
+/// call may proceed (allowed, or unknown — `handle_tool_call` then returns its
+/// own not-found). This is the execution boundary; `tools/list` already hides
+/// the tool, but a client could still call it by name.
+fn profile_gate(
+    id: &Option<Value>,
+    name: &str,
+    profile: tool_registry::McpProfile,
+) -> Option<Value> {
+    let tool = tool_registry::get_tool(name)?;
+    if profile.allows(&tool) {
+        return None;
+    }
+    let needed = if tool_registry::McpProfile::Draft.allows(&tool) {
+        "draft"
+    } else {
+        "maintainer"
+    };
+    Some(json_rpc_error(
+        id,
+        -32001,
+        &format!(
+            "tool `{name}` ({}) is not available in the `{}` MCP profile; restart `vela serve` with `--profile {needed}` for a scoped session. MCP exposes tools; accepted public state still requires a key-custody human accept.",
+            tool.permission_level,
+            profile.as_str()
+        ),
+    ))
 }
 
 async fn handle_tool_call(
@@ -2135,8 +2185,8 @@ async fn http_pubmed(
     }
 }
 
-async fn http_tools_list() -> Json<Value> {
-    Json(tool_registry::mcp_tools_json())
+async fn http_tools_list(State(state): State<AppState>) -> Json<Value> {
+    Json(tool_registry::mcp_tools_json_for_profile(state.profile))
 }
 
 async fn http_tool_call(
@@ -2145,6 +2195,25 @@ async fn http_tool_call(
 ) -> (StatusCode, Json<Value>) {
     let name = body["name"].as_str().unwrap_or_default();
     let args = &body["arguments"];
+    // MCP profile gate (memo §9.4): refuse tools outside the active profile.
+    if let Some(tool) = tool_registry::get_tool(name)
+        && !state.profile.allows(&tool)
+    {
+        let needed = if tool_registry::McpProfile::Draft.allows(&tool) {
+            "draft"
+        } else {
+            "maintainer"
+        };
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({
+                "error": format!(
+                    "tool `{name}` ({}) is not available in the `{}` MCP profile; serve with `--profile {needed}`. MCP exposes tools; accepted public state still requires a key-custody human accept.",
+                    tool.permission_level, state.profile.as_str()
+                ),
+            })),
+        );
+    }
     let started = std::time::Instant::now();
     let (result, snapshot) = execute_tool(
         name,
