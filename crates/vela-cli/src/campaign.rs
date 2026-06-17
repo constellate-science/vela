@@ -59,11 +59,27 @@ impl Rng {
     }
 }
 
+/// A full target spec. Most kinds need only `n` (and `h` for `bh`); the code
+/// families need more — `constant_weight` uses `d`/`w`, `covering` uses `k`/`t`
+/// (with `n` as the ground-set size `v`).
+#[derive(Default)]
+pub struct Target {
+    pub kind: String,
+    pub n: usize,
+    pub h: usize,
+    pub d: usize,
+    pub w: usize,
+    pub k: usize,
+    pub t: usize,
+}
+
 /// Run the discovery engine for one target. `kind` is the verifier kind
 /// (`gf2_sidon`, `union_free`, `rook_directions`, `cap`, `sidon`, `bh`,
 /// `golomb`, `costas`). `n`/`h` parameterize the target; `restarts` bounds the work;
 /// `seed` fixes the draw. Returns the best verified witness, or `None` if the
-/// engine found nothing checkable (and `Err` for an unsupported kind).
+/// engine found nothing checkable (and `Err` for an unsupported kind). Thin
+/// wrapper over [`search_target`] for the common `n`/`h`-only kinds.
+#[allow(dead_code)] // convenience API exercised by the unit tests
 pub fn search(
     kind: &str,
     n: usize,
@@ -71,12 +87,29 @@ pub fn search(
     restarts: u64,
     seed: u64,
 ) -> Result<Option<Found>, String> {
+    search_target(
+        &Target {
+            kind: kind.to_string(),
+            n,
+            h,
+            ..Default::default()
+        },
+        restarts,
+        seed,
+    )
+}
+
+/// Full-spec entry point (handles the code families that need `d`/`w`/`k`/`t`).
+pub fn search_target(tg: &Target, restarts: u64, seed: u64) -> Result<Option<Found>, String> {
     let mut rng = Rng::new(seed);
-    let found = match kind {
+    let (n, h) = (tg.n, tg.h);
+    let found = match tg.kind.as_str() {
         "gf2_sidon" => search_gf2_sidon(n, restarts, &mut rng),
         "union_free" => search_union_free(n, restarts, &mut rng),
         "rook_directions" => search_rook_directions(n, restarts, &mut rng),
         "cap" => search_cap(n, restarts, &mut rng),
+        "constant_weight" => search_constant_weight(n, tg.d, tg.w, restarts, &mut rng),
+        "covering" => search_covering(n, tg.k, tg.t, restarts, &mut rng),
         // Sidon is B_2; share the B_h constructor.
         "sidon" => search_bh(n, 2, restarts, &mut rng),
         "bh" => {
@@ -89,7 +122,7 @@ pub fn search(
         "costas" => search_costas(n, restarts, &mut rng),
         other => {
             return Err(format!(
-                "kind `{other}` is not searchable by the engine yet (searchable: gf2_sidon, union_free, rook_directions, cap, sidon, bh, golomb, costas)"
+                "kind `{other}` is not searchable by the engine yet (searchable: gf2_sidon, union_free, rook_directions, cap, constant_weight, covering, sidon, bh, golomb, costas)"
             ));
         }
     };
@@ -99,8 +132,8 @@ pub fn search(
         let r = verify_witness(&f.witness);
         if !r.ok {
             return Err(format!(
-                "INTERNAL: engine produced an unverified {kind} witness (score {}): {}",
-                f.score, r.message
+                "INTERNAL: engine produced an unverified {} witness (score {}): {}",
+                tg.kind, f.score, r.message
             ));
         }
     }
@@ -407,6 +440,151 @@ fn search_cap(n: usize, restarts: u64, rng: &mut Rng) -> Option<Found> {
 }
 
 // ---------------------------------------------------------------------------
+// constant_weight — a binary constant-weight code A(n, d, w): codewords of
+// length n, weight exactly w, pairwise Hamming distance >= d. Greedy: enumerate
+// the weight-w words, add a word iff it is >= d from every chosen word.
+// Certifies a LOWER bound on A(n, d, w).
+// ---------------------------------------------------------------------------
+fn search_constant_weight(
+    n: usize,
+    d: usize,
+    w: usize,
+    restarts: u64,
+    rng: &mut Rng,
+) -> Option<Found> {
+    if !(1..=20).contains(&n) || w == 0 || w > n || d == 0 || d > 2 * w {
+        return None;
+    }
+    // Enumerate weight-w words once (as bitmasks). Bail if the space is huge.
+    let mut words: Vec<u64> = Vec::new();
+    for x in 0u64..(1u64 << n) {
+        if x.count_ones() as usize == w {
+            words.push(x);
+            if words.len() > 1_000_000 {
+                return None; // C(n,w) too large to enumerate; keep it bounded.
+            }
+        }
+    }
+    if words.is_empty() {
+        return None;
+    }
+    let mut best: Vec<u64> = Vec::new();
+    let iterations = restarts.max(1);
+    for _ in 0..iterations {
+        let mut order = words.clone();
+        rng.shuffle(&mut order);
+        let mut code: Vec<u64> = Vec::new();
+        for &x in &order {
+            if code
+                .iter()
+                .all(|&c| (x ^ c).count_ones() as usize >= d)
+            {
+                code.push(x);
+            }
+        }
+        if code.len() > best.len() {
+            best = code;
+        }
+    }
+    let score = best.len();
+    best.sort_unstable();
+    let words_vec: Vec<Vec<i64>> = best
+        .iter()
+        .map(|&x| (0..n).map(|b| ((x >> b) & 1) as i64).collect())
+        .collect();
+    Some(Found {
+        witness: Witness::ConstantWeight {
+            n,
+            d,
+            w,
+            words: words_vec,
+            claimed_size: Some(score),
+        },
+        score,
+        iterations,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// covering — a covering design C(v, k, t): k-blocks of [v] so every t-subset of
+// [v] lies in at least one block. This is a MINIMIZATION (fewest blocks);
+// greedy set-cover repeatedly takes the block covering the most still-uncovered
+// t-subsets, yielding a valid covering (an UPPER bound on the covering number).
+// `score` is the block count — lower is better, the opposite of the set kinds.
+// ---------------------------------------------------------------------------
+fn search_covering(v: usize, k: usize, t: usize, restarts: u64, rng: &mut Rng) -> Option<Found> {
+    if !(1..=14).contains(&v) || k == 0 || k > v || t == 0 || t > k {
+        return None;
+    }
+    let mask = |x: u32| x as usize;
+    let tsubs: Vec<u32> = (0u32..(1u32 << v))
+        .filter(|x| x.count_ones() as usize == t)
+        .collect();
+    let blocks: Vec<u32> = (0u32..(1u32 << v))
+        .filter(|x| x.count_ones() as usize == k)
+        .collect();
+    if tsubs.is_empty() || blocks.is_empty() {
+        return None;
+    }
+    let mut best: Option<Vec<u32>> = None;
+    let iterations = restarts.max(1);
+    for _ in 0..iterations {
+        // Randomize block order so greedy ties break differently per restart.
+        let mut bl = blocks.clone();
+        rng.shuffle(&mut bl);
+        let mut covered = vec![false; 1usize << v];
+        let mut uncovered = tsubs.len();
+        let mut chosen: Vec<u32> = Vec::new();
+        while uncovered > 0 {
+            // pick the block covering the most uncovered t-subsets
+            let mut best_block = 0u32;
+            let mut best_gain = 0usize;
+            for &b in &bl {
+                let mut gain = 0usize;
+                for &ts in &tsubs {
+                    if (ts & b) == ts && !covered[mask(ts)] {
+                        gain += 1;
+                    }
+                }
+                if gain > best_gain {
+                    best_gain = gain;
+                    best_block = b;
+                }
+            }
+            if best_gain == 0 {
+                break; // cannot cover (shouldn't happen for valid params)
+            }
+            for &ts in &tsubs {
+                if (ts & best_block) == ts && !covered[mask(ts)] {
+                    covered[mask(ts)] = true;
+                    uncovered -= 1;
+                }
+            }
+            chosen.push(best_block);
+        }
+        if uncovered == 0 && best.as_ref().map(|b| chosen.len() < b.len()).unwrap_or(true) {
+            best = Some(chosen);
+        }
+    }
+    let blocks_chosen = best?;
+    let score = blocks_chosen.len();
+    let blocks_vec: Vec<Vec<usize>> = blocks_chosen
+        .iter()
+        .map(|&b| (0..v).filter(|&i| (b >> i) & 1 == 1).collect())
+        .collect();
+    Some(Found {
+        witness: Witness::Covering {
+            v,
+            k,
+            t,
+            blocks: blocks_vec,
+        },
+        score,
+        iterations,
+    })
+}
+
+// ---------------------------------------------------------------------------
 // B_h in {0,1}^n — all h-fold sums (with repetition, as multisets) distinct;
 // h = 2 is a Sidon set (OEIS A309370). Greedy over binary vectors: add a vector
 // iff the full h-fold sum-multiset stays collision-free. Correct over fast: we
@@ -653,6 +831,36 @@ mod tests {
         let f = search("cap", 4, 0, 80, 0x444).unwrap();
         assert_verifies(&f);
         assert!(f.unwrap().score >= 12);
+    }
+
+    #[test]
+    fn constant_weight_finds_verified() {
+        // A(6,4,3): codewords of length 6, weight 3, pairwise distance >= 4.
+        let tg = Target {
+            kind: "constant_weight".into(),
+            n: 6,
+            d: 4,
+            w: 3,
+            ..Default::default()
+        };
+        let f = search_target(&tg, 60, 0x555).unwrap();
+        assert_verifies(&f);
+        assert!(f.unwrap().score >= 4);
+    }
+
+    #[test]
+    fn covering_finds_verified() {
+        // C(6,3,2): cover every pair of [6] with triples; greedy yields a valid
+        // covering (the minimum is 6).
+        let tg = Target {
+            kind: "covering".into(),
+            n: 6,
+            k: 3,
+            t: 2,
+            ..Default::default()
+        };
+        let f = search_target(&tg, 40, 0x666).unwrap();
+        assert_verifies(&f);
     }
 
     #[test]

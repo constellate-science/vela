@@ -1283,17 +1283,29 @@ pub(crate) enum SignAction {
 pub(crate) enum CampaignAction {
     /// Run the engine and report the best verified construction found. Writes
     /// nothing. `--kind` is a verifier kind: gf2_sidon, union_free,
-    /// rook_directions, cap, sidon, bh (with `--h`), golomb, costas.
+    /// rook_directions, cap, constant_weight (with `--d`/`--w`), covering (with
+    /// `--k`/`--t`), sidon, bh (with `--h`), golomb, costas.
     Search {
-        /// Verifier kind to search (gf2_sidon | union_free | rook_directions | cap |
-        /// sidon | bh | golomb | costas).
+        /// Verifier kind to search.
         kind: String,
-        /// Target parameter n (set size domain / order, kind-dependent).
+        /// Target parameter n (set size domain / order / ground set, kind-dependent).
         #[arg(long)]
         n: usize,
         /// For `bh`: the order h (h=2 is Sidon). Ignored by other kinds.
         #[arg(long, default_value_t = 2)]
         h: usize,
+        /// For `constant_weight`: minimum Hamming distance d.
+        #[arg(long, default_value_t = 0)]
+        d: usize,
+        /// For `constant_weight`: codeword weight w.
+        #[arg(long, default_value_t = 0)]
+        w: usize,
+        /// For `covering`: block size k.
+        #[arg(long, default_value_t = 0)]
+        k: usize,
+        /// For `covering`: cover every t-subset.
+        #[arg(long, default_value_t = 0)]
+        t: usize,
         /// Number of randomized restarts (the work budget).
         #[arg(long, default_value_t = 200)]
         restarts: u64,
@@ -1313,6 +1325,14 @@ pub(crate) enum CampaignAction {
         n: usize,
         #[arg(long, default_value_t = 2)]
         h: usize,
+        #[arg(long, default_value_t = 0)]
+        d: usize,
+        #[arg(long, default_value_t = 0)]
+        w: usize,
+        #[arg(long, default_value_t = 0)]
+        k: usize,
+        #[arg(long, default_value_t = 0)]
+        t: usize,
         #[arg(long, default_value_t = 200)]
         restarts: u64,
         #[arg(long, default_value_t = 24221)]

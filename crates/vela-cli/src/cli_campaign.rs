@@ -17,14 +17,35 @@ pub(crate) fn cmd_campaign(action: CampaignAction) {
             kind,
             n,
             h,
+            d,
+            w,
+            k,
+            t,
             restarts,
             seed,
             json,
-        } => cmd_search(&kind, n, h, restarts, seed, json),
+        } => cmd_search(
+            &campaign::Target {
+                kind,
+                n,
+                h,
+                d,
+                w,
+                k,
+                t,
+            },
+            restarts,
+            seed,
+            json,
+        ),
         CampaignAction::Run {
             kind,
             n,
             h,
+            d,
+            w,
+            k,
+            t,
             restarts,
             seed,
             out,
@@ -33,13 +54,29 @@ pub(crate) fn cmd_campaign(action: CampaignAction) {
             reviewer,
             json,
         } => cmd_run(
-            &kind, n, h, restarts, seed, out, frontier, propose, &reviewer, json,
+            &campaign::Target {
+                kind,
+                n,
+                h,
+                d,
+                w,
+                k,
+                t,
+            },
+            restarts,
+            seed,
+            out,
+            frontier,
+            propose,
+            &reviewer,
+            json,
         ),
     }
 }
 
-fn cmd_search(kind: &str, n: usize, h: usize, restarts: u64, seed: u64, json_out: bool) {
-    let found = campaign::search(kind, n, h, restarts, seed).unwrap_or_else(|e| fail_return(&e));
+fn cmd_search(tg: &campaign::Target, restarts: u64, seed: u64, json_out: bool) {
+    let (kind, n, h) = (tg.kind.as_str(), tg.n, tg.h);
+    let found = campaign::search_target(tg, restarts, seed).unwrap_or_else(|e| fail_return(&e));
     let Some(f) = found else {
         if json_out {
             print_json(&json!({
@@ -73,9 +110,7 @@ fn cmd_search(kind: &str, n: usize, h: usize, restarts: u64, seed: u64, json_out
 
 #[allow(clippy::too_many_arguments)]
 fn cmd_run(
-    kind: &str,
-    n: usize,
-    h: usize,
+    tg: &campaign::Target,
     restarts: u64,
     seed: u64,
     out: Option<std::path::PathBuf>,
@@ -84,7 +119,8 @@ fn cmd_run(
     reviewer: &str,
     json_out: bool,
 ) {
-    let found = campaign::search(kind, n, h, restarts, seed).unwrap_or_else(|e| fail_return(&e));
+    let (kind, n, h) = (tg.kind.as_str(), tg.n, tg.h);
+    let found = campaign::search_target(tg, restarts, seed).unwrap_or_else(|e| fail_return(&e));
     let f = match found {
         Some(f) => f,
         None => fail_return(&format!(
