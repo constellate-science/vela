@@ -7,7 +7,7 @@
 //! verifier's judgment for the named (tool, tool_version,
 //! lake_manifest_hash) tuple.
 //!
-//! See `docs/PROOF_VERIFICATION.md` (shipped at v0.153) for the
+//! See `docs/VERIFICATION.md` (the proof-attestation records section) for the
 //! end-to-end pipeline and `.github/workflows/verify-carina-proofs.yml`
 //! for the canonical GitHub Action implementation.
 

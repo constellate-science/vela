@@ -26,8 +26,7 @@ them. Read these files first:
 
 - `examples/sidon-a309370/README.md`
 - `docs/PROTOCOL.md` (the wire spec)
-- `docs/VERIFICATION_GATE.md` (when a claim earns `verified`)
-- `docs/REVIEWER_PLAYBOOK.md`
+- `docs/VERIFICATION.md` (when a claim earns `verified`)
 
 ## GitHub release artifact pack
 

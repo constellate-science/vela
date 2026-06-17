@@ -2364,3 +2364,126 @@ Models: Neural Operators (maps between function spaces); Universal Differential
 Equations; IFP Natural Law Models. Formal-math frontier: AlphaProof, Formal
 Conjectures, miniF2F-Lean, LeanMarathon. Standards (for the deferred export
 projections): W3C PROV, RO-Crate, FAIR.
+
+---
+
+# Appendix A — Theorem audit
+
+*Folded from the former THEORY_AUDIT.md.*
+
+A correctness/depth audit of the Lean substrate theorems (2026-06-01), prompted by "make sure all
+the theories are fully ideal and correct, not bad or shallow." Honest classification, no inflation.
+
+## 1. Genuinely sound, non-trivial content
+
+- **`Vela.Log`** — Theorem 1 (replay convergence) and Theorem 5 (hash-DAG integrity). Replay
+  convergence over a canonical linear extension (lexicographic event-id tie-break) is the genuinely
+  substantive substrate theorem; it is proven over concrete definitions.
+- **`Vela.Transfer`** — Theorem 23 (cross-frontier transfer soundness) + category structure, AND a
+  *concrete* worked instance `translateTransfer` whose `sound` field is the proven theorem
+  `sidon_translate_sound` (translation preserves the Sidon property; membership-unfolding + `omega`).
+  No axiom, no `opaque`, no `sorry`. Verified standalone (Mathlib-free, `lake env lean` exit 0).
+- **`Vela.EGZ`** — Erdős-Ginzburg-Ziv (n=2), a real number-theory proof.
+
+## 2. Correct but algebraically shallow (appropriate — they are invariants)
+
+- **`Vela.Provenance`** — Theorems 2 (retraction monotonicity), 3 (status-provenance soundness),
+  4 (frontier upward closure). Proven over concrete definitions (`rho_Y`, `deriveStatus`,
+  `frontierSupport`), no cheating. They are near-trivial algebraically — that is correct *for
+  invariants*: their job is to be obviously-true machine-checked guarantees that pin the model, not
+  deep results. Honest framing: present them as invariants, not breakthroughs.
+
+## 3. Legitimate boundary assumptions (standard idealizations, clearly labeled)
+
+- `hash_injective : Function.Injective Hash` and `canonicalBytes_injective` (in
+  `AgentAttestationInjectivity`, `ScientificDiffPackId`, `ToolDescriptorInjectivity`,
+  `VerdictConflictResolution`, `EvaluationRecordInjectivity`). You cannot prove SHA-256 injective
+  (false by pigeonhole); modeling the hash/serializer as injective is the standard cryptographic /
+  canonicalization idealization. Acceptable as labeled assumptions, not hollowness.
+
+## 4. HOLLOW — theorems that assume their own content as an axiom over an opaque reducer
+
+These are the "bad/shallow" case and should be de-hollowed:
+
+- **`ToolDescriptorComposition`** Theorem 28 and **`EvaluationDescriptorComposition`** Theorem 34.
+  They conclude "the reducer preserves descriptor identity" by citing axioms
+  (`accept_pack_preserves_descriptors`, `record_evaluation_preserves_descriptors`) that *are* that
+  conclusion, over `opaque` (undefined) reducers `accept_pack` / `record_evaluation`. The substantive
+  invariant is assumed, not proven. The composition step (chaining two preservation facts) is real,
+  but the per-step preservation is axiomatic.
+- Similar pattern: `descriptor_id_is_self`, `signed_bytes_determine_body` (`DiffPackFederationSoundness`).
+
+**The fix (DONE):** `lean/Vela/ReducerModel.lean` gives the reducer a *concrete model* (`St` carries an
+append-only log, a descriptor table, and a finding store; `step` appends to the log and never touches
+the descriptor table on `acceptPack`/`recordEvaluation`) and *proves* preservation from the definition
+(`acceptPack_preserves_descriptors`, `eval_then_pack_preserves`, and `replay_preserves_descriptors` by
+induction over the log). The invariant T28/T34 asserted as an axiom over an `opaque` reducer is now a
+theorem over a concrete one — the assume-guarantee stubs are realized by a real model. Mathlib-free,
+compiles standalone (exit 0). **Resolved.**
+
+## Verdict
+
+No theorem is *wrong* and none uses `sorry`. The substrate is honest *if framed honestly*: Theorems 1,
+5, 23 (+ the concrete transfer) and EGZ are real content; 2-4 are correct invariants; the injectivity
+axioms are standard idealizations; the descriptor-composition theorems **were** hollow and are now
+**de-hollowed** by `Vela/ReducerModel.lean` (concrete reducer, proven invariants). The remaining
+`axiom`s (`hash_injective`, `canonicalBytes_injective`, `signed_bytes_determine_body`) are boundary
+idealizations of cryptographic / serialization injectivity, not hidden content.
+
+The dependency-free nucleus (`Vela/Core.lean`, `Vela/Transfer.lean`, `Vela/ReducerModel.lean`) re-proves
+the core substrate guarantees with NO Mathlib, so the heart of the protocol verifies in seconds. The
+right next work is external validation (OEIS) and scaled-proposer compute, NOT new mathematics.
+
+---
+
+# Appendix B — Guarantees: spec, proof, conformance
+
+*Folded from the former PROTOCOL_GUARANTEES.md.*
+
+What makes a protocol *real* (git, TCP/IP) is not one document but a closed triangle: a normative
+spec clause, a machine-checked guarantee, and an executable conformance test for every load-bearing
+invariant — and two interoperating implementations that agree on the vectors. This file is that map
+for Vela. Every row cites a concrete artifact; if a row's three cells disagree, that is a bug.
+
+Two interoperating implementations today: the Rust reference (`crates/vela-protocol/`, conformance
+runner `conformance.rs`) and the Python reducer (`clients/python/vela_reducer.py`). `conformance/verify.py`
+replays the 12 canonical fixtures through the Python reducer (currently 12/12, integrity preflight green).
+
+## The triangle
+
+| Invariant | Normative spec (PROTOCOL.md) | Machine-checked theorem (`lean/Vela/`) | Conformance vector |
+|---|---|---|---|
+| **Content addressing** `id = vf_/vev_… + H(canon(o))` | §3 content addressing | `CanonicalEventId.lean` (T9, serialize-then-hash determinism); `Log.lean` T5 (hash injectivity model) | `tests/conformance/id-generation.json` |
+| **Canonical bytes** (sorted keys, compact, RFC-8785-style) | §3 + `canonical.rs` header | `CanonicalEventId.lean`; `ScientificDiffPackId.lean` | `tests/conformance/id-generation.json` |
+| **Replay determinism** `S_F = R(E)` is a pure function of `E` | §6 proposal/event protocol | `Log.lean` T1 (canonical-order convergence); `ReducerModel.lean` `replay_deterministic` | the 12 `conformance/fixtures/cascade-*.json` |
+| **Incremental replay** `R(E++F) = R_{R(E)}(F)` | §6 (append + reduce) | `ReducerModel.lean` `replay_append`; `ReplayAppend.lean` | cascade fixtures (event-prefix replays) |
+| **Append-only log** | §6, §7 storage | `ReducerModel.lean` `step_log_grows` | fixtures (event arrays are ordered, append-only) |
+| **Concurrent-event commutativity** (disjoint) | §6 federation/merge | `ConcurrentReplay.lean` T12 | `tests/conformance/` merge cases |
+| **Retraction monotonicity** (support can only shrink) | §6 retraction | `Provenance.lean` `retraction_monotone` (T2) | `tests/conformance/retraction-propagation.json` |
+| **No zombie findings** (T-support killed ⇒ status ≠ T) | §6 + §4 confidence | `Provenance.lean` `status_provenance_sound_t` (T3) | `tests/conformance/retraction-propagation.json` |
+| **Frontier upward closure** (sub-context discord ⇒ super-context discord) | §5 links / discord | `Provenance.lean` `frontier_upward_closed` (T4) | `tests/conformance/` discord cases |
+| **Descriptor preservation** under accept/eval/replay | §6 (reducer arms) | `ReducerModel.lean` `acceptPack_preserves_descriptors`, `eval_then_pack_preserves`, `replay_preserves_descriptors` (de-hollowed T28/T34, now proven) | `tests/conformance/` descriptor cases |
+| **Cross-frontier transfer soundness** (verified transports) | §9.1 constellation (THEORY.md) | `Transfer.lean` `transfer_sound` (T23) + concrete `translateTransfer`/`sidon_translate_sound` | the certified-frontier transfers (Sidon→B_h, code→E8) |
+| **Signature stability / uniqueness** | §6 signing | `Signing.lean` (T6), `SignatureUniqueness.lean` (T10), `MultiSigThreshold.lean` (T11) | `tests/conformance/` signing cases |
+| **Spec-surface freeze** (event/proposal kinds frozen per version) | `SPEC_VERSION.md` | — (hash discipline) | `conformance/spec-surface.v1.json` `surface_sha256` |
+
+## Honesty notes (from Appendix A, the theorem audit)
+
+- No theorem uses `sorry`. `hash_injective` / `canonicalBytes_injective` are standard cryptographic /
+  serialization idealizations (you cannot prove SHA-256 injective), clearly labeled, not hollow.
+- The descriptor-composition theorems T28/T34 *were* hollow (assume-guarantee axioms over an `opaque`
+  reducer). They are now backed by `ReducerModel.lean`, which proves the same invariants over a
+  concrete reducer — the axioms are realized by a real model.
+- `Transfer.transfer_sound` is the *contract* (definitional); `translateTransfer` is the worked
+  instance whose `sound` field is a genuinely proven theorem, so the constellation layer carries
+  content, not just a signature.
+
+## What "conformant" means (MUST)
+
+An implementation is Vela-v1-conformant iff it: (1) derives every `id` as `prefix + H(canon(o))` with
+canonical bytes per `canonical.rs`; (2) reproduces every `tests/conformance/*.json` and `conformance/`
+fixture byte-identically; (3) reduces the frozen event/proposal kinds in `spec-surface.v1.json` and no
+others (silently); (4) treats retractions as appended events, never deletions; (5) represents genuine
+scientific disagreement as Belnap `B` / discord, never as a forced merge. The Rust reference and the
+Python reducer both satisfy (1)–(5); a third implementation is conformant exactly when it joins them on
+the vectors.
