@@ -1241,7 +1241,7 @@ pub struct CodeArtifact {
     /// etc. Not validated against a closed allow-list — code provenance
     /// should accept whatever language the analysis was actually in.
     pub language: String,
-    /// Repository URL (e.g. `https://github.com/vela-science/vela`).
+    /// Repository URL (e.g. `https://github.com/constellate-science/vela`).
     pub repo_url: Option<String>,
     /// Specific git commit (40-char SHA preferred). Required for
     /// reproducibility; `None` means "unpinned" and weakens the

@@ -99,7 +99,7 @@ fn normalize_source_identifier(raw: &str) -> String {
 
 async fn fetch_source_metadata(normalized: &str) -> Result<Value, String> {
     let client = Client::builder()
-        .user_agent("vela/0.66.0 (vela-source-fetch; +https://vela-science.fly.dev)")
+        .user_agent("vela/0.66.0 (vela-source-fetch; +https://constellate-science.fly.dev)")
         .timeout(std::time::Duration::from_secs(30))
         .build()
         .map_err(|e| format!("client build: {e}"))?;

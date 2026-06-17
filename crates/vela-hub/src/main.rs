@@ -109,7 +109,7 @@ const APPEND_RATE_LIMIT: u32 = 30;
 const RATE_WINDOW: Duration = Duration::from_secs(60);
 
 const DEFAULT_PUBLIC_URL: &str = "https://hub.constellate.science";
-const DEFAULT_REPO_URL: &str = "https://github.com/vela-science/vela";
+const DEFAULT_REPO_URL: &str = "https://github.com/constellate-science/vela";
 const DEFAULT_SITE_URL: &str = "https://app.constellate.science";
 
 /// Cache key: (vfr_id, signed_publish_at). A fresh publish gets a new

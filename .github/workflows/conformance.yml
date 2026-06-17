@@ -1,5 +1,5 @@
 # Public conformance CI for the Vela substrate. Runs on the PUBLIC repo
-# (vela-science/vela), where GitHub Actions is free + unlimited — so it
+# (constellate-science/vela), where GitHub Actions is free + unlimited — so it
 # sidesteps the private-repo billing block. A green badge here is itself a
 # trust signal: anyone can see the substrate builds, lints, tests, and that
 # the frozen verifiers re-derive their witnesses from scratch.

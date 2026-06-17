@@ -27,8 +27,8 @@ resolver = "3"
 version = "0.700.0"
 edition = "2024"
 license = "Apache-2.0 OR MIT"
-repository = "https://github.com/vela-science/vela"
-homepage = "https://github.com/vela-science/vela"
+repository = "https://github.com/constellate-science/vela"
+homepage = "https://github.com/constellate-science/vela"
 # Per-crate `publish` is set explicitly: `vela-protocol` and `vela-cli`
 # publish to crates.io; `vela-hub` stays unpublished (server-only hub).
 publish = false

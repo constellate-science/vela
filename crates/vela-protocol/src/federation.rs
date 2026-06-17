@@ -129,7 +129,7 @@ pub enum ConflictKind {
     /// `network_locator` returns 4xx/5xx. The peer hub is healthy and
     /// signed the entry, but the manifest URL the entry points at is
     /// dead. Common when frontiers move repos (e.g. v0.34.1 split
-    /// `vela-science/vela` → `vela-science/vela-frontiers`) and the
+    /// `constellate-science/vela` → `constellate-science/vela-frontiers`) and the
     /// peer's published entry was never refreshed. Surfaces the
     /// stale-locator failure mode that "peer is reachable but
     /// content isn't" produces — distinct from a missing finding.

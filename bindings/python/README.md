@@ -1,6 +1,6 @@
 # vela-python
 
-Python SDK for [Vela](https://github.com/vela-science/vela) v0.5+ — a single-file
+Python SDK for [Vela](https://github.com/constellate-science/vela) v0.5+ — a single-file
 client for `vela serve --http`.
 
 ## Install

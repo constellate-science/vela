@@ -80,7 +80,7 @@ pub struct LeanVerification {
     /// kernel_clean` and `kernel_recheck != failed`.
     pub status: String,
     pub verified_at: String,
-    /// Free-form verifier identity (e.g. "github-action:vela-science/vela:verify-lean-bundle").
+    /// Free-form verifier identity (e.g. "github-action:constellate-science/vela:verify-lean-bundle").
     pub verifier_actor: String,
     // --- axiom hardening (v0.2) ---
     /// The `vtcb_` policy this verification was judged against. Empty on

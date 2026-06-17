@@ -1945,7 +1945,7 @@ pub(crate) enum LeanAction {
         #[arg(long)]
         pub_out: PathBuf,
         /// Free-form identity to embed in the public-key spec
-        /// (e.g. "github-action:vela-science/vela:verify-lean-bundle").
+        /// (e.g. "github-action:constellate-science/vela:verify-lean-bundle").
         #[arg(long)]
         actor: String,
     },

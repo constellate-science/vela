@@ -80,7 +80,7 @@ def canonical_json(obj) -> str:
 def build_tool_descriptor(*, signing_key: SigningKey) -> dict:
     tool_name = "sidon-verifier"
     tool_version = "0.1.0"
-    provider = "github:vela-science/vela:real_bench_erdos"
+    provider = "github:constellate-science/vela:real_bench_erdos"
     calling_convention = "local_python"
     input_schema = {
         "type": "object",
