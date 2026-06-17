@@ -1,4 +1,39 @@
-# Vela Formal Core: Attested Context-Indexed Scientific State
+# Vela: The Formal Core and the Frontier Calculus
+
+*The single canonical statement of the mathematics under Vela and Constellate.
+**Part I** is the protocol formal core: the substrate is sound (replay,
+hash-DAG integrity, signatures, deterministic merge). **Part II** is the
+frontier calculus: the state the substrate carries is meaningful (provenance,
+graded status, κ, the bilattice, the verification-cost admission boundary). The
+machine-checked ground truth is `lean/Vela/*.lean`; the executable reference is
+`research/frontier-calculus/frontier_calculus_kernel.py` (25/25 checks, wired
+into the conformance gate via `scripts/full-conformance.sh`).*
+
+## How to read this document
+
+| You want | Read |
+|---|---|
+| The protocol-correctness guarantees (replay, hash-DAG, signatures, merge, quorum) | **Part I**, §1–§16 |
+| The epistemic calculus (provenance algebra, Belnap/bilattice status, κ, admission, transfers) | **Part II**, §17–§39 |
+| The narrative companion | `docs/THEORY_NARRATIVE.md` |
+| The implementation-facing invariants that must survive product changes | `docs/INVARIANTS.md` |
+
+Citation convention: Part I theorems are **Core Theorem N**, Part II's are
+**Calculus Theorem N**. Where the two coincide (replay convergence, retraction
+monotonicity, no-zombie status), Part I is the canonical statement and Part II
+cross-references it rather than restating it. This document supersedes the
+former `docs/MATH.md` and the working spec at
+`research/frontier-calculus/frontier_calculus.md`; both are folded in here. The
+executable kernel (`frontier_calculus_kernel.py`) and the paper draft remain in
+`research/frontier-calculus/`.
+
+---
+
+# Part I — The Formal Core
+
+*The substrate is sound: deterministic, auditable, contradiction-preserving,
+content-addressed. These are protocol-correctness results, not adjudications of
+scientific truth.*
 
 ## Abstract
 
@@ -34,10 +69,9 @@ agent traces, and reviews are source activity until they become proposals,
 diffs, accepted events, and replayed state.
 
 For the narrative companion to this document, see
-`docs/THEORY_NARRATIVE.md`. For the broader mathematical survey, see
-`docs/MATH.md` and `docs/ROADMAP_MATH.md`. For the implementation-facing
-invariants that must survive product and protocol changes, see
-`docs/INVARIANTS.md`.
+`docs/THEORY_NARRATIVE.md`. For the implementation-facing invariants that must
+survive product and protocol changes, see `docs/INVARIANTS.md`. The frontier
+calculus that this formal core carries is Part II below.
 
 ---
 
@@ -1834,3 +1868,499 @@ The formal core is this:
 > not adjudicate truth outside that policy.
 
 That is the theorem-bearing formal core.
+
+---
+
+# Part II — The Frontier Calculus
+
+*Part I proves the substrate is sound. Part II says what the state it carries
+**means**. It is not a new theory of scientific truth; it composes standard
+tools (provenance semirings, four-valued logic, a product bilattice, an
+assumption-based truth-maintenance layer, a verification-cost admission rule)
+into the read-side calculus of scientific state. The v1 kernel and the v2 delta
+were validated 25/25 in `frontier_calculus_kernel.py`; the load-bearing laws are
+machine-checked in `lean/Vela/FrontierCalculus.lean`. Realized in the substrate
+at `vendor/vela/crates/vela-protocol/src/frontier_calculus.rs` (the Semiring
+trait, the named projections, κ, the bilattice, admission, replay tiers,
+assumption environments, the faithfulness monoid), surfaced by `vela claim
+state`.*
+
+Part II keeps the citation convention from the front matter: its theorems are
+**Calculus Theorem N**. Where a result restates a Part I theorem it
+cross-references rather than re-proves.
+
+## 17. The spine: one free object, many readings
+
+`N[X]`, the semiring of polynomials with natural-number coefficients over
+indeterminates `X` (one variable per source event), is the **free commutative
+semiring** on `X`. The kernel stores exactly one object per claim, the support
+and refute provenance polynomials `π_T, π_F ∈ N[X]` of Part I §2.2 and §7, and
+**derives every flag by a homomorphism out of it**. No flag is computed any
+other way. This is the mathematical form of "derived, never stored": status,
+confidence, cost, count, the bilattice point, are each an evaluation of the one
+stored polynomial into a named semiring.
+
+## 18. Design criteria for a scientific state plane
+
+The calculus exists to satisfy twelve constraints, in tension with each other:
+replayability; context safety; **contradiction preservation** (conflict is kept
+as frontier signal, never averaged away); **retraction propagation** (no zombie
+truths when support disappears); composability (verified results discharge
+premises across frontiers via typed transfers); **trust separation** (formal
+proof, human review, statement faithfulness, body-trace quality, and clinical
+credibility are distinct coordinates, never one green check); body readiness;
+model readiness; **failure memory** (failed attempts are first-class
+search-pruning assets); opportunity ranking that never gates trust; forkability
+and neutrality; and a minimal waist. The waist is not a paper, dataset, model
+output, or lab run. It is the **signed scientific state transition**.
+
+## 19. Related frameworks (what is composed, with citations)
+
+The novelty is the stack and the boundary discipline, not one exotic theorem.
+Provenance semirings (Green-Karvounarakis-Tannen, PODS 2007) give the support
+algebra; Belnap-Dunn four-valued logic gives evidence polarity; presheaves and
+sheaf-theoretic contextuality (Abramsky-Brandenburger) give local-to-global
+discord; functorial data migration (Spivak) frames transfers; proof-carrying
+code (Necula-Lee) generalizes to proof-carrying science; Bayesian experimental
+design and do-calculus (Pearl) inform the opportunity layer and the causal
+caveats; operation-based CRDTs give the convergence ambition without merging
+truth; assumption-based truth maintenance (de Kleer 1986) gives the retraction
+cascade; the product bilattice (Ginsberg 1988, Fitting 1991, Avron 1996) gives
+the graded status. Full citations in §39.
+
+## 20. Provenance algebra
+
+Let `X` be the set of source, event, receipt, trace, attestation, theorem, and
+transfer identifiers; `N[X]` the free commutative semiring (Part I §1). The
+operations read:
+
+```text
+0      = no support
+1      = empty derivation / identity
+x ∈ X  = a source or event variable
+p + q  = alternative support routes
+p · q  = joint dependence
+```
+
+Example `π_T(F) = p1·d3 + r7·e2`: finding `F` is supported either by paper `p1`
+and dataset `d3`, or by review `r7` and experiment `e2`. **Retraction** is the
+homomorphism `ρ_Y` sending each variable in `Y` to `0` and fixing the rest (Part
+I §6); Belnap status `σ ∈ {N,T,F,B}` is read off support/refute nonzeroness
+(Part I §7). Part II grades both.
+
+## 21. The named projections and the universality theorem
+
+**Calculus Theorem (universality / factorization).** For any commutative
+semiring `K` and valuation `v : X → K` there is a unique homomorphism
+`Eval_v : N[X] → K` extending `v`, and (Green-Karvounarakis-Tannen) homomorphisms
+commute with positive relational algebra: `h(Q(R)) = Q(h(R))`. Every flag
+therefore factors uniquely through `N[X]`: provenance is computed once and read
+many ways.
+
+The named projections:
+
+| projection | semiring | valuation | reading |
+|---|---|---|---|
+| existence | `({0,1}, ∨, ∧)` | trusted source = 1 | is there any supporting derivation |
+| cost | tropical `(N∪{∞}, min, +)` | per-source verification cost | cheapest derivation; supplies `v(q,c)` in §25 |
+| confidence | Viterbi `([0,1], max, ·)` | per-source confidence | best-path confidence; this is κ (§23) |
+| count | `N` (bag) | each variable = 1 | how many derivations; multiplicity, never credibility |
+| bottleneck | `([0,1], max, min)` | per-source confidence | a chain is as strong as its weakest premise |
+
+*Proof.* `N[X]` is free, so any valuation extends to exactly one homomorphism;
+checks c15-c17 exercise the laws and the correlated-provenance divergence
+(counting vs confidence) with exact arithmetic. The **bottleneck** projection is
+the one the blast-radius cascade uses (§32): it propagates a finding's support κ
+along the required-premise edges.
+
+## 22. The scope wall and the context wall
+
+**Calculus Theorem (scope wall).** Projection commutes with derivation for
+**positive** steps only. Negation, difference, and aggregation are not semiring
+operations and homomorphism commutation provably fails for them
+(Amsterdamer-Deutch-Tannen). The kernel enforces the boundary mechanically: any
+negation- or aggregation-shaped step tags the polynomial, and `Eval_v` refuses a
+tagged polynomial; the only permitted reading of a tagged polynomial is the bare
+Boolean existence degrade (check c16). This is why the calculus is silent on
+graded refutation and meta-analysis rather than guessing: the argumentation and
+synthesis layers (§35 laws 14, 16; §36) are the licensed extensions, deferred
+until a producer needs them.
+
+**Calculus Theorem (context wall), machine-checked.** The scope wall says which
+*operations* commute with projection; the context wall is its scientific-safety
+twin, saying which *movements between contexts* are licensed. No support moves
+from a context `c` to a context `d` without an explicit licensed rule
+(restriction, generalization, transfer, faithfulness, transport). In-context
+derivation is context-preserving; only a licensed `move` advances the context.
+Proved in `lean/Vela/FrontierCalculus.lean`: `context_confined` shows the context
+of any supported claim is reachable from its origin along licensed moves;
+`no_silent_context_jump` is the contrapositive; `confined_when_no_moves` is the
+limiting instance. This is what structurally forbids `mouse model → human
+claim`, `formal variant → named problem solved`, `cell assay → clinical
+therapeutic`, and `benchmark result → real-world capability` from happening
+silently.
+
+**Calculus Theorem (retraction commutes with projection).** `Eval_v ∘ ρ_Y =
+Eval_{v[Y→0]}`, because zero annihilates products and is the additive identity in
+any semiring (check c15). This is the law the blast-radius cascade (§32) and
+assumption invalidation (§27) rest on: retracting a source and recomputing κ is
+the same as evaluating with that source zeroed.
+
+## 23. The discount coordinate κ
+
+Support accumulation σ is monotone in the knowledge order: more events never
+reduce support. But multiplicity is not independence-backed credibility, a
+thousand citations of one flawed source is one source. **κ** is `Eval_v` into the
+Viterbi semiring `([0,1], max, ·)` with per-premise confidence: multiplication
+contracts along a chain (depth decay), max selects the best alternative
+derivation.
+
+**The correlated-provenance correction (the v3 layer).** Within a monomial,
+shared variables count once. Split provenance into two canonical layers:
+`BagProv = N[X]` keeps multiplicity (counting, attribution); `EnvProv = Env(p)`,
+the square-free image where each monomial becomes its assumption *set*, forgets
+exponents (κ, retraction, attack locality). The quotient `env : N[X] → EnvProv`
+is exact and support-multiplicative (`env(p·q)` is the **union** of assumption
+sets), and **κ = Eval_Viterbi ∘ env**, an honest composition rather than a lax
+map on `N[X]`. Machine-checked in `lean/Vela/FrontierCalculus.lean`: the
+square-free collapse is a theorem (`envWeight_idem`), the quotient is
+support-multiplicative (`env_mul_support`, T4), and counting (bag) is provably
+distinct from κ (env) so shared evidence is never promoted to independent support
+(T13 non-collapse).
+
+**Calculus Theorem (σ/κ asymmetry).** σ is monotone in the knowledge order; κ is
+not. A long chain of high-confidence steps still contracts; invalidating one
+premise can collapse κ to zero (check c19: the telephone chain, the
+thousand-citations fixture, the one-premise collapse).
+
+**Calculus Theorem (idempotent DAG safety).** `Eval` into a semiring with
+**idempotent** addition is well-defined on arbitrary DAGs with shared
+sub-derivations. Viterbi (max) is idempotent and DAG-safe; a probabilistic-sum
+semiring double-counts shared sub-paths and is mechanically flagged unsafe for
+the confidence role (check c18, the diamond DAG). This is why the calculus uses
+Viterbi/bottleneck and treats ProbSum as the unsafe foil it will not project
+confidence through.
+
+## 24. The bilattice status
+
+A bilattice carries two lattice orders, truth and knowledge, with negation
+inverting truth and preserving knowledge (Ginsberg 1988, Fitting 1991). Avron's
+representation theorem (1996): every interlaced bilattice is isomorphic to a
+product `[0,1] ⊙ [0,1]`, so the unit square is the **canonical** graded
+bilattice, not a design choice, and Belnap's FOUR is literally its corner
+sublattice: `T=(1,0)`, `F=(0,1)`, `N=(0,0)`, `B=(1,1)`.
+
+The v2 status of a claim is one point `(x, y)`: `x = κ(π_T)`, `y = κ(π_F)`.
+Information content is `x + y`; **conflict degree is `min(x, y)`**, the graded
+reading that subsumes the discord kind "Conflict". Knowledge operations are
+coordinatewise min/max; truth operations cross; negation swaps coordinates.
+
+**Calculus Theorem (conservative extension), machine-checked.** Thresholding each
+coordinate `(x>0, y>0)` recovers exactly the v1 Belnap status of Part I §7, for
+*all* polynomials and *all* positive confidence assignments
+(`graded_corner_conservative`, Theorem 20 in `lean/Vela/FrontierCalculus.lean`).
+Nothing downstream breaks; the graded interior is a pure read over the v1 corner.
+**Calculus Theorem (k-monotonicity).** An event fold only raises the coordinates;
+only retraction lowers them, through §22's retraction law (`kappa_retract_le`,
+machine-checked).
+
+## 25. Verification cost and the admission boundary
+
+Define `v(q, c)`: the cost of verifying claim `q` under verifier configuration
+`c`, with `v = ∞` when no in-software verifier exists. For derived claims the
+tropical-cost projection (§21) supplies `v` as the cheapest-derivation cost. The
+admission law:
+
+```text
+admission_policy(claim_kind, v) -> required trust coordinates,  monotone increasing in v
+permissionless admission  iff  v <= cheap threshold
+v = ∞:  no admission path through the verifier gate at all
+```
+
+**Calculus Theorem (admission monotonicity).** If `v(q,c) <= v(q',c')` then the
+trust coordinates required to admit `q` are a subset of those for `q'` (the
+policy is a union of threshold-indexed coordinate sets; check c21).
+
+**Calculus Theorem (scope boundary).** A claim kind with **no in-software
+verifier** has no permissionless admission path: `v = ∞` exceeds every threshold,
+so no policy admits. This makes the cheap-verifier scope boundary **derived, not
+asserted**: clinical-shaped claims have `v = ∞`, so the discovery loop
+structurally cannot fire there. This is the formal statement of the thesis-scope
+boundary, and it is why the system goes deep in cheap-verifier domains rather
+than wide.
+
+## 26. Replay tiers
+
+Two replay equivalence relations replace the scalar `artifact_replay` reading:
+**R-bitwise** (output bytes identical: Lean, SAT, exact combinatorics, the
+current wedge) and **R-semantic(τ)** (output within an attested tolerance τ,
+forced by floating-point non-associativity and GPU nondeterminism). The
+load-bearing rule: **a tolerance spec is an attestation, not a proof.** Someone
+signs "within τ is the same result," and the signature carries the
+responsibility; the kernel never invents τ and refuses a semantic receipt with no
+signed tolerance.
+
+**Calculus Theorem (tier monotonicity).** R-bitwise implies R-semantic(τ) for
+every `τ >= 0`; a tier downgrades by re-verification but never upgrades without a
+new replay event, so a semantic receipt can never produce a bitwise-grade trust
+coordinate (check c22).
+
+## 27. Assumption environments and generalized retraction
+
+Provenance variables are assumptions; an **environment** is an assumption set, in
+`N[X]` exactly the variable set of a support monomial (ATMS shape, de Kleer
+1986). Retraction generalizes from "zero this source" to "invalidate this
+assumption set": `invalidate(a)` removes every environment containing `a`, by the
+same homomorphism machinery (§22), no new operator. Superseding an upstream claim
+invalidates the assumption variables of everything derived through it, and the
+cascade is the retraction theorem applied transitively.
+
+**Calculus Theorem (subsumption of variable zeroing).** Environment invalidation
+restricted to a singleton source variable equals v1 retraction (check c23: the
+cascade reaches a second-order transfer and the downstream bilattice point moves
+to zero). **Calculus Theorem (transfer closure is a least fixed point;
+order-independent), machine-checked.** The transfer closure (the least set of
+supported claims closed under `support(B) :- support(A), transfer(A,B)`) is the
+*least fixed point* of that rule, hence unique, hence independent of event-fold
+order (`closure_least`, `transfer_closure_order_independent` in
+`lean/Vela/FrontierCalculus.lean`).
+
+## 28. Statement-faithfulness strength
+
+The statement attestation (`vsa_`) carries a six-valued strength relation for how
+a formal statement relates to the informal claim it attests: `Equivalent |
+FormalStronger | FormalWeaker | Incomparable | Ambiguous | Unfaithful`.
+Composition along formalization chains is a total associative monoid with
+`Equivalent` the identity and `Unfaithful` absorbing; mixed directions and any
+incomparable leg compose to `Ambiguous` (information loss is explicit, never
+silently resolved; composition never invents `Equivalent`). Associativity is
+verified over all 216 triples (check c24).
+
+## 29. The trust vector
+
+Trust is not a Boolean. A claim carries a vector `τ(q,c)` of distinct
+coordinates: `log_integrity, artifact_replay, verifier_gate, method_integrity,
+statement_faithfulness, context_of_use, model_lineage, operator_residual,
+uncertainty_calibration, body_trace_quality, human_review, transfer_status,
+safety_scope, significance_endorsement`. This lets one substrate represent Lean
+proofs, human-checked AI-origin proofs, computational replays, neural-operator
+claims, wet-lab assays, and clinical signals without collapsing them into one
+green check.
+
+**Calculus Theorem (trust-vector non-collapse).** No Boolean `τ → verified`
+projection preserves all domain-relevant distinctions. Construct two claims: one
+Lean-kernel replayed but missing statement-faithfulness, one lab-assay traced but
+not formally verified; any single label loses actionable information. This is the
+graded form of Part I §11.4 (status and confidence cannot collapse to one
+scalar): trust cannot collapse to one bit either.
+
+## 30. Transfers, the constructive bridge
+
+Part I §9.1 and Core Theorem 23 define a transfer as a verifier-homomorphism
+`T = (toFun, sound)` between verifiable frontiers and prove verification
+transports. The calculus adds the provenance consequence: if a verified `A`
+discharges a named premise of `B`,
+
+```text
+π_T(B_premise) += π_T(A) · x_transfer · x_transfer_theorem
+```
+
+so the transferred support is a single monomial product of the source, the
+transfer object, and the transfer theorem. Retracting any of the three deletes
+the monomial (§20), so transferred support disappears by the same retraction
+law, no special case. Real, re-checkable instances: Sidon `B_2 → B_h`; the
+`[8,4,4]` code `→ E8` kissing configuration, which reproduced the proven optimum
+`K(8) = 240`.
+
+## 31. Body, model, and operator receipts
+
+The same kernel must one day accept not only proof receipts but **body traces**
+(execution against reality: executor type, protocol version, instrument config,
+sample lineage, reagent lots, raw-output hashes, deviation log, failure modes,
+cost/safety tier, replay command), **model receipts** (weights hash, training
+data hashes, evaluation suite, calibration report, domain of validity, known
+failure modes), and **operator receipts** (learned solution operators: input/output
+function spaces, discretization, governing equations, residual error, uncertainty
+method, out-of-distribution tests). A model prediction is **activity, not state**;
+it becomes state only through validation, receipt, trace, and attestation. These
+schemas are specified here and deferred in implementation until a producer of
+each shape exists (§36).
+
+## 32. Frontier discord and the opportunity calculus
+
+Discord and frontiers are Part I §4. The calculus adds the **opportunity rank**,
+which schedules work but never gates trust:
+
+```text
+Rank(a | S) = E[ FrontierDelta(S, a, y, θ) ] / Cost(a)
+```
+
+a practical score trades information gain, downstream dependencies unlocked,
+failed-search cost avoided, transfer value, and translation value against
+verification burden, safety risk, and resource cost. This is a scheduling rule,
+not evidence (Part I §8, Calculus law 19 in §35).
+
+**The decision-delta, made computable.** `FrontierDelta` is the headline metric
+the thesis names but the calculus did not, until now, compute. The graded
+blast-radius (`FrontierGraph::blast_radius_graded`,
+`vendor/vela/crates/vela-protocol/src/frontier_graph.rs`) is its first concrete
+instance: retract a claim (its support κ → 0, the §22 retraction law),
+min-propagate κ along the required-premise edges (the **bottleneck** projection,
+§21), and the drop `Δκ` in each dependent's support is the structural
+decision-delta, what would weaken if this result moved. κ measures *trust*; `Δκ`
+measures *consequence*. Formalizing `FrontierDelta` as a calculus primitive on
+this footing is the live theory frontier.
+
+## 33. The transport certificate (spec only)
+
+For empirical-claim transfers (a causal-diagram domain), the certificate shape is
+fixed now so the slot exists: a 4-tuple of a selection-diagram reference, the
+sID-emitted transport formula, the do-calculus witness sequence, and source tags
+per term (Bareinboim-Pearl 2013 give completeness of sID). **Scope guard:**
+formal-math transfers keep the verifier-homomorphism object of §30; the two must
+not be conflated. The kernel ships the schema and validator only, with an empty
+consumer list (check c25); the full causal apparatus stays deferred (§36).
+
+## 34. Calculus theorems, and the map to the formal core
+
+The v1 calculus theorems coincide with Part I and are cited there, not re-proved:
+
+| Calculus result | Canonical statement |
+|---|---|
+| replay convergence | Core Theorem 1 |
+| retraction monotonicity | Core Theorem 2 |
+| no-zombie status after retraction | Core Theorem 3 |
+| conflict preservation (`B`, not forced resolution) | Part I §5.6.1, §7 |
+| hash-DAG integrity | Core Theorem 5 |
+| transfer support propagation / retraction | Core Theorem 23 + §30 |
+| context no-generalization | Core §1 context law + §22 context wall |
+| frontier as discord support, upward closure | Core Theorem 4 |
+
+The genuinely calculus-side theorems are stated in §21–§32: universality,
+the scope wall and context wall, retraction-commutes, the σ/κ asymmetry,
+idempotent DAG safety, conservative extension, k-monotonicity, admission
+monotonicity, the scope boundary, tier monotonicity, the subsumption of variable
+zeroing, transfer-closure-as-least-fixed-point, faithfulness as a monoid, and
+trust-vector non-collapse. **Failure-value positivity** (a failed attempt is
+logged when `P(retry) · avoided_cost · applicability > storage_review_cost`) and
+**opportunity-ranking separation** (ranking schedules but cannot alter σ, κ,
+provenance, or the trust vector) are calculus-only and stated in §18 and §32.
+
+## 35. Calculus doctrine laws (13–23)
+
+Stated laws, not theorems; checkable in review. (Laws 1–14 are the formal-core
+doctrine of Part I §12; these extend the list.)
+
+13. **Projection soundness + provenance.** Every flag is the image of the stored
+    polynomial under a declared homomorphism, and carries a proof packet naming
+    its evaluator, valuation, source polynomial, and policy, so anyone can
+    recompute it. The flag is auditable, never authoritative. Landed in `vela
+    claim state` (the `projection_provenance` record).
+14. **Attack locality.** A challenge attacks named monomials or assumptions,
+    never the claim as an opaque whole, so disputes propagate through assumption
+    retraction. (The Dung argumentation apparatus is the deferred extension.)
+15. **No transport without certificate.** No transferred claim enters the record
+    without a transfer object carrying its assumption set (and, for empirical
+    transfers, the §33 certificate).
+16. **No unsupported synthesis.** A synthesized estimate is a projection over its
+    inputs' provenance polynomials, never a stored free-standing object
+    (derived-never-stored applied to meta-analysis).
+17. **Reproducibility-tier monotonicity.** Bitwise implies semantic; tiers never
+    upgrade without a replay event (§26).
+18. **Verification/admission separation.** What verifies a claim and what admits a
+    writer are distinct; admission is a function of verification cost, never
+    identity alone (§25).
+19. **Incentive non-interference.** No incentive, stake, score, or significance
+    signal is an input to σ, κ, the provenance polynomial, or the trust vector.
+    Incentives price attention; they never touch state.
+20. **Monotone safety gating.** Safety restrictions (access tiers) only ever
+    narrow access; no event widens access to restricted bytes retroactively.
+21. **Evaluation freshness.** A benchmark claim carries its contamination cutoff
+    and statement-registration date; only statements registered after a model's
+    cutoff are admissible freshness evidence (the anti-leaderboard foundation).
+22. **Claim-identity receipts.** Identity between two natural-language claims is
+    itself a signed, attested, retractable event, never a silent reducer input
+    (no-AI-in-the-trust-path applied to entity resolution).
+23. **Reproducibility, replicability, robustness are distinct coordinates**, never
+    collapsed into one.
+
+(Law 9 of the v1 list, "transfers amplify discovery," is recorded as **falsified**
+and stays in the record as falsified. That is the point of having a record.)
+
+## 36. The deferred ledger
+
+Everything correct-but-consumerless, with its un-defer trigger. Nothing here is
+built or scaffolded "while we're in there." Almost every trigger is **a producer
+who needs it**, which is the honest statement that the next theory moves are
+adoption-gated, not theory-gated.
+
+| deferred item | un-defer trigger |
+|---|---|
+| Incentive/mechanism layer (stake, slash, scoring) | a second external producer, or value gated on frontier delta |
+| Dung argumentation framework (typed attacks, grounded/preferred extensions) | a producer emitting structured contested rebuttals |
+| Clinical/observational cluster (CausalClaim, estimand discipline, GRADE) | a producer whose claims have an in-software verifier (likely never for clinical bytes; the scope boundary working as intended) |
+| Full causal selection-diagram apparatus | the first empirical-claim transfer producer |
+| Schema/reducer migration lenses | the first backward-incompatible reducer or schema change |
+| Workflow-provenance interop (PROV, RO-Crate, CWL) | the first computational-replication producer; as export projection, not core object |
+| Ontology binding (OBO, LinkML, SHACL) | a domain producer with an existing controlled vocabulary |
+| Body cluster (quantity types, calibration custody, regulatory packets) | the first autonomous-lab or instrument producer |
+| Evidence-synthesis reducer (random-effects over `N[X]`) | a domain producing multiple independent estimates of one quantity (build as projection, law 16) |
+| Bitemporality (valid-time axis) | the first claim whose validity window diverges from record time |
+| Contributor identity PIDs (ORCID, ROR, CRediT) | external contributors (the Argonaut trigger) |
+
+## 37. The naming dictionary
+
+| calculus name | symbol | protocol object / Rust home | id / status |
+|---|---|---|---|
+| claim-state cell | cell | reducer fold, `vela claim state` | live |
+| status (v2 bilattice point) | `(x,y)`; v1 σ corners | Belnap in reducer; graded coords in the kernel | live (corners) / v2 (interior) |
+| support / refute provenance | `π_T, π_F` | `N[X]`, wired to reducer flags | live |
+| discount | κ | `frontier_calculus.rs` (Viterbi projection) | live |
+| trust vector | τ | `cli_claim.rs` (derives 7 of 14 fields) | partial |
+| verification cost | `v(q,c)` | admission policy parameter | live |
+| decision-delta | `Δκ` / FrontierDelta | `frontier_graph.rs::blast_radius_graded` | live (structural instance) |
+| finding / frontier / event | — | `vf_` / `vfr_` / `vev_` | live |
+| transfer | — | cross-domain transfer | `vtr_`, live |
+| statement attestation (faithfulness) | — | `statement_attestation.rs`; six-valued strength | live |
+
+The bare word "attestation" is banned: it is always "statement attestation
+(`vsa_`)" or "reviewer attestation (`vatt_`)".
+
+## 38. Executable validation
+
+The reference kernel `research/frontier-calculus/frontier_calculus_kernel.py`
+runs 25 checks and exits nonzero unless all pass (wired into the conformance gate
+by exit code via `scripts/full-conformance.sh`). The 14 v1 checks cover replay
+convergence under shuffle, the semiring/retraction laws, no-zombie status,
+hash-DAG tamper detection, transfer propagation/retraction, trust-vector
+separation, and the Ramsey demo (`R(3,3)=6` by C5 witness + exhaustive
+verification). The 11 v2 checks (c15–c25) cover the named projections as
+homomorphisms, the negation/aggregation refusal, the counting-vs-confidence
+divergence, Viterbi DAG safety, the σ/κ asymmetry, the bilattice corner
+embedding and k-monotonicity, admission monotonicity, replay-tier monotonicity,
+assumption-invalidation cascade, faithfulness composition, and the transport
+certificate schema. The load-bearing laws are additionally machine-checked in
+`lean/Vela/FrontierCalculus.lean` (Mathlib-free).
+
+## 39. References
+
+Provenance and database theory: Green-Karvounarakis-Tannen, "Provenance
+semirings," PODS 2007 (free-semiring universality, commutation with positive
+relational algebra); Green-Tannen, "The semiring framework for database
+provenance," PODS 2017; Amsterdamer-Deutch-Tannen, "Provenance for aggregate
+queries" (the negation/difference boundary). Status and bilattices: Belnap-Dunn
+four-valued logic; Ginsberg, "Multivalued logics," 1988; Fitting, "Bilattices and
+the semantics of logic programming," 1991; Avron, "The structure of interlaced
+bilattices," MSCS 6, 1996 (the product representation theorem). Trust and
+discounting: Jøsang, "Trust network analysis with subjective logic," ACSC 2006
+(discount canonical on series-parallel graphs only). Truth maintenance: de Kleer,
+"An assumption-based TMS," AI 28, 1986. Replicated data: Shapiro et al., CRDTs.
+Contextuality: Abramsky-Brandenburger; Abramsky-Barbosa-Mansfield, "Contextual
+fraction," PRL 2017. Data migration: Spivak, functorial data migration.
+Proof-carrying: Necula-Lee, proof-carrying code. Causal transport: Bareinboim-
+Pearl, "Deciding transportability," 2013 (sID completeness); Pearl, do-calculus.
+Experimental design: Rainforth et al., modern Bayesian experimental design.
+Models: Neural Operators (maps between function spaces); Universal Differential
+Equations; IFP Natural Law Models. Formal-math frontier: AlphaProof, Formal
+Conjectures, miniF2F-Lean, LeanMarathon. Standards (for the deferred export
+projections): W3C PROV, RO-Crate, FAIR.

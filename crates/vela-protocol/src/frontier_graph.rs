@@ -130,7 +130,7 @@ pub struct Edge {
 }
 
 /// The product-facing state of a finding (memo §6) — **Plane 2** of the four
-/// status planes (see `docs/STATUS_PLANES.md`): distinct from the cross-source
+/// status planes (see `docs/THEORY.md` Part II §24): distinct from the cross-source
 /// resolution words (Plane 1), the Belnap/bilattice epistemic status (Plane 3),
 /// and the review-lifecycle signals (Plane 4). A pure, derived classification
 /// of a finding's review verdict + confidence into the five words the platform
