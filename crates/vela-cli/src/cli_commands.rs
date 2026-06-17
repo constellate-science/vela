@@ -1283,9 +1283,9 @@ pub(crate) enum SignAction {
 pub(crate) enum CampaignAction {
     /// Run the engine and report the best verified construction found. Writes
     /// nothing. `--kind` is a verifier kind: gf2_sidon, union_free,
-    /// rook_directions, sidon, bh (with `--h`), golomb, costas.
+    /// rook_directions, cap, sidon, bh (with `--h`), golomb, costas.
     Search {
-        /// Verifier kind to search (gf2_sidon | union_free | rook_directions |
+        /// Verifier kind to search (gf2_sidon | union_free | rook_directions | cap |
         /// sidon | bh | golomb | costas).
         kind: String,
         /// Target parameter n (set size domain / order, kind-dependent).

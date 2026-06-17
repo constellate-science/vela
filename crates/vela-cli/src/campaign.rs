@@ -60,8 +60,8 @@ impl Rng {
 }
 
 /// Run the discovery engine for one target. `kind` is the verifier kind
-/// (`gf2_sidon`, `union_free`, `rook_directions`, `sidon`, `bh`, `golomb`,
-/// `costas`). `n`/`h` parameterize the target; `restarts` bounds the work;
+/// (`gf2_sidon`, `union_free`, `rook_directions`, `cap`, `sidon`, `bh`,
+/// `golomb`, `costas`). `n`/`h` parameterize the target; `restarts` bounds the work;
 /// `seed` fixes the draw. Returns the best verified witness, or `None` if the
 /// engine found nothing checkable (and `Err` for an unsupported kind).
 pub fn search(
@@ -76,6 +76,7 @@ pub fn search(
         "gf2_sidon" => search_gf2_sidon(n, restarts, &mut rng),
         "union_free" => search_union_free(n, restarts, &mut rng),
         "rook_directions" => search_rook_directions(n, restarts, &mut rng),
+        "cap" => search_cap(n, restarts, &mut rng),
         // Sidon is B_2; share the B_h constructor.
         "sidon" => search_bh(n, 2, restarts, &mut rng),
         "bh" => {
@@ -88,7 +89,7 @@ pub fn search(
         "costas" => search_costas(n, restarts, &mut rng),
         other => {
             return Err(format!(
-                "kind `{other}` is not searchable by the engine yet (searchable: gf2_sidon, union_free, rook_directions, sidon, bh, golomb, costas)"
+                "kind `{other}` is not searchable by the engine yet (searchable: gf2_sidon, union_free, rook_directions, cap, sidon, bh, golomb, costas)"
             ));
         }
     };
@@ -341,6 +342,71 @@ fn search_rook_directions(n: usize, restarts: u64, rng: &mut Rng) -> Option<Foun
 }
 
 // ---------------------------------------------------------------------------
+// cap — a cap set in F_3^n: no three distinct points collinear, equivalently no
+// three distinct points summing to 0 mod 3 (OEIS A090245 / the FunSearch
+// problem). Greedy: a point is addable iff it neither sits in the set nor
+// completes a line through two existing points; on add, mark the third point of
+// every new pair forbidden. Certifies a LOWER bound on the cap number.
+// ---------------------------------------------------------------------------
+fn search_cap(n: usize, restarts: u64, rng: &mut Rng) -> Option<Found> {
+    if !(1..=8).contains(&n) {
+        return None; // 3^n point space; n<=8 (6561) stays tractable.
+    }
+    let pow3: Vec<usize> = (0..n).map(|i| 3usize.pow(i as u32)).collect();
+    let space = 3usize.pow(n as u32);
+    // The third collinear point of a, b in F_3^n: t_i = -(a_i + b_i) mod 3.
+    let third = |a: usize, b: usize| -> usize {
+        let mut t = 0usize;
+        for (i, &p) in pow3.iter().enumerate() {
+            let ai = (a / p) % 3;
+            let bi = (b / p) % 3;
+            t += ((3 - (ai + bi) % 3) % 3) * pow3[i];
+        }
+        t
+    };
+    let mut best: Vec<usize> = Vec::new();
+    let iterations = restarts.max(1);
+    for _ in 0..iterations {
+        let mut order: Vec<usize> = (0..space).collect();
+        rng.shuffle(&mut order);
+        let mut set: Vec<usize> = Vec::new();
+        let mut inset = vec![false; space];
+        let mut forbidden = vec![false; space];
+        for &p in &order {
+            if inset[p] || forbidden[p] {
+                continue;
+            }
+            for &a in &set {
+                forbidden[third(p, a)] = true;
+            }
+            set.push(p);
+            inset[p] = true;
+        }
+        if set.len() > best.len() {
+            best = set;
+        }
+    }
+    if best.is_empty() {
+        return None;
+    }
+    let score = best.len();
+    best.sort_unstable();
+    let points: Vec<Vec<i64>> = best
+        .iter()
+        .map(|&c| pow3.iter().map(|&p| ((c / p) % 3) as i64).collect())
+        .collect();
+    Some(Found {
+        witness: Witness::Cap {
+            n,
+            points,
+            claimed_size: Some(score),
+        },
+        score,
+        iterations,
+    })
+}
+
+// ---------------------------------------------------------------------------
 // B_h in {0,1}^n — all h-fold sums (with repetition, as multisets) distinct;
 // h = 2 is a Sidon set (OEIS A309370). Greedy over binary vectors: add a vector
 // iff the full h-fold sum-multiset stays collision-free. Correct over fast: we
@@ -579,6 +645,14 @@ mod tests {
     fn sidon_finds_verified() {
         let f = search("sidon", 7, 0, 30, 0x222).unwrap();
         assert_verifies(&f);
+    }
+
+    #[test]
+    fn cap_finds_verified() {
+        // n=4: the maximum cap in F_3^4 is 20; greedy should find a sizeable one.
+        let f = search("cap", 4, 0, 80, 0x444).unwrap();
+        assert_verifies(&f);
+        assert!(f.unwrap().score >= 12);
     }
 
     #[test]
