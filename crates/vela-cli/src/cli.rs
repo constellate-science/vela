@@ -4715,12 +4715,18 @@ fn cmd_mcp_setup(source: Option<&Path>, frontiers: Option<&Path>) {
         .map(|p| p.display().to_string())
         .or_else(|| frontiers.map(|p| p.display().to_string()))
         .unwrap_or_else(|| "frontier.json".to_string());
+    // Emit the read-only profile by default (memo §9.1): the safe MCP surface
+    // an agent should get unless a human starts a scoped draft/maintainer
+    // session. Matches the `.mcp.json` that `vela agents sync` generates.
     let args = if let Some(path) = source {
-        format!(r#""serve", "{}""#, path.display())
+        format!(r#""serve", "{}", "--profile", "read-only""#, path.display())
     } else if let Some(path) = frontiers {
-        format!(r#""serve", "--frontiers", "{}""#, path.display())
+        format!(
+            r#""serve", "--frontiers", "{}", "--profile", "read-only""#,
+            path.display()
+        )
     } else {
-        r#""serve", "frontier.json""#.to_string()
+        r#""serve", "frontier.json", "--profile", "read-only""#.to_string()
     };
     println!(
         r#"Add this MCP server configuration to your client:
