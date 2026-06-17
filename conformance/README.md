@@ -155,6 +155,30 @@ either add a handler or return a no-op-on-digest result for it; the
 fixture pins the expected reducer-effect shape so silent disagreement
 becomes a failing test.
 
+## v0.9 scientific-state-kernel fixtures
+
+Three fixtures pin the v0.9 Scientific State Kernel surface (the three kernel
+verbs: append / restrict / observe):
+
+- `vela_v09_sidon_kernel_fixture.py` (+ `fixtures/vela_v09_sidon_kernel_fixture.json`)
+  builds one end-to-end math-wedge instance — the Sidon lower bound
+  `B2([0,4]) >= 3` from the witness `{0,1,4}` — and exercises all three verbs:
+  composed lineage Γ, a hitting-set challenge that kills support, and a repair
+  clause (`{0,2,5}`) that restores it under the challenged view. Run with
+  `--check` to assert the kill/repair/observation invariants.
+- `vela_no_hidden_state_check.py` (+ `fixtures/no_hidden_state_example_{pass,fail}.json`)
+  is the executable form of Conformance Law "No hidden state": every
+  authoritative field (status, confidence, κ, trust, cost, bottleneck, …) must
+  be reproduced by exactly one replayable observation packet whose canonical
+  output hash matches the displayed value. The pass example passes; the fail
+  example is rejected because a `kappa` field is shown with no packet behind it.
+
+These are Conformance Laws (protocol-surface obligations checked against an
+implementation), not theorems about the free lineage carrier. The finite-ranked
+core they correspond to is machine-checked in `lean/` (the Scientific State
+Kernel module: ranked-model existence/uniqueness, view restriction, hitting-set
+kill, repair, observation determinism, and the closed three-verb operation type).
+
 ## License
 
 These fixtures are part of the Vela project and are licensed under the

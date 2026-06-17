@@ -1,0 +1,251 @@
+{
+  "active_envs_after_challenge_for_c_lb3": [],
+  "active_envs_after_repair_for_c_lb3": [
+    [
+      "a_lb_rule",
+      "a_w025"
+    ]
+  ],
+  "active_envs_before_for_c_lb3": [
+    [
+      "a_lb_rule",
+      "a_w014"
+    ]
+  ],
+  "challenge": [
+    "a_w014"
+  ],
+  "challenge_kills_c_lb3": true,
+  "fixture": "vela_v09_sidon_lower_bound_kernel_fixture",
+  "gamma_base": {
+    "c_lb3": [
+      [
+        "a_lb_rule",
+        "a_w014"
+      ]
+    ],
+    "c_t014": [
+      [
+        "a_translate_rule",
+        "a_translate_theorem",
+        "a_w014"
+      ]
+    ],
+    "c_w014": [
+      [
+        "a_w014"
+      ]
+    ]
+  },
+  "gamma_repaired": {
+    "c_lb3": [
+      [
+        "a_lb_rule",
+        "a_w014"
+      ],
+      [
+        "a_lb_rule",
+        "a_w025"
+      ]
+    ],
+    "c_t014": [
+      [
+        "a_translate_rule",
+        "a_translate_theorem",
+        "a_w014"
+      ],
+      [
+        "a_translate_rule",
+        "a_translate_theorem",
+        "a_w025"
+      ]
+    ],
+    "c_w014": [
+      [
+        "a_w014"
+      ],
+      [
+        "a_w025"
+      ]
+    ]
+  },
+  "lineage_root_base": "953451e1babee7dc52d5ed79b4008e8b94d3be6e1c00e9c044c06fdc2b6a7c61",
+  "lineage_root_repaired": "3317c2d260e479fa94f2ecfa2408c255b54d04cfed0af366db2f7b49b0efc8e0",
+  "observation_packets_after_challenge": [
+    {
+      "cell": "c_lb3",
+      "kind": "belnap_support",
+      "lineage_root": "953451e1babee7dc52d5ed79b4008e8b94d3be6e1c00e9c044c06fdc2b6a7c61",
+      "output": "N",
+      "output_hash": "f9dfd61493ca94a454a5eed57383fda3e8c36afd6315c3aa952415d6f2637cdb",
+      "presentation_root": "49d6888970c6f0e69e7be0eb36a2094642f5d8a4c54718680114efadac12baa0",
+      "view_root": "8941ca0b23574909e3555cc51e5e21a219223c89dd84b2cfacaa1e7063b0b720"
+    },
+    {
+      "cell": "c_lb3",
+      "kind": "minimal_envs",
+      "lineage_root": "953451e1babee7dc52d5ed79b4008e8b94d3be6e1c00e9c044c06fdc2b6a7c61",
+      "output": [],
+      "output_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "presentation_root": "49d6888970c6f0e69e7be0eb36a2094642f5d8a4c54718680114efadac12baa0",
+      "view_root": "8941ca0b23574909e3555cc51e5e21a219223c89dd84b2cfacaa1e7063b0b720"
+    }
+  ],
+  "observation_packets_after_repair": [
+    {
+      "cell": "c_lb3",
+      "kind": "belnap_support",
+      "lineage_root": "3317c2d260e479fa94f2ecfa2408c255b54d04cfed0af366db2f7b49b0efc8e0",
+      "output": "T",
+      "output_hash": "57cb45de78dd46c65752468897bbc5ca4c01cffaf1dec35653e040bf7d8de523",
+      "presentation_root": "49d6888970c6f0e69e7be0eb36a2094642f5d8a4c54718680114efadac12baa0",
+      "view_root": "8941ca0b23574909e3555cc51e5e21a219223c89dd84b2cfacaa1e7063b0b720"
+    },
+    {
+      "cell": "c_lb3",
+      "kind": "minimal_envs",
+      "lineage_root": "3317c2d260e479fa94f2ecfa2408c255b54d04cfed0af366db2f7b49b0efc8e0",
+      "output": [
+        [
+          "a_lb_rule",
+          "a_w025"
+        ]
+      ],
+      "output_hash": "be0a0b2b945f71219ee5f7d1f80ccd3f175b704493f4bcc16c6350a97c5f5f43",
+      "presentation_root": "49d6888970c6f0e69e7be0eb36a2094642f5d8a4c54718680114efadac12baa0",
+      "view_root": "8941ca0b23574909e3555cc51e5e21a219223c89dd84b2cfacaa1e7063b0b720"
+    }
+  ],
+  "observation_packets_before": [
+    {
+      "cell": "c_lb3",
+      "kind": "belnap_support",
+      "lineage_root": "953451e1babee7dc52d5ed79b4008e8b94d3be6e1c00e9c044c06fdc2b6a7c61",
+      "output": "T",
+      "output_hash": "57cb45de78dd46c65752468897bbc5ca4c01cffaf1dec35653e040bf7d8de523",
+      "presentation_root": "49d6888970c6f0e69e7be0eb36a2094642f5d8a4c54718680114efadac12baa0",
+      "view_root": "5efb3f30ea8d70f0783ea7a9898d74b95eb161b35a30284f84979bcfc8a03721"
+    },
+    {
+      "cell": "c_lb3",
+      "kind": "kappa",
+      "lineage_root": "953451e1babee7dc52d5ed79b4008e8b94d3be6e1c00e9c044c06fdc2b6a7c61",
+      "output": "99/100",
+      "output_hash": "ff5c3741cc40dbd72294955dcbfd4be7bbcfcc21f46c36327f8069609d3a73a9",
+      "presentation_root": "49d6888970c6f0e69e7be0eb36a2094642f5d8a4c54718680114efadac12baa0",
+      "view_root": "5efb3f30ea8d70f0783ea7a9898d74b95eb161b35a30284f84979bcfc8a03721"
+    },
+    {
+      "cell": "c_lb3",
+      "kind": "cost",
+      "lineage_root": "953451e1babee7dc52d5ed79b4008e8b94d3be6e1c00e9c044c06fdc2b6a7c61",
+      "output": 2,
+      "output_hash": "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35",
+      "presentation_root": "49d6888970c6f0e69e7be0eb36a2094642f5d8a4c54718680114efadac12baa0",
+      "view_root": "5efb3f30ea8d70f0783ea7a9898d74b95eb161b35a30284f84979bcfc8a03721"
+    },
+    {
+      "cell": "c_lb3",
+      "kind": "bottleneck",
+      "lineage_root": "953451e1babee7dc52d5ed79b4008e8b94d3be6e1c00e9c044c06fdc2b6a7c61",
+      "output": "99/100",
+      "output_hash": "ff5c3741cc40dbd72294955dcbfd4be7bbcfcc21f46c36327f8069609d3a73a9",
+      "presentation_root": "49d6888970c6f0e69e7be0eb36a2094642f5d8a4c54718680114efadac12baa0",
+      "view_root": "5efb3f30ea8d70f0783ea7a9898d74b95eb161b35a30284f84979bcfc8a03721"
+    },
+    {
+      "cell": "c_lb3",
+      "kind": "minimal_envs",
+      "lineage_root": "953451e1babee7dc52d5ed79b4008e8b94d3be6e1c00e9c044c06fdc2b6a7c61",
+      "output": [
+        [
+          "a_lb_rule",
+          "a_w014"
+        ]
+      ],
+      "output_hash": "29618b651480c08ea1a4efc7ce94cfdb198ffc3968dc5532b55ffbca536fe584",
+      "presentation_root": "49d6888970c6f0e69e7be0eb36a2094642f5d8a4c54718680114efadac12baa0",
+      "view_root": "5efb3f30ea8d70f0783ea7a9898d74b95eb161b35a30284f84979bcfc8a03721"
+    }
+  ],
+  "presentation": {
+    "atoms": {
+      "a_lb_rule": "accepted extraction rule: Sidon witness of size 3 implies lower bound >=3",
+      "a_translate_rule": "accepted translation construction +10",
+      "a_translate_theorem": "proof receipt: translation preserves Sidon",
+      "a_w014": "verifier receipt for {0,1,4} Sidon",
+      "a_w025": "repair verifier receipt for {0,2,5} Sidon"
+    },
+    "base_clauses": [
+      {
+        "atoms": [
+          "a_w014"
+        ],
+        "body": [],
+        "head": "c_w014",
+        "id": "r_w014",
+        "persistent": true
+      },
+      {
+        "atoms": [
+          "a_lb_rule"
+        ],
+        "body": [
+          "c_w014"
+        ],
+        "head": "c_lb3",
+        "id": "r_lb3",
+        "persistent": true
+      },
+      {
+        "atoms": [
+          "a_translate_rule",
+          "a_translate_theorem"
+        ],
+        "body": [
+          "c_w014"
+        ],
+        "head": "c_t014",
+        "id": "r_t014",
+        "persistent": true
+      }
+    ],
+    "cells": {
+      "c_lb3": "There exists a 3-element Sidon set in [0,4]; hence B2([0,4]) >= 3",
+      "c_t014": "S0+10={10,11,14} is Sidon in [10,14]",
+      "c_w014": "S0={0,1,4} is Sidon in [0,4]"
+    },
+    "ranks": {
+      "c_lb3": 1,
+      "c_t014": 1,
+      "c_w014": 0
+    },
+    "repair_clause": {
+      "atoms": [
+        "a_w025"
+      ],
+      "body": [],
+      "head": "c_w014",
+      "id": "r_w025",
+      "persistent": true
+    }
+  },
+  "presentation_root": "49d6888970c6f0e69e7be0eb36a2094642f5d8a4c54718680114efadac12baa0",
+  "repair_atoms": [
+    "a_w025"
+  ],
+  "repair_restores_c_lb3": true,
+  "view_after_challenge_active_atoms": [
+    "a_lb_rule",
+    "a_translate_rule",
+    "a_translate_theorem",
+    "a_w025"
+  ],
+  "view_default_active_atoms": [
+    "a_lb_rule",
+    "a_translate_rule",
+    "a_translate_theorem",
+    "a_w014",
+    "a_w025"
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "state": {
+    "claims": {
+      "vf_sidon_lb3": {
+        "status": "T",
+        "kappa": "99/100",
+        "note": "non-authoritative display copy"
+      }
+    }
+  },
+  "field_roles": {
+    "claims.vf_sidon_lb3.status": "status",
+    "claims.vf_sidon_lb3.kappa": "kappa"
+  },
+  "observation_packets": [
+    {
+      "output_path": "claims.vf_sidon_lb3.status",
+      "output": "T",
+      "presentation_root": "p",
+      "lineage_root": "g",
+      "view_root": "v",
+      "evaluator_id": "belnap_support"
+    },
+    {
+      "output_path": "claims.vf_sidon_lb3.kappa",
+      "output": "99/100",
+      "presentation_root": "p",
+      "lineage_root": "g",
+      "view_root": "v",
+      "evaluator_id": "kappa_viterbi"
+    }
+  ]
+}
