@@ -185,6 +185,12 @@ fn cmd_gate_backfill(frontier: &Path, reviewer: &str, dry_run: bool, json_output
         ProbeKind, ProbeResult, VerifierAttachment, VerifierMethod, claim_digest,
     };
 
+    // Registration pre-pass: deposit any canonical `witnesses/*.witness.json`
+    // not yet present as a content-addressed artifact, so the attach loop below
+    // can feed the gate over them. No-op when the frontier ships no
+    // `witnesses/targets.json` (preserves prior behavior).
+    let (registered, no_target) = register_canonical_witnesses(frontier, reviewer, dry_run);
+
     let source = repo::detect(frontier).unwrap_or_else(|e| fail_return(&e));
     let proj = repo::load(&source).unwrap_or_else(|e| fail_return(&e));
 
@@ -195,8 +201,15 @@ fn cmd_gate_backfill(frontier: &Path, reviewer: &str, dry_run: bool, json_output
         .map(|f| (f.id.clone(), f.assertion.text.clone()))
         .collect();
 
-    // (finding, witness kind, claim_digest) for each landed/planned check.
+    // An agent may draft (create pending) but not self-apply a truth-bearing
+    // `verifier.attach`; a human reviewer applies inline. (The substrate's
+    // accept gate enforces this independently — this just avoids drafting then
+    // failing to self-accept.)
+    let apply = !reviewer.trim().to_ascii_lowercase().starts_with("agent:");
+
+    // (finding, witness kind, claim_digest) for each landed / pending / planned check.
     let mut done: Vec<(String, String, String)> = Vec::new();
+    let mut pending: Vec<(String, String, String)> = Vec::new();
     let mut failed: Vec<(String, String)> = Vec::new();
     let mut skipped: usize = 0;
 
@@ -286,8 +299,17 @@ fn cmd_gate_backfill(frontier: &Path, reviewer: &str, dry_run: bool, json_output
                 Vec::new(),
                 Vec::new(),
             );
-            match proposals::create_or_apply(frontier, proposal, true) {
-                Ok(_) => done.push((tf.clone(), kind.clone(), digest)),
+            // The trust boundary, enforced here: an agent reviewer may DRAFT a
+            // `verifier.attach` (it ran the frozen verifier) but may not
+            // self-apply it — that is a truth-bearing acceptance reserved for a
+            // named human with key custody. So for agents we create the
+            // proposal as PENDING; a maintainer accepts it with `vela accept`.
+            // A human reviewer applies inline (subject to key custody).
+            match proposals::create_or_apply(frontier, proposal, apply) {
+                Ok(res) if res.applied_event_id.is_some() => {
+                    done.push((tf.clone(), kind.clone(), digest))
+                }
+                Ok(_) => pending.push((tf.clone(), kind.clone(), digest)),
                 Err(e) => failed.push((tf.clone(), e)),
             }
         }
@@ -303,7 +325,14 @@ fn cmd_gate_backfill(frontier: &Path, reviewer: &str, dry_run: bool, json_output
             serde_json::to_string_pretty(&json!({
                 "command": "gate backfill",
                 "dry_run": dry_run,
+                "registered_artifacts": registered,
+                "witnesses_without_target": no_target,
                 "attached": done.len(),
+                "pending_human_accept": pending.len(),
+                "pending_findings": pending
+                    .iter()
+                    .map(|(f, k, d)| json!({ "finding": f, "kind": k, "claim_digest": d }))
+                    .collect::<Vec<_>>(),
                 "failed": failed.len(),
                 "skipped_artifacts": skipped,
                 "findings": findings,
@@ -312,6 +341,20 @@ fn cmd_gate_backfill(frontier: &Path, reviewer: &str, dry_run: bool, json_output
         );
     } else {
         let verb = if dry_run { "would attach" } else { "attached" };
+        if registered > 0 {
+            let rverb = if dry_run { "would register" } else { "registered" };
+            println!(
+                "· gate backfill: {rverb} {registered} canonical witness artifact{}",
+                if registered == 1 { "" } else { "s" },
+            );
+        }
+        if !no_target.is_empty() {
+            println!(
+                "  ! {} witness file(s) have no target finding in witnesses/targets.json (not registered): {}",
+                no_target.len(),
+                no_target.join(", "),
+            );
+        }
         println!(
             "· gate backfill: {verb} {} frozen-verifier check{} ({skipped} artifacts skipped, {} verify-failures)",
             done.len(),
@@ -321,10 +364,166 @@ fn cmd_gate_backfill(frontier: &Path, reviewer: &str, dry_run: bool, json_output
         for (f, k, d) in &done {
             println!("  {f} · {k} · claim {d}");
         }
+        if !pending.is_empty() {
+            println!(
+                "· gate backfill: {} verifier.attach proposal{} drafted + frozen-verified, PENDING a maintainer's key-custody accept (`vela accept`):",
+                pending.len(),
+                if pending.len() == 1 { "" } else { "s" },
+            );
+            for (f, k, d) in &pending {
+                println!("  ◦ {f} · {k} · claim {d}");
+            }
+        }
         for (f, e) in &failed {
             println!("  ! {f}: {e}");
         }
     }
+}
+
+/// Registration pre-pass for `gate backfill`. Deposits every canonical
+/// `witnesses/*.witness.json` that is not yet present as a content-addressed
+/// artifact, binding each to its target finding via the frontier-owned
+/// `witnesses/targets.json` map (`{ "<file>.witness.json": "vf_…" }`). This is
+/// the step that makes a frontier's frozen-verifier witnesses visible to the
+/// gate; the attach loop in [`cmd_gate_backfill`] then lands the signed
+/// re-check over them.
+///
+/// No-op when the frontier ships no `witnesses/targets.json`, preserving prior
+/// behavior. The deposit rides under `deposited_by` (an agent identity for
+/// machine deposits) as an `artifact.asserted` event: it is a *data* deposit of
+/// a machine-checkable witness, not a trust verdict (the verdict is the
+/// signed `verifier.attach`, which the attach loop types by actor).
+///
+/// Returns `(registered, witnesses_without_target)`.
+fn register_canonical_witnesses(
+    frontier: &Path,
+    deposited_by: &str,
+    dry_run: bool,
+) -> (usize, Vec<String>) {
+    use sha2::{Digest, Sha256};
+    use std::collections::{BTreeMap, HashSet};
+
+    let targets_path = frontier.join("witnesses").join("targets.json");
+    let Ok(targets_raw) = std::fs::read_to_string(&targets_path) else {
+        return (0, Vec::new());
+    };
+    let targets: BTreeMap<String, String> = serde_json::from_str(&targets_raw)
+        .unwrap_or_else(|e| fail_return(&format!("parse {}: {e}", targets_path.display())));
+
+    let source = repo::detect(frontier).unwrap_or_else(|e| fail_return(&e));
+    let proj = repo::load(&source).unwrap_or_else(|e| fail_return(&e));
+    let existing_hashes: HashSet<String> =
+        proj.artifacts.iter().map(|a| a.content_hash.clone()).collect();
+
+    let mut registered = 0usize;
+    let mut no_target: Vec<String> = Vec::new();
+
+    for wf in collect_witness_files(frontier) {
+        let fname = wf
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default()
+            .to_string();
+        let Ok(bytes) = std::fs::read(&wf) else {
+            continue;
+        };
+        let raw = String::from_utf8_lossy(&bytes).to_string();
+        // Only register a file the frozen verifier can actually parse as a witness.
+        let Ok(witness) = parse_witness(&raw) else {
+            continue;
+        };
+        let kind = witness.kind().to_string();
+
+        let hash_hex = hex::encode(Sha256::digest(&bytes));
+        let content_hash = format!("sha256:{hash_hex}");
+        if existing_hashes.contains(&content_hash) {
+            continue; // already registered (idempotent on content hash)
+        }
+        let Some(target) = targets.get(&fname) else {
+            no_target.push(fname);
+            continue;
+        };
+
+        if dry_run {
+            registered += 1;
+            continue;
+        }
+
+        // Deposit the content-addressed blob if absent.
+        let blob_rel = format!(".vela/artifact-blobs/sha256/{hash_hex}");
+        let blob_abs = frontier.join(&blob_rel);
+        if !blob_abs.exists() {
+            if let Some(parent) = blob_abs.parent() {
+                std::fs::create_dir_all(parent)
+                    .unwrap_or_else(|e| fail_return(&format!("create blob dir: {e}")));
+            }
+            std::fs::write(&blob_abs, &bytes)
+                .unwrap_or_else(|e| fail_return(&format!("write blob {blob_rel}: {e}")));
+        }
+
+        let stem = fname.trim_end_matches(".witness.json");
+        let name = format!("Frozen-verifier witness: {stem} ({kind})");
+        let mut metadata: BTreeMap<String, Value> = BTreeMap::new();
+        metadata.insert(
+            "verifier".to_string(),
+            Value::String(format!("vela-verify::{kind}")),
+        );
+        metadata.insert("witness_kind".to_string(), Value::String(kind.clone()));
+        metadata.insert("witness_file".to_string(), Value::String(fname.clone()));
+
+        let provenance = bundle::Provenance {
+            source_type: "data_release".to_string(),
+            doi: None,
+            pmid: None,
+            pmc: None,
+            openalex_id: None,
+            url: None,
+            title: name.clone(),
+            authors: Vec::new(),
+            year: None,
+            journal: None,
+            license: Some("CC-BY-4.0".to_string()),
+            publisher: None,
+            funders: Vec::new(),
+            extraction: bundle::Extraction::default(),
+            review: None,
+            citation_count: None,
+        };
+
+        let id =
+            bundle::Artifact::content_address("dataset", &name, &content_hash, None, Some(&blob_rel));
+        let artifact = bundle::Artifact {
+            id,
+            kind: "dataset".to_string(),
+            name,
+            content_hash,
+            size_bytes: Some(bytes.len() as u64),
+            media_type: Some("application/json".to_string()),
+            storage_mode: "local_blob".to_string(),
+            locator: Some(blob_rel),
+            source_url: None,
+            license: Some("CC-BY-4.0".to_string()),
+            target_findings: vec![target.clone()],
+            source_id: None,
+            provenance,
+            metadata,
+            review_state: None,
+            retracted: false,
+            access_tier: vela_protocol::access_tier::AccessTier::default(),
+            created: chrono::Utc::now().to_rfc3339(),
+        };
+        match vela_protocol::state::add_artifact(
+            frontier,
+            artifact,
+            deposited_by,
+            "register canonical frozen-verifier witness for gate backfill",
+        ) {
+            Ok(_) => registered += 1,
+            Err(e) if e.contains("duplicate") => {}
+            Err(e) => fail_return(&format!("register witness {fname}: {e}")),
+        }
+    }
+    (registered, no_target)
 }
 
 pub(crate) fn cmd_reproduce(path: &Path, json_output: bool) {
