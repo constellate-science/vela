@@ -110,7 +110,9 @@ fn run_domains(args: &[String]) {
         serde_json::from_str(&raw).unwrap_or_else(|e| fail(&format!("parse {domains_of}: {e}")));
     let projects: Vec<_> = frontiers
         .iter()
-        .map(|f| repo::load_from_path(Path::new(f)).unwrap_or_else(|e| fail(&format!("load {f}: {e}"))))
+        .map(|f| {
+            repo::load_from_path(Path::new(f)).unwrap_or_else(|e| fail(&format!("load {f}: {e}")))
+        })
         .collect();
     let refs: Vec<&_> = projects.iter().collect();
     let atlas = atlas::project(&refs);
@@ -281,8 +283,7 @@ fn run_blast_radius(args: &[String]) {
             }
         }
     }
-    let usage =
-        "usage: vela atlas blast-radius <frontier> <finding> [--impact up|down|both] [--kinds <csv>]";
+    let usage = "usage: vela atlas blast-radius <frontier> <finding> [--impact up|down|both] [--kinds <csv>]";
     let frontier = frontier.unwrap_or_else(|| fail(usage));
     let finding = finding.unwrap_or_else(|| fail(usage));
     let project = repo::load_from_path(Path::new(frontier))
@@ -291,7 +292,11 @@ fn run_blast_radius(args: &[String]) {
     let center = graph
         .find_node(finding)
         .unwrap_or_else(|| fail(&format!("no finding matching '{finding}' in {frontier}")));
-    print_json(&graph.blast_radius_graded(&project, &center, &kinds, direction).to_json());
+    print_json(
+        &graph
+            .blast_radius_graded(&project, &center, &kinds, direction)
+            .to_json(),
+    );
 }
 
 /// Extract a problem/sequence number from a finding's assertion text. Handles
@@ -474,11 +479,10 @@ fn run_ingest_source(args: &[String]) {
             .and_then(|i| args.get(i + 1))
             .map(|s| s.to_string())
     };
-    let adapter = flag("--adapter")
-        .unwrap_or_else(|| fail("--adapter is required (formal|alphaproof)"));
+    let adapter =
+        flag("--adapter").unwrap_or_else(|| fail("--adapter is required (formal|alphaproof)"));
     let input = flag("--input").unwrap_or_else(|| fail("--input <dir> is required"));
-    let out = flag("--out")
-        .unwrap_or_else(|| fail("--out <frontier.json|repo-dir> is required"));
+    let out = flag("--out").unwrap_or_else(|| fail("--out <frontier.json|repo-dir> is required"));
     let ns = flag("--namespace").unwrap_or_else(|| "erdos".to_string());
     let rev = flag("--rev").unwrap_or_else(|| "unknown".to_string());
     let actor = flag("--actor").unwrap_or_else(|| "agent:atlas-ingest".to_string());
@@ -492,7 +496,9 @@ fn run_ingest_source(args: &[String]) {
     let records = crate::atlas_adapters::read_adapter(&adapter, Path::new(&input), &rev)
         .unwrap_or_else(|e| fail(&e));
     if records.is_empty() {
-        fail(&format!("adapter '{adapter}' yielded no records from {input}"));
+        fail(&format!(
+            "adapter '{adapter}' yielded no records from {input}"
+        ));
     }
 
     // Build content-addressed findings (deduped by id) + an anchor plan entry
@@ -508,7 +514,9 @@ fn run_ingest_source(args: &[String]) {
         if !seen.insert(fid.clone()) {
             continue; // duplicate content-address (same text+type+id)
         }
-        id_by_extid.entry(rec.external_id.clone()).or_insert(fid.clone());
+        id_by_extid
+            .entry(rec.external_id.clone())
+            .or_insert(fid.clone());
         findings.push(finding);
         plan.push((
             fid,

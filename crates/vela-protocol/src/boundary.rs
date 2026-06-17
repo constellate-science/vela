@@ -125,10 +125,7 @@ impl Boundary {
                         boundary.one_premise_away.push(BoundaryItem {
                             finding: node.id.clone(),
                             label: node.label.clone(),
-                            reason: format!(
-                                "open; all {} premise(s) established",
-                                premises.len()
-                            ),
+                            reason: format!("open; all {} premise(s) established", premises.len()),
                             related: premises.iter().map(|s| (*s).to_string()).collect(),
                         });
                     }
@@ -191,8 +188,11 @@ impl Boundary {
 
         // Contradiction pairs add any node not already flagged contested, with
         // its partner as the related finding. Each endpoint is listed once.
-        let already: BTreeSet<String> =
-            boundary.contested.iter().map(|i| i.finding.clone()).collect();
+        let already: BTreeSet<String> = boundary
+            .contested
+            .iter()
+            .map(|i| i.finding.clone())
+            .collect();
         let mut added: BTreeSet<String> = already.clone();
         for (a, b) in graph.contradiction_pairs() {
             for (node_id, partner) in [(&a, &b), (&b, &a)] {

@@ -342,7 +342,11 @@ fn cmd_gate_backfill(frontier: &Path, reviewer: &str, dry_run: bool, json_output
     } else {
         let verb = if dry_run { "would attach" } else { "attached" };
         if registered > 0 {
-            let rverb = if dry_run { "would register" } else { "registered" };
+            let rverb = if dry_run {
+                "would register"
+            } else {
+                "registered"
+            };
             println!(
                 "· gate backfill: {rverb} {registered} canonical witness artifact{}",
                 if registered == 1 { "" } else { "s" },
@@ -412,8 +416,11 @@ fn register_canonical_witnesses(
 
     let source = repo::detect(frontier).unwrap_or_else(|e| fail_return(&e));
     let proj = repo::load(&source).unwrap_or_else(|e| fail_return(&e));
-    let existing_hashes: HashSet<String> =
-        proj.artifacts.iter().map(|a| a.content_hash.clone()).collect();
+    let existing_hashes: HashSet<String> = proj
+        .artifacts
+        .iter()
+        .map(|a| a.content_hash.clone())
+        .collect();
 
     let mut registered = 0usize;
     let mut no_target: Vec<String> = Vec::new();
@@ -490,8 +497,13 @@ fn register_canonical_witnesses(
             citation_count: None,
         };
 
-        let id =
-            bundle::Artifact::content_address("dataset", &name, &content_hash, None, Some(&blob_rel));
+        let id = bundle::Artifact::content_address(
+            "dataset",
+            &name,
+            &content_hash,
+            None,
+            Some(&blob_rel),
+        );
         let artifact = bundle::Artifact {
             id,
             kind: "dataset".to_string(),

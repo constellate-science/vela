@@ -1216,7 +1216,11 @@ pub fn add_artifact(
             // Honest actor typing: an `agent:` depositor is an agent, not a
             // human. Artifact deposit is provenance (not a truth verdict), so
             // an agent may do it — but the event must not mislabel who did.
-            r#type: if deposited_by.trim().to_ascii_lowercase().starts_with("agent:") {
+            r#type: if deposited_by
+                .trim()
+                .to_ascii_lowercase()
+                .starts_with("agent:")
+            {
                 "agent".to_string()
             } else {
                 "human".to_string()

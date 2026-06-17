@@ -645,7 +645,11 @@ pub fn tool_caveats(name: &str) -> Vec<String> {
 /// (coarser) `permission_level`. Keep in sync with the substrate accept gate:
 /// these are the truth-bearing finalize actions an agent must never reach
 /// through a draft session.
-const FINALIZING_TOOLS: &[&str] = &["accept_proposal", "reject_proposal", "propose_and_apply_note"];
+const FINALIZING_TOOLS: &[&str] = &[
+    "accept_proposal",
+    "reject_proposal",
+    "propose_and_apply_note",
+];
 
 /// MCP exposure profile (memo §9.1). A served frontier scopes which tools an
 /// agent can see and call. `MCP exposes tools; Vela governs state` — even the
@@ -766,16 +770,35 @@ mod profile_tests {
         let draft = tools_for_profile(McpProfile::Draft);
         let maint = tools_for_profile(McpProfile::Maintainer);
         // read-only ⊆ draft ⊆ maintainer
-        assert!(ro.len() < draft.len(), "read-only must be a strict subset of draft");
-        assert!(draft.len() < maint.len(), "draft must be a strict subset of maintainer");
-        assert_eq!(maint.len(), all_tools().len(), "maintainer exposes every tool");
+        assert!(
+            ro.len() < draft.len(),
+            "read-only must be a strict subset of draft"
+        );
+        assert!(
+            draft.len() < maint.len(),
+            "draft must be a strict subset of maintainer"
+        );
+        assert_eq!(
+            maint.len(),
+            all_tools().len(),
+            "maintainer exposes every tool"
+        );
         // read-only admits no mutating tool
-        assert!(ro.iter().all(|t| !t.mutating), "read-only must expose no mutating tool");
+        assert!(
+            ro.iter().all(|t| !t.mutating),
+            "read-only must expose no mutating tool"
+        );
         // the finalizing (Dangerous) tier is maintainer-only
-        let dangerous_in_draft = draft
-            .iter()
-            .any(|t| matches!(t.permission_level, crate::permission::PermissionLevel::Dangerous));
-        assert!(!dangerous_in_draft, "draft must not expose the finalizing tier");
+        let dangerous_in_draft = draft.iter().any(|t| {
+            matches!(
+                t.permission_level,
+                crate::permission::PermissionLevel::Dangerous
+            )
+        });
+        assert!(
+            !dangerous_in_draft,
+            "draft must not expose the finalizing tier"
+        );
         // accept/reject commit accepted state — maintainer-only, never draft,
         // even though they are plain `Write`.
         for finalize in FINALIZING_TOOLS {
@@ -792,10 +815,19 @@ mod profile_tests {
 
     #[test]
     fn profile_parse_roundtrips() {
-        assert_eq!(McpProfile::parse("read-only").unwrap(), McpProfile::ReadOnly);
-        assert_eq!(McpProfile::parse("read_only").unwrap(), McpProfile::ReadOnly);
+        assert_eq!(
+            McpProfile::parse("read-only").unwrap(),
+            McpProfile::ReadOnly
+        );
+        assert_eq!(
+            McpProfile::parse("read_only").unwrap(),
+            McpProfile::ReadOnly
+        );
         assert_eq!(McpProfile::parse("draft").unwrap(), McpProfile::Draft);
-        assert_eq!(McpProfile::parse("maintainer").unwrap(), McpProfile::Maintainer);
+        assert_eq!(
+            McpProfile::parse("maintainer").unwrap(),
+            McpProfile::Maintainer
+        );
         assert!(McpProfile::parse("god-mode").is_err());
     }
 }

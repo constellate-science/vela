@@ -475,10 +475,7 @@ fn search_constant_weight(
         rng.shuffle(&mut order);
         let mut code: Vec<u64> = Vec::new();
         for &x in &order {
-            if code
-                .iter()
-                .all(|&c| (x ^ c).count_ones() as usize >= d)
-            {
+            if code.iter().all(|&c| (x ^ c).count_ones() as usize >= d) {
                 code.push(x);
             }
         }
@@ -562,7 +559,12 @@ fn search_covering(v: usize, k: usize, t: usize, restarts: u64, rng: &mut Rng) -
             }
             chosen.push(best_block);
         }
-        if uncovered == 0 && best.as_ref().map(|b| chosen.len() < b.len()).unwrap_or(true) {
+        if uncovered == 0
+            && best
+                .as_ref()
+                .map(|b| chosen.len() < b.len())
+                .unwrap_or(true)
+        {
             best = Some(chosen);
         }
     }
@@ -738,7 +740,11 @@ fn search_golomb(order: usize, restarts: u64, rng: &mut Rng) -> Option<Found> {
         }
         if marks.len() == order {
             let len = *marks.last().unwrap();
-            if best.as_ref().map(|b| len < *b.last().unwrap()).unwrap_or(true) {
+            if best
+                .as_ref()
+                .map(|b| len < *b.last().unwrap())
+                .unwrap_or(true)
+            {
                 best = Some(marks);
             }
         }

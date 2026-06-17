@@ -133,9 +133,7 @@ fn cmd_run(
     let out_path = out.unwrap_or_else(|| {
         let dir = frontier
             .as_ref()
-            .unwrap_or_else(|| {
-                fail_return("campaign run needs --out <file> or --frontier <dir>")
-            })
+            .unwrap_or_else(|| fail_return("campaign run needs --out <file> or --frontier <dir>"))
             .join("witnesses");
         let name = if kind == "bh" {
             format!("{kind}-n{n}-h{h}.witness.json")
@@ -158,9 +156,9 @@ fn cmd_run(
     // tool uses, so the proposal is byte-identical to a hand-made one.
     let mut proposal_note = None;
     if propose {
-        let fr = frontier.as_ref().unwrap_or_else(|| {
-            fail_return("campaign run --propose needs --frontier <dir>")
-        });
+        let fr = frontier
+            .as_ref()
+            .unwrap_or_else(|| fail_return("campaign run --propose needs --frontier <dir>"));
         let assertion = assertion_for(kind, n, h, f.score);
         propose_pending(fr, &assertion, reviewer);
         proposal_note = Some(assertion);
@@ -186,7 +184,9 @@ fn cmd_run(
         );
         if let Some(a) = proposal_note {
             println!("  proposed (pending review): {a}");
-            println!("  accept with your key: vela accept <frontier> <proposal-id> --reviewer {reviewer} --key <key>");
+            println!(
+                "  accept with your key: vela accept <frontier> <proposal-id> --reviewer {reviewer} --key <key>"
+            );
         } else {
             println!("  re-verify: vela reproduce {}", out_path.display());
         }
@@ -214,9 +214,9 @@ fn assertion_for(kind: &str, n: usize, h: usize, score: usize) -> String {
         "golomb" => format!(
             "a Golomb ruler of order {n} (length {score}). Frozen-verified by vela-verify (golomb kind)."
         ),
-        "costas" => format!(
-            "a Costas array of order {n}. Frozen-verified by vela-verify (costas kind)."
-        ),
+        "costas" => {
+            format!("a Costas array of order {n}. Frozen-verified by vela-verify (costas kind).")
+        }
         _ => format!("{kind} witness, score {score}. Frozen-verified by vela-verify."),
     }
 }

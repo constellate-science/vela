@@ -10,9 +10,9 @@ use colored::Colorize;
 // library. These were `vela_protocol::{cli, serve, workbench, cli_*}`
 // before; they now live here and reach into the substrate via
 // `vela_protocol::*`.
-pub mod cli;
 mod atlas_adapters;
 mod campaign;
+pub mod cli;
 mod cli_admin;
 mod cli_agents;
 mod cli_atlas;

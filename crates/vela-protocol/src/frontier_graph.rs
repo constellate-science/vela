@@ -387,7 +387,10 @@ impl GradedBlast {
     pub fn to_json(&self) -> serde_json::Value {
         let mut v = self.structural.to_json();
         if let serde_json::Value::Object(ref mut m) = v {
-            m.insert("schema".into(), serde_json::json!("vela.blast_radius.graded.v0.1"));
+            m.insert(
+                "schema".into(),
+                serde_json::json!("vela.blast_radius.graded.v0.1"),
+            );
             m.insert(
                 "center_status".into(),
                 serde_json::to_value(&self.center_status).unwrap_or_default(),
@@ -506,8 +509,10 @@ impl FrontierGraph {
         // fold in its derived gate status — the establishment signal on a
         // verifier-gated frontier. The gate is recomputed (never a stored
         // flag), so the graph never trusts a persisted "verified" bit.
-        let mut attachments_by_target: HashMap<&str, Vec<crate::verifier_attachment::VerifierAttachment>> =
-            HashMap::new();
+        let mut attachments_by_target: HashMap<
+            &str,
+            Vec<crate::verifier_attachment::VerifierAttachment>,
+        > = HashMap::new();
         for a in &project.verifier_attachments {
             attachments_by_target
                 .entry(a.target.as_str())
@@ -1209,7 +1214,10 @@ mod tests {
         let mut project = assemble("dom2", vec![], 0, 0, "test");
         project.findings = vec![z];
         let g = FrontierGraph::from_project(&project);
-        assert!(g.support_dominators(&z_id, &[EdgeKind::DependsOn]).is_empty());
+        assert!(
+            g.support_dominators(&z_id, &[EdgeKind::DependsOn])
+                .is_empty()
+        );
     }
 
     #[test]
@@ -1251,7 +1259,7 @@ mod tests {
 
     #[test]
     fn blast_radius_graded_prunes_unweakened_dependents() {
-        use crate::events::{StateActor, StateEvent, StateTarget, EVENT_SCHEMA, NULL_HASH};
+        use crate::events::{EVENT_SCHEMA, NULL_HASH, StateActor, StateEvent, StateTarget};
         let asserted = |idx: usize, target: &str| StateEvent {
             schema: EVENT_SCHEMA.to_string(),
             id: format!("vev_g_{idx:04}"),

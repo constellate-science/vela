@@ -423,8 +423,14 @@ pub struct DomainAtlas {
 /// Parse a `rat_str` ("num/den") back into a `Rational`.
 fn parse_rat(s: &str) -> Rational {
     let mut it = s.split('/');
-    let n = it.next().and_then(|x| x.trim().parse::<i128>().ok()).unwrap_or(0);
-    let d = it.next().and_then(|x| x.trim().parse::<i128>().ok()).unwrap_or(1);
+    let n = it
+        .next()
+        .and_then(|x| x.trim().parse::<i128>().ok())
+        .unwrap_or(0);
+    let d = it
+        .next()
+        .and_then(|x| x.trim().parse::<i128>().ok())
+        .unwrap_or(1);
     Rational::new(n, if d == 0 { 1 } else { d })
 }
 
@@ -664,7 +670,11 @@ mod tests {
         let da = project_domains(&atlas, &map);
         // domains sorted by claim count: number theory (2) first.
         assert_eq!(da.domains[0].name, "number theory");
-        let nt = da.domains.iter().find(|d| d.name == "number theory").unwrap();
+        let nt = da
+            .domains
+            .iter()
+            .find(|d| d.name == "number theory")
+            .unwrap();
         assert_eq!(nt.claim_count, 2);
         // both claims supported → the field's join_k corner is T.
         assert_eq!(nt.belnap, "T");

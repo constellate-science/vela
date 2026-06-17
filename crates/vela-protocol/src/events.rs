@@ -1400,7 +1400,9 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
             if let Some(a) = object.get("triggering_ancestors")
                 && !a.is_array()
             {
-                return Err("payload.triggering_ancestors must be an array when present".to_string());
+                return Err(
+                    "payload.triggering_ancestors must be an array when present".to_string()
+                );
             }
         }
         "frontier.conflict_detected" => {

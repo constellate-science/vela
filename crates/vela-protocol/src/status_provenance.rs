@@ -493,7 +493,10 @@ mod tests {
     #[test]
     fn variable_tag_round_trips() {
         assert_eq!(tag_visibility("vev_x", AccessTier::Public), "vev_x");
-        assert_eq!(tag_visibility("vev_x", AccessTier::Restricted), "vev_x#restricted");
+        assert_eq!(
+            tag_visibility("vev_x", AccessTier::Restricted),
+            "vev_x#restricted"
+        );
         assert_eq!(variable_tier("vev_x"), AccessTier::Public);
         assert_eq!(variable_tier("vev_x#restricted"), AccessTier::Restricted);
         assert_eq!(variable_tier("vev_x#classified"), AccessTier::Classified);
@@ -504,7 +507,10 @@ mod tests {
     #[test]
     fn public_projection_drops_restricted_support_keeps_public() {
         let mut sp = StatusProvenance::empty();
-        sp.add_support(&ProvenancePoly::singleton(tag_visibility("vev_pub", AccessTier::Public)));
+        sp.add_support(&ProvenancePoly::singleton(tag_visibility(
+            "vev_pub",
+            AccessTier::Public,
+        )));
         sp.add_support(&ProvenancePoly::singleton(tag_visibility(
             "vev_priv",
             AccessTier::Restricted,
@@ -537,7 +543,8 @@ mod tests {
             BelnapStatus::None
         );
         assert_eq!(
-            sp.project_to_clearance(AccessTier::Classified).derive_status(),
+            sp.project_to_clearance(AccessTier::Classified)
+                .derive_status(),
             BelnapStatus::True
         );
     }
