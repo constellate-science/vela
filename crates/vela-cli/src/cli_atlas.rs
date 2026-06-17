@@ -43,6 +43,10 @@ pub(crate) fn run(args: &[String]) {
         run_pathfind(args);
         return;
     }
+    if args.get(2).map(String::as_str) == Some("domains") {
+        run_domains(args);
+        return;
+    }
     let frontiers: Vec<&str> = args
         .iter()
         .skip(2)
@@ -62,6 +66,47 @@ pub(crate) fn run(args: &[String]) {
         .collect();
     let refs: Vec<&_> = projects.iter().collect();
     let out = atlas::project(&refs);
+    print_json(&serde_json::to_value(&out).unwrap_or_else(|e| fail(&format!("serialize: {e}"))));
+}
+
+/// `vela atlas domains <frontier>... --domains-of <map.json>` — project the
+/// per-domain frontier state (frontier calculus lifted from a single claim to a
+/// whole field). `--domains-of` is a JSON object mapping an Erdős problem id to
+/// its domains (`{"102": ["additive combinatorics", "sidon sets"], ...}`); each
+/// atlas cell is attributed to its problem's domains and the cells' bilattice
+/// points are folded by `join_k`. Emits the `DomainAtlas`.
+fn run_domains(args: &[String]) {
+    let mut frontiers: Vec<&str> = Vec::new();
+    let mut domains_of: Option<&str> = None;
+    let mut i = 3; // after "atlas domains"
+    while i < args.len() {
+        if args[i] == "--domains-of" {
+            domains_of = args.get(i + 1).map(String::as_str);
+            i += 2;
+            continue;
+        }
+        if !args[i].starts_with('-') {
+            frontiers.push(&args[i]);
+        }
+        i += 1;
+    }
+    let usage =
+        "usage: vela atlas domains <frontier> [<frontier> ...] --domains-of <problem-domains.json>";
+    let domains_of = domains_of.unwrap_or_else(|| fail(usage));
+    if frontiers.is_empty() {
+        fail(usage);
+    }
+    let raw = std::fs::read_to_string(domains_of)
+        .unwrap_or_else(|e| fail(&format!("read {domains_of}: {e}")));
+    let map: std::collections::BTreeMap<String, Vec<String>> =
+        serde_json::from_str(&raw).unwrap_or_else(|e| fail(&format!("parse {domains_of}: {e}")));
+    let projects: Vec<_> = frontiers
+        .iter()
+        .map(|f| repo::load_from_path(Path::new(f)).unwrap_or_else(|e| fail(&format!("load {f}: {e}"))))
+        .collect();
+    let refs: Vec<&_> = projects.iter().collect();
+    let atlas = atlas::project(&refs);
+    let out = atlas::project_domains(&atlas, &map);
     print_json(&serde_json::to_value(&out).unwrap_or_else(|e| fail(&format!("serialize: {e}"))));
 }
 

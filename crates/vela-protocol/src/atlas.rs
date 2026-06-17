@@ -388,6 +388,125 @@ pub fn project(projects: &[&Project]) -> Atlas {
     }
 }
 
+/// One math domain's aggregate frontier state. `belnap` is the knowledge-order
+/// join (`join_k`) of the domain's claims — a field reads `B` (contested) iff
+/// some claim in it is contested, `T` iff something is supported and nothing
+/// refuted, etc. The distributions give the field's *shape* (how many open vs
+/// resolved, how many T/F/B/N). This is frontier calculus lifted from a single
+/// claim to a whole field.
+#[derive(Debug, Clone, Serialize)]
+pub struct DomainState {
+    pub name: String,
+    /// Atlas cells (problems) attributed to this domain.
+    pub claim_count: usize,
+    /// Aggregate Belnap from `join_k` over the cells' bilattice points.
+    pub belnap: &'static str,
+    /// Joined support / refutation coordinates (knowledge-order max), exact "num/den".
+    pub support_kappa: String,
+    pub refutation_kappa: String,
+    /// Per-claim Belnap distribution (the trust shape): keys "T"|"F"|"B"|"N".
+    pub belnap_counts: BTreeMap<String, usize>,
+    /// Self-declared status distribution (the resolution shape).
+    pub status_counts: BTreeMap<String, usize>,
+    /// Claims individually contested (Belnap "B").
+    pub contested: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct DomainAtlas {
+    pub schema: String,
+    pub projection_version: String,
+    /// Domains, sorted by claim count descending.
+    pub domains: Vec<DomainState>,
+}
+
+/// Parse a `rat_str` ("num/den") back into a `Rational`.
+fn parse_rat(s: &str) -> Rational {
+    let mut it = s.split('/');
+    let n = it.next().and_then(|x| x.trim().parse::<i128>().ok()).unwrap_or(0);
+    let d = it.next().and_then(|x| x.trim().parse::<i128>().ok()).unwrap_or(1);
+    Rational::new(n, if d == 0 { 1 } else { d })
+}
+
+/// Project a per-domain frontier state from an atlas. `problem_domains` maps an
+/// Erdős problem id (the `erdos` anchor id, e.g. "102") to the domains it lives
+/// in; each cell is attributed to every domain of its `erdos` anchor. The state
+/// folds the cells' bilattice points by `join_k` (the knowledge-order join) and
+/// tallies the Belnap + status distributions. The calculus that gives one claim
+/// a trust state now gives a whole field one — the load-bearing step toward the
+/// math atlas as the trusted *state* of a domain, not a list of problems.
+pub fn project_domains(
+    atlas: &Atlas,
+    problem_domains: &BTreeMap<String, Vec<String>>,
+) -> DomainAtlas {
+    use crate::frontier_calculus::BilatticePoint;
+    struct Acc {
+        point: BilatticePoint,
+        seen: bool,
+        belnap: BTreeMap<String, usize>,
+        status: BTreeMap<String, usize>,
+        contested: usize,
+        count: usize,
+    }
+    let mut acc: BTreeMap<String, Acc> = BTreeMap::new();
+    for cell in &atlas.cells {
+        let Some(pid) = cell
+            .anchors
+            .iter()
+            .find(|a| a.namespace == "erdos")
+            .map(|a| a.id.clone())
+        else {
+            continue;
+        };
+        let Some(domains) = problem_domains.get(&pid) else {
+            continue;
+        };
+        let pt = BilatticePoint::new(
+            parse_rat(&cell.support_kappa),
+            parse_rat(&cell.refutation_kappa),
+        );
+        for dom in domains {
+            let e = acc.entry(dom.clone()).or_insert_with(|| Acc {
+                point: BilatticePoint::new(Rational::zero(), Rational::zero()),
+                seen: false,
+                belnap: BTreeMap::new(),
+                status: BTreeMap::new(),
+                contested: 0,
+                count: 0,
+            });
+            e.point = if e.seen { e.point.join_k(&pt) } else { pt };
+            e.seen = true;
+            *e.belnap.entry(cell.belnap.to_string()).or_insert(0) += 1;
+            if cell.belnap == "B" {
+                e.contested += 1;
+            }
+            if let Some(s) = &cell.status {
+                *e.status.entry(s.clone()).or_insert(0) += 1;
+            }
+            e.count += 1;
+        }
+    }
+    let mut domains: Vec<DomainState> = acc
+        .into_iter()
+        .map(|(name, a)| DomainState {
+            name,
+            claim_count: a.count,
+            belnap: belnap_str(a.point.corner()),
+            support_kappa: rat_str(&a.point.x),
+            refutation_kappa: rat_str(&a.point.y),
+            belnap_counts: a.belnap,
+            status_counts: a.status,
+            contested: a.contested,
+        })
+        .collect();
+    domains.sort_by(|a, b| b.claim_count.cmp(&a.claim_count).then(a.name.cmp(&b.name)));
+    DomainAtlas {
+        schema: "vela.atlas.domains.v0.1".to_string(),
+        projection_version: ATLAS_PROJECTION_VERSION.to_string(),
+        domains,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -518,5 +637,43 @@ mod tests {
             2,
             "SearchOnly anchors never induce identity"
         );
+    }
+
+    #[test]
+    fn project_domains_lifts_state_to_a_field() {
+        // Two Erdős problems, both anchored + supported (Belnap T).
+        let p1 = proj_with(
+            "vfr_a",
+            "vf_1",
+            "Erdős #1",
+            anchor("erdos", "1", "problem", JoinPolicy::HardIdentity),
+        );
+        let p2 = proj_with(
+            "vfr_b",
+            "vf_2",
+            "Erdős #2",
+            anchor("erdos", "2", "problem", JoinPolicy::HardIdentity),
+        );
+        let atlas = project(&[&p1, &p2]);
+        let mut map: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        map.insert("1".into(), vec!["number theory".into()]);
+        map.insert(
+            "2".into(),
+            vec!["number theory".into(), "additive combinatorics".into()],
+        );
+        let da = project_domains(&atlas, &map);
+        // domains sorted by claim count: number theory (2) first.
+        assert_eq!(da.domains[0].name, "number theory");
+        let nt = da.domains.iter().find(|d| d.name == "number theory").unwrap();
+        assert_eq!(nt.claim_count, 2);
+        // both claims supported → the field's join_k corner is T.
+        assert_eq!(nt.belnap, "T");
+        assert_eq!(nt.contested, 0);
+        let ac = da
+            .domains
+            .iter()
+            .find(|d| d.name == "additive combinatorics")
+            .unwrap();
+        assert_eq!(ac.claim_count, 1); // only #2 is in additive combinatorics
     }
 }
