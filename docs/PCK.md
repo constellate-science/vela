@@ -1,6 +1,13 @@
 
 # Proof-Carrying Knowledge (PCK): the Bitcoin-scale candidate for Vela
 
+> **Implementation note.** The Python crypto/protocol prototypes cited below (`scripts/pck_*.py`,
+> `scripts/povd_node.py`) lived in the consuming workspace and were retired in the verifier
+> cut-over; they are not part of this substrate. The proven core is canonical and lives here in
+> `lean/Vela/` (`ProtocolKeystone`, `HeteroAccumulation`, `Accumulation`, `FoldingSoundness`,
+> `SumcheckSoundness`, `PoVD`); build it with `lake build`. The `scripts/*.py` references below are
+> historical.
+
 This document names the one mechanism that could be to *cumulative knowledge* what Bitcoin was to
 *money* — same shape, different substrate — and is blunt about which parts are proven, which are
 buildable, and which cannot be willed. It is a research direction with a proven first stone, not a
