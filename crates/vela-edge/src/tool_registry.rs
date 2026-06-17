@@ -231,6 +231,23 @@ pub fn all_tools() -> Vec<ToolDefinition> {
             false,
             vec!["Multi-hop relations are declared links, not adjudicated truth."],
         ),
+        // Dependency-impact: the directional blast radius + the single
+        // points of failure on a finding's support (the minimal cut).
+        tool(
+            "blast_radius",
+            "The dependency-impact neighborhood of a finding (its \"blast radius\"): what it RESTS ON (upstream support), what RESTS ON IT (downstream — what would weaken if it moved), and the SINGLE POINTS OF FAILURE on its support (the minimal set whose removal collapses it). Resolve by finding id, problem number, or an assertion substring. `impact` selects up|down|both (default both); `kinds` is a comma-separated edge-kind filter (default the dependency kinds: supports, depends_on, derived_from, discharges). Read-only.",
+            json!({"type": "object", "properties": {
+                "finding": {"type": "string", "description": "Finding id, problem number, or an assertion substring"},
+                "impact": {"type": "string", "description": "up | down | both (default both)"},
+                "kinds": {"type": "string", "description": "comma-separated edge kinds; default the dependency kinds"}
+            }, "required": ["finding"]}),
+            PermissionLevel::ReadOnly,
+            false,
+            vec![
+                "Impact is STRUCTURAL over declared links: that a result is in the blast radius is not a claim it is wrong.",
+                "Edges are candidate relations, not adjudicated truth.",
+            ],
+        ),
         // ORKG-style comparison: findings on a scoped problem lined up
         // against generic comparison properties as a table.
         tool(

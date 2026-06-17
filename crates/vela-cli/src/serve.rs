@@ -933,6 +933,13 @@ async fn execute_tool(
                 Some(clone_project(&project)),
             )
         }
+        "blast_radius" => {
+            let project = frontier.lock().await;
+            (
+                tool_blast_radius(args, &project),
+                Some(clone_project(&project)),
+            )
+        }
         "frontier_compare" => {
             let project = frontier.lock().await;
             (
@@ -3296,6 +3303,28 @@ fn tool_deep_trace(args: &Value, frontier: &Project) -> Result<String, String> {
         "caveat": "Multi-hop view over declared links for synthesis; relations are candidates, not adjudicated truth.",
     }))
     .map_err(|e| format!("Serialization error: {e}"))
+}
+
+fn tool_blast_radius(args: &Value, frontier: &Project) -> Result<String, String> {
+    use vela_protocol::frontier_graph::{BlastDirection, EdgeKind, FrontierGraph};
+    let q = args["finding"]
+        .as_str()
+        .ok_or("Missing 'finding' argument")?;
+    let direction = match args["impact"].as_str() {
+        Some("up") | Some("upstream") => BlastDirection::Upstream,
+        Some("down") | Some("downstream") => BlastDirection::Downstream,
+        _ => BlastDirection::Both,
+    };
+    let kinds: Vec<EdgeKind> = args["kinds"]
+        .as_str()
+        .map(|csv| csv.split(',').filter_map(EdgeKind::parse).collect())
+        .unwrap_or_default();
+    let graph = FrontierGraph::from_project(frontier);
+    let center = graph
+        .find_node(q)
+        .ok_or_else(|| format!("Finding '{q}' not found"))?;
+    let br = graph.blast_radius(&center, &kinds, direction);
+    serde_json::to_string_pretty(&br.to_json()).map_err(|e| format!("Serialization error: {e}"))
 }
 
 fn tool_apply_observer(args: &Value, frontier: &Project) -> Result<String, String> {

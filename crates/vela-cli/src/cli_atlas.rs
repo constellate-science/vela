@@ -13,7 +13,11 @@
 use std::path::Path;
 
 use serde_json::json;
-use vela_protocol::{atlas, boundary, frontier_graph::FrontierGraph, pathfind, repo};
+use vela_protocol::{
+    atlas, boundary,
+    frontier_graph::{BlastDirection, EdgeKind, FrontierGraph},
+    pathfind, repo,
+};
 
 use crate::cli::{fail, print_json};
 
@@ -41,6 +45,10 @@ pub(crate) fn run(args: &[String]) {
     }
     if args.get(2).map(String::as_str) == Some("pathfind") {
         run_pathfind(args);
+        return;
+    }
+    if args.get(2).map(String::as_str) == Some("blast-radius") {
+        run_blast_radius(args);
         return;
     }
     if args.get(2).map(String::as_str) == Some("domains") {
@@ -233,6 +241,57 @@ fn run_pathfind(args: &[String]) {
             "note": "no support/reduction path between these findings",
         })),
     }
+}
+
+/// `vela atlas blast-radius <frontier> <finding> [--impact up|down|both]
+/// [--kinds <csv>]` — the dependency-impact neighborhood (memo §7.3): what the
+/// finding rests on (upstream), what rests on it (downstream, the blast radius
+/// if it moved), and the single points of failure on its support (the
+/// minimal-evidence-cut). The finding resolves by id or assertion substring.
+fn run_blast_radius(args: &[String]) {
+    let mut frontier: Option<&str> = None;
+    let mut finding: Option<&str> = None;
+    let mut direction = BlastDirection::Both;
+    let mut kinds: Vec<EdgeKind> = Vec::new();
+    let mut i = 3; // after "atlas blast-radius"
+    while i < args.len() {
+        match args[i].as_str() {
+            "--impact" => {
+                direction = match args.get(i + 1).map(String::as_str) {
+                    Some("up") | Some("upstream") => BlastDirection::Upstream,
+                    Some("down") | Some("downstream") => BlastDirection::Downstream,
+                    _ => BlastDirection::Both,
+                };
+                i += 2;
+            }
+            "--kinds" => {
+                if let Some(csv) = args.get(i + 1) {
+                    kinds = csv.split(',').filter_map(EdgeKind::parse).collect();
+                }
+                i += 2;
+            }
+            a if a.starts_with('-') => i += 1,
+            a => {
+                if frontier.is_none() {
+                    frontier = Some(a);
+                } else if finding.is_none() {
+                    finding = Some(a);
+                }
+                i += 1;
+            }
+        }
+    }
+    let usage =
+        "usage: vela atlas blast-radius <frontier> <finding> [--impact up|down|both] [--kinds <csv>]";
+    let frontier = frontier.unwrap_or_else(|| fail(usage));
+    let finding = finding.unwrap_or_else(|| fail(usage));
+    let project = repo::load_from_path(Path::new(frontier))
+        .unwrap_or_else(|e| fail(&format!("load {frontier}: {e}")));
+    let graph = FrontierGraph::from_project(&project);
+    let center = graph
+        .find_node(finding)
+        .unwrap_or_else(|| fail(&format!("no finding matching '{finding}' in {frontier}")));
+    print_json(&graph.blast_radius(&center, &kinds, direction).to_json());
 }
 
 /// Extract a problem/sequence number from a finding's assertion text. Handles

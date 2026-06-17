@@ -250,6 +250,77 @@ pub struct Dominator {
     pub single_point_of_failure: bool,
 }
 
+/// Direction of a [`FrontierGraph::blast_radius`] query.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlastDirection {
+    /// What the start rests on: its support, forward over `source → target`.
+    Upstream,
+    /// What rests on the start: its dependents, the impact if it moved.
+    Downstream,
+    /// Both sides.
+    Both,
+}
+
+/// One node reached by a blast-radius traversal, with its hop distance.
+#[derive(Debug, Clone, Serialize)]
+pub struct ReachNode {
+    pub id: String,
+    pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub state: Option<FindingState>,
+    pub distance: usize,
+}
+
+/// The dependency-impact neighborhood of a claim (memo §7.3, §18.8 — the
+/// dependency-impact "blast radius"): what it rests on (`upstream`) and what
+/// rests on it (`downstream`, the impact if it moved), plus the load-bearing
+/// single points of failure on its support (the minimal-evidence-cut of §13).
+/// A derived view over declared links: relations are candidates, not
+/// adjudicated truth, and the impact is STRUCTURAL — that a result is in the
+/// blast radius is not a claim that it is wrong.
+#[derive(Debug, Clone, Serialize)]
+pub struct BlastRadius {
+    pub center: String,
+    pub center_label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub center_state: Option<FindingState>,
+    pub kinds: Vec<&'static str>,
+    pub summary: BlastSummary,
+    pub single_points_of_failure: Vec<Dominator>,
+    pub upstream: Vec<ReachNode>,
+    pub downstream: Vec<ReachNode>,
+}
+
+/// Headline counts for a [`BlastRadius`].
+#[derive(Debug, Clone, Serialize)]
+pub struct BlastSummary {
+    pub upstream: usize,
+    pub downstream: usize,
+    pub max_downstream_distance: usize,
+    pub single_points_of_failure: usize,
+}
+
+impl BlastRadius {
+    /// A stable JSON view, marked derived and structural.
+    #[must_use]
+    pub fn to_json(&self) -> serde_json::Value {
+        let mut v = serde_json::to_value(self).unwrap_or(serde_json::Value::Null);
+        if let serde_json::Value::Object(ref mut m) = v {
+            m.insert("schema".into(), serde_json::json!("vela.blast_radius.v0.1"));
+            m.insert(
+                "claim_boundary".into(),
+                serde_json::json!({
+                    "graph_is_derived": true,
+                    "edges_are_declared_links": true,
+                    "relations_are_candidates_not_adjudicated": true,
+                    "impact_is_structural_not_a_truth_claim": true,
+                }),
+            );
+        }
+        v
+    }
+}
+
 /// The typed claim-level graph for one frontier (or one merged
 /// multi-frontier Project).
 #[derive(Debug, Clone, Default)]
@@ -538,6 +609,156 @@ impl FrontierGraph {
         doms
     }
 
+    /// The default dependency edge kinds for a blast-radius query: the relations
+    /// where the source rests on the target, so removing the target weakens the
+    /// source. Lineage kinds (`Improves`/`Generalizes`/…) are excluded — they
+    /// are not load-bearing dependency.
+    pub const DEPENDENCY_KINDS: [EdgeKind; 4] = [
+        EdgeKind::Supports,
+        EdgeKind::DependsOn,
+        EdgeKind::DerivedFrom,
+        EdgeKind::Discharges,
+    ];
+
+    /// True if `id` is a node in this graph.
+    #[must_use]
+    pub fn has_node(&self, id: &str) -> bool {
+        self.nodes.contains_key(id)
+    }
+
+    /// Resolve a query to a node id: an exact id; else an id *prefix* (ids are
+    /// addressed by prefix, like `deep_trace` — a substring match would let a
+    /// bare number like "617" spuriously hit the hex tail of a content-addressed
+    /// id); else the first finding (in id order) whose assertion contains the
+    /// query, case-insensitively, so a problem number or snippet resolves.
+    #[must_use]
+    pub fn find_node(&self, query: &str) -> Option<String> {
+        if self.nodes.contains_key(query) {
+            return Some(query.to_string());
+        }
+        if let Some(n) = self.nodes.values().find(|n| n.id.starts_with(query)) {
+            return Some(n.id.clone());
+        }
+        let q = query.to_lowercase();
+        self.nodes
+            .values()
+            .find(|n| n.label.to_lowercase().contains(&q))
+            .map(|n| n.id.clone())
+    }
+
+    /// Directed reachability from `start` with hop distance, following `kinds`
+    /// either forward (`source → target`, the support `start` rests on) or
+    /// reverse (`target → source`, the dependents that rest on `start`).
+    /// Excludes `start`.
+    fn reach_directed(
+        &self,
+        start: &str,
+        kinds: &[EdgeKind],
+        reverse: bool,
+    ) -> BTreeMap<String, usize> {
+        let mut dist: BTreeMap<String, usize> = BTreeMap::new();
+        dist.insert(start.to_string(), 0);
+        let mut frontier = vec![start.to_string()];
+        let mut hop = 0usize;
+        while !frontier.is_empty() {
+            hop += 1;
+            let mut next = Vec::new();
+            for node in &frontier {
+                for e in &self.edges {
+                    if !kinds.contains(&e.kind) {
+                        continue;
+                    }
+                    let (from, to) = if reverse {
+                        (&e.target, &e.source)
+                    } else {
+                        (&e.source, &e.target)
+                    };
+                    if from != node {
+                        continue;
+                    }
+                    if !dist.contains_key(to) {
+                        dist.insert(to.clone(), hop);
+                        next.push(to.clone());
+                    }
+                }
+            }
+            frontier = next;
+        }
+        dist.remove(start);
+        dist
+    }
+
+    /// Build a sorted [`ReachNode`] list (by distance, then id) from a distance
+    /// map produced by [`Self::reach_directed`].
+    fn reach_nodes(&self, dist: &BTreeMap<String, usize>) -> Vec<ReachNode> {
+        let mut v: Vec<ReachNode> = dist
+            .iter()
+            .map(|(id, &distance)| ReachNode {
+                id: id.clone(),
+                label: self.label_of(id).unwrap_or("").to_string(),
+                state: self.nodes.get(id).map(|n| n.state),
+                distance,
+            })
+            .collect();
+        v.sort_by(|a, b| a.distance.cmp(&b.distance).then(a.id.cmp(&b.id)));
+        v
+    }
+
+    /// The dependency-impact neighborhood of `start` (memo §7.3): `upstream`
+    /// (what it rests on), `downstream` (what rests on it — the blast radius if
+    /// it moved), and the single points of failure on its support. An empty
+    /// `kinds` defaults to [`Self::DEPENDENCY_KINDS`]. Pure; recomputed on read.
+    #[must_use]
+    pub fn blast_radius(
+        &self,
+        start: &str,
+        kinds: &[EdgeKind],
+        direction: BlastDirection,
+    ) -> BlastRadius {
+        let kinds: Vec<EdgeKind> = if kinds.is_empty() {
+            Self::DEPENDENCY_KINDS.to_vec()
+        } else {
+            kinds.to_vec()
+        };
+        let want_up = matches!(direction, BlastDirection::Upstream | BlastDirection::Both);
+        let want_down = matches!(direction, BlastDirection::Downstream | BlastDirection::Both);
+
+        let upstream = if want_up {
+            self.reach_nodes(&self.reach_directed(start, &kinds, false))
+        } else {
+            Vec::new()
+        };
+        let downstream = if want_down {
+            self.reach_nodes(&self.reach_directed(start, &kinds, true))
+        } else {
+            Vec::new()
+        };
+        let single_points_of_failure: Vec<Dominator> = if want_up {
+            self.support_dominators(start, &kinds)
+                .into_iter()
+                .filter(|d| d.single_point_of_failure)
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let max_downstream_distance = downstream.iter().map(|n| n.distance).max().unwrap_or(0);
+        BlastRadius {
+            center: start.to_string(),
+            center_label: self.label_of(start).unwrap_or("").to_string(),
+            center_state: self.nodes.get(start).map(|n| n.state),
+            kinds: kinds.iter().map(|k| k.as_str()).collect(),
+            summary: BlastSummary {
+                upstream: upstream.len(),
+                downstream: downstream.len(),
+                max_downstream_distance,
+                single_points_of_failure: single_points_of_failure.len(),
+            },
+            single_points_of_failure,
+            upstream,
+            downstream,
+        }
+    }
+
     /// Serialize to a stable claim-level JSON view. This is a focused
     /// `vela.frontier_graph.claims.v0.1` artifact — deliberately
     /// distinct from the broad provenance `vela.frontier_graph.v0.1`
@@ -739,6 +960,43 @@ mod tests {
         project.findings = vec![z];
         let g = FrontierGraph::from_project(&project);
         assert!(g.support_dominators(&z_id, &[EdgeKind::DependsOn]).is_empty());
+    }
+
+    #[test]
+    fn blast_radius_splits_upstream_and_downstream() {
+        // z depends_on a depends_on b (the same chain as the dominator test).
+        let b = synth_finding(0, vec![]);
+        let a = synth_finding(1, vec![link_typed(&b.id, "depends")]);
+        let z = synth_finding(2, vec![link_typed(&a.id, "depends")]);
+        let (a_id, b_id, z_id) = (a.id.clone(), b.id.clone(), z.id.clone());
+        let mut project = assemble("blast", vec![], 0, 0, "test");
+        project.findings = vec![b, a, z];
+        let g = FrontierGraph::from_project(&project);
+
+        // z rests on a (hop 1) and b (hop 2); nothing rests on z.
+        let from_z = g.blast_radius(&z_id, &[EdgeKind::DependsOn], BlastDirection::Both);
+        assert_eq!(from_z.summary.upstream, 2);
+        assert_eq!(from_z.summary.downstream, 0);
+        let up_ids: Vec<&str> = from_z.upstream.iter().map(|n| n.id.as_str()).collect();
+        assert_eq!(up_ids, vec![a_id.as_str(), b_id.as_str()]); // sorted by distance
+        assert_eq!(from_z.upstream[0].distance, 1);
+        assert_eq!(from_z.upstream[1].distance, 2);
+        // a is the single point of failure on z's support.
+        assert_eq!(from_z.single_points_of_failure.len(), 1);
+        assert_eq!(from_z.single_points_of_failure[0].node, a_id);
+
+        // b is rested on BY a (hop 1) and z (hop 2); it rests on nothing.
+        let from_b = g.blast_radius(&b_id, &[EdgeKind::DependsOn], BlastDirection::Both);
+        assert_eq!(from_b.summary.upstream, 0);
+        assert_eq!(from_b.summary.downstream, 2);
+        assert_eq!(from_b.summary.max_downstream_distance, 2);
+        let down_ids: Vec<&str> = from_b.downstream.iter().map(|n| n.id.as_str()).collect();
+        assert_eq!(down_ids, vec![a_id.as_str(), z_id.as_str()]);
+
+        // direction filters: downstream-only yields no upstream work.
+        let down_only = g.blast_radius(&b_id, &[EdgeKind::DependsOn], BlastDirection::Downstream);
+        assert!(down_only.upstream.is_empty());
+        assert_eq!(down_only.downstream.len(), 2);
     }
 
     #[test]
