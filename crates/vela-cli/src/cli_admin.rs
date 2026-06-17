@@ -127,6 +127,15 @@ pub(crate) fn cmd_actor(action: ActorAction) {
             clearance,
             json,
         } => {
+            // Default id + pubkey to the configured identity (`vela id`), so
+            // `vela actor add <frontier>` registers you without typing a 64-char
+            // hex key. The pubkey is stored by `vela id` for exactly this.
+            let pubkey = pubkey
+                .or_else(|| crate::cli_identity::load_identity().map(|i| i.pubkey))
+                .unwrap_or_else(|| {
+                    fail("no --pubkey given and no configured identity; run `vela id import` / `vela id create`, or pass --pubkey")
+                });
+            let id = crate::cli_identity::resolve_actor(id.as_deref());
             // Validate the pubkey shape before mutating the frontier.
             let trimmed = pubkey.trim();
             if trimmed.len() != 64 || hex::decode(trimmed).is_err() {

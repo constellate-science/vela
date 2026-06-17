@@ -1044,7 +1044,10 @@ pub(crate) enum Commands {
     /// *aggregate* delta, and saves once. The batch is all-or-nothing at
     /// the Engine gate (use `--force` to override), and `--dry-run`
     /// previews the verdict with zero on-disk effect.
-    #[command(hide = true)]
+    ///
+    /// This is the reviewer's batch path: `vela accept-batch <frontier>
+    /// --all-pending` accepts every pending proposal in one signed pass and
+    /// reconciles derived views, instead of a per-proposal loop.
     AcceptBatch {
         frontier: PathBuf,
         /// Accept every `pending_review` proposal in the frontier.
@@ -1061,8 +1064,10 @@ pub(crate) enum Commands {
         /// Cap the number accepted (0 = no cap). Useful for staged rollout.
         #[arg(long, default_value_t = 0)]
         limit: usize,
+        /// Reviewer actor id. Optional: defaults to your configured identity
+        /// (`vela id create`).
         #[arg(long)]
-        reviewer: String,
+        reviewer: Option<String>,
         #[arg(long)]
         reason: String,
         /// Engine strict mode: also block on new review warnings.
@@ -1075,6 +1080,10 @@ pub(crate) enum Commands {
         /// Preview only: run the gate and report, persist nothing.
         #[arg(long)]
         dry_run: bool,
+        /// Skip the post-accept `frontier materialize` reconcile (derived
+        /// views are left to a later materialize/gate run).
+        #[arg(long)]
+        no_reconcile: bool,
         #[arg(long)]
         json: bool,
     },
@@ -1465,11 +1474,13 @@ pub(crate) enum ActorAction {
     /// Register an Ed25519 public key for a stable actor identity
     Add {
         frontier: PathBuf,
-        /// Stable actor id (e.g. "reviewer:will-blair")
-        id: String,
-        /// Hex-encoded Ed25519 public key (64 hex chars)
+        /// Stable actor id (e.g. "reviewer:will-blair"). Optional: defaults to
+        /// your configured identity (`vela id`).
+        id: Option<String>,
+        /// Hex-encoded Ed25519 public key (64 hex chars). Optional: defaults to
+        /// your configured identity's public key — you should never type it.
         #[arg(long)]
-        pubkey: String,
+        pubkey: Option<String>,
         /// Optional trust tier (Phase α, v0.6). Currently recognized:
         /// "auto-notes" — permits one-call propose_and_apply_note.
         /// Unknown tier strings load fine but never grant auto-apply.

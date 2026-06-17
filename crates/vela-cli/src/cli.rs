@@ -1199,8 +1199,13 @@ pub async fn run_command() {
             strict,
             force,
             dry_run,
+            no_reconcile,
             json,
         } => {
+            let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
+            // Sign with the configured identity's key (managed-identity model):
+            // key custody, not the typed name, is the accept authority.
+            let signing_key = crate::cli_identity::resolve_signing_key_opt(None);
             if !all_pending && ids.is_empty() {
                 fail_return::<()>(
                     "accept-batch: pass --all-pending and/or one or more --id <proposal_id>",
@@ -1245,7 +1250,7 @@ pub async fn run_command() {
                 proposals::AcceptOptions {
                     strict,
                     force,
-                    signing_key: None,
+                    signing_key,
                     custody_verified: false,
                 },
                 dry_run,
@@ -1315,6 +1320,15 @@ pub async fn run_command() {
                     }
                 }
                 print_engine_verdict(v);
+            }
+            // Reconcile derived views in the same pass, so the reviewer is not
+            // left to run `vela proof` + `vela frontier materialize` by hand
+            // after a batch accept. Skipped on dry-run / gated / --no-reconcile.
+            if !report.gated && !report.dry_run && !no_reconcile {
+                let _ = vela_protocol::frontier_repo::materialize(&frontier);
+                if !json {
+                    println!("  reconciled derived views (frontier.json, vela.lock, proof)");
+                }
             }
         }
 
@@ -5426,6 +5440,7 @@ Production (multi-producer coordination, signed judgment):
   register-statement Register a statement hash as a priority timestamp
   attest-statement   Sign a statement-faithfulness verdict (faithful/variant/unfaithful)
   onboard            Write AGENTS.md + CLAUDE.md for a frontier (regenerated from the log)
+  agents             Generate agent-config adapters from VELA.md (sync | doctor | diff)
   stash              Park bytes in the hub's untrusted vsx_ scratch tier
   events             Follow a frontier's hub event stream (--follow)
   task               Create, list, claim, and close local frontier tasks
@@ -5531,6 +5546,9 @@ fn print_session_help() {
     println!("    propose           Create a finding.review proposal");
     println!("    diff <vpr_id>     Preview a pending proposal vs current frontier");
     println!("    accept <vpr_id>   Apply a proposal under reviewer authority");
+    println!(
+        "    accept-batch      Accept all pending in one signed, reconciled pass (--all-pending)"
+    );
     println!("    attest            Sign findings under your private key");
     println!("    log               Recent canonical state events");
     println!("    history <vf_id>   State-transition replay for one finding");
