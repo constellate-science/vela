@@ -452,8 +452,10 @@ pub fn project_confidence(p: &ProvenancePoly, conf: &BTreeMap<String, Rational>)
 ///
 /// v3 framing (`lean/Vela/FrontierCalculus.lean`): the `collapse_exponents`
 /// flag is `kappa` reading the *environment quotient* `EnvProv = Env(p)` rather
-/// than raw `N[X]`. On that layer `kappa = Eval_Viterbi . env`, an exact
-/// homomorphism, not the lax map it looks like on `N[X]`. The square-free
+/// than raw `N[X]`. On that layer `env` is the homomorphism (multiplication is
+/// assumption-set union) and `kappa = weight . env` is the TERMINAL weighted
+/// readout (max over environments of the product of assumption weights), NOT a
+/// homomorphism into scalar Viterbi (that would force `w^2 = w`). The square-free
 /// collapse (`envWeight_idem`) and the env quotient's multiplicativity
 /// (`env_mul_support`, T4) are machine-checked there.
 pub fn kappa(p: &ProvenancePoly, conf: &BTreeMap<String, Rational>) -> Rational {

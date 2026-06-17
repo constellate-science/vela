@@ -659,7 +659,9 @@ Sidon (B_2) sets {0,1}^n  ->  B_h sets        (packed encoding; verifier verify_
 [8,4,4] Hamming code      ->  E8 kissing config (Construction A; verifier verify_kissing)
 ```
 
-The second reproduced the proven optimum `K(8) = 240` from the code side.
+The second constructs the 240-point E8 kissing configuration from the code side,
+a verified *witness* matching the known optimum `K(8) = 240` (the matching upper
+bound is Odlyzko-Sloane / Levenshtein, not part of the transfer).
 Both are verifier-homomorphisms in the sense above.
 
 ---
@@ -1478,7 +1480,7 @@ objects-with-verifiers and verification-preserving maps); the
 contribution is that it specifies the cross-frontier moat and is
 machine-checked. Empirical instances: the Sidon (B_2) -> B_h transfer
 and the `[8,4,4]` code -> E8 kissing transfer (which reproduced the
-proven optimum `K(8) = 240`). Honest scope: a transfer only earns this
+240-point `K(8) = 240` kissing configuration, matching the known optimum). Honest scope: a transfer only earns this
 guarantee once `sound` is discharged for the specific map; the theorem
 is the contract, the per-bridge `sound` proof is the obligation.
 
@@ -1750,8 +1752,11 @@ change schema artifact, replay root changes
 
 # 15. Lean 4 skeleton
 
-This is not a full formalization. It states the intended replay
-convergence theorem with the proof obligations made explicit.
+**Historical / illustrative skeleton.** The completed proof of replay convergence
+now lives in `lean/Vela/Log.lean` (Core Theorem 1; see Appendix A, the theorem
+audit). The skeleton below is the original aspirational statement with its proof
+obligations made explicit; it still carries a `sorry` and is kept only to show
+the obligation structure, not as a current proof.
 
 ```lean
 import Std.Data.HashMap
@@ -1977,8 +1982,13 @@ along the required-premise edges.
 
 **Calculus Theorem (scope wall).** Projection commutes with derivation for
 **positive** steps only. Negation, difference, and aggregation are not semiring
-operations and homomorphism commutation provably fails for them
-(Amsterdamer-Deutch-Tannen). The kernel enforces the boundary mechanically: any
+operations and homomorphism commutation provably fails for them (difference:
+Amsterdamer-Deutch-Tannen, "On the Limitations of Provenance for Queries with
+Difference", 2011; aggregation: their "Provenance for Aggregate Queries", 2011).
+Semiring semantics for full first-order logic (Grädel-Tannen, dual indeterminates)
+exist but are deliberately out of scope; the boundary is a scope choice, not a
+claim that no semantics exists past it. The kernel enforces the boundary
+mechanically: any
 negation- or aggregation-shaped step tags the polynomial, and `Eval_v` refuses a
 tagged polynomial; the only permitted reading of a tagged polynomial is the bare
 Boolean existence degrade (check c16). This is why the calculus is silent on
@@ -2017,16 +2027,44 @@ derivation.
 
 **The correlated-provenance correction (the v3 layer).** Within a monomial,
 shared variables count once. Split provenance into two canonical layers:
-`BagProv = N[X]` keeps multiplicity (counting, attribution); `EnvProv = Env(p)`,
-the square-free image where each monomial becomes its assumption *set*, forgets
-exponents (κ, retraction, attack locality). The quotient `env : N[X] → EnvProv`
-is exact and support-multiplicative (`env(p·q)` is the **union** of assumption
-sets), and **κ = Eval_Viterbi ∘ env**, an honest composition rather than a lax
-map on `N[X]`. Machine-checked in `lean/Vela/FrontierCalculus.lean`: the
-square-free collapse is a theorem (`envWeight_idem`), the quotient is
-support-multiplicative (`env_mul_support`, T4), and counting (bag) is provably
-distinct from κ (env) so shared evidence is never promoted to independent support
-(T13 non-collapse).
+`BagProv = N[X]` keeps multiplicity (counting, attribution); `EnvProv = Env(p)`
+is the assumption-set lineage — each monomial becomes its variable *set* (an
+assumption set), a polynomial becomes a *set of assumption sets*, and
+multiplication is the pairwise **union** of assumption sets (idempotent: an
+assumption appears once per environment). `env : N[X] → EnvProv` IS a
+homomorphism (`env(p·q)` is the union of assumption sets; `env_mul_support`, T4).
+κ is then the **terminal weighted readout** of that lineage:
+
+```text
+κ(p) = max over E ∈ env(p) of  ∏_{a ∈ E} w(a)
+```
+
+the best environment's product of assumption weights. **κ is NOT a semiring
+homomorphism into ordinary scalar Viterbi** `([0,1], max, ·)`: that would force
+`κ(x²) = κ(x)·κ(x)`, i.e. `w(x)² = w(x)`, which holds only at `w ∈ {0,1}`. On raw
+`N[X]`, κ is *lax* (`κ(p·q) ≥ κ(p)·κ(q)`, strict exactly when evidence is
+correlated); on the `EnvProv` layer the double-counting is impossible by
+construction, because each assumption appears once per environment. So the honest
+statement names its layer: **`env` is the homomorphism; `κ = weight ∘ env` is a
+terminal evaluator of the environment lineage, not a homomorphism into Viterbi.**
+Machine-checked in `lean/Vela/FrontierCalculus.lean`: the idempotent square-free
+readout (`envWeight_idem`), the env homomorphism (`env_mul_support`, T4), and that
+counting (bag) is provably distinct from κ (env), so shared evidence is never
+promoted to independent support (T13 non-collapse). (Corrected per the GPT-pro
+review, 2026-06-17: the earlier "κ = Eval_Viterbi ∘ env *homomorphism*" phrasing
+was wrong for non-Boolean weights; `env` is the homomorphism, κ is the readout.)
+
+**Where the weights come from (the calibration discipline).** κ's source weights
+`w(a)` must come only from *auditable calibration channels*: historical verifier
+pass/fail rates, prospectively scored reviewer forecasts (proper scoring rules),
+replication frequencies, instrument/protocol error models, signed statistical
+posteriors. They must NEVER come from LLM self-confidence, citation count, venue
+prestige, institutional brand, or reviewer vibes; that would launder a guess into
+authority, the exact failure the trust separation (§29) and incentive
+non-interference (§35, law 19) exist to prevent. Until such channels are wired the
+confidence map is empty, κ runs at its `{0,1}` corners, and the graded interior is
+a conservative read-layer prepared for calibrated inputs, not a current source of
+resolution.
 
 **Calculus Theorem (σ/κ asymmetry).** σ is monotone in the knowledge order; κ is
 not. A long chain of high-confidence steps still contracts; invalidating one
@@ -2046,9 +2084,12 @@ confidence through.
 A bilattice carries two lattice orders, truth and knowledge, with negation
 inverting truth and preserving knowledge (Ginsberg 1988, Fitting 1991). Avron's
 representation theorem (1996): every interlaced bilattice is isomorphic to a
-product `[0,1] ⊙ [0,1]`, so the unit square is the **canonical** graded
-bilattice, not a design choice, and Belnap's FOUR is literally its corner
-sublattice: `T=(1,0)`, `F=(0,1)`, `N=(0,0)`, `B=(1,1)`.
+*product* of two bounded lattices. We **choose** the unit square `[0,1] ⊙ [0,1]`
+as a natural graded product instance: Avron forces the product *shape*, not the
+choice of `[0,1]` as the factor lattice. Belnap's FOUR embeds as the four Boolean
+corners: `T=(1,0)`, `F=(0,1)`, `N=(0,0)`, `B=(1,1)`. The conflict readout
+`min(x, y)` below is likewise a declared projection, not forced by bilattice
+theory.
 
 The v2 status of a claim is one point `(x, y)`: `x = κ(π_T)`, `y = κ(π_F)`.
 Information content is `x + y`; **conflict degree is `min(x, y)`**, the graded
@@ -2169,8 +2210,9 @@ so the transferred support is a single monomial product of the source, the
 transfer object, and the transfer theorem. Retracting any of the three deletes
 the monomial (§20), so transferred support disappears by the same retraction
 law, no special case. Real, re-checkable instances: Sidon `B_2 → B_h`; the
-`[8,4,4]` code `→ E8` kissing configuration, which reproduced the proven optimum
-`K(8) = 240`.
+`[8,4,4]` code `→ E8` kissing configuration, which constructs the 240-point
+witness matching the known optimum `K(8) = 240` (the upper bound is not part of
+the transfer).
 
 ## 31. Body, model, and operator receipts
 
@@ -2200,16 +2242,23 @@ failed-search cost avoided, transfer value, and translation value against
 verification burden, safety risk, and resource cost. This is a scheduling rule,
 not evidence (Part I §8, Calculus law 19 in §35).
 
-**The decision-delta, made computable.** `FrontierDelta` is the headline metric
-the thesis names but the calculus did not, until now, compute. The graded
-blast-radius (`FrontierGraph::blast_radius_graded`,
-`vendor/vela/crates/vela-protocol/src/frontier_graph.rs`) is its first concrete
-instance: retract a claim (its support κ → 0, the §22 retraction law),
-min-propagate κ along the required-premise edges (the **bottleneck** projection,
-§21), and the drop `Δκ` in each dependent's support is the structural
-decision-delta, what would weaken if this result moved. κ measures *trust*; `Δκ`
-measures *consequence*. Formalizing `FrontierDelta` as a calculus primitive on
-this footing is the live theory frontier.
+**The decision-delta, made computable (and named precisely).** The graded
+blast-radius (`FrontierGraph::blast_radius_graded`) computes one specific
+quantity: retract a claim (its support κ → 0, the §22 retraction law),
+min-propagate κ along required-premise edges (the **bottleneck** projection, §21),
+and read the drop `Δκ` in each dependent's support. That is a **StructuralDelta**,
+a deletion-counterfactual over a support projection (the database-causality /
+deletion-propagation / responsibility lineage: Meliou et al.; Kimelfeld). It is
+**not** a full **DecisionValue** (which needs an action, an outcome distribution,
+a cost, and a utility — value-of-information, Howard 1966), and not an
+**AttributionValue** (a Shapley / Banzhaf allocation over the provenance object;
+Deutch et al.). κ measures *trust*; `Δκ` measures *structural consequence*; the
+opportunity rank above measures *decision value*. Keeping the three distinct is
+the correction from the GPT-pro review: conflating "what would break if this
+moved" with "what should we do next" is the trap. A principled `Δκ` (and the
+attribution and decision readings) wants the composed-provenance object of the
+roadmap, since scalar κ propagation is a weakest-link *projection*, not a
+provenance semantics.
 
 ## 33. The transport certificate (spec only)
 
@@ -2294,6 +2343,23 @@ built or scaffolded "while we're in there." Almost every trigger is **a producer
 who needs it**, which is the honest statement that the next theory moves are
 adoption-gated, not theory-gated.
 
+**The one prioritized theory move (distinct from the consumer-gated deferrals
+below): the composed-provenance object.** Today each finding's provenance is over
+its OWN events; the calculus does not compose provenance across the dependency
+graph, and cross-claim impact uses scalar κ/Bottleneck propagation (a weakest-link
+*projection*, §32, not a provenance semantics). The fix is a **global composed
+provenance object**: compile the whole transition DAG into a positive-derivation
+lineage circuit over primitive assumptions (`support(B) += support(A₁) · … ·
+x_rule · x_transfer`), with retraction as substitution on that object. Then
+Boolean existence, count, κ (the weighted-environment readout), Bottleneck, cost,
+Shapley/responsibility attribution, StructuralDelta, and the PCK replay predicate
+all become projections of ONE object. This closes the cross-finding gap, gives κ
+and the decision-delta a real lineage basis, and gives PCK a crisp statement to
+fold over. It is the single highest-leverage theory move, is NOT consumer-gated,
+but is still subordinate to standing up the live acceptance loop (a producer, a
+reviewer, an accepted external write). Identified as load-bearing by the GPT-pro
+review, 2026-06-17.
+
 | deferred item | un-defer trigger |
 |---|---|
 | Incentive/mechanism layer (stake, slash, scoring) | a second external producer, or value gated on frontier delta |
@@ -2363,7 +2429,18 @@ Experimental design: Rainforth et al., modern Bayesian experimental design.
 Models: Neural Operators (maps between function spaces); Universal Differential
 Equations; IFP Natural Law Models. Formal-math frontier: AlphaProof, Formal
 Conjectures, miniF2F-Lean, LeanMarathon. Standards (for the deferred export
-projections): W3C PROV, RO-Crate, FAIR.
+projections): W3C PROV, RO-Crate, FAIR. Negation / aggregation boundary:
+Amsterdamer-Deutch-Tannen, "On the Limitations of Provenance for Queries with
+Difference," 2011, and "Provenance for Aggregate Queries," 2011; first-order
+semiring semantics: Grädel-Tannen, 2017. Decision-delta lineages:
+Meliou-Gatterbauer-Moore-Suciu (database causality and responsibility); Kimelfeld
+(deletion propagation, 2012); Deutch-Frost-Kimelfeld-Monet (Shapley value of facts
+in query answering); Koh-Liang (influence functions, ICML 2017); Howard,
+"Information Value Theory," 1966. Kissing-number upper bound: Odlyzko-Sloane
+(1979), Levenshtein (1979). PCK lineage: Necula (proof-carrying code);
+Chiesa-Tromer (proof-carrying data); Valiant (incrementally verifiable
+computation); Bünz-Chiesa-Mishra-Spooner (PCD from accumulation schemes); Nova /
+HyperNova / ProtoStar (folding/accumulation).
 
 ---
 
