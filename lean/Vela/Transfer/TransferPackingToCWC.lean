@@ -1,4 +1,4 @@
-import Vela.TransferCWCtoDNA
+import Vela.Transfer.TransferCWCtoDNA
 
 /-!
 # Cross-frontier transfer: bounded-intersection packing → Constant-Weight Code (→ DNA)

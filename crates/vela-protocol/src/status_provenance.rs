@@ -312,7 +312,7 @@ mod tests {
     ///
     /// This is a fixture witness for a *machine-checked* theorem: the universal
     /// statement is proven in Lean as `graded_corner_conservative`
-    /// (`lean/Vela/FrontierCalculus.lean`, Theorem 20), over all polynomials and
+    /// (`lean/Vela/Frontier/FrontierCalculus.lean`, Theorem 20), over all polynomials and
     /// all positive confidence assignments — not just the cases enumerated here.
     #[test]
     fn graded_status_corner_is_conservative_over_v1() {

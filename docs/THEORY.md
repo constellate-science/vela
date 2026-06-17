@@ -907,7 +907,7 @@ signature_threshold must remain in canonical_json
 verifier must recompute canonical_json against current bytes
 ```
 
-**Formalization.** Lean module: `lean/Vela/Signing.lean`. The
+**Formalization.** Lean module: `lean/Vela/Crypto/Signing.lean`. The
 companion theorem `theorem6_pre_vs_post_fix_distinction` proves
 the structural difference is real: the pre-fix preimage was
 demonstrably flip-sensitive on a concrete finding, while the
@@ -974,7 +974,7 @@ substrate, so the index never goes stale; positions remain
 valid for the life of a replay." Theorem 7 is that statement
 as a Lean-checked theorem.
 
-**Formalization.** Lean module: `lean/Vela/ReplayIndex.lean`.
+**Formalization.** Lean module: `lean/Vela/Protocol/ReplayIndex.lean`.
 The companion lemmas `lookup_append_miss` (appending a fresh
 key doesn't change other lookups) and `lookup_append_hit`
 (the appended key's lookup returns the new last position) are
@@ -1017,7 +1017,7 @@ the same parity have an even sum:
 The Lean proof walks all 2³ = 8 parity patterns explicitly
 and selects which pair-sum is even in each.
 
-**Formalization.** Lean module: `lean/Vela/EGZ.lean`. The
+**Formalization.** Lean module: `lean/Vela/Constructions/EGZ.lean`. The
 helper lemma `int_emod_two` proves `x % 2 ∈ {0, 1}` via
 `Int.emod_nonneg` + `Int.emod_lt_of_pos`. The helper lemma
 `sum_even_of_same_parity` proves that integers with equal
@@ -1067,7 +1067,7 @@ if `g : A → B` is injective and `f : B → C` is injective, then
 and `f := H`, the composition `H ∘ canonicalBytes` is
 injective. The Lean proof is one line.
 
-**Formalization.** Lean module: `lean/Vela/CanonicalEventId.lean`.
+**Formalization.** Lean module: `lean/Vela/Crypto/CanonicalEventId.lean`.
 The `canonicalEventId` definition makes the composed pipeline
 explicit; `theorem9_canonical_event_id_injective` is the main
 result; `theorem9_same_id_implies_same_core` is the
@@ -1117,7 +1117,7 @@ lines; the contrapositive form is given as
 `theorem10_distinct_core_or_key_implies_distinct_sig`.
 
 **Formalization.** Lean module:
-`lean/Vela/SignatureUniqueness.lean`. The main result is
+`lean/Vela/Crypto/SignatureUniqueness.lean`. The main result is
 `theorem10_signature_uniqueness_under_canonical`. Verifies
 with `lake build Vela.SignatureUniqueness`.
 
@@ -1169,7 +1169,7 @@ of `Finset.card_le_card` plus the definitional unfolding of
 Lean.
 
 **Formalization.** Lean module:
-`lean/Vela/MultiSigThreshold.lean`. Three theorems:
+`lean/Vela/Crypto/MultiSigThreshold.lean`. Three theorems:
 `theorem11a_distinctness`, `theorem11b_monotone_under_append`,
 `theorem11c_registration_bound`. Verifies with
 `lake build Vela.MultiSigThreshold`.
@@ -1215,7 +1215,7 @@ instantiated at the given pair. The substrate value is naming
 remain implicit in the Rust code.
 
 **Formalization.** Lean module:
-`lean/Vela/ConcurrentReplay.lean`. Two theorems:
+`lean/Vela/Protocol/ConcurrentReplay.lean`. Two theorems:
 `theorem12_concurrent_replay_commutes` (main statement) and
 `theorem12b_two_event_swap` (named base case for the n-event
 permutation extension). Verifies with
@@ -1259,7 +1259,7 @@ the structure of Theorem 9 at the event-log layer rather than the
 per-event layer.
 
 **Formalization.** Lean module:
-`lean/Vela/FrontierIdDeterminism.lean`. Two theorems:
+`lean/Vela/Crypto/FrontierIdDeterminism.lean`. Two theorems:
 `theorem13_frontier_id_injective` (main statement) and
 `theorem13_same_id_implies_same_log` (the contrapositive form
 used directly in the witness-check argument). Verifies with
@@ -1314,7 +1314,7 @@ The Lean proof is `exact hDedup`. A threefold corollary
 rewriting twice.
 
 **Formalization.** Lean module:
-`lean/Vela/ProposalIdempotency.lean`. Two theorems:
+`lean/Vela/Governance/ProposalIdempotency.lean`. Two theorems:
 `theorem14_accept_idempotent` (main statement) and
 `theorem14_accept_threefold` (named corollary for the
 three-in-a-row case used directly in the federation re-sync
@@ -1366,7 +1366,7 @@ A symmetric corollary restates the bound in two-sided form:
 proof reuses Mathlib's `abs_le` to discharge the half-bounds.
 
 **Formalization.** Lean module:
-`lean/Vela/ConfidenceUpdate.lean`. Two theorems:
+`lean/Vela/Governance/ConfidenceUpdate.lean`. Two theorems:
 `theorem15_confidence_update_bounded` (main statement) and
 `theorem15_two_sided_bound` (symmetric corollary for use in
 policy-monitoring reasoning where one wants to bound the
@@ -1421,7 +1421,7 @@ the hypothesis. The `Nodup` follows from
 predicate split follows from Boolean conjunction unfolding.
 
 **Formalization.** Lean module:
-`lean/Vela/GovernedQuorumSoundness.lean`. One theorem:
+`lean/Vela/Governance/GovernedQuorumSoundness.lean`. One theorem:
 `theorem16_governed_quorum_sound`. Verifies with
 `lake build Vela.GovernedQuorumSoundness`. Composes Theorem 11
 (multi-sig threshold counting), Theorem 10 (signature
@@ -1469,7 +1469,7 @@ discord point in a connected one.
 **Proof.** Immediate from the homomorphism field `sound`; composition is
 function composition with the soundness fields chained; unit and
 associativity hold definitionally (`rfl`). Fully proved, Mathlib-free,
-in `lean/Vela/Transfer.lean` (`transfer_sound`, `Transfer.id`,
+in `lean/Vela/Transfer/Transfer.lean` (`transfer_sound`, `Transfer.id`,
 `Transfer.comp`, `transfer_closes`).
 
 **Why this matters.** This is the formal core of the constellation
@@ -1633,11 +1633,11 @@ until review allocation is implemented.
 | Bayesian frontier ranking | Target v1.0 | `FRONTIER_RANKING.md` |
 | Constellation bridge category | Target v0.9 | `CONSTELLATIONS.md` |
 | Mechanism-design review allocation | Target v1.2 | `REVIEW_ALLOCATION.md` |
-| Theorem 1 (replay convergence) Lean-checked | Current (v0.90) | `lean/Vela/Log.lean` |
-| Theorem 2 (retraction monotonicity) Lean-checked | Current (v0.90) | `lean/Vela/Provenance.lean` |
-| Theorem 3 (status-provenance soundness) Lean-checked | Current (v0.90) | `lean/Vela/Provenance.lean` |
-| Theorem 4 (frontier upward closure) Lean-checked | Current (v0.90) | `lean/Vela/Provenance.lean` |
-| Theorem 5 (hash-DAG log integrity, structural) Lean-checked | Current (v0.90) | `lean/Vela/Log.lean` |
+| Theorem 1 (replay convergence) Lean-checked | Current (v0.90) | `lean/Vela/Protocol/Log.lean` |
+| Theorem 2 (retraction monotonicity) Lean-checked | Current (v0.90) | `lean/Vela/Protocol/Provenance.lean` |
+| Theorem 3 (status-provenance soundness) Lean-checked | Current (v0.90) | `lean/Vela/Protocol/Provenance.lean` |
+| Theorem 4 (frontier upward closure) Lean-checked | Current (v0.90) | `lean/Vela/Protocol/Provenance.lean` |
+| Theorem 5 (hash-DAG log integrity, structural) Lean-checked | Current (v0.90) | `lean/Vela/Protocol/Log.lean` |
 
 ---
 
@@ -1753,7 +1753,7 @@ change schema artifact, replay root changes
 # 15. Lean 4 skeleton
 
 **Historical / illustrative skeleton.** The completed proof of replay convergence
-now lives in `lean/Vela/Log.lean` (Core Theorem 1; see Appendix A, the theorem
+now lives in `lean/Vela/Protocol/Log.lean` (Core Theorem 1; see Appendix A, the theorem
 audit). The skeleton below is the original aspirational statement with its proof
 obligations made explicit; it still carries a `sorry` and is kept only to show
 the obligation structure, not as a current proof.
@@ -1884,7 +1884,7 @@ tools (provenance semirings, four-valued logic, a product bilattice, an
 assumption-based truth-maintenance layer, a verification-cost admission rule)
 into the read-side calculus of scientific state. The v1 kernel and the v2 delta
 were validated 25/25 in `frontier_calculus_kernel.py`; the load-bearing laws are
-machine-checked in `lean/Vela/FrontierCalculus.lean`. Realized in the substrate
+machine-checked in `lean/Vela/Frontier/FrontierCalculus.lean`. Realized in the substrate
 at `vendor/vela/crates/vela-protocol/src/frontier_calculus.rs` (the Semiring
 trait, the named projections, κ, the bilattice, admission, replay tiers,
 assumption environments, the faithfulness monoid), surfaced by `vela claim
@@ -2004,7 +2004,7 @@ twin, saying which *movements between contexts* are licensed. No support moves
 from a context `c` to a context `d` without an explicit licensed rule
 (restriction, generalization, transfer, faithfulness, transport). In-context
 derivation is context-preserving; only a licensed `move` advances the context.
-Proved in `lean/Vela/FrontierCalculus.lean`: `context_confined` shows the context
+Proved in `lean/Vela/Frontier/FrontierCalculus.lean`: `context_confined` shows the context
 of any supported claim is reachable from its origin along licensed moves;
 `no_silent_context_jump` is the contrapositive; `confined_when_no_moves` is the
 limiting instance. This is what structurally forbids `mouse model → human
@@ -2049,7 +2049,7 @@ correlated); on the `EnvProv` layer the double-counting is impossible by
 construction, because each assumption appears once per environment. So the honest
 statement names its layer: **`env` is the homomorphism; `κ = weight ∘ env` is a
 terminal evaluator of the environment lineage, not a homomorphism into Viterbi.**
-Machine-checked in `lean/Vela/FrontierCalculus.lean`: the idempotent square-free
+Machine-checked in `lean/Vela/Frontier/FrontierCalculus.lean`: the idempotent square-free
 readout (`envWeight_idem`), the env homomorphism (`env_mul_support`, T4), and that
 counting (bag) is provably distinct from κ (env), so shared evidence is never
 promoted to independent support (T13 non-collapse). (Corrected per the GPT-pro
@@ -2101,7 +2101,7 @@ coordinatewise min/max; truth operations cross; negation swaps coordinates.
 **Calculus Theorem (conservative extension), machine-checked.** Thresholding each
 coordinate `(x>0, y>0)` recovers exactly the v1 Belnap status of Part I §7, for
 *all* polynomials and *all* positive confidence assignments
-(`graded_corner_conservative`, Theorem 20 in `lean/Vela/FrontierCalculus.lean`).
+(`graded_corner_conservative`, Theorem 20 in `lean/Vela/Frontier/FrontierCalculus.lean`).
 Nothing downstream breaks; the graded interior is a pure read over the v1 corner.
 **Calculus Theorem (k-monotonicity).** An event fold only raises the coordinates;
 only retraction lowers them, through §22's retraction law (`kappa_retract_le`,
@@ -2166,7 +2166,7 @@ order-independent), machine-checked.** The transfer closure (the least set of
 supported claims closed under `support(B) :- support(A), transfer(A,B)`) is the
 *least fixed point* of that rule, hence unique, hence independent of event-fold
 order (`closure_least`, `transfer_closure_order_independent` in
-`lean/Vela/FrontierCalculus.lean`).
+`lean/Vela/Frontier/FrontierCalculus.lean`).
 
 ## 28. Statement-faithfulness strength
 
@@ -2408,7 +2408,7 @@ divergence, Viterbi DAG safety, the σ/κ asymmetry, the bilattice corner
 embedding and k-monotonicity, admission monotonicity, replay-tier monotonicity,
 assumption-invalidation cascade, faithfulness composition, and the transport
 certificate schema. The load-bearing laws are additionally machine-checked in
-`lean/Vela/FrontierCalculus.lean` (Mathlib-free).
+`lean/Vela/Frontier/FrontierCalculus.lean` (Mathlib-free).
 
 ## 39. References
 
@@ -2492,7 +2492,7 @@ These are the "bad/shallow" case and should be de-hollowed:
   but the per-step preservation is axiomatic.
 - Similar pattern: `descriptor_id_is_self`, `signed_bytes_determine_body` (`DiffPackFederationSoundness`).
 
-**The fix (DONE):** `lean/Vela/ReducerModel.lean` gives the reducer a *concrete model* (`St` carries an
+**The fix (DONE):** `lean/Vela/Protocol/ReducerModel.lean` gives the reducer a *concrete model* (`St` carries an
 append-only log, a descriptor table, and a finding store; `step` appends to the log and never touches
 the descriptor table on `acceptPack`/`recordEvaluation`) and *proves* preservation from the definition
 (`acceptPack_preserves_descriptors`, `eval_then_pack_preserves`, and `replay_preserves_descriptors` by

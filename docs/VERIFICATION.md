@@ -114,7 +114,7 @@ and produced the named output.
 vela proof-attest-verification \
   --proof-id vpf_egz_n2 \
   --tool lean4 --tool-version 4.29.1 \
-  --script-locator sha256:$(shasum -a 256 lean/Vela/EGZ.lean | awk '{print $1}') \
+  --script-locator sha256:$(shasum -a 256 lean/Vela/Constructions/EGZ.lean | awk '{print $1}') \
   --lake-manifest-hash sha256:$(shasum -a 256 lean/lake-manifest.json | awk '{print $1}') \
   --verifier-output-hash sha256:$(lake build Vela.EGZ | shasum -a 256 | awk '{print $1}') \
   --status verified \

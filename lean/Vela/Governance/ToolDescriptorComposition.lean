@@ -1,5 +1,5 @@
 import Mathlib
-import Vela.CanonicalEventId
+import Vela.Crypto.CanonicalEventId
 
 /-!
 # Vela Theorem 28: Tool Descriptor × Diff Pack composition

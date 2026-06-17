@@ -329,7 +329,7 @@ pub fn state_cell(project: &Project, finding: &FindingBundle) -> Value {
             "evaluator": "kappa = Eval_Viterbi . env (square-free environment quotient of N[X], v3); corner thresholds each coordinate at > 0",
             "valuation": "per-source confidence in [0,1]; absent sources default to 1",
             "source": { "support_poly": sp.support.to_string(), "refute_poly": sp.refute.to_string() },
-            "policy": "frontier_calculus v3 (env-quotient kappa; conservative extension is Theorem 20, lean/Vela/FrontierCalculus.lean)",
+            "policy": "frontier_calculus v3 (env-quotient kappa; conservative extension is Theorem 20, lean/Vela/Frontier/FrontierCalculus.lean)",
             "reproduce": "kappa(support_poly) and kappa(refute_poly) under the valuation give (support_degree, opposition_degree); the corner letter is deriveStatus(support_degree > 0, opposition_degree > 0)",
         },
         "note": "read-side projection over the event log (asserted/accept -> support vars, supersession/retraction -> rho_Y, dependency_invalidated -> refute); never stored",

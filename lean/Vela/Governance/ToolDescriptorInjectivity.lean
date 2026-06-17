@@ -1,5 +1,5 @@
 import Mathlib
-import Vela.CanonicalEventId
+import Vela.Crypto.CanonicalEventId
 
 /-!
 # Vela Theorem 25: Tool descriptor injectivity

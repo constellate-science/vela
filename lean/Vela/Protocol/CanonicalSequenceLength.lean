@@ -1,5 +1,5 @@
 import Mathlib
-import Vela.Log
+import Vela.Protocol.Log
 
 /-!
 # Vela Theorem 21: canonical-sequence cardinality preservation

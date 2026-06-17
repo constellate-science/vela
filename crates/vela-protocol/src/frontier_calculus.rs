@@ -450,7 +450,7 @@ pub fn project_confidence(p: &ProvenancePoly, conf: &BTreeMap<String, Rational>)
 /// absent from the confidence map default to 1 (assumptions carry conditions,
 /// not decay).
 ///
-/// v3 framing (`lean/Vela/FrontierCalculus.lean`): the `collapse_exponents`
+/// v3 framing (`lean/Vela/Frontier/FrontierCalculus.lean`): the `collapse_exponents`
 /// flag is `kappa` reading the *environment quotient* `EnvProv = Env(p)` rather
 /// than raw `N[X]`. On that layer `env` is the homomorphism (multiplication is
 /// assumption-set union) and `kappa = weight . env` is the TERMINAL weighted

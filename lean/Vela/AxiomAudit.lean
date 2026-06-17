@@ -1,5 +1,5 @@
 import Vela.CoreTheorems
-import Vela.TransferBinaryCodeToCWC
+import Vela.Transfer.TransferBinaryCodeToCWC
 
 /-!
 # Axiom audit

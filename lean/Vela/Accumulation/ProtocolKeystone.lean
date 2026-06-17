@@ -1,4 +1,4 @@
-import Vela.HeteroAccumulation
+import Vela.Accumulation.HeteroAccumulation
 
 /-!
 # The protocol keystone: one constant-size check certifies the whole cross-frontier knowledge DAG

@@ -1,4 +1,4 @@
-import Vela.Core
+import Vela.Protocol.Core
 
 /-!
 # Frontier calculus v2: the graded status is a conservative extension

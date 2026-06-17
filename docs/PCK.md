@@ -23,7 +23,7 @@ That decoupling is what let a global, permissionless ledger exist.
 
 ## The matching gap in Vela
 
-`PoVD` (`lean/Vela/PoVD.lean`; the mechanism is detailed in the PoVD section below) gives us the consensus + anti-fraud + Sybil-resistance
+`PoVD` (`lean/Vela/Accumulation/PoVD.lean`; the mechanism is detailed in the PoVD section below) gives us the consensus + anti-fraud + Sybil-resistance
 core on the frozen-verifiable slice: the shared state grows only by verifier-accepted, strictly
 improving deltas, by a pure function with no adjudicator. Proven and running (`scripts/povd_node.py`).
 
@@ -62,7 +62,7 @@ integrity without a central authority and without anyone redoing all the work.*
 
 Folding schemes fold **one machine's repeated step**. PCD handles a DAG but under **one fixed**
 compliance predicate. PCK's compliance predicate is a **heterogeneous** set of frozen verifiers linked
-by **verified transfer-homomorphisms** (`lean/Vela/Transfer.lean`, Theorem 23): a Sidon record
+by **verified transfer-homomorphisms** (`lean/Vela/Transfer/Transfer.lean`, Theorem 23): a Sidon record
 importable into a B_h proof via a soundness-preserving map, a `[8,4,4]` code into an E8 kissing bound —
 all composed inside one accumulator. Cross-frontier composition inside a single succinct proof is the
 part not present in the cryptographic literature, and it is precisely where Vela's constellation thesis
@@ -70,7 +70,7 @@ already lives.
 
 ## The moat, now proven (not just specified)
 
-The cross-frontier composition above is the novel part, and `lean/Vela/HeteroAccumulation.lean`
+The cross-frontier composition above is the novel part, and `lean/Vela/Accumulation/HeteroAccumulation.lean`
 (Mathlib-free, standalone) now proves its soundness. The accumulator there folds a *heterogeneous*
 history: each delta is justified either natively (its frontier's own verifier accepts a witness) or
 **by transfer** — importing another frontier's current verified best through a registered sound map,
@@ -160,7 +160,7 @@ PCK has two independent scaling questions, and it is honest to separate them:
 
 ## The proven first stone (in hand today)
 
-`lean/Vela/Accumulation.lean` (Mathlib-free, compiles standalone) models the accumulator as a
+`lean/Vela/Accumulation/Accumulation.lean` (Mathlib-free, compiles standalone) models the accumulator as a
 constant-size object — running `state` plus one integrity bit `ok` — and proves the load-bearing
 scaling property:
 
@@ -269,7 +269,7 @@ trees, and public-key crypto all predated it; the invention was the *mechanism*)
 - **Credit**: one non-forgeable, content-addressed unit accrues to the producer of each accepted delta.
 - **Replay**: the shared state is the deterministic fold of all accepted deltas — no authority.
 
-## Proven properties (machine-checked, `lean/Vela/PoVD.lean`, Mathlib-free, compiles standalone)
+## Proven properties (machine-checked, `lean/Vela/Accumulation/PoVD.lean`, Mathlib-free, compiles standalone)
 
 | Property | Theorem | Meaning |
 |---|---|---|

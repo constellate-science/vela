@@ -1,4 +1,4 @@
-import Vela.TransferCWCtoDNA
+import Vela.Transfer.TransferCWCtoDNA
 
 /-!
 # Cross-frontier transfer: Binary code → Constant-Weight Code (fixed-weight subcode)

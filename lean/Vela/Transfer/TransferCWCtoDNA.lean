@@ -1,4 +1,4 @@
-import Vela.Transfer
+import Vela.Transfer.Transfer
 
 /-!
 # Cross-frontier transfer: Constant-Weight Code → DNA Code (the pro model's #1)
