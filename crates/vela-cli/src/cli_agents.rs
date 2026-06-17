@@ -85,13 +85,40 @@ draft until a key-holding human accepts it. The full charter is VELA.md.\n\
     )
 }
 
-fn mcp_json_adapter() -> String {
+fn mcp_json_adapter(root: &Path) -> String {
+    // Pick a serve invocation that actually loads in THIS worktree. A
+    // single-frontier worktree (has `.vela/`) serves `.`; a multi-frontier
+    // root serves its conventional frontiers directory (`frontiers/` per the
+    // atlas layout, else `examples/`). `serve .` at a multi-frontier root, and
+    // `serve --frontiers .` (which rescans non-frontier JSON), both fail.
+    let args: Vec<String> = if root.join(".vela").is_dir() {
+        ["serve", ".", "--profile", "read-only"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    } else {
+        let frontiers_dir = if root.join("frontiers").is_dir() {
+            "frontiers"
+        } else {
+            "examples"
+        };
+        [
+            "serve",
+            "--frontiers",
+            frontiers_dir,
+            "--profile",
+            "read-only",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+    };
     let value = json!({
         "_generated_by": "vela agents sync (from VELA.md) — edit VELA.md, not this file",
         "mcpServers": {
             "vela-local": {
                 "command": "vela",
-                "args": ["serve", ".", "--profile", "read-only"],
+                "args": args,
                 "env": { "VELA_WORKTREE": "." }
             }
         }
@@ -130,7 +157,7 @@ fn build_adapters(root: &Path) -> Vec<Adapter> {
                     markdown_adapter("Vela \u{2014} Copilot instructions", &rules, &commands)
                 }
                 ".cursor/rules/vela.mdc" => cursor_adapter(&rules),
-                ".mcp.json" => mcp_json_adapter(),
+                ".mcp.json" => mcp_json_adapter(root),
                 other => fail_return(&format!("unknown adapter target {other}")),
             };
             Adapter {

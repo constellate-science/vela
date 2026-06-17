@@ -640,6 +640,13 @@ pub fn tool_caveats(name: &str) -> Vec<String> {
     get_tool(name).map(|tool| tool.caveats).unwrap_or_default()
 }
 
+/// Tools that COMMIT a pending proposal into accepted state (or apply
+/// immediately). Reserved for the maintainer profile regardless of their
+/// (coarser) `permission_level`. Keep in sync with the substrate accept gate:
+/// these are the truth-bearing finalize actions an agent must never reach
+/// through a draft session.
+const FINALIZING_TOOLS: &[&str] = &["accept_proposal", "reject_proposal", "propose_and_apply_note"];
+
 /// MCP exposure profile (memo §9.1). A served frontier scopes which tools an
 /// agent can see and call. `MCP exposes tools; Vela governs state` — even the
 /// maintainer profile only drafts proposals; accepted public state still
@@ -676,12 +683,22 @@ impl McpProfile {
     }
 
     /// Whether this profile may expose AND execute `tool`. Read-only admits
-    /// only non-mutating reads; draft admits everything except the finalizing
-    /// `Dangerous` tier; maintainer admits all.
+    /// only non-mutating reads; draft admits the propose/draft writes but NOT
+    /// the finalizing tools (accept/reject/apply, which commit accepted state)
+    /// nor the `Dangerous` tier; maintainer admits all.
+    ///
+    /// Finalizing is a profile policy, not a property of `permission_level`:
+    /// `accept_proposal` is a plain `Write` (it is not a destructive cascade
+    /// like `propagate_retraction`), but committing a pending proposal into
+    /// accepted state is a maintainer act. The draft tier creates submissions;
+    /// it does not finalize them.
     pub fn allows(self, tool: &ToolDefinition) -> bool {
         match self {
             Self::ReadOnly => matches!(tool.permission_level, PermissionLevel::ReadOnly),
-            Self::Draft => !matches!(tool.permission_level, PermissionLevel::Dangerous),
+            Self::Draft => {
+                !matches!(tool.permission_level, PermissionLevel::Dangerous)
+                    && !FINALIZING_TOOLS.contains(&tool.name.as_str())
+            }
             Self::Maintainer => true,
         }
     }
@@ -759,6 +776,18 @@ mod profile_tests {
             .iter()
             .any(|t| matches!(t.permission_level, crate::permission::PermissionLevel::Dangerous));
         assert!(!dangerous_in_draft, "draft must not expose the finalizing tier");
+        // accept/reject commit accepted state — maintainer-only, never draft,
+        // even though they are plain `Write`.
+        for finalize in FINALIZING_TOOLS {
+            assert!(
+                !draft.iter().any(|t| &t.name == finalize),
+                "draft must not expose finalizing tool {finalize}"
+            );
+            assert!(
+                maint.iter().any(|t| &t.name == finalize),
+                "maintainer must expose finalizing tool {finalize}"
+            );
+        }
     }
 
     #[test]
