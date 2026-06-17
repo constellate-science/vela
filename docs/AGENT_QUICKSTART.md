@@ -100,6 +100,19 @@ POST `/api/propose-note` with the canonical preimage signed by the agent's priva
 
 The proposal sits in `vela inbox <frontier>` until a reviewer adjudicates. Acceptance writes a signed canonical event under the reviewer's identity; the agent's proposal becomes part of replayable state. The substrate's truth-claim discipline does not promote agent-drafted assertions without a signed human verdict.
 
+## Produce a witness with the discovery engine
+
+For verifier-gated construction kinds, you do not need to hand-write a witness — the discovery engine searches for one and verifies it in the same step:
+
+```bash
+# search and report (writes nothing)
+vela campaign search rook_directions --n 16
+# search, write the verified witness, and propose it (pending; no key needed)
+vela campaign run gf2_sidon --n 12 --frontier <frontier> --propose --reviewer <agent-id>
+```
+
+Searchable kinds: `gf2_sidon`, `union_free`, `rook_directions`, `sidon`, `bh` (with `--h`), `golomb`, `costas`. The search is deterministic — the same `--seed` reproduces the same witness — and every find is re-checked by the frozen `vela-verify` before it is reported, so a reported find always passes `vela reproduce`. `--propose` lands a key-free `finding.add` that waits for a human verdict (step 4); it does not promote the claim. The engine certifies lower bounds: it extends the less-explored ranges and will under-perform the algebraic optima behind the largest records, which is exactly where a stronger search wins.
+
 ## Key management for the agent
 
 The Ed25519 private key in `agents/<slug>/keys/private.key` is the agent's signing credential. Treat it like a deployment secret:
