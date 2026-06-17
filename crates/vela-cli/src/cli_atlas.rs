@@ -291,7 +291,7 @@ fn run_blast_radius(args: &[String]) {
     let center = graph
         .find_node(finding)
         .unwrap_or_else(|| fail(&format!("no finding matching '{finding}' in {frontier}")));
-    print_json(&graph.blast_radius(&center, &kinds, direction).to_json());
+    print_json(&graph.blast_radius_graded(&project, &center, &kinds, direction).to_json());
 }
 
 /// Extract a problem/sequence number from a finding's assertion text. Handles

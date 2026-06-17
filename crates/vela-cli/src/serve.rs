@@ -3323,7 +3323,7 @@ fn tool_blast_radius(args: &Value, frontier: &Project) -> Result<String, String>
     let center = graph
         .find_node(q)
         .ok_or_else(|| format!("Finding '{q}' not found"))?;
-    let br = graph.blast_radius(&center, &kinds, direction);
+    let br = graph.blast_radius_graded(frontier, &center, &kinds, direction);
     serde_json::to_string_pretty(&br.to_json()).map_err(|e| format!("Serialization error: {e}"))
 }
 

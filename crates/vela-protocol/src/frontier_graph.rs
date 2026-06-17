@@ -25,6 +25,8 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use serde::Serialize;
 
+use crate::evidence_diff::derive_status_provenance;
+use crate::frontier_calculus::Rational;
 use crate::project::Project;
 
 /// The canonical T7 relation vocabulary. Each variant maps to one or
@@ -318,6 +320,171 @@ impl BlastRadius {
             );
         }
         v
+    }
+}
+
+/// `num/den` string for a rational coordinate (matches the atlas's kappa
+/// serialization so the two reads are comparable byte-for-byte).
+fn rat_string(r: &Rational) -> String {
+    format!("{}/{}", r.numer(), r.denom())
+}
+
+/// The graded status of the center finding: the canonical bilattice point
+/// `(support kappa, refute kappa)` from `derive_status_provenance`, its conflict
+/// degree `min(x, y)`, and the v1 Belnap corner it thresholds to.
+#[derive(Debug, Clone, Serialize)]
+pub struct GradedStatus {
+    pub support_kappa: String,
+    pub refute_kappa: String,
+    pub conflict: String,
+    pub belnap: char,
+}
+
+/// One dependent whose support kappa genuinely drops when the center's support
+/// is retracted (the retraction theorem applied at the kappa level). A
+/// structurally-reachable dependent with `delta_kappa = 0` has alternative
+/// support and is omitted — the calculus prunes what reachability overcounts.
+#[derive(Debug, Clone, Serialize)]
+pub struct GradedImpact {
+    pub id: String,
+    pub label: String,
+    pub kappa_before: String,
+    pub kappa_after: String,
+    pub delta_kappa: String,
+    /// The center is a single point of failure for this dependent: retracting it
+    /// leaves the dependent with no support (`kappa_after = 0`).
+    pub support_killed: bool,
+}
+
+/// Headline counts for the graded cascade.
+#[derive(Debug, Clone, Serialize)]
+pub struct GradedBlastSummary {
+    pub downstream_candidates: usize,
+    pub weakened: usize,
+    pub killed: usize,
+    pub semiring: &'static str,
+}
+
+/// The calculus reading of a blast radius (memo §7.3, project_true_math_atlas
+/// roadmap #4 — the licensed propagation). Wraps the structural [`BlastRadius`]
+/// with the center's canonical graded status and the genuine downstream impact:
+/// each dependent's support kappa is min-propagated along the dependency edges
+/// (the Bottleneck semiring — "a chain is as strong as its weakest premise"),
+/// computed before and after the center's support is retracted. `delta_kappa`
+/// is the real impact.
+#[derive(Debug, Clone, Serialize)]
+pub struct GradedBlast {
+    pub structural: BlastRadius,
+    pub center_status: GradedStatus,
+    pub impacted: Vec<GradedImpact>,
+    pub summary: GradedBlastSummary,
+}
+
+impl GradedBlast {
+    /// JSON: the structural view, extended with the graded reading and an honest
+    /// boundary on what the calculus does and does not claim here.
+    #[must_use]
+    pub fn to_json(&self) -> serde_json::Value {
+        let mut v = self.structural.to_json();
+        if let serde_json::Value::Object(ref mut m) = v {
+            m.insert("schema".into(), serde_json::json!("vela.blast_radius.graded.v0.1"));
+            m.insert(
+                "center_status".into(),
+                serde_json::to_value(&self.center_status).unwrap_or_default(),
+            );
+            m.insert(
+                "graded_impact".into(),
+                serde_json::to_value(&self.impacted).unwrap_or_default(),
+            );
+            m.insert(
+                "graded_summary".into(),
+                serde_json::to_value(&self.summary).unwrap_or_default(),
+            );
+            m.insert(
+                "graded_boundary".into(),
+                serde_json::json!({
+                    "support_kappa": "per-finding canonical support degree — kappa of the support polynomial (derive_status_provenance + the bilattice)",
+                    "propagation": "Bottleneck semiring (max, min): a chain is as strong as its weakest premise — the kernel's licensed reading for dependency support",
+                    "delta_kappa": "the drop in a dependent's support kappa when the center's support is retracted (kappa -> 0); the retraction theorem applied at the kappa level",
+                    "pruning": "a structurally-reachable dependent with delta_kappa = 0 has alternative support and is NOT listed",
+                }),
+            );
+        }
+        v
+    }
+}
+
+/// Memoized Bottleneck-semiring propagation of canonical support kappa along the
+/// dependency edges. `zeroed` is the retracted center (its support kappa is 0,
+/// the retraction theorem's effect); pass `""` for the unperturbed pass.
+struct PropCtx<'a> {
+    graph: &'a FrontierGraph,
+    project: &'a Project,
+    kinds: &'a [EdgeKind],
+    zeroed: &'a str,
+    own: HashMap<String, Rational>,
+    memo: HashMap<String, Rational>,
+}
+
+impl<'a> PropCtx<'a> {
+    fn new(
+        graph: &'a FrontierGraph,
+        project: &'a Project,
+        kinds: &'a [EdgeKind],
+        zeroed: &'a str,
+    ) -> Self {
+        PropCtx {
+            graph,
+            project,
+            kinds,
+            zeroed,
+            own: HashMap::new(),
+            memo: HashMap::new(),
+        }
+    }
+
+    /// The finding's OWN support kappa (canonical, per-finding), or 0 if it is
+    /// the retracted center. Memoized.
+    fn own_kappa(&mut self, d: &str) -> Rational {
+        if d == self.zeroed {
+            return Rational::zero();
+        }
+        if let Some(v) = self.own.get(d) {
+            return *v;
+        }
+        let conf: BTreeMap<String, Rational> = BTreeMap::new();
+        let k = derive_status_provenance(&self.project.events, d)
+            .derive_graded_status(&conf)
+            .x;
+        self.own.insert(d.to_string(), k);
+        k
+    }
+
+    /// `kappa_prop(d) = min(own(d), min over d's dependency premises p of
+    /// kappa_prop(p))`. Cycle-safe: a node already on the path contributes only
+    /// its own support (no infinite descent).
+    fn prop(&mut self, d: &str, on_path: &mut BTreeSet<String>) -> Rational {
+        if let Some(v) = self.memo.get(d) {
+            return *v;
+        }
+        let own = self.own_kappa(d);
+        if !on_path.insert(d.to_string()) {
+            return own; // d is already on the current path: a cycle
+        }
+        let premises: Vec<String> = self
+            .graph
+            .edges
+            .iter()
+            .filter(|e| e.source == d && self.kinds.contains(&e.kind))
+            .map(|e| e.target.clone())
+            .collect();
+        let mut k = own;
+        for p in premises {
+            k = k.min(self.prop(&p, on_path));
+        }
+        on_path.remove(d);
+        self.memo.insert(d.to_string(), k);
+        k
     }
 }
 
@@ -620,6 +787,18 @@ impl FrontierGraph {
         EdgeKind::Discharges,
     ];
 
+    /// The REQUIRED-premise kinds: a claim's support is *bottlenecked* by these
+    /// (if the premise fails, the claim weakens — the calculus's "weakest
+    /// premise" reading). `Supports` is corroboration (an alternative, not a
+    /// requirement), so it is NOT a bottleneck and is excluded from the graded
+    /// min-propagation: losing one corroboration does not weaken a claim that
+    /// still has another.
+    pub const REQUIRED_PREMISE_KINDS: [EdgeKind; 3] = [
+        EdgeKind::DependsOn,
+        EdgeKind::DerivedFrom,
+        EdgeKind::Discharges,
+    ];
+
     /// True if `id` is a node in this graph.
     #[must_use]
     pub fn has_node(&self, id: &str) -> bool {
@@ -756,6 +935,77 @@ impl FrontierGraph {
             single_points_of_failure,
             upstream,
             downstream,
+        }
+    }
+
+    /// The calculus reading of the blast radius (the licensed propagation,
+    /// project_true_math_atlas roadmap #4): the center's canonical graded status,
+    /// and for each structural downstream dependent the drop in its support kappa
+    /// when the center's support is retracted, min-propagated along the dependency
+    /// edges (the Bottleneck semiring — a chain is as strong as its weakest
+    /// premise). Needs `project` for the per-finding provenance (events).
+    /// Dependents whose kappa does not drop are pruned: they have alternative
+    /// support, so structural reachability overcounted them.
+    #[must_use]
+    pub fn blast_radius_graded(
+        &self,
+        project: &Project,
+        start: &str,
+        kinds: &[EdgeKind],
+        direction: BlastDirection,
+    ) -> GradedBlast {
+        let structural = self.blast_radius(start, kinds, direction);
+        let conf: BTreeMap<String, Rational> = BTreeMap::new();
+        let center_pt =
+            derive_status_provenance(&project.events, start).derive_graded_status(&conf);
+        let center_status = GradedStatus {
+            support_kappa: rat_string(&center_pt.x),
+            refute_kappa: rat_string(&center_pt.y),
+            conflict: rat_string(&center_pt.conflict()),
+            belnap: center_pt.corner().letter(),
+        };
+
+        // The graded cascade min-propagates over REQUIRED premises only (the
+        // structural `kinds` govern reachability, but corroborating `supports` is
+        // not a bottleneck). A dependent reachable only via `supports` therefore
+        // has delta_kappa = 0 and is pruned.
+        let mut before = PropCtx::new(self, project, &Self::REQUIRED_PREMISE_KINDS, "");
+        let mut after = PropCtx::new(self, project, &Self::REQUIRED_PREMISE_KINDS, start);
+        let mut scored: Vec<(Rational, GradedImpact)> = Vec::new();
+        for node in &structural.downstream {
+            let b = before.prop(&node.id, &mut BTreeSet::new());
+            let a = after.prop(&node.id, &mut BTreeSet::new());
+            if b > a {
+                let delta = b.sub(&a);
+                scored.push((
+                    delta,
+                    GradedImpact {
+                        id: node.id.clone(),
+                        label: node.label.clone(),
+                        kappa_before: rat_string(&b),
+                        kappa_after: rat_string(&a),
+                        delta_kappa: rat_string(&delta),
+                        support_killed: a == Rational::zero(),
+                    },
+                ));
+            }
+        }
+        // strongest impact first, then id for stable ordering
+        scored.sort_by(|x, y| y.0.cmp(&x.0).then(x.1.id.cmp(&y.1.id)));
+        let killed = scored.iter().filter(|(_, g)| g.support_killed).count();
+        let weakened = scored.len();
+        let impacted: Vec<GradedImpact> = scored.into_iter().map(|(_, g)| g).collect();
+        let summary = GradedBlastSummary {
+            downstream_candidates: structural.downstream.len(),
+            weakened,
+            killed,
+            semiring: "bottleneck",
+        };
+        GradedBlast {
+            structural,
+            center_status,
+            impacted,
+            summary,
         }
     }
 
@@ -997,6 +1247,75 @@ mod tests {
         let down_only = g.blast_radius(&b_id, &[EdgeKind::DependsOn], BlastDirection::Downstream);
         assert!(down_only.upstream.is_empty());
         assert_eq!(down_only.downstream.len(), 2);
+    }
+
+    #[test]
+    fn blast_radius_graded_prunes_unweakened_dependents() {
+        use crate::events::{StateActor, StateEvent, StateTarget, EVENT_SCHEMA, NULL_HASH};
+        let asserted = |idx: usize, target: &str| StateEvent {
+            schema: EVENT_SCHEMA.to_string(),
+            id: format!("vev_g_{idx:04}"),
+            kind: "finding.asserted".to_string(),
+            target: StateTarget {
+                r#type: "finding".to_string(),
+                id: target.to_string(),
+            },
+            actor: StateActor {
+                id: "reviewer:test".to_string(),
+                r#type: "human".to_string(),
+            },
+            timestamp: format!("2026-06-17T00:00:{:02}Z", idx % 60),
+            reason: "graded blast test".to_string(),
+            before_hash: NULL_HASH.to_string(),
+            after_hash: NULL_HASH.to_string(),
+            payload: serde_json::json!({}),
+            caveats: vec![],
+            signature: None,
+            schema_artifact_id: None,
+        };
+
+        // z depends_on a depends_on b (a required chain); s corroborates b via
+        // `supports` only (not a required premise). All four are asserted, so
+        // each has own support kappa = 1.
+        let b = synth_finding(0, vec![]);
+        let a = synth_finding(1, vec![link_typed(&b.id, "depends")]);
+        let z = synth_finding(2, vec![link_typed(&a.id, "depends")]);
+        let s = synth_finding(3, vec![link_typed(&b.id, "supports")]);
+        let (a_id, z_id, s_id, b_id) = (a.id.clone(), z.id.clone(), s.id.clone(), b.id.clone());
+        let mut project = assemble("graded", vec![], 0, 0, "test");
+        project.events = vec![
+            asserted(0, &b_id),
+            asserted(1, &a_id),
+            asserted(2, &z_id),
+            asserted(3, &s_id),
+        ];
+        project.findings = vec![b, a, z, s];
+        let g = FrontierGraph::from_project(&project);
+
+        let gb = g.blast_radius_graded(&project, &b_id, &[], BlastDirection::Downstream);
+
+        // b is supported: center reads T with support kappa 1.
+        assert_eq!(gb.center_status.belnap, 'T');
+        assert_eq!(gb.center_status.support_kappa, "1/1");
+
+        // Structural downstream of b is {a, z, s}; the graded impact is {a, z}
+        // only — s corroborates via `supports`, not a required premise, so its
+        // kappa does not drop (Δκ = 0) and it is pruned.
+        let ids: Vec<&str> = gb.impacted.iter().map(|i| i.id.as_str()).collect();
+        assert!(ids.contains(&a_id.as_str()) && ids.contains(&z_id.as_str()));
+        assert!(
+            !ids.contains(&s_id.as_str()),
+            "a supports-only corroborator must be pruned from the graded impact"
+        );
+        assert_eq!(gb.summary.downstream_candidates, 3);
+        assert_eq!(gb.summary.weakened, 2);
+        assert_eq!(gb.summary.killed, 2);
+        for imp in &gb.impacted {
+            assert_eq!(imp.kappa_before, "1/1");
+            assert_eq!(imp.kappa_after, "0/1");
+            assert_eq!(imp.delta_kappa, "1/1");
+            assert!(imp.support_killed);
+        }
     }
 
     #[test]
