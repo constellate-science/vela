@@ -1968,7 +1968,9 @@ The named projections:
 |---|---|---|---|
 | existence | `({0,1}, ∨, ∧)` | trusted source = 1 | is there any supporting derivation |
 | cost | tropical `(N∪{∞}, min, +)` | per-source verification cost | cheapest derivation; supplies `v(q,c)` in §25 |
-| confidence | Viterbi `([0,1], max, ·)` | per-source confidence | best-path confidence; this is κ (§23) |
+| raw Viterbi confidence | `([0,1], max, ·)` | per-source confidence | valid only under explicit independence or square-free assumptions |
+| environment lineage | `EnvProv` | variable to singleton environment | correlated assumption-set lineage |
+| κ readout | terminal weighted readout over `EnvProv` | auditable source weights | best calibrated assumption environment; not a semiring homomorphism into scalar Viterbi |
 | count | `N` (bag) | each variable = 1 | how many derivations; multiplicity, never credibility |
 | bottleneck | `([0,1], max, min)` | per-source confidence | a chain is as strong as its weakest premise |
 
