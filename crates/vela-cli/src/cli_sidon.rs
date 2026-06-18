@@ -19,8 +19,8 @@ use std::path::Path;
 use serde_json::{Value, json};
 
 use vela_protocol::sidon_profile::{
-    Presentation, make_observation, make_result, make_task, validate_shape,
-    verify_observation_replay, verify_signed_packet,
+    Presentation, build_frontier_map, make_observation, make_result, make_task,
+    next_bound_obligations, validate_shape, verify_observation_replay, verify_signed_packet,
 };
 
 use crate::cli::parse_signing_key;
@@ -133,6 +133,46 @@ pub(crate) fn cmd_sidon(action: SidonAction) {
                         b["n"], b["best_lower_bound"]
                     );
                 }
+            }
+        }
+
+        SidonAction::FrontierMap {
+            presentation,
+            json: json_out,
+        } => {
+            let pj = read_json(&presentation);
+            let pres = Presentation::from_json(&pj)
+                .unwrap_or_else(|e| die(format!("invalid presentation: {e}")));
+            let disabled = BTreeSet::new();
+            // Derive the open frontier: the next bound to beat at each n.
+            let obls = next_bound_obligations(&pres)
+                .unwrap_or_else(|e| die(format!("derive obligations: {e}")));
+            let map = build_frontier_map(&pres, &obls, &disabled)
+                .unwrap_or_else(|e| die(format!("build frontier map: {e}")));
+
+            if json_out {
+                println!("{}", serde_json::to_string_pretty(&map).unwrap());
+            } else {
+                println!("frontier map {}", map["frontier_map_root"].as_str().unwrap());
+                let empty = Vec::new();
+                let rows = map["obligations"].as_array().unwrap_or(&empty);
+                if rows.is_empty() {
+                    println!("  (no registered bounds — nothing to extend)");
+                }
+                for r in rows {
+                    let ctx = &r["context"];
+                    println!(
+                        "  [{}] A309370(n={}) >= {}  (current {})",
+                        r["status"].as_str().unwrap_or("?"),
+                        ctx["n"],
+                        ctx["target_k"],
+                        ctx["current_k"]
+                    );
+                }
+                println!(
+                    "\nOpen frontier: {} obligation(s). Beat one with `vela sidon submit`.",
+                    map["open_obligations"].as_array().map(Vec::len).unwrap_or(0)
+                );
             }
         }
     }

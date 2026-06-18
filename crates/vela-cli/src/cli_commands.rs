@@ -1516,6 +1516,18 @@ pub(crate) enum SidonAction {
         #[arg(long)]
         json: bool,
     },
+    /// The open frontier: the next bound to beat at each n, derived from the
+    /// presentation's registered bounds. Each row is `latent`, `open`, or
+    /// `discharged`; the map is bound to the presentation root. This is the
+    /// view a producer reads to choose work. No key required (a planning view,
+    /// not accepted state).
+    FrontierMap {
+        /// A presentation JSON: `{cell_ranks, clauses, accepted_events, cell_metadata}`.
+        #[arg(long)]
+        presentation: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]

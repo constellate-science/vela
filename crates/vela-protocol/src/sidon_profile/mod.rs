@@ -24,6 +24,7 @@
 
 pub mod canonical;
 pub mod evaluator;
+pub mod frontier;
 pub mod kernel;
 pub mod packets;
 pub mod producer;
@@ -33,6 +34,10 @@ pub use evaluator::{
     EVALUATOR_ID, FRONTIER_ID, PROFILE_ID, RULE_ATOM, VIEW_POLICY_ID, append_verified_route,
     best_bounds, bound_cell, claim, current_bound, register_bound_metadata, state_commitment,
     verify_observation_replay, witness_cell,
+};
+pub use frontier::{
+    Obligation, build_frontier_map, frontier_transition, next_bound_obligations,
+    obligation_discharged, obligation_status, verify_positive_gap_monotonicity,
 };
 pub use kernel::{
     Clause, Monomial, Polynomial, Presentation, active_environments, active_view_root,
