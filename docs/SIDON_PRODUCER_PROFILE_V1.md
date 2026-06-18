@@ -169,3 +169,34 @@ A conformant implementation must reproduce the fixture's roots and trace:
 ```
 
 It must also reject the negative no-hidden-state fixture and preserve historical lineage across restriction.
+
+## 11. Rust realization (status)
+
+The profile is realized in Rust at `crates/vela-protocol/src/sidon_profile/`
+(modules `canonical` · `packets` · `kernel` · `evaluator` · `producer`) and
+surfaced through `vela sidon`. Every layer is conformance-pinned to the Python
+reference and to the landed fixtures:
+
+- **canonical + packets** — recompute all 25 fixture packet IDs and re-verify
+  every Ed25519 signature (`tests/sidon_profile_conformance.rs`).
+- **kernel + evaluator** — replay each snapshot's four roots, canonical output,
+  and digests; reproduce the `6,7,7,6,7` trace; the restrict-kill and
+  append-repair through the bag-lineage environments
+  (`tests/sidon_profile_kernel_conformance.rs`).
+- **producer** — `make_support_function` / `make_observation` / `make_task` /
+  `make_result` regenerate the genesis observation, task, and result *byte for
+  byte*, signatures included (`tests/sidon_profile_producer_conformance.rs`).
+
+`vela sidon submit WITNESS --base-observation OBS --key K --actor A` emits the
+signed `ResultPacket` a producer proposes; `vela sidon observe --presentation P
+--key K --actor A` emits the authoritative `ObservationPacket` (which replays
+from the presentation it names). Both sign with the caller's own key. Packets
+emitted by the Rust CLI are accepted by the independent Python
+`verify_signed_packet`.
+
+Not yet realized in Rust: the reviewer-side constructors
+(gate/acceptance/challenge/view/repair) — where the **production gate runs the
+frozen `vela-verify` Sidon verifier**, not the fixture's hashed Python
+executables; the live-frontier reducer (accepted findings → presentation); and
+the hub observation endpoint that mints `bounds.json` carrying the observation
+id.
