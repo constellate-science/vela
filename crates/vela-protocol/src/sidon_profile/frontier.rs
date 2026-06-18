@@ -33,6 +33,13 @@ pub const SUPPORT_EXISTS_EVALUATOR: &str = "vela.support-exists.v1";
 
 /// An obligation: a target cell that should become supported, with the
 /// dependencies that gate when the work is actionable.
+///
+/// Scope: this is the SIDON PROFILE's obligation, not a domain-general protocol
+/// primitive. The map plane is the least-realized of the three (record / map /
+/// extend); a shared `vela-protocol` `Obligation` type is deliberately deferred
+/// until a second domain needs one (the stop-list: do not build domain-general
+/// machinery ahead of a second producer). Until then the map plane is realized
+/// per-profile here, and as ad-hoc JSON in the hub's obligation endpoints.
 #[derive(Debug, Clone)]
 pub struct Obligation {
     pub obligation_id: String,
