@@ -2,7 +2,6 @@
 //! Depends on vela-protocol (the waist); never the reverse.
 
 pub mod agent_attestation;
-pub mod aggregate;
 pub mod artifact_audit;
 pub mod artifact_to_state;
 pub mod benchmark;
@@ -49,7 +48,6 @@ pub mod reviewer_identity;
 pub mod search;
 pub mod signals;
 pub mod source_inbox;
-pub mod source_resolver;
 pub mod state_integrity;
 pub mod task_workspace;
 pub mod tensions;
