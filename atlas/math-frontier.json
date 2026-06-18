@@ -1,0 +1,303 @@
+{
+  "schema": "vela.math-frontier.v1",
+  "what": "The frontier of mathematics mapped with the Frontier Fabric model: every cell is discharged (verified), open (an exact verifier exists, admission-eligible to push), or dark matter (typed missingness with no cheap-verifier path). Record = the 809k-node atlas; map = this partition.",
+  "totals": {
+    "nodes": 809282,
+    "discharged": 317587,
+    "discharged_pct": 39,
+    "open_attackable": 796,
+    "dark_matter": 491695,
+    "dark_matter_pct": 61
+  },
+  "fields": [
+    {
+      "domain": "integer-sequences",
+      "nodes": 396966,
+      "discharged": 1,
+      "discharged_pct": 0,
+      "unverified": 396965
+    },
+    {
+      "domain": "Core",
+      "nodes": 100435,
+      "discharged": 56789,
+      "discharged_pct": 57,
+      "unverified": 43646
+    },
+    {
+      "domain": "Algebra",
+      "nodes": 56331,
+      "discharged": 47957,
+      "discharged_pct": 85,
+      "unverified": 8374
+    },
+    {
+      "domain": "CategoryTheory",
+      "nodes": 42795,
+      "discharged": 31349,
+      "discharged_pct": 73,
+      "unverified": 11446
+    },
+    {
+      "domain": "Analysis",
+      "nodes": 28576,
+      "discharged": 26103,
+      "discharged_pct": 91,
+      "unverified": 2473
+    },
+    {
+      "domain": "Topology",
+      "nodes": 27983,
+      "discharged": 24226,
+      "discharged_pct": 87,
+      "unverified": 3757
+    },
+    {
+      "domain": "Data",
+      "nodes": 25143,
+      "discharged": 22218,
+      "discharged_pct": 88,
+      "unverified": 2925
+    },
+    {
+      "domain": "Order",
+      "nodes": 19804,
+      "discharged": 17503,
+      "discharged_pct": 88,
+      "unverified": 2301
+    },
+    {
+      "domain": "RingTheory",
+      "nodes": 19275,
+      "discharged": 16576,
+      "discharged_pct": 86,
+      "unverified": 2699
+    },
+    {
+      "domain": "LinearAlgebra",
+      "nodes": 12399,
+      "discharged": 10571,
+      "discharged_pct": 85,
+      "unverified": 1828
+    },
+    {
+      "domain": "MeasureTheory",
+      "nodes": 12354,
+      "discharged": 11407,
+      "discharged_pct": 92,
+      "unverified": 947
+    },
+    {
+      "domain": "GroupTheory",
+      "nodes": 8900,
+      "discharged": 7518,
+      "discharged_pct": 84,
+      "unverified": 1382
+    },
+    {
+      "domain": "Combinatorics",
+      "nodes": 7895,
+      "discharged": 6779,
+      "discharged_pct": 86,
+      "unverified": 1116
+    },
+    {
+      "domain": "NumberTheory",
+      "nodes": 6630,
+      "discharged": 5743,
+      "discharged_pct": 87,
+      "unverified": 887
+    },
+    {
+      "domain": "Geometry",
+      "nodes": 6105,
+      "discharged": 5317,
+      "discharged_pct": 87,
+      "unverified": 788
+    },
+    {
+      "domain": "AlgebraicGeometry",
+      "nodes": 5895,
+      "discharged": 4842,
+      "discharged_pct": 82,
+      "unverified": 1053
+    },
+    {
+      "domain": "Tactic",
+      "nodes": 5134,
+      "discharged": 1417,
+      "discharged_pct": 28,
+      "unverified": 3717
+    },
+    {
+      "domain": "AlgebraicTopology",
+      "nodes": 4733,
+      "discharged": 3457,
+      "discharged_pct": 73,
+      "unverified": 1276
+    },
+    {
+      "domain": "Probability",
+      "nodes": 4276,
+      "discharged": 3922,
+      "discharged_pct": 92,
+      "unverified": 354
+    },
+    {
+      "domain": "SetTheory",
+      "nodes": 3516,
+      "discharged": 3224,
+      "discharged_pct": 92,
+      "unverified": 292
+    },
+    {
+      "domain": "FieldTheory",
+      "nodes": 3000,
+      "discharged": 2622,
+      "discharged_pct": 87,
+      "unverified": 378
+    },
+    {
+      "domain": "Logic",
+      "nodes": 2824,
+      "discharged": 2275,
+      "discharged_pct": 81,
+      "unverified": 549
+    },
+    {
+      "domain": "RepresentationTheory",
+      "nodes": 1998,
+      "discharged": 1462,
+      "discharged_pct": 73,
+      "unverified": 536
+    },
+    {
+      "domain": "Computability",
+      "nodes": 1865,
+      "discharged": 1328,
+      "discharged_pct": 71,
+      "unverified": 537
+    },
+    {
+      "domain": "ModelTheory",
+      "nodes": 1767,
+      "discharged": 1313,
+      "discharged_pct": 74,
+      "unverified": 454
+    },
+    {
+      "domain": "Dynamics",
+      "nodes": 903,
+      "discharged": 801,
+      "discharged_pct": 89,
+      "unverified": 102
+    },
+    {
+      "domain": "Control",
+      "nodes": 606,
+      "discharged": 392,
+      "discharged_pct": 65,
+      "unverified": 214
+    },
+    {
+      "domain": "Condensed",
+      "nodes": 430,
+      "discharged": 250,
+      "discharged_pct": 58,
+      "unverified": 180
+    },
+    {
+      "domain": "Lean",
+      "nodes": 293,
+      "discharged": 43,
+      "discharged_pct": 15,
+      "unverified": 250
+    },
+    {
+      "domain": "Util",
+      "nodes": 268,
+      "discharged": 23,
+      "discharged_pct": 9,
+      "unverified": 245
+    },
+    {
+      "domain": "InformationTheory",
+      "nodes": 144,
+      "discharged": 136,
+      "discharged_pct": 94,
+      "unverified": 8
+    },
+    {
+      "domain": "Testing",
+      "nodes": 36,
+      "discharged": 23,
+      "discharged_pct": 64,
+      "unverified": 13
+    },
+    {
+      "domain": "Init",
+      "nodes": 3,
+      "discharged": 0,
+      "discharged_pct": 0,
+      "unverified": 3
+    }
+  ],
+  "open_frontier": {
+    "what": "the attackable obligations — exact, in-software-verifier, admission-eligible for the permissionless discovery loop. This is the work queue: where Vela's verifier-gated loop can push.",
+    "total": 796,
+    "sources": [
+      {
+        "source": "formal-conjectures (Lean)",
+        "verifier": "lean kernel",
+        "open": 757,
+        "discharged_note": "26 of 783 files proof-complete",
+        "note": "sorry-bearing conjectures: a Lean proof discharges them",
+        "by_area_open": {
+          "HilbertProblems": 2,
+          "Paper": 23,
+          "OEIS": 21,
+          "OpenQuantumProblems": 3,
+          "WrittenOnTheWallII": 47,
+          "GreensOpenProblems": 46,
+          "Wikipedia": 120,
+          "Util": 5,
+          "Other": 5,
+          "LittProblems": 1,
+          "Books": 7,
+          "Millenium": 4,
+          "Kourovka": 2,
+          "Arxiv": 14,
+          "OptimizationConstants": 1,
+          "Mathoverflow": 12,
+          "ErdosProblems": 444
+        }
+      },
+      {
+        "source": "Erdős wedge",
+        "verifier": "frozen vela-verify / Lean",
+        "open": 38,
+        "discharged_note": "22 covered (verifier or Lean proof exists)",
+        "note": "marked computationally decidable in the canonical DB; no Vela verifier yet"
+      },
+      {
+        "source": "Vela frozen-verifier frontiers",
+        "verifier": "vela-verify (frozen)",
+        "open": 1,
+        "discharged_note": "3 live frontiers",
+        "note": "each anchored sequence has an open next-bound obligation",
+        "frontiers": [
+          "benchmark-state",
+          "erdos-problems",
+          "sidon-sets"
+        ]
+      }
+    ]
+  },
+  "dark_matter": {
+    "what": "typed missingness (Frontier Fabric gap classes) with no current cheap-verifier path",
+    "total": 491695,
+    "dominant_gap_class": "coverage",
+    "note": "Most dark matter is `coverage`: OEIS sequences and open problems with no verified status. It is not absolute — it is relative to the declared obligation universe (admit a new adapter/coverage model and more of it becomes open)."
+  },
+  "insight": "Of 809,282 cells, 317,587 are verified and 491,695 are dark matter, but only ~796 are attackable RIGHT NOW (an exact verifier exists). That precious set is the frontier to push; the dark matter grows attackable as new verifiers and coverage models are admitted."
+}
