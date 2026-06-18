@@ -624,6 +624,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/entries", get(list_entries).post(publish_entry))
         .route("/entries/{vfr_id}", get(get_entry))
         .route("/entries/{vfr_id}/snapshot", get(get_entry_snapshot))
+        .route(
+            "/entries/{vfr_id}/sidon-frontier-map",
+            get(get_sidon_frontier_map),
+        )
         .route("/entries/{vfr_id}/summary", get(get_entry_summary))
         .route("/entries/{vfr_id}/manifest", get(get_entry_manifest))
         .route("/entries/{vfr_id}/status", get(get_entry_status))
@@ -1051,6 +1055,56 @@ async fn load_substrate(
         }
     }
     None
+}
+
+/// The live Sidon open-frontier over HTTP: the next bound to beat at each n,
+/// compiled from the frontier's accepted record so a producer reads what to
+/// attempt without cloning. Keyless (a planning view, not accepted state) and
+/// additive. Sidon-specific; a non-Sidon frontier returns 422.
+async fn get_sidon_frontier_map(
+    State(state): State<AppState>,
+    Path(vfr_id): Path<String>,
+) -> Response {
+    use std::collections::BTreeSet;
+    use vela_protocol::sidon_profile::{
+        build_frontier_map, live_presentation, next_bound_obligations,
+    };
+    let project = match state.db.get_materialized_project(&vfr_id).await {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "frontier not found", "vfr_id": vfr_id })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": e })))
+                .into_response();
+        }
+    };
+    let pres = match live_presentation(&project) {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({
+                    "error": format!("not a live Sidon frontier: {e}"),
+                    "vfr_id": vfr_id,
+                })),
+            )
+                .into_response();
+        }
+    };
+    let disabled = BTreeSet::new();
+    let map =
+        next_bound_obligations(&pres).and_then(|obls| build_frontier_map(&pres, &obls, &disabled));
+    match map {
+        Ok(m) => (StatusCode::OK, Json(m)).into_response(),
+        Err(e) => {
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": e }))).into_response()
+        }
+    }
 }
 
 async fn get_entry(
