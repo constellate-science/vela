@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://constellate.science/schema/domain-adapter-v2.schema.json",
+  "title": "Vela DomainAdapter v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version","adapter_id","name","domain_profile_id","evidence_class","context_dimensions","compiler_id","verifier_profiles","obligation_generators","candidate_generators","transfer_lanes","observation_evaluators","capabilities"],
+  "properties": {
+    "schema_version": {"const": "vela.domain-adapter.v2"},
+    "adapter_id": {"type": "string", "pattern": "^vadp_[0-9a-f]{64}$"},
+    "name": {"type": "string", "minLength": 1},
+    "domain_profile_id": {"type": "string", "minLength": 1},
+    "evidence_class": {"enum": ["exact","replay","trace","estimate","attestation"]},
+    "context_dimensions": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "compiler_id": {"type": "string"},
+    "verifier_profiles": {"type": "array", "items": {"type": "object", "additionalProperties": false, "required": ["verifier_profile_id","receipt_kinds"], "properties": {"verifier_profile_id":{"type":"string"},"receipt_kinds":{"type":"array","items":{"type":"string"},"uniqueItems":true}}}},
+    "obligation_generators": {"type": "array", "items": {"type":"object","additionalProperties":false,"required":["generator_id","kind","targets","discharge_evaluator_id","verifier_profile_id","rationale"],"properties":{"generator_id":{"type":"string"},"kind":{"type":"string"},"targets":{"type":"array","items":{"type":"string"}},"discharge_evaluator_id":{"const":"vela.support-exists.v1"},"verifier_profile_id":{"type":"string"},"rationale":{"type":"string"},"dependencies":{"type":"array","items":{"type":"string"}}}}},
+    "candidate_generators": {"type": "array", "items": {"type":"object","additionalProperties":false,"required":["generator_id","model_class","state_effect"],"properties":{"generator_id":{"type":"string"},"model_class":{"enum":["none","language_model","graph_model","neural_operator","symbolic_regression","universal_differential_equation","natural_law_model","generative_model"]},"state_effect":{"const":"none"}}}},
+    "transfer_lanes": {"type":"array","items":{"enum":["certified","target_checked","exploratory"]},"uniqueItems":true},
+    "observation_evaluators": {"type":"array","items":{"type":"object","additionalProperties":false,"required":["evaluator_id","authoritative"],"properties":{"evaluator_id":{"type":"string"},"authoritative":{"type":"boolean"}}}},
+    "capabilities": {"type":"array","items":{"type":"string"},"uniqueItems":true}
+  }
+}

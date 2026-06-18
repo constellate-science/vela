@@ -1,0 +1,64 @@
+{
+  "adapter_id": "vadp_82c62045152ccf30cfd042d30d875aed4157dd9570789bf0c000c610381f2d7b",
+  "candidate_generators": [
+    {
+      "generator_id": "foundation-model",
+      "model_class": "graph_model",
+      "state_effect": "none"
+    },
+    {
+      "generator_id": "natural-law-model",
+      "model_class": "natural_law_model",
+      "state_effect": "none"
+    }
+  ],
+  "capabilities": [
+    "compile_model_receipts",
+    "track_domain_shift",
+    "generate_candidate_hypotheses"
+  ],
+  "compiler_id": "vela.compiler.model-evaluation.v2",
+  "context_dimensions": [
+    "model",
+    "weights",
+    "training_data",
+    "evaluation_suite",
+    "domain_of_validity"
+  ],
+  "domain_profile_id": "model-evaluation",
+  "evidence_class": "replay",
+  "name": "Scientific model evaluation",
+  "obligation_generators": [
+    {
+      "discharge_evaluator_id": "vela.support-exists.v1",
+      "generator_id": "evaluation-gap-generator",
+      "kind": "missing_evaluation",
+      "rationale": "a declared model capability lacks a target-domain evaluation route",
+      "targets": [
+        "model_validated"
+      ],
+      "verifier_profile_id": "evaluation-suite"
+    }
+  ],
+  "observation_evaluators": [
+    {
+      "authoritative": true,
+      "evaluator_id": "vela.support-and-environments.v2"
+    }
+  ],
+  "schema_version": "vela.domain-adapter.v2",
+  "transfer_lanes": [
+    "target_checked",
+    "exploratory"
+  ],
+  "verifier_profiles": [
+    {
+      "receipt_kinds": [
+        "benchmark_replay",
+        "calibration_report",
+        "ood_report"
+      ],
+      "verifier_profile_id": "evaluation-suite"
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "adapter_id": "vadp_71bb5d10646801bc0d41e62b888fdd80c02faf0dae39fa8902ee1bb709f6d512",
+  "candidate_generators": [
+    {
+      "generator_id": "human-or-external",
+      "model_class": "none",
+      "state_effect": "none"
+    },
+    {
+      "generator_id": "experiment-planner",
+      "model_class": "natural_law_model",
+      "state_effect": "none"
+    }
+  ],
+  "capabilities": [
+    "compile_body_traces",
+    "generate_replication_gaps",
+    "rank_experiments"
+  ],
+  "compiler_id": "vela.compiler.experimental-trace.v2",
+  "context_dimensions": [
+    "protocol",
+    "sample_lineage",
+    "instrument",
+    "calibration",
+    "operator",
+    "time"
+  ],
+  "domain_profile_id": "experimental-trace",
+  "evidence_class": "trace",
+  "name": "Experimental execution trace",
+  "obligation_generators": [
+    {
+      "discharge_evaluator_id": "vela.support-exists.v1",
+      "generator_id": "replication-gap-generator",
+      "kind": "missing_replication",
+      "rationale": "a declared replication obligation lacks an independent trace route",
+      "targets": [
+        "replicated_observation"
+      ],
+      "verifier_profile_id": "trace-validator"
+    }
+  ],
+  "observation_evaluators": [
+    {
+      "authoritative": true,
+      "evaluator_id": "vela.support-and-environments.v2"
+    }
+  ],
+  "schema_version": "vela.domain-adapter.v2",
+  "transfer_lanes": [
+    "target_checked",
+    "exploratory"
+  ],
+  "verifier_profiles": [
+    {
+      "receipt_kinds": [
+        "instrument_trace",
+        "calibration_receipt"
+      ],
+      "verifier_profile_id": "trace-validator"
+    }
+  ]
+}

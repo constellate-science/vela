@@ -1,0 +1,63 @@
+{
+  "adapter_id": "vadp_a7ec967536b18dfef10b7784b650c7166010894855148ca2e7d102b7169ed2bc",
+  "candidate_generators": [
+    {
+      "generator_id": "human-or-external",
+      "model_class": "none",
+      "state_effect": "none"
+    },
+    {
+      "generator_id": "search-agent",
+      "model_class": "generative_model",
+      "state_effect": "none"
+    }
+  ],
+  "capabilities": [
+    "compile_witnesses",
+    "generate_bound_obligations",
+    "poll_frontier",
+    "export_oeis"
+  ],
+  "compiler_id": "vela.compiler.exact-combinatorics.v2",
+  "context_dimensions": [
+    "problem",
+    "parameter",
+    "bound_kind",
+    "verifier_version"
+  ],
+  "domain_profile_id": "exact-combinatorics",
+  "evidence_class": "exact",
+  "name": "Exact combinatorics",
+  "obligation_generators": [
+    {
+      "discharge_evaluator_id": "vela.support-exists.v1",
+      "generator_id": "frontier-bound-generator",
+      "kind": "unimproved_bound",
+      "rationale": "the next declared frontier bound lacks an accepted witness",
+      "targets": [
+        "next_bound"
+      ],
+      "verifier_profile_id": "exact-witness"
+    }
+  ],
+  "observation_evaluators": [
+    {
+      "authoritative": true,
+      "evaluator_id": "vela.support-and-environments.v2"
+    }
+  ],
+  "schema_version": "vela.domain-adapter.v2",
+  "transfer_lanes": [
+    "certified",
+    "target_checked",
+    "exploratory"
+  ],
+  "verifier_profiles": [
+    {
+      "receipt_kinds": [
+        "exact_certificate"
+      ],
+      "verifier_profile_id": "exact-witness"
+    }
+  ]
+}

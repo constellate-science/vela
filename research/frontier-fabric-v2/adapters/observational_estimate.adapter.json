@@ -1,0 +1,64 @@
+{
+  "adapter_id": "vadp_23b8ad93a699520bd60c50693a19beb329ae67107c5328acd88c7a6ccde554a9",
+  "candidate_generators": [
+    {
+      "generator_id": "human-or-external",
+      "model_class": "none",
+      "state_effect": "none"
+    },
+    {
+      "generator_id": "causal-model",
+      "model_class": "graph_model",
+      "state_effect": "none"
+    }
+  ],
+  "capabilities": [
+    "compile_estimands",
+    "track_assumptions",
+    "generate_analysis_candidates"
+  ],
+  "compiler_id": "vela.compiler.observational-estimate.v2",
+  "context_dimensions": [
+    "population",
+    "estimand",
+    "data_root",
+    "analysis",
+    "assumptions",
+    "valid_time"
+  ],
+  "domain_profile_id": "observational-estimate",
+  "evidence_class": "estimate",
+  "name": "Observational estimate",
+  "obligation_generators": [
+    {
+      "discharge_evaluator_id": "vela.support-exists.v1",
+      "generator_id": "estimand-gap-generator",
+      "kind": "missing_estimate",
+      "rationale": "a registered estimand lacks an accepted estimate route",
+      "targets": [
+        "registered_estimand"
+      ],
+      "verifier_profile_id": "analysis-replay"
+    }
+  ],
+  "observation_evaluators": [
+    {
+      "authoritative": true,
+      "evaluator_id": "vela.support-and-environments.v2"
+    }
+  ],
+  "schema_version": "vela.domain-adapter.v2",
+  "transfer_lanes": [
+    "target_checked",
+    "exploratory"
+  ],
+  "verifier_profiles": [
+    {
+      "receipt_kinds": [
+        "analysis_replay",
+        "uncertainty_report"
+      ],
+      "verifier_profile_id": "analysis-replay"
+    }
+  ]
+}

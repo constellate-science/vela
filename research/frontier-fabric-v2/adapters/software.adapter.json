@@ -1,0 +1,64 @@
+{
+  "adapter_id": "vadp_d0e0543bf0b819e1963dc92c0f06416625249aba939353be8c1ea3552af50ec4",
+  "candidate_generators": [
+    {
+      "generator_id": "human-or-external",
+      "model_class": "none",
+      "state_effect": "none"
+    },
+    {
+      "generator_id": "coding-agent",
+      "model_class": "language_model",
+      "state_effect": "none"
+    }
+  ],
+  "capabilities": [
+    "compile_ci_receipts",
+    "track_regressions",
+    "export_git"
+  ],
+  "compiler_id": "vela.compiler.software.v2",
+  "context_dimensions": [
+    "repository",
+    "commit",
+    "toolchain",
+    "platform",
+    "test_suite"
+  ],
+  "domain_profile_id": "software",
+  "evidence_class": "replay",
+  "name": "Software and code validation",
+  "obligation_generators": [
+    {
+      "discharge_evaluator_id": "vela.support-exists.v1",
+      "generator_id": "failing-check-generator",
+      "kind": "failing_check",
+      "rationale": "an implementation claim lacks a passing replay route",
+      "targets": [
+        "validated_implementation"
+      ],
+      "verifier_profile_id": "reproducible-build"
+    }
+  ],
+  "observation_evaluators": [
+    {
+      "authoritative": true,
+      "evaluator_id": "vela.support-and-environments.v2"
+    }
+  ],
+  "schema_version": "vela.domain-adapter.v2",
+  "transfer_lanes": [
+    "certified",
+    "target_checked",
+    "exploratory"
+  ],
+  "verifier_profiles": [
+    {
+      "receipt_kinds": [
+        "bitwise_replay",
+        "test_receipt"
+      ],
+      "verifier_profile_id": "reproducible-build"
+    }
+  ]
+}

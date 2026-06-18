@@ -1,0 +1,63 @@
+{
+  "adapter_id": "vadp_6300865b00ae56df723a9bfcfd769371a144e290f2591e1d510036b52041396e",
+  "candidate_generators": [
+    {
+      "generator_id": "human-or-external",
+      "model_class": "none",
+      "state_effect": "none"
+    },
+    {
+      "generator_id": "formal-agent",
+      "model_class": "language_model",
+      "state_effect": "none"
+    }
+  ],
+  "capabilities": [
+    "compile_proof_receipts",
+    "generate_open_goals",
+    "certified_transfers",
+    "export_lean"
+  ],
+  "compiler_id": "vela.compiler.formal-math.v2",
+  "context_dimensions": [
+    "theory",
+    "statement",
+    "formal_system",
+    "library_version"
+  ],
+  "domain_profile_id": "formal-math",
+  "evidence_class": "exact",
+  "name": "Formal mathematics",
+  "obligation_generators": [
+    {
+      "discharge_evaluator_id": "vela.support-exists.v1",
+      "generator_id": "open-goal-generator",
+      "kind": "missing_proof",
+      "rationale": "a declared theorem cell lacks an accepted proof route",
+      "targets": [
+        "open_goal"
+      ],
+      "verifier_profile_id": "lean-kernel"
+    }
+  ],
+  "observation_evaluators": [
+    {
+      "authoritative": true,
+      "evaluator_id": "vela.support-and-environments.v2"
+    }
+  ],
+  "schema_version": "vela.domain-adapter.v2",
+  "transfer_lanes": [
+    "certified",
+    "target_checked",
+    "exploratory"
+  ],
+  "verifier_profiles": [
+    {
+      "receipt_kinds": [
+        "kernel_check"
+      ],
+      "verifier_profile_id": "lean-kernel"
+    }
+  ]
+}

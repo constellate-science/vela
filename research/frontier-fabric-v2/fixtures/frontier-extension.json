@@ -1,0 +1,2128 @@
+{
+  "adapters": [
+    "vadp_a7ec967536b18dfef10b7784b650c7166010894855148ca2e7d102b7169ed2bc",
+    "vadp_c1afea3394413f9cedfc0cae18401564db3118e71f7eea0f02dd3e09158a71af",
+    "vadp_82c62045152ccf30cfd042d30d875aed4157dd9570789bf0c000c610381f2d7b"
+  ],
+  "cells": {
+    "heat_alpha_01": "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf",
+    "heat_alpha_02": "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb",
+    "heat_alpha_03": "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87",
+    "heat_coverage": "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de",
+    "sidon_source": "vcell_3d576eb6a19b72af81730636c8b35067016635b665fc3716b120348a3456db7c",
+    "sidon_translated": "vcell_bc06d6d70f6caa3bfd51be3e39e24ef5014da0f965acca48dddd59a75e585a0d"
+  },
+  "certified_transfer": {
+    "assumptions": [
+      "translation-is-componentwise-in-Z"
+    ],
+    "certificate": {
+      "map": "componentwise_translation",
+      "offset": [
+        10
+      ],
+      "passed": true,
+      "source_detail": "6 pair sums distinct",
+      "target_detail": "6 pair sums distinct",
+      "translated_points": [
+        [
+          10
+        ],
+        [
+          11
+        ],
+        [
+          14
+        ]
+      ],
+      "verifier_preserving": true
+    },
+    "lane": "certified",
+    "lost_coordinates": [],
+    "packet_id": "vtx_b7a6ad16734b2357c9ea9aaf659c945634900e19757032986e9f46ae576aa750",
+    "packet_type": "transfer",
+    "preserved_coordinates": [
+      "exact_verification"
+    ],
+    "required_target_receipts": [],
+    "schema_version": "vela.constellate.frontier-fabric.v2",
+    "signature": {
+      "algorithm": "ed25519",
+      "value": "mhDwYpmKfKa6Ai+BWi249apyi3s2sk9F7sTBhIkuKZli9LjcjfUQF8HZH3ieKdvzXwO5JGZNbIttcLZSzqO4AQ=="
+    },
+    "signer_actor": "verifier:translation",
+    "signer_kind": "verifier",
+    "signer_public_key": "SCM0HHTVW4gr1FRQHzqXSq4frJVaak0W0iv5uVJd+N0=",
+    "source_cells": [
+      "vcell_3d576eb6a19b72af81730636c8b35067016635b665fc3716b120348a3456db7c"
+    ],
+    "source_contexts": [
+      {
+        "parameter": "source",
+        "problem": "sidon_Z"
+      }
+    ],
+    "state_effect": "append_eligible_after_human_acceptance",
+    "target_cell": "vcell_bc06d6d70f6caa3bfd51be3e39e24ef5014da0f965acca48dddd59a75e585a0d",
+    "target_context": {
+      "parameter": "translated",
+      "problem": "sidon_Z"
+    }
+  },
+  "challenge": {
+    "base_observation_id": "vop_3df449e3f9a50740533962e1cb346b79cbe001ebc1c8b7c92f559b7722e9b8ce",
+    "hits_every_active_environment": true,
+    "packet_id": "vch_58b1b416d49695778627382e9d49f4d37f1274cddbc7415b4429058906b1948f",
+    "packet_type": "challenge",
+    "proposed_disabled_atoms": [
+      "target-receipt:vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a"
+    ],
+    "schema_version": "vela.constellate.frontier-fabric.v2",
+    "signature": {
+      "algorithm": "ed25519",
+      "value": "jV8xP3aigde9wMAnHMsc1q4urzqFEjxyShU4XNhu1RkiKkTNIGGKq+k6OlKyN059XpylyhzC/CREyObNHFX4AA=="
+    },
+    "signer_actor": "human:challenger",
+    "signer_kind": "human",
+    "signer_public_key": "idxn+h4PdtEqw55dvyqO2e1/jj7htEtUEFTkXN7bDzc=",
+    "state_effect": "none_until_view_decision",
+    "target_cell_id": "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb"
+  },
+  "frontier_after": {
+    "disabled_atoms": [],
+    "discharged_obligations": [
+      "vobl_ef92d174c81732f3064c9d269f534407a690b75cf603d67d7cd82bf14f9fb760"
+    ],
+    "frontier_map_root": "vfm_6e326ad7858b2d01aa98d28a539afe353fc70cd53906d7a47d2d93707c26575d",
+    "latent_obligations": [],
+    "obligations": [
+      {
+        "adapter_id": "vadp_c1afea3394413f9cedfc0cae18401564db3118e71f7eea0f02dd3e09158a71af",
+        "context": {
+          "equations": "heat-1d",
+          "initial_conditions": "sin(pi*x)",
+          "mesh": "analytic-fixture",
+          "parameters": {
+            "alpha": "0.2"
+          },
+          "solver": "reference",
+          "tolerance": "1e-9"
+        },
+        "dependencies": [
+          "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb"
+        ],
+        "discharge_evaluator_id": "vela.support-exists.v1",
+        "generator_id": "parameter-coverage-alpha-03",
+        "kind": "uncovered_parameter_regime",
+        "obligation_id": "vobl_22d26543ffaae9620593f20a290b8925cbd2bd1c1ae6d8b9a4b705e635b14e84",
+        "rationale": "the successor regime becomes actionable after alpha=0.2 is replay-confirmed",
+        "status": "open",
+        "target_cell": "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87",
+        "verifier_profile_id": "semantic-replay"
+      },
+      {
+        "adapter_id": "vadp_c1afea3394413f9cedfc0cae18401564db3118e71f7eea0f02dd3e09158a71af",
+        "context": {
+          "equations": "heat-1d",
+          "initial_conditions": "sin(pi*x)",
+          "mesh": "analytic-fixture",
+          "parameters": {
+            "alpha": "0.2"
+          },
+          "solver": "reference",
+          "tolerance": "1e-9"
+        },
+        "dependencies": [],
+        "discharge_evaluator_id": "vela.support-exists.v1",
+        "generator_id": "parameter-coverage-alpha-02",
+        "kind": "uncovered_parameter_regime",
+        "obligation_id": "vobl_ef92d174c81732f3064c9d269f534407a690b75cf603d67d7cd82bf14f9fb760",
+        "rationale": "the next actionable parameter regime lacks a replay-confirmed solution route",
+        "status": "discharged",
+        "target_cell": "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb",
+        "verifier_profile_id": "semantic-replay"
+      }
+    ],
+    "open_obligations": [
+      "vobl_22d26543ffaae9620593f20a290b8925cbd2bd1c1ae6d8b9a4b705e635b14e84"
+    ],
+    "presentation_root": "vpr_b4ed968f10a1d68f528b62018643d45d1a7bb4a59da5005cf4c10aa3f7c68a2b"
+  },
+  "frontier_before": {
+    "disabled_atoms": [],
+    "discharged_obligations": [],
+    "frontier_map_root": "vfm_f54225e4c5906cb9425b9ac23254e457c298f08e85f510c14fb8d3ce60fdb2be",
+    "latent_obligations": [
+      "vobl_22d26543ffaae9620593f20a290b8925cbd2bd1c1ae6d8b9a4b705e635b14e84"
+    ],
+    "obligations": [
+      {
+        "adapter_id": "vadp_c1afea3394413f9cedfc0cae18401564db3118e71f7eea0f02dd3e09158a71af",
+        "context": {
+          "equations": "heat-1d",
+          "initial_conditions": "sin(pi*x)",
+          "mesh": "analytic-fixture",
+          "parameters": {
+            "alpha": "0.2"
+          },
+          "solver": "reference",
+          "tolerance": "1e-9"
+        },
+        "dependencies": [
+          "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb"
+        ],
+        "discharge_evaluator_id": "vela.support-exists.v1",
+        "generator_id": "parameter-coverage-alpha-03",
+        "kind": "uncovered_parameter_regime",
+        "obligation_id": "vobl_22d26543ffaae9620593f20a290b8925cbd2bd1c1ae6d8b9a4b705e635b14e84",
+        "rationale": "the successor regime becomes actionable after alpha=0.2 is replay-confirmed",
+        "status": "latent",
+        "target_cell": "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87",
+        "verifier_profile_id": "semantic-replay"
+      },
+      {
+        "adapter_id": "vadp_c1afea3394413f9cedfc0cae18401564db3118e71f7eea0f02dd3e09158a71af",
+        "context": {
+          "equations": "heat-1d",
+          "initial_conditions": "sin(pi*x)",
+          "mesh": "analytic-fixture",
+          "parameters": {
+            "alpha": "0.2"
+          },
+          "solver": "reference",
+          "tolerance": "1e-9"
+        },
+        "dependencies": [],
+        "discharge_evaluator_id": "vela.support-exists.v1",
+        "generator_id": "parameter-coverage-alpha-02",
+        "kind": "uncovered_parameter_regime",
+        "obligation_id": "vobl_ef92d174c81732f3064c9d269f534407a690b75cf603d67d7cd82bf14f9fb760",
+        "rationale": "the next actionable parameter regime lacks a replay-confirmed solution route",
+        "status": "open",
+        "target_cell": "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb",
+        "verifier_profile_id": "semantic-replay"
+      }
+    ],
+    "open_obligations": [
+      "vobl_ef92d174c81732f3064c9d269f534407a690b75cf603d67d7cd82bf14f9fb760"
+    ],
+    "presentation_root": "vpr_fece5638e091537770974ed368dc0df5ecc234fb597be94d893e3699d4fc56a2"
+  },
+  "frontier_repaired": {
+    "disabled_atoms": [
+      "target-receipt:vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a"
+    ],
+    "discharged_obligations": [
+      "vobl_ef92d174c81732f3064c9d269f534407a690b75cf603d67d7cd82bf14f9fb760"
+    ],
+    "frontier_map_root": "vfm_45adc51d34676ff050792c8fb74ef0cadf18e76d37dcf367c1b848e83f9b8184",
+    "latent_obligations": [],
+    "obligations": [
+      {
+        "adapter_id": "vadp_c1afea3394413f9cedfc0cae18401564db3118e71f7eea0f02dd3e09158a71af",
+        "context": {
+          "equations": "heat-1d",
+          "initial_conditions": "sin(pi*x)",
+          "mesh": "analytic-fixture",
+          "parameters": {
+            "alpha": "0.2"
+          },
+          "solver": "reference",
+          "tolerance": "1e-9"
+        },
+        "dependencies": [
+          "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb"
+        ],
+        "discharge_evaluator_id": "vela.support-exists.v1",
+        "generator_id": "parameter-coverage-alpha-03",
+        "kind": "uncovered_parameter_regime",
+        "obligation_id": "vobl_22d26543ffaae9620593f20a290b8925cbd2bd1c1ae6d8b9a4b705e635b14e84",
+        "rationale": "the successor regime becomes actionable after alpha=0.2 is replay-confirmed",
+        "status": "open",
+        "target_cell": "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87",
+        "verifier_profile_id": "semantic-replay"
+      },
+      {
+        "adapter_id": "vadp_c1afea3394413f9cedfc0cae18401564db3118e71f7eea0f02dd3e09158a71af",
+        "context": {
+          "equations": "heat-1d",
+          "initial_conditions": "sin(pi*x)",
+          "mesh": "analytic-fixture",
+          "parameters": {
+            "alpha": "0.2"
+          },
+          "solver": "reference",
+          "tolerance": "1e-9"
+        },
+        "dependencies": [],
+        "discharge_evaluator_id": "vela.support-exists.v1",
+        "generator_id": "parameter-coverage-alpha-02",
+        "kind": "uncovered_parameter_regime",
+        "obligation_id": "vobl_ef92d174c81732f3064c9d269f534407a690b75cf603d67d7cd82bf14f9fb760",
+        "rationale": "the next actionable parameter regime lacks a replay-confirmed solution route",
+        "status": "discharged",
+        "target_cell": "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb",
+        "verifier_profile_id": "semantic-replay"
+      }
+    ],
+    "open_obligations": [
+      "vobl_22d26543ffaae9620593f20a290b8925cbd2bd1c1ae6d8b9a4b705e635b14e84"
+    ],
+    "presentation_root": "vpr_16006d55a9e05b7d45e913e0b7a77422efca3f7c0d9df339b77e80c117da645f"
+  },
+  "frontier_restricted": {
+    "disabled_atoms": [
+      "target-receipt:vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a"
+    ],
+    "discharged_obligations": [],
+    "frontier_map_root": "vfm_67f7a4379810d35f4746afe0d19bea8d1b9f558b74296894fd6d80840202ba8c",
+    "latent_obligations": [
+      "vobl_22d26543ffaae9620593f20a290b8925cbd2bd1c1ae6d8b9a4b705e635b14e84"
+    ],
+    "obligations": [
+      {
+        "adapter_id": "vadp_c1afea3394413f9cedfc0cae18401564db3118e71f7eea0f02dd3e09158a71af",
+        "context": {
+          "equations": "heat-1d",
+          "initial_conditions": "sin(pi*x)",
+          "mesh": "analytic-fixture",
+          "parameters": {
+            "alpha": "0.2"
+          },
+          "solver": "reference",
+          "tolerance": "1e-9"
+        },
+        "dependencies": [
+          "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb"
+        ],
+        "discharge_evaluator_id": "vela.support-exists.v1",
+        "generator_id": "parameter-coverage-alpha-03",
+        "kind": "uncovered_parameter_regime",
+        "obligation_id": "vobl_22d26543ffaae9620593f20a290b8925cbd2bd1c1ae6d8b9a4b705e635b14e84",
+        "rationale": "the successor regime becomes actionable after alpha=0.2 is replay-confirmed",
+        "status": "latent",
+        "target_cell": "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87",
+        "verifier_profile_id": "semantic-replay"
+      },
+      {
+        "adapter_id": "vadp_c1afea3394413f9cedfc0cae18401564db3118e71f7eea0f02dd3e09158a71af",
+        "context": {
+          "equations": "heat-1d",
+          "initial_conditions": "sin(pi*x)",
+          "mesh": "analytic-fixture",
+          "parameters": {
+            "alpha": "0.2"
+          },
+          "solver": "reference",
+          "tolerance": "1e-9"
+        },
+        "dependencies": [],
+        "discharge_evaluator_id": "vela.support-exists.v1",
+        "generator_id": "parameter-coverage-alpha-02",
+        "kind": "uncovered_parameter_regime",
+        "obligation_id": "vobl_ef92d174c81732f3064c9d269f534407a690b75cf603d67d7cd82bf14f9fb760",
+        "rationale": "the next actionable parameter regime lacks a replay-confirmed solution route",
+        "status": "open",
+        "target_cell": "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb",
+        "verifier_profile_id": "semantic-replay"
+      }
+    ],
+    "open_obligations": [
+      "vobl_ef92d174c81732f3064c9d269f534407a690b75cf603d67d7cd82bf14f9fb760"
+    ],
+    "presentation_root": "vpr_b4ed968f10a1d68f528b62018643d45d1a7bb4a59da5005cf4c10aa3f7c68a2b"
+  },
+  "frontier_transition": {
+    "after_frontier_map_root": "vfm_6e326ad7858b2d01aa98d28a539afe353fc70cd53906d7a47d2d93707c26575d",
+    "before_frontier_map_root": "vfm_f54225e4c5906cb9425b9ac23254e457c298f08e85f510c14fb8d3ce60fdb2be",
+    "transition_digest": "sha256:d2d08cba54cb680dd42c91976868d15ad9c14fff8b5947aa16215e04a06f0ed2",
+    "transitions": [
+      {
+        "after": "open",
+        "before": "latent",
+        "obligation_id": "vobl_22d26543ffaae9620593f20a290b8925cbd2bd1c1ae6d8b9a4b705e635b14e84"
+      },
+      {
+        "after": "discharged",
+        "before": "open",
+        "obligation_id": "vobl_ef92d174c81732f3064c9d269f534407a690b75cf603d67d7cd82bf14f9fb760"
+      }
+    ]
+  },
+  "gap_identifiability": {
+    "conclusion": "gaps require a declared obligation universe",
+    "open_a": [],
+    "open_b": [
+      "vobl_ef92d174c81732f3064c9d269f534407a690b75cf603d67d7cd82bf14f9fb760"
+    ],
+    "same_presentation_root": "vpr_fece5638e091537770974ed368dc0df5ecc234fb597be94d893e3699d4fc56a2",
+    "universe_a_root": "vfm_6c7e3ff6e06d8a08f4d686878a8d46c74a6109d941d3fa1216f832056c069e93",
+    "universe_b_root": "vfm_f54225e4c5906cb9425b9ac23254e457c298f08e85f510c14fb8d3ce60fdb2be"
+  },
+  "model_candidate": {
+    "assumptions": [
+      "alpha-within-declared-domain",
+      "same-equation-family"
+    ],
+    "authority_claim": "proposal_only",
+    "base_observation_root": "vop_842961704d1ff06da011bf033a21fb3a261444cf04be43ebd17636f536632754",
+    "model_class": "neural_operator",
+    "model_id": "model:heat-neural-operator-v1",
+    "packet_id": "vcand_b60bac6e8806398725af95aee5125a8c8703000b2952b489848006ef5a70f479",
+    "packet_type": "candidate",
+    "proposed_artifact": {
+      "kind": "operator_prediction",
+      "samples": [
+        {
+          "t": "0.1",
+          "u": "0.580441836548432",
+          "x": "0.25"
+        },
+        {
+          "t": "0.4",
+          "u": "0.321055285288984",
+          "x": "0.25"
+        },
+        {
+          "t": "0.1",
+          "u": "0.82086871741554",
+          "x": "0.5"
+        },
+        {
+          "t": "0.4",
+          "u": "0.454040738727245",
+          "x": "0.5"
+        },
+        {
+          "t": "0.1",
+          "u": "0.580441836548432",
+          "x": "0.75"
+        },
+        {
+          "t": "0.4",
+          "u": "0.321055285288984",
+          "x": "0.75"
+        }
+      ]
+    },
+    "proposed_artifact_digest": "sha256:0c837f75ae8fd6800ddbbfbc5b6511b5f73b01dda6563406331a701d4cfcabac",
+    "required_target_receipts": [
+      "semantic_replay"
+    ],
+    "schema_version": "vela.constellate.frontier-fabric.v2",
+    "signature": {
+      "algorithm": "ed25519",
+      "value": "Bartz8c6SgCTI7rce+8+N4m9ebEf5qAlIHXZkD9OPVyf0K7iux5nwrI3zll8yAl9I9lk1xsCJ7CqZj4rRq8SBg=="
+    },
+    "signer_actor": "model:heat-operator",
+    "signer_kind": "model",
+    "signer_public_key": "eqyWDwuOeNCeUE6jLPTHaVIyy2chlpvmAbpRY9DF5DE=",
+    "source_cells": [
+      "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf"
+    ],
+    "state_effect": "none",
+    "target_cell": "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb",
+    "target_context": {
+      "equations": "heat-1d",
+      "initial_conditions": "sin(pi*x)",
+      "mesh": "analytic-fixture",
+      "parameters": {
+        "alpha": "0.2"
+      },
+      "solver": "reference",
+      "tolerance": "1e-9"
+    },
+    "transfer_lane": "target_checked"
+  },
+  "natural_law_candidate": {
+    "assumptions": [
+      "observed-regime-is-representative"
+    ],
+    "authority_claim": "proposal_only",
+    "base_observation_root": "vop_3df449e3f9a50740533962e1cb346b79cbe001ebc1c8b7c92f559b7722e9b8ce",
+    "model_class": "natural_law_model",
+    "model_id": "model:natural-law-heat-v1",
+    "packet_id": "vcand_76c61a7b89f83e8bf44a36a5ed22745567871125b441d7b33e6807780b315165",
+    "packet_type": "candidate",
+    "proposed_artifact": {
+      "expression": "u_t = alpha * u_xx",
+      "kind": "candidate_law"
+    },
+    "proposed_artifact_digest": "sha256:f58c99b850179bd4c8b6dcecf47b028494b3f56ab741e24769b5e0b5483bd57f",
+    "required_target_receipts": [
+      "semantic_replay",
+      "heldout_prediction"
+    ],
+    "schema_version": "vela.constellate.frontier-fabric.v2",
+    "signature": {
+      "algorithm": "ed25519",
+      "value": "P6SADWAwx15xFnOsMzEJUyd3D+HdNsX6Gf2Lo8zoVCHCU4i24qMp1BAEYh1PifuvjUlbP1ddMywcwIULj27UAg=="
+    },
+    "signer_actor": "model:natural-law",
+    "signer_kind": "model",
+    "signer_public_key": "eqyWDwuOeNCeUE6jLPTHaVIyy2chlpvmAbpRY9DF5DE=",
+    "source_cells": [
+      "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf",
+      "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb"
+    ],
+    "state_effect": "none",
+    "target_cell": "vcell_681fabc184940fc432e137acc577725d7e54430b291d31d00499534568c6aa69",
+    "target_context": {
+      "system": "heat-like-diffusion"
+    },
+    "transfer_lane": "exploratory"
+  },
+  "observations": {
+    "after": {
+      "active_view_root": "vav_91d01443a0b929e67779e154dae5127e6b5b7c1d3456f5280fa64ec56efb3a96",
+      "canonical_output": {
+        "cells": [
+          {
+            "active_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "artifact:heat-a01",
+                "receipt:semantic-a01"
+              ]
+            ],
+            "cell_id": "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf",
+            "historical_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "artifact:heat-a01",
+                "receipt:semantic-a01"
+              ]
+            ],
+            "metadata": {
+              "cell_kind": "replay_solution",
+              "claim": {
+                "alpha": "0.1",
+                "equation": "u_t=alpha*u_xx",
+                "kind": "heat_solution"
+              },
+              "context": {
+                "equations": "heat-1d",
+                "initial_conditions": "sin(pi*x)",
+                "mesh": "analytic-fixture",
+                "parameters": {
+                  "alpha": "0.1"
+                },
+                "solver": "reference",
+                "tolerance": "1e-9"
+              },
+              "evidence_class": "replay",
+              "evidence_label": "replay_confirmed",
+              "profile_id": "numerical-simulation"
+            },
+            "supported": true
+          },
+          {
+            "active_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "acceptance:vev_bcd005622747fb744e506b8d134c6547236949ac6e247ae3ef51185205eff76c",
+                "artifact:heat-a01",
+                "assumption:operator-generalizes-within-declared-alpha-range",
+                "receipt:semantic-a01",
+                "target-receipt:vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a",
+                "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+              ]
+            ],
+            "cell_id": "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb",
+            "historical_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "acceptance:vev_bcd005622747fb744e506b8d134c6547236949ac6e247ae3ef51185205eff76c",
+                "artifact:heat-a01",
+                "assumption:operator-generalizes-within-declared-alpha-range",
+                "receipt:semantic-a01",
+                "target-receipt:vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a",
+                "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+              ]
+            ],
+            "metadata": {
+              "cell_kind": "replay_solution",
+              "claim": {
+                "alpha": "0.2",
+                "equation": "u_t=alpha*u_xx",
+                "kind": "heat_solution"
+              },
+              "context": {
+                "equations": "heat-1d",
+                "initial_conditions": "sin(pi*x)",
+                "mesh": "analytic-fixture",
+                "parameters": {
+                  "alpha": "0.2"
+                },
+                "solver": "reference",
+                "tolerance": "1e-9"
+              },
+              "evidence_class": "replay",
+              "evidence_label": "replay_confirmed",
+              "profile_id": "numerical-simulation"
+            },
+            "supported": true
+          },
+          {
+            "active_minimal_environments": [],
+            "cell_id": "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87",
+            "historical_minimal_environments": [],
+            "metadata": {
+              "cell_kind": "replay_solution",
+              "claim": {
+                "alpha": "0.3",
+                "equation": "u_t=alpha*u_xx",
+                "kind": "heat_solution"
+              },
+              "context": {
+                "equations": "heat-1d",
+                "initial_conditions": "sin(pi*x)",
+                "mesh": "analytic-fixture",
+                "parameters": {
+                  "alpha": "0.3"
+                },
+                "solver": "reference",
+                "tolerance": "1e-9"
+              },
+              "evidence_class": "replay",
+              "evidence_label": "replay_confirmed",
+              "profile_id": "numerical-simulation"
+            },
+            "supported": false
+          },
+          {
+            "active_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "acceptance:vev_bcd005622747fb744e506b8d134c6547236949ac6e247ae3ef51185205eff76c",
+                "acceptance:vev_c16be2e3f1cfaf3712177ec8d0e64c29618c229fbd5feb92e9ae5d9679dde5e7",
+                "artifact:heat-a01",
+                "assumption:operator-generalizes-within-declared-alpha-range",
+                "receipt:semantic-a01",
+                "rule:coverage-both-alphas",
+                "target-receipt:vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a",
+                "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+              ]
+            ],
+            "cell_id": "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de",
+            "historical_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "acceptance:vev_bcd005622747fb744e506b8d134c6547236949ac6e247ae3ef51185205eff76c",
+                "acceptance:vev_c16be2e3f1cfaf3712177ec8d0e64c29618c229fbd5feb92e9ae5d9679dde5e7",
+                "artifact:heat-a01",
+                "assumption:operator-generalizes-within-declared-alpha-range",
+                "receipt:semantic-a01",
+                "rule:coverage-both-alphas",
+                "target-receipt:vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a",
+                "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+              ]
+            ],
+            "metadata": {
+              "cell_kind": "coverage",
+              "claim": {
+                "alphas": [
+                  "0.1",
+                  "0.2"
+                ],
+                "kind": "parameter_coverage"
+              },
+              "context": {
+                "equations": "heat-1d",
+                "initial_conditions": "sin(pi*x)",
+                "mesh": "analytic-fixture",
+                "parameters": {
+                  "alpha_set": [
+                    "0.1",
+                    "0.2"
+                  ]
+                },
+                "solver": "coverage",
+                "tolerance": "1e-9"
+              },
+              "evidence_class": "replay",
+              "evidence_label": "replay_confirmed",
+              "profile_id": "numerical-simulation"
+            },
+            "supported": true
+          }
+        ]
+      },
+      "circuit_root": "vcr_b01931a996faa2440e3e1ee0c69b28801824edf8be04d1a9798a99f76bac77e7",
+      "evaluator_id": "vela.support-and-environments.v2",
+      "evaluator_inputs": {
+        "cells": [
+          "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf",
+          "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb",
+          "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87",
+          "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de"
+        ],
+        "disabled_atoms": [],
+        "view_policy_id": "vela.view.public.v2"
+      },
+      "lineage_root": "vlr_830ce63ca74669a2d3c6a5ad3014880a0706e94819b8a21828f43dbddd18bd75",
+      "packet_id": "vop_3df449e3f9a50740533962e1cb346b79cbe001ebc1c8b7c92f559b7722e9b8ce",
+      "packet_type": "observation",
+      "presentation_root": "vpr_b4ed968f10a1d68f528b62018643d45d1a7bb4a59da5005cf4c10aa3f7c68a2b",
+      "replay_receipt": {
+        "evaluator_digest": "veval_4916cb62e61db8d515b25520bbd2f71c63a7f8e91e2c4895b8629c77ac30c735",
+        "evaluator_id": "vela.support-and-environments.v2",
+        "input_roots_digest": "sha256:366f7692b8fc76dfe688cfee26ac5a26bf004c800ea1e3ac0878d505bc086948",
+        "inputs_digest": "sha256:e5f2bfa6dae4941ab1d5327bf19fbe1b1a936a470bd334b4628da384b10a795c",
+        "output_digest": "sha256:f61679afac823271bc7b5ef65398609a7ffc1aa10162ab42e3c3a8f565fc8c5e"
+      },
+      "schema_version": "vela.constellate.frontier-fabric.v2",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "ZqrZkB8KQvfdA9Flw0ufADP7MfAzbm7YnaxjEvoci8zXEI0BXvewG/jhGUVRqT592K10yszV0pvIL4P+4TerDQ=="
+      },
+      "signer_actor": "hub:fixture",
+      "signer_kind": "hub",
+      "signer_public_key": "iCEeH6N+iYc/+g4U01C7OfFNWR/nJPDfiaX9gZH+6IA="
+    },
+    "before": {
+      "active_view_root": "vav_91d01443a0b929e67779e154dae5127e6b5b7c1d3456f5280fa64ec56efb3a96",
+      "canonical_output": {
+        "cells": [
+          {
+            "active_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "artifact:heat-a01",
+                "receipt:semantic-a01"
+              ]
+            ],
+            "cell_id": "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf",
+            "historical_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "artifact:heat-a01",
+                "receipt:semantic-a01"
+              ]
+            ],
+            "metadata": {
+              "cell_kind": "replay_solution",
+              "claim": {
+                "alpha": "0.1",
+                "equation": "u_t=alpha*u_xx",
+                "kind": "heat_solution"
+              },
+              "context": {
+                "equations": "heat-1d",
+                "initial_conditions": "sin(pi*x)",
+                "mesh": "analytic-fixture",
+                "parameters": {
+                  "alpha": "0.1"
+                },
+                "solver": "reference",
+                "tolerance": "1e-9"
+              },
+              "evidence_class": "replay",
+              "evidence_label": "replay_confirmed",
+              "profile_id": "numerical-simulation"
+            },
+            "supported": true
+          },
+          {
+            "active_minimal_environments": [],
+            "cell_id": "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb",
+            "historical_minimal_environments": [],
+            "metadata": {
+              "cell_kind": "replay_solution",
+              "claim": {
+                "alpha": "0.2",
+                "equation": "u_t=alpha*u_xx",
+                "kind": "heat_solution"
+              },
+              "context": {
+                "equations": "heat-1d",
+                "initial_conditions": "sin(pi*x)",
+                "mesh": "analytic-fixture",
+                "parameters": {
+                  "alpha": "0.2"
+                },
+                "solver": "reference",
+                "tolerance": "1e-9"
+              },
+              "evidence_class": "replay",
+              "evidence_label": "replay_confirmed",
+              "profile_id": "numerical-simulation"
+            },
+            "supported": false
+          },
+          {
+            "active_minimal_environments": [],
+            "cell_id": "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87",
+            "historical_minimal_environments": [],
+            "metadata": {
+              "cell_kind": "replay_solution",
+              "claim": {
+                "alpha": "0.3",
+                "equation": "u_t=alpha*u_xx",
+                "kind": "heat_solution"
+              },
+              "context": {
+                "equations": "heat-1d",
+                "initial_conditions": "sin(pi*x)",
+                "mesh": "analytic-fixture",
+                "parameters": {
+                  "alpha": "0.3"
+                },
+                "solver": "reference",
+                "tolerance": "1e-9"
+              },
+              "evidence_class": "replay",
+              "evidence_label": "replay_confirmed",
+              "profile_id": "numerical-simulation"
+            },
+            "supported": false
+          },
+          {
+            "active_minimal_environments": [],
+            "cell_id": "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de",
+            "historical_minimal_environments": [],
+            "metadata": {
+              "cell_kind": "coverage",
+              "claim": {
+                "alphas": [
+                  "0.1",
+                  "0.2"
+                ],
+                "kind": "parameter_coverage"
+              },
+              "context": {
+                "equations": "heat-1d",
+                "initial_conditions": "sin(pi*x)",
+                "mesh": "analytic-fixture",
+                "parameters": {
+                  "alpha_set": [
+                    "0.1",
+                    "0.2"
+                  ]
+                },
+                "solver": "coverage",
+                "tolerance": "1e-9"
+              },
+              "evidence_class": "replay",
+              "evidence_label": "replay_confirmed",
+              "profile_id": "numerical-simulation"
+            },
+            "supported": false
+          }
+        ]
+      },
+      "circuit_root": "vcr_5a06e1be4e550d484a2fc04f07189c5dd5b2ac08f7e3b7ba423deabb101fbc28",
+      "evaluator_id": "vela.support-and-environments.v2",
+      "evaluator_inputs": {
+        "cells": [
+          "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf",
+          "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb",
+          "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87",
+          "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de"
+        ],
+        "disabled_atoms": [],
+        "view_policy_id": "vela.view.public.v2"
+      },
+      "lineage_root": "vlr_c99c0d0dc5336b27e7b77412f16e55e4403753f079616bea30eb88e76b43e090",
+      "packet_id": "vop_842961704d1ff06da011bf033a21fb3a261444cf04be43ebd17636f536632754",
+      "packet_type": "observation",
+      "presentation_root": "vpr_fece5638e091537770974ed368dc0df5ecc234fb597be94d893e3699d4fc56a2",
+      "replay_receipt": {
+        "evaluator_digest": "veval_4916cb62e61db8d515b25520bbd2f71c63a7f8e91e2c4895b8629c77ac30c735",
+        "evaluator_id": "vela.support-and-environments.v2",
+        "input_roots_digest": "sha256:0d5eb92d26648cf0f42ce41204c19cc75753123918eb21a098f995b49067bedb",
+        "inputs_digest": "sha256:e5f2bfa6dae4941ab1d5327bf19fbe1b1a936a470bd334b4628da384b10a795c",
+        "output_digest": "sha256:6d24e3fccc8e271b9f801dcdb46e92f6f016a13fdf1a3141249b74068f10d3c7"
+      },
+      "schema_version": "vela.constellate.frontier-fabric.v2",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "DjR2/snBIt9OC7QIkANobu5AdpE0KNZgKPGNweXOvsBy0dGC22DKr6vPvxCxaCNlcU+5wUlU02DhMMhHPgVcBw=="
+      },
+      "signer_actor": "hub:fixture",
+      "signer_kind": "hub",
+      "signer_public_key": "iCEeH6N+iYc/+g4U01C7OfFNWR/nJPDfiaX9gZH+6IA="
+    },
+    "repaired": {
+      "active_view_root": "vav_314f63b53941035b5951053c9c0092c8884b1db62042c43b7cee276398faa9df",
+      "canonical_output": {
+        "cells": [
+          {
+            "active_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "artifact:heat-a01",
+                "receipt:semantic-a01"
+              ]
+            ],
+            "cell_id": "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf",
+            "historical_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "artifact:heat-a01",
+                "receipt:semantic-a01"
+              ]
+            ],
+            "metadata": {
+              "cell_kind": "replay_solution",
+              "claim": {
+                "alpha": "0.1",
+                "equation": "u_t=alpha*u_xx",
+                "kind": "heat_solution"
+              },
+              "context": {
+                "equations": "heat-1d",
+                "initial_conditions": "sin(pi*x)",
+                "mesh": "analytic-fixture",
+                "parameters": {
+                  "alpha": "0.1"
+                },
+                "solver": "reference",
+                "tolerance": "1e-9"
+              },
+              "evidence_class": "replay",
+              "evidence_label": "replay_confirmed",
+              "profile_id": "numerical-simulation"
+            },
+            "supported": true
+          },
+          {
+            "active_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "acceptance:vev_a6645d71f271ec242418804bc60df87ed69336ca3f7db256d4769559f57548aa",
+                "artifact:heat-a01",
+                "assumption:operator-generalizes-within-declared-alpha-range",
+                "receipt:semantic-a01",
+                "target-receipt:vtrc_4eeb7ac7831fb33713a0f3554df2a0e18ac4f2c377d863499959c80a17e7d285",
+                "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+              ]
+            ],
+            "cell_id": "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb",
+            "historical_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "acceptance:vev_a6645d71f271ec242418804bc60df87ed69336ca3f7db256d4769559f57548aa",
+                "artifact:heat-a01",
+                "assumption:operator-generalizes-within-declared-alpha-range",
+                "receipt:semantic-a01",
+                "target-receipt:vtrc_4eeb7ac7831fb33713a0f3554df2a0e18ac4f2c377d863499959c80a17e7d285",
+                "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+              ],
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "acceptance:vev_bcd005622747fb744e506b8d134c6547236949ac6e247ae3ef51185205eff76c",
+                "artifact:heat-a01",
+                "assumption:operator-generalizes-within-declared-alpha-range",
+                "receipt:semantic-a01",
+                "target-receipt:vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a",
+                "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+              ]
+            ],
+            "metadata": {
+              "cell_kind": "replay_solution",
+              "claim": {
+                "alpha": "0.2",
+                "equation": "u_t=alpha*u_xx",
+                "kind": "heat_solution"
+              },
+              "context": {
+                "equations": "heat-1d",
+                "initial_conditions": "sin(pi*x)",
+                "mesh": "analytic-fixture",
+                "parameters": {
+                  "alpha": "0.2"
+                },
+                "solver": "reference",
+                "tolerance": "1e-9"
+              },
+              "evidence_class": "replay",
+              "evidence_label": "replay_confirmed",
+              "profile_id": "numerical-simulation"
+            },
+            "supported": true
+          },
+          {
+            "active_minimal_environments": [],
+            "cell_id": "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87",
+            "historical_minimal_environments": [],
+            "metadata": {
+              "cell_kind": "replay_solution",
+              "claim": {
+                "alpha": "0.3",
+                "equation": "u_t=alpha*u_xx",
+                "kind": "heat_solution"
+              },
+              "context": {
+                "equations": "heat-1d",
+                "initial_conditions": "sin(pi*x)",
+                "mesh": "analytic-fixture",
+                "parameters": {
+                  "alpha": "0.3"
+                },
+                "solver": "reference",
+                "tolerance": "1e-9"
+              },
+              "evidence_class": "replay",
+              "evidence_label": "replay_confirmed",
+              "profile_id": "numerical-simulation"
+            },
+            "supported": false
+          },
+          {
+            "active_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "acceptance:vev_a6645d71f271ec242418804bc60df87ed69336ca3f7db256d4769559f57548aa",
+                "acceptance:vev_c16be2e3f1cfaf3712177ec8d0e64c29618c229fbd5feb92e9ae5d9679dde5e7",
+                "artifact:heat-a01",
+                "assumption:operator-generalizes-within-declared-alpha-range",
+                "receipt:semantic-a01",
+                "rule:coverage-both-alphas",
+                "target-receipt:vtrc_4eeb7ac7831fb33713a0f3554df2a0e18ac4f2c377d863499959c80a17e7d285",
+                "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+              ]
+            ],
+            "cell_id": "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de",
+            "historical_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "acceptance:vev_a6645d71f271ec242418804bc60df87ed69336ca3f7db256d4769559f57548aa",
+                "acceptance:vev_c16be2e3f1cfaf3712177ec8d0e64c29618c229fbd5feb92e9ae5d9679dde5e7",
+                "artifact:heat-a01",
+                "assumption:operator-generalizes-within-declared-alpha-range",
+                "receipt:semantic-a01",
+                "rule:coverage-both-alphas",
+                "target-receipt:vtrc_4eeb7ac7831fb33713a0f3554df2a0e18ac4f2c377d863499959c80a17e7d285",
+                "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+              ],
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "acceptance:vev_bcd005622747fb744e506b8d134c6547236949ac6e247ae3ef51185205eff76c",
+                "acceptance:vev_c16be2e3f1cfaf3712177ec8d0e64c29618c229fbd5feb92e9ae5d9679dde5e7",
+                "artifact:heat-a01",
+                "assumption:operator-generalizes-within-declared-alpha-range",
+                "receipt:semantic-a01",
+                "rule:coverage-both-alphas",
+                "target-receipt:vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a",
+                "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+              ]
+            ],
+            "metadata": {
+              "cell_kind": "coverage",
+              "claim": {
+                "alphas": [
+                  "0.1",
+                  "0.2"
+                ],
+                "kind": "parameter_coverage"
+              },
+              "context": {
+                "equations": "heat-1d",
+                "initial_conditions": "sin(pi*x)",
+                "mesh": "analytic-fixture",
+                "parameters": {
+                  "alpha_set": [
+                    "0.1",
+                    "0.2"
+                  ]
+                },
+                "solver": "coverage",
+                "tolerance": "1e-9"
+              },
+              "evidence_class": "replay",
+              "evidence_label": "replay_confirmed",
+              "profile_id": "numerical-simulation"
+            },
+            "supported": true
+          }
+        ]
+      },
+      "circuit_root": "vcr_f8659be04d69a17238e3aca51a42ad67232e8f689646f7f89667ea60d6fe3abb",
+      "evaluator_id": "vela.support-and-environments.v2",
+      "evaluator_inputs": {
+        "cells": [
+          "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf",
+          "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb",
+          "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87",
+          "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de"
+        ],
+        "disabled_atoms": [
+          "target-receipt:vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a"
+        ],
+        "view_policy_id": "vela.view.public.v2"
+      },
+      "lineage_root": "vlr_7731ce921b9720732bf5ddfb2e9205e39e0c85cf89bb5413a82433d10b4baf68",
+      "packet_id": "vop_b8964034e94d44c4febf623c50221ec16fffb4ff33ec45cd81616fae1bff0298",
+      "packet_type": "observation",
+      "presentation_root": "vpr_16006d55a9e05b7d45e913e0b7a77422efca3f7c0d9df339b77e80c117da645f",
+      "replay_receipt": {
+        "evaluator_digest": "veval_4916cb62e61db8d515b25520bbd2f71c63a7f8e91e2c4895b8629c77ac30c735",
+        "evaluator_id": "vela.support-and-environments.v2",
+        "input_roots_digest": "sha256:14f35299e9512700c9a309fa44ea62b9cd5feb1cabfa341e7d8e45b9b62400cd",
+        "inputs_digest": "sha256:09b99c6b601fe7445a68ee9e28e8adac951712727e2d09ce3b03f69809525266",
+        "output_digest": "sha256:308783b298453bfba5401d0bb4f368d894d568240af65d0a8fb866ff3c0a9139"
+      },
+      "schema_version": "vela.constellate.frontier-fabric.v2",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "kmhNHfjkxE67NEu4B+95e7+snKmJtmAlUWjghyG5lIF9KnvRXnRrFOrB7kQYeybQYchdnbMf/Y1e6V5g0Z7TAA=="
+      },
+      "signer_actor": "hub:fixture",
+      "signer_kind": "hub",
+      "signer_public_key": "iCEeH6N+iYc/+g4U01C7OfFNWR/nJPDfiaX9gZH+6IA="
+    },
+    "restricted": {
+      "active_view_root": "vav_314f63b53941035b5951053c9c0092c8884b1db62042c43b7cee276398faa9df",
+      "canonical_output": {
+        "cells": [
+          {
+            "active_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "artifact:heat-a01",
+                "receipt:semantic-a01"
+              ]
+            ],
+            "cell_id": "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf",
+            "historical_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "artifact:heat-a01",
+                "receipt:semantic-a01"
+              ]
+            ],
+            "metadata": {
+              "cell_kind": "replay_solution",
+              "claim": {
+                "alpha": "0.1",
+                "equation": "u_t=alpha*u_xx",
+                "kind": "heat_solution"
+              },
+              "context": {
+                "equations": "heat-1d",
+                "initial_conditions": "sin(pi*x)",
+                "mesh": "analytic-fixture",
+                "parameters": {
+                  "alpha": "0.1"
+                },
+                "solver": "reference",
+                "tolerance": "1e-9"
+              },
+              "evidence_class": "replay",
+              "evidence_label": "replay_confirmed",
+              "profile_id": "numerical-simulation"
+            },
+            "supported": true
+          },
+          {
+            "active_minimal_environments": [],
+            "cell_id": "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb",
+            "historical_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "acceptance:vev_bcd005622747fb744e506b8d134c6547236949ac6e247ae3ef51185205eff76c",
+                "artifact:heat-a01",
+                "assumption:operator-generalizes-within-declared-alpha-range",
+                "receipt:semantic-a01",
+                "target-receipt:vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a",
+                "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+              ]
+            ],
+            "metadata": {
+              "cell_kind": "replay_solution",
+              "claim": {
+                "alpha": "0.2",
+                "equation": "u_t=alpha*u_xx",
+                "kind": "heat_solution"
+              },
+              "context": {
+                "equations": "heat-1d",
+                "initial_conditions": "sin(pi*x)",
+                "mesh": "analytic-fixture",
+                "parameters": {
+                  "alpha": "0.2"
+                },
+                "solver": "reference",
+                "tolerance": "1e-9"
+              },
+              "evidence_class": "replay",
+              "evidence_label": "replay_confirmed",
+              "profile_id": "numerical-simulation"
+            },
+            "supported": false
+          },
+          {
+            "active_minimal_environments": [],
+            "cell_id": "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87",
+            "historical_minimal_environments": [],
+            "metadata": {
+              "cell_kind": "replay_solution",
+              "claim": {
+                "alpha": "0.3",
+                "equation": "u_t=alpha*u_xx",
+                "kind": "heat_solution"
+              },
+              "context": {
+                "equations": "heat-1d",
+                "initial_conditions": "sin(pi*x)",
+                "mesh": "analytic-fixture",
+                "parameters": {
+                  "alpha": "0.3"
+                },
+                "solver": "reference",
+                "tolerance": "1e-9"
+              },
+              "evidence_class": "replay",
+              "evidence_label": "replay_confirmed",
+              "profile_id": "numerical-simulation"
+            },
+            "supported": false
+          },
+          {
+            "active_minimal_environments": [],
+            "cell_id": "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de",
+            "historical_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "acceptance:vev_bcd005622747fb744e506b8d134c6547236949ac6e247ae3ef51185205eff76c",
+                "acceptance:vev_c16be2e3f1cfaf3712177ec8d0e64c29618c229fbd5feb92e9ae5d9679dde5e7",
+                "artifact:heat-a01",
+                "assumption:operator-generalizes-within-declared-alpha-range",
+                "receipt:semantic-a01",
+                "rule:coverage-both-alphas",
+                "target-receipt:vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a",
+                "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+              ]
+            ],
+            "metadata": {
+              "cell_kind": "coverage",
+              "claim": {
+                "alphas": [
+                  "0.1",
+                  "0.2"
+                ],
+                "kind": "parameter_coverage"
+              },
+              "context": {
+                "equations": "heat-1d",
+                "initial_conditions": "sin(pi*x)",
+                "mesh": "analytic-fixture",
+                "parameters": {
+                  "alpha_set": [
+                    "0.1",
+                    "0.2"
+                  ]
+                },
+                "solver": "coverage",
+                "tolerance": "1e-9"
+              },
+              "evidence_class": "replay",
+              "evidence_label": "replay_confirmed",
+              "profile_id": "numerical-simulation"
+            },
+            "supported": false
+          }
+        ]
+      },
+      "circuit_root": "vcr_b01931a996faa2440e3e1ee0c69b28801824edf8be04d1a9798a99f76bac77e7",
+      "evaluator_id": "vela.support-and-environments.v2",
+      "evaluator_inputs": {
+        "cells": [
+          "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf",
+          "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb",
+          "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87",
+          "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de"
+        ],
+        "disabled_atoms": [
+          "target-receipt:vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a"
+        ],
+        "view_policy_id": "vela.view.public.v2"
+      },
+      "lineage_root": "vlr_830ce63ca74669a2d3c6a5ad3014880a0706e94819b8a21828f43dbddd18bd75",
+      "packet_id": "vop_da4641f20d830b89b87d6e932af1bf31ab6abecff9983f04aea8556b81bfe602",
+      "packet_type": "observation",
+      "presentation_root": "vpr_b4ed968f10a1d68f528b62018643d45d1a7bb4a59da5005cf4c10aa3f7c68a2b",
+      "replay_receipt": {
+        "evaluator_digest": "veval_4916cb62e61db8d515b25520bbd2f71c63a7f8e91e2c4895b8629c77ac30c735",
+        "evaluator_id": "vela.support-and-environments.v2",
+        "input_roots_digest": "sha256:7ab12d2ea741b9ec0c438f418764d6d5378b391b50c5bc18ac0e32f46a82b209",
+        "inputs_digest": "sha256:09b99c6b601fe7445a68ee9e28e8adac951712727e2d09ce3b03f69809525266",
+        "output_digest": "sha256:a5ab80e3d3f6ef67535de4217654f8bffb8dcde41a53a0412154bc43f4e27447"
+      },
+      "schema_version": "vela.constellate.frontier-fabric.v2",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "avABFLYbeVWKiOydB4OcFdPLrWglczDylOnn1PfQnlAuLN+DQf3IqngazUF3S3MaU/u3JxXCcaiVaqN/iXCjAA=="
+      },
+      "signer_actor": "hub:fixture",
+      "signer_kind": "hub",
+      "signer_public_key": "iCEeH6N+iYc/+g4U01C7OfFNWR/nJPDfiaX9gZH+6IA="
+    }
+  },
+  "presentation_before": {
+    "accepted_events": [
+      "vev_1912171e22d25f92a696434c3bcec1a9485503f02165cb169cb67c8e9a686d87",
+      "vev_c1dfa35a0c0497f96c23127c652d9369ed464b08d2abd9f9dba7e8ca70a31ea8",
+      "vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+      "vev_c16be2e3f1cfaf3712177ec8d0e64c29618c229fbd5feb92e9ae5d9679dde5e7"
+    ],
+    "admitted_profiles": [
+      "exact-combinatorics",
+      "numerical-simulation"
+    ],
+    "cell_metadata": {
+      "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf": {
+        "cell_kind": "replay_solution",
+        "claim": {
+          "alpha": "0.1",
+          "equation": "u_t=alpha*u_xx",
+          "kind": "heat_solution"
+        },
+        "context": {
+          "equations": "heat-1d",
+          "initial_conditions": "sin(pi*x)",
+          "mesh": "analytic-fixture",
+          "parameters": {
+            "alpha": "0.1"
+          },
+          "solver": "reference",
+          "tolerance": "1e-9"
+        },
+        "evidence_class": "replay",
+        "evidence_label": "replay_confirmed",
+        "profile_id": "numerical-simulation"
+      },
+      "vcell_3d576eb6a19b72af81730636c8b35067016635b665fc3716b120348a3456db7c": {
+        "cell_kind": "verified_witness",
+        "claim": {
+          "kind": "sidon_witness",
+          "points": [
+            [
+              0
+            ],
+            [
+              1
+            ],
+            [
+              4
+            ]
+          ]
+        },
+        "context": {
+          "parameter": "source",
+          "problem": "sidon_Z"
+        },
+        "evidence_class": "exact",
+        "evidence_label": "exact_verified",
+        "profile_id": "exact-combinatorics"
+      },
+      "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb": {
+        "cell_kind": "replay_solution",
+        "claim": {
+          "alpha": "0.2",
+          "equation": "u_t=alpha*u_xx",
+          "kind": "heat_solution"
+        },
+        "context": {
+          "equations": "heat-1d",
+          "initial_conditions": "sin(pi*x)",
+          "mesh": "analytic-fixture",
+          "parameters": {
+            "alpha": "0.2"
+          },
+          "solver": "reference",
+          "tolerance": "1e-9"
+        },
+        "evidence_class": "replay",
+        "evidence_label": "replay_confirmed",
+        "profile_id": "numerical-simulation"
+      },
+      "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87": {
+        "cell_kind": "replay_solution",
+        "claim": {
+          "alpha": "0.3",
+          "equation": "u_t=alpha*u_xx",
+          "kind": "heat_solution"
+        },
+        "context": {
+          "equations": "heat-1d",
+          "initial_conditions": "sin(pi*x)",
+          "mesh": "analytic-fixture",
+          "parameters": {
+            "alpha": "0.3"
+          },
+          "solver": "reference",
+          "tolerance": "1e-9"
+        },
+        "evidence_class": "replay",
+        "evidence_label": "replay_confirmed",
+        "profile_id": "numerical-simulation"
+      },
+      "vcell_bc06d6d70f6caa3bfd51be3e39e24ef5014da0f965acca48dddd59a75e585a0d": {
+        "cell_kind": "verified_witness",
+        "claim": {
+          "kind": "sidon_witness",
+          "points": [
+            [
+              10
+            ],
+            [
+              11
+            ],
+            [
+              14
+            ]
+          ]
+        },
+        "context": {
+          "parameter": "translated",
+          "problem": "sidon_Z"
+        },
+        "evidence_class": "exact",
+        "evidence_label": "exact_verified",
+        "profile_id": "exact-combinatorics"
+      },
+      "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de": {
+        "cell_kind": "coverage",
+        "claim": {
+          "alphas": [
+            "0.1",
+            "0.2"
+          ],
+          "kind": "parameter_coverage"
+        },
+        "context": {
+          "equations": "heat-1d",
+          "initial_conditions": "sin(pi*x)",
+          "mesh": "analytic-fixture",
+          "parameters": {
+            "alpha_set": [
+              "0.1",
+              "0.2"
+            ]
+          },
+          "solver": "coverage",
+          "tolerance": "1e-9"
+        },
+        "evidence_class": "replay",
+        "evidence_label": "replay_confirmed",
+        "profile_id": "numerical-simulation"
+      }
+    },
+    "cell_ranks": {
+      "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf": 0,
+      "vcell_3d576eb6a19b72af81730636c8b35067016635b665fc3716b120348a3456db7c": 0,
+      "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb": 1,
+      "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87": 1,
+      "vcell_bc06d6d70f6caa3bfd51be3e39e24ef5014da0f965acca48dddd59a75e585a0d": 1,
+      "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de": 2
+    },
+    "clauses": [
+      {
+        "accepted_event_id": "vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+        "atoms": [
+          "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+          "artifact:heat-a01",
+          "receipt:semantic-a01"
+        ],
+        "body": [],
+        "clause_id": "vlc_fbd94d776c8b351ea4b63913296ea8d4eb0bcd4cedff4491a246679778ab4757",
+        "head": "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf",
+        "head_rank": 0,
+        "profile_id": "numerical-simulation"
+      },
+      {
+        "accepted_event_id": "vev_1912171e22d25f92a696434c3bcec1a9485503f02165cb169cb67c8e9a686d87",
+        "atoms": [
+          "acceptance:vev_1912171e22d25f92a696434c3bcec1a9485503f02165cb169cb67c8e9a686d87",
+          "artifact:sidon-014",
+          "verifier:pair-sum"
+        ],
+        "body": [],
+        "clause_id": "vlc_b38d0ad244ff0a56fb8f75913274be52972f510fb3d72021ae7d19cf89685f09",
+        "head": "vcell_3d576eb6a19b72af81730636c8b35067016635b665fc3716b120348a3456db7c",
+        "head_rank": 0,
+        "profile_id": "exact-combinatorics"
+      },
+      {
+        "accepted_event_id": "vev_c1dfa35a0c0497f96c23127c652d9369ed464b08d2abd9f9dba7e8ca70a31ea8",
+        "atoms": [
+          "acceptance:vev_c1dfa35a0c0497f96c23127c652d9369ed464b08d2abd9f9dba7e8ca70a31ea8",
+          "assumption:translation-is-componentwise-in-Z",
+          "certificate:sha256:282c58ad0c30e4bb1875e03e3fb79e2da11d6ed368eeeedda865fdbfe36dffdb",
+          "transfer:vtx_b7a6ad16734b2357c9ea9aaf659c945634900e19757032986e9f46ae576aa750"
+        ],
+        "body": [
+          "vcell_3d576eb6a19b72af81730636c8b35067016635b665fc3716b120348a3456db7c"
+        ],
+        "clause_id": "vlc_1f26cdef057aa5bd1c3e2fa29500685d3461af0fab74a43ba2d975f4309fd447",
+        "head": "vcell_bc06d6d70f6caa3bfd51be3e39e24ef5014da0f965acca48dddd59a75e585a0d",
+        "head_rank": 1,
+        "profile_id": "exact-combinatorics"
+      },
+      {
+        "accepted_event_id": "vev_c16be2e3f1cfaf3712177ec8d0e64c29618c229fbd5feb92e9ae5d9679dde5e7",
+        "atoms": [
+          "acceptance:vev_c16be2e3f1cfaf3712177ec8d0e64c29618c229fbd5feb92e9ae5d9679dde5e7",
+          "rule:coverage-both-alphas"
+        ],
+        "body": [
+          "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf",
+          "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb"
+        ],
+        "clause_id": "vlc_93c504387d7537e31035da33af8b57679984965fca3383dff4f05fe88234b0e5",
+        "head": "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de",
+        "head_rank": 2,
+        "profile_id": "numerical-simulation"
+      }
+    ]
+  },
+  "presentation_final": {
+    "accepted_events": [
+      "vev_1912171e22d25f92a696434c3bcec1a9485503f02165cb169cb67c8e9a686d87",
+      "vev_c1dfa35a0c0497f96c23127c652d9369ed464b08d2abd9f9dba7e8ca70a31ea8",
+      "vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+      "vev_c16be2e3f1cfaf3712177ec8d0e64c29618c229fbd5feb92e9ae5d9679dde5e7",
+      "vev_bcd005622747fb744e506b8d134c6547236949ac6e247ae3ef51185205eff76c",
+      "vev_a6645d71f271ec242418804bc60df87ed69336ca3f7db256d4769559f57548aa"
+    ],
+    "admitted_profiles": [
+      "exact-combinatorics",
+      "numerical-simulation"
+    ],
+    "cell_metadata": {
+      "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf": {
+        "cell_kind": "replay_solution",
+        "claim": {
+          "alpha": "0.1",
+          "equation": "u_t=alpha*u_xx",
+          "kind": "heat_solution"
+        },
+        "context": {
+          "equations": "heat-1d",
+          "initial_conditions": "sin(pi*x)",
+          "mesh": "analytic-fixture",
+          "parameters": {
+            "alpha": "0.1"
+          },
+          "solver": "reference",
+          "tolerance": "1e-9"
+        },
+        "evidence_class": "replay",
+        "evidence_label": "replay_confirmed",
+        "profile_id": "numerical-simulation"
+      },
+      "vcell_3d576eb6a19b72af81730636c8b35067016635b665fc3716b120348a3456db7c": {
+        "cell_kind": "verified_witness",
+        "claim": {
+          "kind": "sidon_witness",
+          "points": [
+            [
+              0
+            ],
+            [
+              1
+            ],
+            [
+              4
+            ]
+          ]
+        },
+        "context": {
+          "parameter": "source",
+          "problem": "sidon_Z"
+        },
+        "evidence_class": "exact",
+        "evidence_label": "exact_verified",
+        "profile_id": "exact-combinatorics"
+      },
+      "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb": {
+        "cell_kind": "replay_solution",
+        "claim": {
+          "alpha": "0.2",
+          "equation": "u_t=alpha*u_xx",
+          "kind": "heat_solution"
+        },
+        "context": {
+          "equations": "heat-1d",
+          "initial_conditions": "sin(pi*x)",
+          "mesh": "analytic-fixture",
+          "parameters": {
+            "alpha": "0.2"
+          },
+          "solver": "reference",
+          "tolerance": "1e-9"
+        },
+        "evidence_class": "replay",
+        "evidence_label": "replay_confirmed",
+        "profile_id": "numerical-simulation"
+      },
+      "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87": {
+        "cell_kind": "replay_solution",
+        "claim": {
+          "alpha": "0.3",
+          "equation": "u_t=alpha*u_xx",
+          "kind": "heat_solution"
+        },
+        "context": {
+          "equations": "heat-1d",
+          "initial_conditions": "sin(pi*x)",
+          "mesh": "analytic-fixture",
+          "parameters": {
+            "alpha": "0.3"
+          },
+          "solver": "reference",
+          "tolerance": "1e-9"
+        },
+        "evidence_class": "replay",
+        "evidence_label": "replay_confirmed",
+        "profile_id": "numerical-simulation"
+      },
+      "vcell_bc06d6d70f6caa3bfd51be3e39e24ef5014da0f965acca48dddd59a75e585a0d": {
+        "cell_kind": "verified_witness",
+        "claim": {
+          "kind": "sidon_witness",
+          "points": [
+            [
+              10
+            ],
+            [
+              11
+            ],
+            [
+              14
+            ]
+          ]
+        },
+        "context": {
+          "parameter": "translated",
+          "problem": "sidon_Z"
+        },
+        "evidence_class": "exact",
+        "evidence_label": "exact_verified",
+        "profile_id": "exact-combinatorics"
+      },
+      "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de": {
+        "cell_kind": "coverage",
+        "claim": {
+          "alphas": [
+            "0.1",
+            "0.2"
+          ],
+          "kind": "parameter_coverage"
+        },
+        "context": {
+          "equations": "heat-1d",
+          "initial_conditions": "sin(pi*x)",
+          "mesh": "analytic-fixture",
+          "parameters": {
+            "alpha_set": [
+              "0.1",
+              "0.2"
+            ]
+          },
+          "solver": "coverage",
+          "tolerance": "1e-9"
+        },
+        "evidence_class": "replay",
+        "evidence_label": "replay_confirmed",
+        "profile_id": "numerical-simulation"
+      }
+    },
+    "cell_ranks": {
+      "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf": 0,
+      "vcell_3d576eb6a19b72af81730636c8b35067016635b665fc3716b120348a3456db7c": 0,
+      "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb": 1,
+      "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87": 1,
+      "vcell_bc06d6d70f6caa3bfd51be3e39e24ef5014da0f965acca48dddd59a75e585a0d": 1,
+      "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de": 2
+    },
+    "clauses": [
+      {
+        "accepted_event_id": "vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+        "atoms": [
+          "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+          "artifact:heat-a01",
+          "receipt:semantic-a01"
+        ],
+        "body": [],
+        "clause_id": "vlc_fbd94d776c8b351ea4b63913296ea8d4eb0bcd4cedff4491a246679778ab4757",
+        "head": "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf",
+        "head_rank": 0,
+        "profile_id": "numerical-simulation"
+      },
+      {
+        "accepted_event_id": "vev_1912171e22d25f92a696434c3bcec1a9485503f02165cb169cb67c8e9a686d87",
+        "atoms": [
+          "acceptance:vev_1912171e22d25f92a696434c3bcec1a9485503f02165cb169cb67c8e9a686d87",
+          "artifact:sidon-014",
+          "verifier:pair-sum"
+        ],
+        "body": [],
+        "clause_id": "vlc_b38d0ad244ff0a56fb8f75913274be52972f510fb3d72021ae7d19cf89685f09",
+        "head": "vcell_3d576eb6a19b72af81730636c8b35067016635b665fc3716b120348a3456db7c",
+        "head_rank": 0,
+        "profile_id": "exact-combinatorics"
+      },
+      {
+        "accepted_event_id": "vev_a6645d71f271ec242418804bc60df87ed69336ca3f7db256d4769559f57548aa",
+        "atoms": [
+          "acceptance:vev_a6645d71f271ec242418804bc60df87ed69336ca3f7db256d4769559f57548aa",
+          "assumption:operator-generalizes-within-declared-alpha-range",
+          "target-receipt:vtrc_4eeb7ac7831fb33713a0f3554df2a0e18ac4f2c377d863499959c80a17e7d285",
+          "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+        ],
+        "body": [
+          "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf"
+        ],
+        "clause_id": "vlc_12d1fe3db1999313fdcaaee59406cf7571fbb06d4e1d1f2b4dd4569d4a617e77",
+        "head": "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb",
+        "head_rank": 1,
+        "profile_id": "numerical-simulation"
+      },
+      {
+        "accepted_event_id": "vev_bcd005622747fb744e506b8d134c6547236949ac6e247ae3ef51185205eff76c",
+        "atoms": [
+          "acceptance:vev_bcd005622747fb744e506b8d134c6547236949ac6e247ae3ef51185205eff76c",
+          "assumption:operator-generalizes-within-declared-alpha-range",
+          "target-receipt:vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a",
+          "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+        ],
+        "body": [
+          "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf"
+        ],
+        "clause_id": "vlc_1a70497ca8d5082f575037e1f6b25185162e622217aa9480a080116cc6b2f079",
+        "head": "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb",
+        "head_rank": 1,
+        "profile_id": "numerical-simulation"
+      },
+      {
+        "accepted_event_id": "vev_c1dfa35a0c0497f96c23127c652d9369ed464b08d2abd9f9dba7e8ca70a31ea8",
+        "atoms": [
+          "acceptance:vev_c1dfa35a0c0497f96c23127c652d9369ed464b08d2abd9f9dba7e8ca70a31ea8",
+          "assumption:translation-is-componentwise-in-Z",
+          "certificate:sha256:282c58ad0c30e4bb1875e03e3fb79e2da11d6ed368eeeedda865fdbfe36dffdb",
+          "transfer:vtx_b7a6ad16734b2357c9ea9aaf659c945634900e19757032986e9f46ae576aa750"
+        ],
+        "body": [
+          "vcell_3d576eb6a19b72af81730636c8b35067016635b665fc3716b120348a3456db7c"
+        ],
+        "clause_id": "vlc_1f26cdef057aa5bd1c3e2fa29500685d3461af0fab74a43ba2d975f4309fd447",
+        "head": "vcell_bc06d6d70f6caa3bfd51be3e39e24ef5014da0f965acca48dddd59a75e585a0d",
+        "head_rank": 1,
+        "profile_id": "exact-combinatorics"
+      },
+      {
+        "accepted_event_id": "vev_c16be2e3f1cfaf3712177ec8d0e64c29618c229fbd5feb92e9ae5d9679dde5e7",
+        "atoms": [
+          "acceptance:vev_c16be2e3f1cfaf3712177ec8d0e64c29618c229fbd5feb92e9ae5d9679dde5e7",
+          "rule:coverage-both-alphas"
+        ],
+        "body": [
+          "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf",
+          "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb"
+        ],
+        "clause_id": "vlc_93c504387d7537e31035da33af8b57679984965fca3383dff4f05fe88234b0e5",
+        "head": "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de",
+        "head_rank": 2,
+        "profile_id": "numerical-simulation"
+      }
+    ]
+  },
+  "repair": {
+    "new_route_receipt_id": "vtrc_4eeb7ac7831fb33713a0f3554df2a0e18ac4f2c377d863499959c80a17e7d285",
+    "packet_id": "vrp_4c66e62c56e48238185aa8c639c40d0271abd2b8c28041f224b7c42b948d8d02",
+    "packet_type": "repair",
+    "prior_observation_id": "vop_da4641f20d830b89b87d6e932af1bf31ab6abecff9983f04aea8556b81bfe602",
+    "repaired_observation_id": "vop_b8964034e94d44c4febf623c50221ec16fffb4ff33ec45cd81616fae1bff0298",
+    "restores_target": true,
+    "schema_version": "vela.constellate.frontier-fabric.v2",
+    "signature": {
+      "algorithm": "ed25519",
+      "value": "aLjIKIPPnwQz7YQzofBjjAcXLUGTQ6meIKkMXnTk+dQ9UxLJIHjJXel7XcgoYaVM9Who7cOb+6tm0gA0inBrBw=="
+    },
+    "signer_actor": "human:maintainer",
+    "signer_kind": "human",
+    "signer_public_key": "idxn+h4PdtEqw55dvyqO2e1/jj7htEtUEFTkXN7bDzc=",
+    "state_effect": "none; append already changed historical state",
+    "target_cell_id": "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb"
+  },
+  "route_summaries": {
+    "coverage": {
+      "active_environments": [
+        [
+          "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+          "acceptance:vev_a6645d71f271ec242418804bc60df87ed69336ca3f7db256d4769559f57548aa",
+          "acceptance:vev_c16be2e3f1cfaf3712177ec8d0e64c29618c229fbd5feb92e9ae5d9679dde5e7",
+          "artifact:heat-a01",
+          "assumption:operator-generalizes-within-declared-alpha-range",
+          "receipt:semantic-a01",
+          "rule:coverage-both-alphas",
+          "target-receipt:vtrc_4eeb7ac7831fb33713a0f3554df2a0e18ac4f2c377d863499959c80a17e7d285",
+          "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+        ]
+      ],
+      "cell_id": "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de",
+      "historical_environments": [
+        [
+          "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+          "acceptance:vev_a6645d71f271ec242418804bc60df87ed69336ca3f7db256d4769559f57548aa",
+          "acceptance:vev_c16be2e3f1cfaf3712177ec8d0e64c29618c229fbd5feb92e9ae5d9679dde5e7",
+          "artifact:heat-a01",
+          "assumption:operator-generalizes-within-declared-alpha-range",
+          "receipt:semantic-a01",
+          "rule:coverage-both-alphas",
+          "target-receipt:vtrc_4eeb7ac7831fb33713a0f3554df2a0e18ac4f2c377d863499959c80a17e7d285",
+          "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+        ],
+        [
+          "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+          "acceptance:vev_bcd005622747fb744e506b8d134c6547236949ac6e247ae3ef51185205eff76c",
+          "acceptance:vev_c16be2e3f1cfaf3712177ec8d0e64c29618c229fbd5feb92e9ae5d9679dde5e7",
+          "artifact:heat-a01",
+          "assumption:operator-generalizes-within-declared-alpha-range",
+          "receipt:semantic-a01",
+          "rule:coverage-both-alphas",
+          "target-receipt:vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a",
+          "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+        ]
+      ]
+    },
+    "heat_alpha_02": {
+      "active_environments": [
+        [
+          "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+          "acceptance:vev_a6645d71f271ec242418804bc60df87ed69336ca3f7db256d4769559f57548aa",
+          "artifact:heat-a01",
+          "assumption:operator-generalizes-within-declared-alpha-range",
+          "receipt:semantic-a01",
+          "target-receipt:vtrc_4eeb7ac7831fb33713a0f3554df2a0e18ac4f2c377d863499959c80a17e7d285",
+          "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+        ]
+      ],
+      "cell_id": "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb",
+      "historical_environments": [
+        [
+          "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+          "acceptance:vev_a6645d71f271ec242418804bc60df87ed69336ca3f7db256d4769559f57548aa",
+          "artifact:heat-a01",
+          "assumption:operator-generalizes-within-declared-alpha-range",
+          "receipt:semantic-a01",
+          "target-receipt:vtrc_4eeb7ac7831fb33713a0f3554df2a0e18ac4f2c377d863499959c80a17e7d285",
+          "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+        ],
+        [
+          "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+          "acceptance:vev_bcd005622747fb744e506b8d134c6547236949ac6e247ae3ef51185205eff76c",
+          "artifact:heat-a01",
+          "assumption:operator-generalizes-within-declared-alpha-range",
+          "receipt:semantic-a01",
+          "target-receipt:vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a",
+          "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+        ]
+      ]
+    },
+    "heat_alpha_03": {
+      "active_environments": [],
+      "cell_id": "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87",
+      "historical_environments": []
+    }
+  },
+  "schema_version": "vela.frontier-fabric.fixture.v2",
+  "state_export": {
+    "authoritative_values": [
+      {
+        "canonical_value_digest": "sha256:308783b298453bfba5401d0bb4f368d894d568240af65d0a8fb866ff3c0a9139",
+        "name": "frontier-state",
+        "observation_packet_id": "vop_b8964034e94d44c4febf623c50221ec16fffb4ff33ec45cd81616fae1bff0298",
+        "value": {
+          "cells": [
+            {
+              "active_minimal_environments": [
+                [
+                  "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                  "artifact:heat-a01",
+                  "receipt:semantic-a01"
+                ]
+              ],
+              "cell_id": "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf",
+              "historical_minimal_environments": [
+                [
+                  "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                  "artifact:heat-a01",
+                  "receipt:semantic-a01"
+                ]
+              ],
+              "metadata": {
+                "cell_kind": "replay_solution",
+                "claim": {
+                  "alpha": "0.1",
+                  "equation": "u_t=alpha*u_xx",
+                  "kind": "heat_solution"
+                },
+                "context": {
+                  "equations": "heat-1d",
+                  "initial_conditions": "sin(pi*x)",
+                  "mesh": "analytic-fixture",
+                  "parameters": {
+                    "alpha": "0.1"
+                  },
+                  "solver": "reference",
+                  "tolerance": "1e-9"
+                },
+                "evidence_class": "replay",
+                "evidence_label": "replay_confirmed",
+                "profile_id": "numerical-simulation"
+              },
+              "supported": true
+            },
+            {
+              "active_minimal_environments": [
+                [
+                  "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                  "acceptance:vev_a6645d71f271ec242418804bc60df87ed69336ca3f7db256d4769559f57548aa",
+                  "artifact:heat-a01",
+                  "assumption:operator-generalizes-within-declared-alpha-range",
+                  "receipt:semantic-a01",
+                  "target-receipt:vtrc_4eeb7ac7831fb33713a0f3554df2a0e18ac4f2c377d863499959c80a17e7d285",
+                  "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+                ]
+              ],
+              "cell_id": "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb",
+              "historical_minimal_environments": [
+                [
+                  "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                  "acceptance:vev_a6645d71f271ec242418804bc60df87ed69336ca3f7db256d4769559f57548aa",
+                  "artifact:heat-a01",
+                  "assumption:operator-generalizes-within-declared-alpha-range",
+                  "receipt:semantic-a01",
+                  "target-receipt:vtrc_4eeb7ac7831fb33713a0f3554df2a0e18ac4f2c377d863499959c80a17e7d285",
+                  "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+                ],
+                [
+                  "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                  "acceptance:vev_bcd005622747fb744e506b8d134c6547236949ac6e247ae3ef51185205eff76c",
+                  "artifact:heat-a01",
+                  "assumption:operator-generalizes-within-declared-alpha-range",
+                  "receipt:semantic-a01",
+                  "target-receipt:vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a",
+                  "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+                ]
+              ],
+              "metadata": {
+                "cell_kind": "replay_solution",
+                "claim": {
+                  "alpha": "0.2",
+                  "equation": "u_t=alpha*u_xx",
+                  "kind": "heat_solution"
+                },
+                "context": {
+                  "equations": "heat-1d",
+                  "initial_conditions": "sin(pi*x)",
+                  "mesh": "analytic-fixture",
+                  "parameters": {
+                    "alpha": "0.2"
+                  },
+                  "solver": "reference",
+                  "tolerance": "1e-9"
+                },
+                "evidence_class": "replay",
+                "evidence_label": "replay_confirmed",
+                "profile_id": "numerical-simulation"
+              },
+              "supported": true
+            },
+            {
+              "active_minimal_environments": [],
+              "cell_id": "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87",
+              "historical_minimal_environments": [],
+              "metadata": {
+                "cell_kind": "replay_solution",
+                "claim": {
+                  "alpha": "0.3",
+                  "equation": "u_t=alpha*u_xx",
+                  "kind": "heat_solution"
+                },
+                "context": {
+                  "equations": "heat-1d",
+                  "initial_conditions": "sin(pi*x)",
+                  "mesh": "analytic-fixture",
+                  "parameters": {
+                    "alpha": "0.3"
+                  },
+                  "solver": "reference",
+                  "tolerance": "1e-9"
+                },
+                "evidence_class": "replay",
+                "evidence_label": "replay_confirmed",
+                "profile_id": "numerical-simulation"
+              },
+              "supported": false
+            },
+            {
+              "active_minimal_environments": [
+                [
+                  "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                  "acceptance:vev_a6645d71f271ec242418804bc60df87ed69336ca3f7db256d4769559f57548aa",
+                  "acceptance:vev_c16be2e3f1cfaf3712177ec8d0e64c29618c229fbd5feb92e9ae5d9679dde5e7",
+                  "artifact:heat-a01",
+                  "assumption:operator-generalizes-within-declared-alpha-range",
+                  "receipt:semantic-a01",
+                  "rule:coverage-both-alphas",
+                  "target-receipt:vtrc_4eeb7ac7831fb33713a0f3554df2a0e18ac4f2c377d863499959c80a17e7d285",
+                  "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+                ]
+              ],
+              "cell_id": "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de",
+              "historical_minimal_environments": [
+                [
+                  "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                  "acceptance:vev_a6645d71f271ec242418804bc60df87ed69336ca3f7db256d4769559f57548aa",
+                  "acceptance:vev_c16be2e3f1cfaf3712177ec8d0e64c29618c229fbd5feb92e9ae5d9679dde5e7",
+                  "artifact:heat-a01",
+                  "assumption:operator-generalizes-within-declared-alpha-range",
+                  "receipt:semantic-a01",
+                  "rule:coverage-both-alphas",
+                  "target-receipt:vtrc_4eeb7ac7831fb33713a0f3554df2a0e18ac4f2c377d863499959c80a17e7d285",
+                  "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+                ],
+                [
+                  "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                  "acceptance:vev_bcd005622747fb744e506b8d134c6547236949ac6e247ae3ef51185205eff76c",
+                  "acceptance:vev_c16be2e3f1cfaf3712177ec8d0e64c29618c229fbd5feb92e9ae5d9679dde5e7",
+                  "artifact:heat-a01",
+                  "assumption:operator-generalizes-within-declared-alpha-range",
+                  "receipt:semantic-a01",
+                  "rule:coverage-both-alphas",
+                  "target-receipt:vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a",
+                  "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+                ]
+              ],
+              "metadata": {
+                "cell_kind": "coverage",
+                "claim": {
+                  "alphas": [
+                    "0.1",
+                    "0.2"
+                  ],
+                  "kind": "parameter_coverage"
+                },
+                "context": {
+                  "equations": "heat-1d",
+                  "initial_conditions": "sin(pi*x)",
+                  "mesh": "analytic-fixture",
+                  "parameters": {
+                    "alpha_set": [
+                      "0.1",
+                      "0.2"
+                    ]
+                  },
+                  "solver": "coverage",
+                  "tolerance": "1e-9"
+                },
+                "evidence_class": "replay",
+                "evidence_label": "replay_confirmed",
+                "profile_id": "numerical-simulation"
+              },
+              "supported": true
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "structural_delta": {
+    "after_presentation_root": "vpr_b4ed968f10a1d68f528b62018643d45d1a7bb4a59da5005cf4c10aa3f7c68a2b",
+    "before_presentation_root": "vpr_fece5638e091537770974ed368dc0df5ecc234fb597be94d893e3699d4fc56a2",
+    "delta_digest": "sha256:9e39a171fcd8057d8215895c182cddf72b58e086c3dbcad9cb579f89abe31343",
+    "newly_supported_cells": [
+      "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb",
+      "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de"
+    ],
+    "no_longer_supported_cells": []
+  },
+  "target_receipt": {
+    "artifact_digest": "sha256:0c837f75ae8fd6800ddbbfbc5b6511b5f73b01dda6563406331a701d4cfcabac",
+    "candidate_packet_id": "vcand_b60bac6e8806398725af95aee5125a8c8703000b2952b489848006ef5a70f479",
+    "claim_digest": "sha256:a7d8b87d1a7071065c4713d6f3fe0597eb0589e7cdcf3f06f3c34fcfc925387b",
+    "packet_id": "vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a",
+    "packet_type": "target_receipt",
+    "passed": true,
+    "receipt_kind": "semantic_replay",
+    "result": {
+      "alpha": "0.2",
+      "max_abs_error": "4.4408920985e-16",
+      "passed": true,
+      "receipt_kind": "semantic_replay",
+      "sample_count": 6,
+      "tolerance": "1e-09"
+    },
+    "schema_version": "vela.constellate.frontier-fabric.v2",
+    "signature": {
+      "algorithm": "ed25519",
+      "value": "rl3J50MW7MPgYnS9DEdxmt/QMXnorp5IeD8GRSEU0lnww7JySkuMfieAkYoUG321okt8Td/JXq0gPcx7KjPHCw=="
+    },
+    "signer_actor": "verifier:heat",
+    "signer_kind": "verifier",
+    "signer_public_key": "SCM0HHTVW4gr1FRQHzqXSq4frJVaak0W0iv5uVJd+N0=",
+    "verifier_id": "heat-analytic-replay-v1"
+  },
+  "trace": [
+    {
+      "stage": "before",
+      "support": {
+        "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf": true,
+        "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb": false,
+        "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87": false,
+        "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de": false
+      }
+    },
+    {
+      "stage": "after_target_check",
+      "support": {
+        "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf": true,
+        "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb": true,
+        "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87": false,
+        "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de": true
+      }
+    },
+    {
+      "stage": "restricted",
+      "support": {
+        "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf": true,
+        "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb": false,
+        "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87": false,
+        "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de": false
+      }
+    },
+    {
+      "stage": "repaired",
+      "support": {
+        "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf": true,
+        "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb": true,
+        "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87": false,
+        "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de": true
+      }
+    }
+  ],
+  "view_decision": {
+    "challenge_packet_id": "vch_58b1b416d49695778627382e9d49f4d37f1274cddbc7415b4429058906b1948f",
+    "decision": "accepted",
+    "packet_id": "vvd_f4bf33ef5b1a8cbe2119a983d61b7bba06cc3f103c02d5a25dca2542eb247e41",
+    "packet_type": "view_decision",
+    "resulting_disabled_atoms": [
+      "target-receipt:vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a"
+    ],
+    "schema_version": "vela.constellate.frontier-fabric.v2",
+    "signature": {
+      "algorithm": "ed25519",
+      "value": "47ucxzzT/mvi3VUK4bq9hJNUGUbynZcw5JO1jGclwoHXhq+FrvnIJj/NlVZw71oUoOo2IvbDRIkUlI8eTn9FBQ=="
+    },
+    "signer_actor": "human:maintainer",
+    "signer_kind": "human",
+    "signer_public_key": "idxn+h4PdtEqw55dvyqO2e1/jj7htEtUEFTkXN7bDzc=",
+    "state_effect": "restrict",
+    "view_policy_id": "vela.view.public.v2"
+  }
+}

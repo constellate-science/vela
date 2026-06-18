@@ -1,0 +1,78 @@
+{
+  "adapter_id": "vadp_c1afea3394413f9cedfc0cae18401564db3118e71f7eea0f02dd3e09158a71af",
+  "candidate_generators": [
+    {
+      "generator_id": "human-or-external",
+      "model_class": "none",
+      "state_effect": "none"
+    },
+    {
+      "generator_id": "neural-operator",
+      "model_class": "neural_operator",
+      "state_effect": "none"
+    }
+  ],
+  "capabilities": [
+    "compile_replay_receipts",
+    "generate_parameter_gaps",
+    "operator_candidates",
+    "export_ro_crate"
+  ],
+  "compiler_id": "vela.compiler.numerical-simulation.v2",
+  "context_dimensions": [
+    "equations",
+    "parameters",
+    "initial_conditions",
+    "mesh",
+    "solver",
+    "tolerance"
+  ],
+  "domain_profile_id": "numerical-simulation",
+  "evidence_class": "replay",
+  "name": "Reproducible numerical simulation",
+  "obligation_generators": [
+    {
+      "discharge_evaluator_id": "vela.support-exists.v1",
+      "generator_id": "parameter-coverage-alpha-02",
+      "kind": "uncovered_parameter_regime",
+      "rationale": "the next actionable parameter regime lacks a replay-confirmed solution route",
+      "targets": [
+        "heat_alpha_02"
+      ],
+      "verifier_profile_id": "semantic-replay"
+    },
+    {
+      "dependencies": [
+        "heat_alpha_02"
+      ],
+      "discharge_evaluator_id": "vela.support-exists.v1",
+      "generator_id": "parameter-coverage-alpha-03",
+      "kind": "uncovered_parameter_regime",
+      "rationale": "the successor regime becomes actionable after alpha=0.2 is replay-confirmed",
+      "targets": [
+        "heat_alpha_03"
+      ],
+      "verifier_profile_id": "semantic-replay"
+    }
+  ],
+  "observation_evaluators": [
+    {
+      "authoritative": true,
+      "evaluator_id": "vela.support-and-environments.v2"
+    }
+  ],
+  "schema_version": "vela.domain-adapter.v2",
+  "transfer_lanes": [
+    "target_checked",
+    "exploratory"
+  ],
+  "verifier_profiles": [
+    {
+      "receipt_kinds": [
+        "semantic_replay",
+        "residual_check"
+      ],
+      "verifier_profile_id": "semantic-replay"
+    }
+  ]
+}

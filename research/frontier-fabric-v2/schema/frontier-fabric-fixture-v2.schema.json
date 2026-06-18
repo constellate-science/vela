@@ -1,0 +1,224 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://constellate.science/schema/frontier-fabric-fixture-v2.schema.json",
+  "title": "Frontier Fabric v2 conformance fixture",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "adapters",
+    "cells",
+    "presentation_before",
+    "presentation_final",
+    "frontier_before",
+    "frontier_after",
+    "frontier_restricted",
+    "frontier_repaired",
+    "frontier_transition",
+    "gap_identifiability",
+    "certified_transfer",
+    "model_candidate",
+    "target_receipt",
+    "structural_delta",
+    "challenge",
+    "view_decision",
+    "repair",
+    "natural_law_candidate",
+    "observations",
+    "trace",
+    "state_export",
+    "route_summaries"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "vela.frontier-fabric.fixture.v2"
+    },
+    "adapters": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^vadp_[0-9a-f]{64}$"
+      }
+    },
+    "cells": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^vcell_[0-9a-f]{64}$"
+      }
+    },
+    "presentation_before": {
+      "type": "object"
+    },
+    "presentation_final": {
+      "type": "object"
+    },
+    "frontier_before": {
+      "$ref": "#/$defs/frontierMap"
+    },
+    "frontier_after": {
+      "$ref": "#/$defs/frontierMap"
+    },
+    "gap_identifiability": {
+      "type": "object"
+    },
+    "certified_transfer": {
+      "$ref": "#/$defs/signedPacket"
+    },
+    "model_candidate": {
+      "$ref": "#/$defs/signedPacket"
+    },
+    "target_receipt": {
+      "$ref": "#/$defs/signedPacket"
+    },
+    "structural_delta": {
+      "type": "object"
+    },
+    "challenge": {
+      "$ref": "#/$defs/signedPacket"
+    },
+    "view_decision": {
+      "$ref": "#/$defs/signedPacket"
+    },
+    "repair": {
+      "$ref": "#/$defs/signedPacket"
+    },
+    "natural_law_candidate": {
+      "$ref": "#/$defs/signedPacket"
+    },
+    "observations": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/signedPacket"
+      }
+    },
+    "trace": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "state_export": {
+      "type": "object"
+    },
+    "route_summaries": {
+      "type": "object"
+    },
+    "frontier_restricted": {
+      "$ref": "#/$defs/frontierMap"
+    },
+    "frontier_repaired": {
+      "$ref": "#/$defs/frontierMap"
+    },
+    "frontier_transition": {
+      "type": "object",
+      "required": [
+        "before_frontier_map_root",
+        "after_frontier_map_root",
+        "transitions",
+        "transition_digest"
+      ]
+    }
+  },
+  "$defs": {
+    "signedPacket": {
+      "type": "object",
+      "required": [
+        "schema_version",
+        "packet_type",
+        "packet_id",
+        "signer_actor",
+        "signer_kind",
+        "signer_public_key",
+        "signature"
+      ],
+      "properties": {
+        "schema_version": {
+          "const": "vela.constellate.frontier-fabric.v2"
+        },
+        "packet_type": {
+          "type": "string"
+        },
+        "packet_id": {
+          "type": "string"
+        },
+        "signer_actor": {
+          "type": "string"
+        },
+        "signer_kind": {
+          "type": "string"
+        },
+        "signer_public_key": {
+          "type": "string"
+        },
+        "signature": {
+          "type": "object",
+          "required": [
+            "algorithm",
+            "value"
+          ],
+          "properties": {
+            "algorithm": {
+              "const": "ed25519"
+            },
+            "value": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "frontierMap": {
+      "type": "object",
+      "required": [
+        "frontier_map_root",
+        "presentation_root",
+        "disabled_atoms",
+        "obligations",
+        "open_obligations",
+        "latent_obligations",
+        "discharged_obligations"
+      ],
+      "properties": {
+        "frontier_map_root": {
+          "type": "string",
+          "pattern": "^vfm_[0-9a-f]{64}$"
+        },
+        "presentation_root": {
+          "type": "string",
+          "pattern": "^vpr_[0-9a-f]{64}$"
+        },
+        "disabled_atoms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "obligations": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        },
+        "open_obligations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "discharged_obligations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "latent_obligations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

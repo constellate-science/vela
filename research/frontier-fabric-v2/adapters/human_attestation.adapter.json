@@ -1,0 +1,54 @@
+{
+  "adapter_id": "vadp_e681e89c3128ed08367cfd98462ca40df56982cba97d000377bd6ae91f5bc085",
+  "candidate_generators": [
+    {
+      "generator_id": "human-or-external",
+      "model_class": "none",
+      "state_effect": "none"
+    }
+  ],
+  "capabilities": [
+    "compile_attestations",
+    "track_statement_faithfulness"
+  ],
+  "compiler_id": "vela.compiler.human-attestation.v2",
+  "context_dimensions": [
+    "statement",
+    "scope",
+    "reviewer_role",
+    "policy_epoch"
+  ],
+  "domain_profile_id": "human-attestation",
+  "evidence_class": "attestation",
+  "name": "Human statement and interpretation attestation",
+  "obligation_generators": [
+    {
+      "discharge_evaluator_id": "vela.support-exists.v1",
+      "generator_id": "review-gap-generator",
+      "kind": "missing_review",
+      "rationale": "a declared interpretation lacks an eligible human attestation",
+      "targets": [
+        "reviewed_statement"
+      ],
+      "verifier_profile_id": "signature-policy"
+    }
+  ],
+  "observation_evaluators": [
+    {
+      "authoritative": true,
+      "evaluator_id": "vela.support-and-environments.v2"
+    }
+  ],
+  "schema_version": "vela.domain-adapter.v2",
+  "transfer_lanes": [
+    "exploratory"
+  ],
+  "verifier_profiles": [
+    {
+      "receipt_kinds": [
+        "statement_attestation"
+      ],
+      "verifier_profile_id": "signature-policy"
+    }
+  ]
+}

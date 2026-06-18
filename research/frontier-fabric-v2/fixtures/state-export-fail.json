@@ -1,0 +1,12 @@
+{
+  "authoritative_values": [
+    {
+      "canonical_value_digest": "sha256:d1f0625c576a2f019dbcdbb03f76e453b3ebdd1cb952b0ffdd02a9302ed4dcab",
+      "name": "hidden-frontier-score",
+      "observation_packet_id": "missing",
+      "value": {
+        "score": "0.91"
+      }
+    }
+  ]
+}

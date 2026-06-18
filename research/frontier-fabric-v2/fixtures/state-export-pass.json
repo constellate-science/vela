@@ -1,0 +1,202 @@
+{
+  "authoritative_values": [
+    {
+      "canonical_value_digest": "sha256:308783b298453bfba5401d0bb4f368d894d568240af65d0a8fb866ff3c0a9139",
+      "name": "frontier-state",
+      "observation_packet_id": "vop_b8964034e94d44c4febf623c50221ec16fffb4ff33ec45cd81616fae1bff0298",
+      "value": {
+        "cells": [
+          {
+            "active_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "artifact:heat-a01",
+                "receipt:semantic-a01"
+              ]
+            ],
+            "cell_id": "vcell_1f3aa8a457cef2d980bdc010aa0ea557ef4aeca4ad1447cbac0c2b760ec0dbcf",
+            "historical_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "artifact:heat-a01",
+                "receipt:semantic-a01"
+              ]
+            ],
+            "metadata": {
+              "cell_kind": "replay_solution",
+              "claim": {
+                "alpha": "0.1",
+                "equation": "u_t=alpha*u_xx",
+                "kind": "heat_solution"
+              },
+              "context": {
+                "equations": "heat-1d",
+                "initial_conditions": "sin(pi*x)",
+                "mesh": "analytic-fixture",
+                "parameters": {
+                  "alpha": "0.1"
+                },
+                "solver": "reference",
+                "tolerance": "1e-9"
+              },
+              "evidence_class": "replay",
+              "evidence_label": "replay_confirmed",
+              "profile_id": "numerical-simulation"
+            },
+            "supported": true
+          },
+          {
+            "active_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "acceptance:vev_a6645d71f271ec242418804bc60df87ed69336ca3f7db256d4769559f57548aa",
+                "artifact:heat-a01",
+                "assumption:operator-generalizes-within-declared-alpha-range",
+                "receipt:semantic-a01",
+                "target-receipt:vtrc_4eeb7ac7831fb33713a0f3554df2a0e18ac4f2c377d863499959c80a17e7d285",
+                "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+              ]
+            ],
+            "cell_id": "vcell_45a27a543b9b5d19d05923195efa65facdf21516caa40ed963096f4b9228f8fb",
+            "historical_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "acceptance:vev_a6645d71f271ec242418804bc60df87ed69336ca3f7db256d4769559f57548aa",
+                "artifact:heat-a01",
+                "assumption:operator-generalizes-within-declared-alpha-range",
+                "receipt:semantic-a01",
+                "target-receipt:vtrc_4eeb7ac7831fb33713a0f3554df2a0e18ac4f2c377d863499959c80a17e7d285",
+                "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+              ],
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "acceptance:vev_bcd005622747fb744e506b8d134c6547236949ac6e247ae3ef51185205eff76c",
+                "artifact:heat-a01",
+                "assumption:operator-generalizes-within-declared-alpha-range",
+                "receipt:semantic-a01",
+                "target-receipt:vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a",
+                "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+              ]
+            ],
+            "metadata": {
+              "cell_kind": "replay_solution",
+              "claim": {
+                "alpha": "0.2",
+                "equation": "u_t=alpha*u_xx",
+                "kind": "heat_solution"
+              },
+              "context": {
+                "equations": "heat-1d",
+                "initial_conditions": "sin(pi*x)",
+                "mesh": "analytic-fixture",
+                "parameters": {
+                  "alpha": "0.2"
+                },
+                "solver": "reference",
+                "tolerance": "1e-9"
+              },
+              "evidence_class": "replay",
+              "evidence_label": "replay_confirmed",
+              "profile_id": "numerical-simulation"
+            },
+            "supported": true
+          },
+          {
+            "active_minimal_environments": [],
+            "cell_id": "vcell_94b30e20db5e5889362904c2e66976eeecfffac34fd205ed55d6d4bf1cfbfd87",
+            "historical_minimal_environments": [],
+            "metadata": {
+              "cell_kind": "replay_solution",
+              "claim": {
+                "alpha": "0.3",
+                "equation": "u_t=alpha*u_xx",
+                "kind": "heat_solution"
+              },
+              "context": {
+                "equations": "heat-1d",
+                "initial_conditions": "sin(pi*x)",
+                "mesh": "analytic-fixture",
+                "parameters": {
+                  "alpha": "0.3"
+                },
+                "solver": "reference",
+                "tolerance": "1e-9"
+              },
+              "evidence_class": "replay",
+              "evidence_label": "replay_confirmed",
+              "profile_id": "numerical-simulation"
+            },
+            "supported": false
+          },
+          {
+            "active_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "acceptance:vev_a6645d71f271ec242418804bc60df87ed69336ca3f7db256d4769559f57548aa",
+                "acceptance:vev_c16be2e3f1cfaf3712177ec8d0e64c29618c229fbd5feb92e9ae5d9679dde5e7",
+                "artifact:heat-a01",
+                "assumption:operator-generalizes-within-declared-alpha-range",
+                "receipt:semantic-a01",
+                "rule:coverage-both-alphas",
+                "target-receipt:vtrc_4eeb7ac7831fb33713a0f3554df2a0e18ac4f2c377d863499959c80a17e7d285",
+                "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+              ]
+            ],
+            "cell_id": "vcell_f11fcbbd33f0b5f91298a6b39f693c79b740b2f450d76df0a831ea3c2942a5de",
+            "historical_minimal_environments": [
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "acceptance:vev_a6645d71f271ec242418804bc60df87ed69336ca3f7db256d4769559f57548aa",
+                "acceptance:vev_c16be2e3f1cfaf3712177ec8d0e64c29618c229fbd5feb92e9ae5d9679dde5e7",
+                "artifact:heat-a01",
+                "assumption:operator-generalizes-within-declared-alpha-range",
+                "receipt:semantic-a01",
+                "rule:coverage-both-alphas",
+                "target-receipt:vtrc_4eeb7ac7831fb33713a0f3554df2a0e18ac4f2c377d863499959c80a17e7d285",
+                "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+              ],
+              [
+                "acceptance:vev_85b9c385e2b5ec2604f5dfbd9f9bbd6021f02ed192db21d87d58ef9311124543",
+                "acceptance:vev_bcd005622747fb744e506b8d134c6547236949ac6e247ae3ef51185205eff76c",
+                "acceptance:vev_c16be2e3f1cfaf3712177ec8d0e64c29618c229fbd5feb92e9ae5d9679dde5e7",
+                "artifact:heat-a01",
+                "assumption:operator-generalizes-within-declared-alpha-range",
+                "receipt:semantic-a01",
+                "rule:coverage-both-alphas",
+                "target-receipt:vtrc_e7c1b4bfc3209a918fce7a2be44c949814c48a754bce14a3ca9e6ca16e78f57a",
+                "transfer:vtx_703633297a7cb32bad79b8a291feb5a81743aecab0fb4261389a7be8063e0413"
+              ]
+            ],
+            "metadata": {
+              "cell_kind": "coverage",
+              "claim": {
+                "alphas": [
+                  "0.1",
+                  "0.2"
+                ],
+                "kind": "parameter_coverage"
+              },
+              "context": {
+                "equations": "heat-1d",
+                "initial_conditions": "sin(pi*x)",
+                "mesh": "analytic-fixture",
+                "parameters": {
+                  "alpha_set": [
+                    "0.1",
+                    "0.2"
+                  ]
+                },
+                "solver": "coverage",
+                "tolerance": "1e-9"
+              },
+              "evidence_class": "replay",
+              "evidence_label": "replay_confirmed",
+              "profile_id": "numerical-simulation"
+            },
+            "supported": true
+          }
+        ]
+      }
+    }
+  ]
+}
