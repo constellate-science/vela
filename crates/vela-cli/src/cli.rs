@@ -231,6 +231,7 @@ pub async fn run_command() {
             let _ = conformance::run(&dir);
         }
         Commands::Gate { action } => cmd_gate(action),
+        Commands::Sidon { action } => crate::cli_sidon::cmd_sidon(action),
         Commands::Agents { action } => crate::cli_agents::cmd_agents(action),
         Commands::Campaign { action } => crate::cli_campaign::cmd_campaign(action),
         Commands::Onboard { frontier, json } => {

@@ -303,6 +303,15 @@ pub(crate) enum Commands {
         #[command(subcommand)]
         action: GateAction,
     },
+    /// The Sidon Producer Profile (`vela.sidon-producer-profile.v1`): the
+    /// realized finite/positive/ranked Scientific State Kernel for one live
+    /// frontier, lower bounds for OEIS A309370 (Sidon sets in the binary cube).
+    /// `submit` produces the signed witness a producer brings; `observe`
+    /// produces the authoritative best-bound read. Both sign with your own key.
+    Sidon {
+        #[command(subcommand)]
+        action: SidonAction,
+    },
     /// Generate vendor agent-config adapters from the canonical `VELA.md`
     /// (one source of truth; the adapter files are disposable, regenerable
     /// leaves). `AGENTS.md`, `CLAUDE.md`, `.cursor/rules/vela.mdc`,
@@ -1464,6 +1473,46 @@ pub(crate) enum GateAction {
         /// Report the plan without writing.
         #[arg(long)]
         dry_run: bool,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum SidonAction {
+    /// Produce a signed `ResultPacket` from a Sidon witness, root-pinned to a
+    /// base `ObservationPacket`. The producer on-ramp: bring a witness, get the
+    /// signed result to propose. Signs with YOUR key — never a maintainer's.
+    Submit {
+        /// A Sidon witness JSON: `{kind:"sidon", n, claimed_size, points:[[0/1,…],…]}`.
+        witness: PathBuf,
+        /// The base `ObservationPacket` the work is pinned to (its state is
+        /// repeated byte-for-byte into the result).
+        #[arg(long)]
+        base_observation: PathBuf,
+        /// Path to your Ed25519 signing key (hex). Your producer key.
+        #[arg(long)]
+        key: PathBuf,
+        /// Your producer actor id, e.g. `producer:alice`.
+        #[arg(long)]
+        actor: String,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Replay a presentation into the authoritative best-bound
+    /// `ObservationPacket` (the four roots, the canonical output, and the
+    /// replay receipt). Signs with your own key; the read replays from the
+    /// presentation it names.
+    Observe {
+        /// A presentation JSON: `{cell_ranks, clauses, accepted_events, cell_metadata}`.
+        #[arg(long)]
+        presentation: PathBuf,
+        /// Path to your Ed25519 signing key (hex).
+        #[arg(long)]
+        key: PathBuf,
+        /// Your observer actor id, e.g. `hub:observer`.
+        #[arg(long)]
+        actor: String,
         #[arg(long)]
         json: bool,
     },

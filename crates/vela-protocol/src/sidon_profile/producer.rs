@@ -8,10 +8,14 @@
 //! signing key, so a Rust producer emits byte-identical packets to the Python
 //! reference (Ed25519 signing is deterministic per RFC 8032).
 //!
-//! This commit lands the authoritative-read constructors —
-//! [`make_support_function`] and [`make_observation`] — and proves them by
-//! regenerating the fixture's genesis observation byte for byte. The remaining
-//! constructors (task/result/gate/acceptance/challenge/view/repair) layer on top.
+//! Landed so far: the authoritative-read constructors ([`make_support_function`],
+//! [`make_observation`]) and the producer submission path ([`make_task`],
+//! [`make_result`], [`validate_shape`]) — all proven by regenerating the
+//! fixture's genesis observation, task, and result byte for byte, and surfaced
+//! through `vela sidon observe` / `vela sidon submit`. The reviewer-side
+//! constructors (gate/acceptance/challenge/view/repair) layer on top next; the
+//! production gate runs the frozen `vela-verify` Sidon verifier rather than the
+//! fixture's Python executables.
 
 use ed25519_dalek::SigningKey;
 use serde_json::{Value, json};
@@ -82,7 +86,7 @@ pub fn make_task(
     objective_kind: &str,
     signing_key: &SigningKey,
     actor: &str,
-    step: u32,
+    created_at: &str,
 ) -> Result<Value, String> {
     let current = current_bound(observation, n)?;
     let required_minimum = if objective_kind == "strict_improvement" {
@@ -114,7 +118,7 @@ pub fn make_task(
         "verifier_contract": "vela.sidon.gate.v1",
         "required_result_schema": "vela.sidon-witness.v1",
         "lease": { "state_effect": "none", "required": false },
-        "created_at": fixture_time(step),
+        "created_at": created_at,
     });
     signed_packet("task", fields_of(fields), signing_key, actor)
 }
@@ -127,7 +131,7 @@ pub fn make_result(
     witness: &Value,
     signing_key: &SigningKey,
     actor: &str,
-    step: u32,
+    created_at: &str,
 ) -> Result<Value, String> {
     let (n, points) = validate_shape(witness)?;
     if Some(n) != task["cell_target"]["n"].as_i64() {
@@ -145,7 +149,7 @@ pub fn make_result(
         "artifact": witness,
         "artifact_digest": digest(witness)?,
         "certificate_kind": "sidon-witness-v1",
-        "created_at": fixture_time(step),
+        "created_at": created_at,
     });
     signed_packet("result", fields_of(fields), signing_key, actor)
 }
@@ -169,7 +173,7 @@ pub fn make_support_function(
     cell_id: &str,
     signing_key: &SigningKey,
     actor: &str,
-    step: u32,
+    created_at: &str,
 ) -> Result<Value, String> {
     let gamma = compile_gamma(presentation)?;
     let poly = gamma
@@ -195,7 +199,7 @@ pub fn make_support_function(
         "historical_minimal_environments": historical,
         "active_minimal_environments": active,
         "support_function_digest": support_function_digest,
-        "created_at": fixture_time(step),
+        "created_at": created_at,
     });
     signed_packet("support_function", fields_of(fields), signing_key, actor)
 }
@@ -212,7 +216,7 @@ pub fn make_observation(
     caused_by_event_id: Option<&str>,
     signing_key: &SigningKey,
     actor: &str,
-    step: u32,
+    created_at: &str,
 ) -> Result<Value, String> {
     let gamma = compile_gamma(presentation)?;
     let roots = json!({
@@ -264,7 +268,7 @@ pub fn make_observation(
     fields.insert("evaluator_inputs".into(), evaluator_inputs);
     fields.insert("canonical_output".into(), output);
     fields.insert("replay_receipt".into(), replay_receipt);
-    fields.insert("created_at".into(), json!(fixture_time(step)));
+    fields.insert("created_at".into(), json!(created_at));
 
     signed_packet("observation", fields, signing_key, actor)
 }

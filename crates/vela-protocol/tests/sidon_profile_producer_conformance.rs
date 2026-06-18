@@ -18,8 +18,8 @@ use serde_json::{Value, json};
 use vela_protocol::sidon_profile::canonical::content_id;
 use vela_protocol::sidon_profile::{
     Presentation, append_verified_route, bound_cell, claim, deterministic_signing_key, digest,
-    make_observation, make_result, make_support_function, make_task, register_bound_metadata,
-    verify_observation_replay, verify_signed_packet,
+    fixture_time, make_observation, make_result, make_support_function, make_task,
+    register_bound_metadata, verify_observation_replay, verify_signed_packet,
 };
 
 fn load(name: &str) -> Value {
@@ -91,7 +91,8 @@ fn genesis(fx: &Value) -> (Presentation, Value, Value, String) {
     let observer = deterministic_signing_key("observer");
     let disabled = BTreeSet::new();
     let cell = bound_cell(4, 6).unwrap();
-    let sf0 = make_support_function(&p, &disabled, &cell, &observer, "hub:observer", 0).unwrap();
+    let sf0 = make_support_function(&p, &disabled, &cell, &observer, "hub:observer", &fixture_time(0))
+        .unwrap();
     let obs0 = make_observation(
         &p,
         &disabled,
@@ -99,7 +100,7 @@ fn genesis(fx: &Value) -> (Presentation, Value, Value, String) {
         Some(&base_event),
         &observer,
         "hub:observer",
-        1,
+        &fixture_time(1),
     )
     .unwrap();
     (p, sf0, obs0, base_event)
@@ -150,10 +151,19 @@ fn rust_regenerates_the_task_and_result_byte_for_byte() {
     let producer_a = deterministic_signing_key("producer-alpha");
 
     // task_a: strict-improvement task at n=4 pinned to the genesis observation.
-    let task_a = make_task(&obs0, 4, "strict_improvement", &task_key, "hub:task-issuer", 2).unwrap();
+    let task_a = make_task(
+        &obs0,
+        4,
+        "strict_improvement",
+        &task_key,
+        "hub:task-issuer",
+        &fixture_time(2),
+    )
+    .unwrap();
     // result_a: producer alpha's 7-point witness answering task_a.
     let witness_a = fx["witnesses"]["route_a"].clone();
-    let result_a = make_result(&task_a, &witness_a, &producer_a, "producer:alpha", 4).unwrap();
+    let result_a =
+        make_result(&task_a, &witness_a, &producer_a, "producer:alpha", &fixture_time(4)).unwrap();
 
     let find = |id: &Value| -> Value {
         fx["packets"]
