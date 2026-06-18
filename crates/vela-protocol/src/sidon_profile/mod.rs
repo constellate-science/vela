@@ -13,16 +13,30 @@
 //!   - [`canonical`] — the domain-separated canonical JSON subset and content
 //!     identifiers (the bedrock every ID and root commits to);
 //!   - [`packets`] — the signed packet envelope (the nine packet types, their
-//!     IDs, and Ed25519 signatures).
+//!     IDs, and Ed25519 signatures);
+//!   - [`kernel`] — the finite, positive, ranked Scientific State Kernel:
+//!     composed bag-lineage `Gamma_P`, the four roots, and minimal environments;
+//!   - [`evaluator`] — the `vela.sidon.best-lower-bound.v1` evaluator and the
+//!     authoritative-read observation replay.
 //!
-//! Later layers (composed lineage circuit, active-view restriction, the
-//! `vela.sidon.best-lower-bound.v1` observation evaluator, and explicit
-//! staleness resolution) land on top of this bedrock.
+//! Later layers (the reducer that compiles accepted events into clauses, the
+//! `vela sidon` CLI surface, and the HTTP observation endpoint) land on top.
 
 pub mod canonical;
+pub mod evaluator;
+pub mod kernel;
 pub mod packets;
 
 pub use canonical::{CANON_DOMAIN, canonical_bytes, content_id, digest, sha256_value};
+pub use evaluator::{
+    EVALUATOR_ID, FRONTIER_ID, PROFILE_ID, RULE_ATOM, VIEW_POLICY_ID, append_verified_route,
+    best_bounds, bound_cell, claim, current_bound, register_bound_metadata, state_commitment,
+    verify_observation_replay, witness_cell,
+};
+pub use kernel::{
+    Clause, Monomial, Polynomial, Presentation, active_environments, active_view_root,
+    compile_gamma, evaluator_digest, is_hitting_set, lineage_root, minimal_environments, supported,
+};
 pub use packets::{
     PACKET_ID_DOMAIN, SCHEMA_VERSION, SIGNATURE_DOMAIN, deterministic_signing_key, packet_body,
     packet_id, prefix_for, public_key_b64, signed_packet, signing_preimage, verify_signed_packet,
