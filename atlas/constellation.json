@@ -1,0 +1,361 @@
+{
+  "schema": "vela.constellation.v1",
+  "mission": "Map all of knowledge and its frontiers, then fill the gaps and push the frontiers.",
+  "what": "One connected map: every knowledge object in one of three states — known (verified), frontier (an exact verifier exists, attackable now), or gap (dark matter) — and the connections that link the sources. Math is the populated region; the model is domain-general (a new science is a new source, not a new schema).",
+  "totals": {
+    "nodes": 809282,
+    "known": 317587,
+    "known_pct": 39,
+    "frontier": 796,
+    "gaps": 491695,
+    "gaps_pct": 61
+  },
+  "sources": [
+    {
+      "id": "oeis",
+      "kind": "integer-sequences",
+      "role": "breadth (claims)"
+    },
+    {
+      "id": "mathlib",
+      "kind": "formalized-math",
+      "role": "verified spine (kernel-checked)"
+    },
+    {
+      "id": "erdos",
+      "kind": "open-problems",
+      "role": "attackable problem corpus"
+    },
+    {
+      "id": "formal-conjectures",
+      "kind": "lean-conjectures",
+      "role": "open obligations (sorry)"
+    },
+    {
+      "id": "vela-frontiers",
+      "kind": "frozen-verifier-frontiers",
+      "role": "the verified record + its next targets"
+    }
+  ],
+  "fields": [
+    {
+      "field": "integer-sequences",
+      "nodes": 396966,
+      "known": 1,
+      "known_pct": 0,
+      "gap": 396965
+    },
+    {
+      "field": "Core",
+      "nodes": 100435,
+      "known": 56789,
+      "known_pct": 57,
+      "gap": 43646
+    },
+    {
+      "field": "Algebra",
+      "nodes": 56331,
+      "known": 47957,
+      "known_pct": 85,
+      "gap": 8374
+    },
+    {
+      "field": "CategoryTheory",
+      "nodes": 42795,
+      "known": 31349,
+      "known_pct": 73,
+      "gap": 11446
+    },
+    {
+      "field": "Analysis",
+      "nodes": 28576,
+      "known": 26103,
+      "known_pct": 91,
+      "gap": 2473
+    },
+    {
+      "field": "Topology",
+      "nodes": 27983,
+      "known": 24226,
+      "known_pct": 87,
+      "gap": 3757
+    },
+    {
+      "field": "Data",
+      "nodes": 25143,
+      "known": 22218,
+      "known_pct": 88,
+      "gap": 2925
+    },
+    {
+      "field": "Order",
+      "nodes": 19804,
+      "known": 17503,
+      "known_pct": 88,
+      "gap": 2301
+    },
+    {
+      "field": "RingTheory",
+      "nodes": 19275,
+      "known": 16576,
+      "known_pct": 86,
+      "gap": 2699
+    },
+    {
+      "field": "LinearAlgebra",
+      "nodes": 12399,
+      "known": 10571,
+      "known_pct": 85,
+      "gap": 1828
+    },
+    {
+      "field": "MeasureTheory",
+      "nodes": 12354,
+      "known": 11407,
+      "known_pct": 92,
+      "gap": 947
+    },
+    {
+      "field": "GroupTheory",
+      "nodes": 8900,
+      "known": 7518,
+      "known_pct": 84,
+      "gap": 1382
+    },
+    {
+      "field": "Combinatorics",
+      "nodes": 7895,
+      "known": 6779,
+      "known_pct": 86,
+      "gap": 1116
+    },
+    {
+      "field": "NumberTheory",
+      "nodes": 6630,
+      "known": 5743,
+      "known_pct": 87,
+      "gap": 887
+    },
+    {
+      "field": "Geometry",
+      "nodes": 6105,
+      "known": 5317,
+      "known_pct": 87,
+      "gap": 788
+    },
+    {
+      "field": "AlgebraicGeometry",
+      "nodes": 5895,
+      "known": 4842,
+      "known_pct": 82,
+      "gap": 1053
+    },
+    {
+      "field": "Tactic",
+      "nodes": 5134,
+      "known": 1417,
+      "known_pct": 28,
+      "gap": 3717
+    },
+    {
+      "field": "AlgebraicTopology",
+      "nodes": 4733,
+      "known": 3457,
+      "known_pct": 73,
+      "gap": 1276
+    },
+    {
+      "field": "Probability",
+      "nodes": 4276,
+      "known": 3922,
+      "known_pct": 92,
+      "gap": 354
+    },
+    {
+      "field": "SetTheory",
+      "nodes": 3516,
+      "known": 3224,
+      "known_pct": 92,
+      "gap": 292
+    },
+    {
+      "field": "FieldTheory",
+      "nodes": 3000,
+      "known": 2622,
+      "known_pct": 87,
+      "gap": 378
+    },
+    {
+      "field": "Logic",
+      "nodes": 2824,
+      "known": 2275,
+      "known_pct": 81,
+      "gap": 549
+    },
+    {
+      "field": "RepresentationTheory",
+      "nodes": 1998,
+      "known": 1462,
+      "known_pct": 73,
+      "gap": 536
+    },
+    {
+      "field": "Computability",
+      "nodes": 1865,
+      "known": 1328,
+      "known_pct": 71,
+      "gap": 537
+    },
+    {
+      "field": "ModelTheory",
+      "nodes": 1767,
+      "known": 1313,
+      "known_pct": 74,
+      "gap": 454
+    },
+    {
+      "field": "Dynamics",
+      "nodes": 903,
+      "known": 801,
+      "known_pct": 89,
+      "gap": 102
+    },
+    {
+      "field": "Control",
+      "nodes": 606,
+      "known": 392,
+      "known_pct": 65,
+      "gap": 214
+    },
+    {
+      "field": "Condensed",
+      "nodes": 430,
+      "known": 250,
+      "known_pct": 58,
+      "gap": 180
+    },
+    {
+      "field": "Lean",
+      "nodes": 293,
+      "known": 43,
+      "known_pct": 15,
+      "gap": 250
+    },
+    {
+      "field": "Util",
+      "nodes": 268,
+      "known": 23,
+      "known_pct": 9,
+      "gap": 245
+    },
+    {
+      "field": "InformationTheory",
+      "nodes": 144,
+      "known": 136,
+      "known_pct": 94,
+      "gap": 8
+    },
+    {
+      "field": "Testing",
+      "nodes": 36,
+      "known": 23,
+      "known_pct": 64,
+      "gap": 13
+    },
+    {
+      "field": "Init",
+      "nodes": 3,
+      "known": 0,
+      "known_pct": 0,
+      "gap": 3
+    }
+  ],
+  "connections": [
+    {
+      "a": "erdos",
+      "b": "oeis",
+      "kind": "references-sequence",
+      "count": 463
+    },
+    {
+      "a": "erdos",
+      "b": "erdos",
+      "kind": "implies",
+      "count": 2
+    },
+    {
+      "a": "vfr",
+      "b": "lean",
+      "kind": "related-formalization",
+      "count": 2
+    },
+    {
+      "a": "oeis",
+      "b": "vfr",
+      "kind": "verified-by",
+      "count": 1
+    },
+    {
+      "a": "lean-vela",
+      "b": "lean",
+      "kind": "same-theorem",
+      "count": 1
+    },
+    {
+      "a": "erdos-problem",
+      "b": "lean",
+      "kind": "formalizes",
+      "count": 1
+    },
+    {
+      "a": "oeis/vela",
+      "b": "mathlib",
+      "kind": "same-mathematics",
+      "count": 1,
+      "thread": "Sidon sets"
+    },
+    {
+      "a": "oeis/vela",
+      "b": "mathlib",
+      "kind": "same-mathematics",
+      "count": 1,
+      "thread": "Erdos-Ginzburg-Ziv"
+    },
+    {
+      "a": "mathlib",
+      "b": "mathlib",
+      "kind": "field-imports",
+      "count": 9560,
+      "note": "249 cross-field pairs (module dep graph)"
+    }
+  ],
+  "frontier": {
+    "what": "What to push: attackable obligations where an exact verifier admits the loop.",
+    "total": 796,
+    "sources": [
+      {
+        "source": "formal-conjectures",
+        "verifier": "lean kernel",
+        "open": 757,
+        "note": "757 of 783 Lean conjecture files still carry sorry"
+      },
+      {
+        "source": "erdos-wedge",
+        "verifier": "frozen vela-verify / Lean",
+        "open": 38,
+        "note": "22 already covered by a verifier or Lean proof"
+      },
+      {
+        "source": "vela-frontiers",
+        "verifier": "vela-verify (frozen)",
+        "open": 1,
+        "note": "3 live frozen-verifier frontiers"
+      }
+    ]
+  },
+  "gaps": {
+    "what": "What to fill: typed missingness, mostly `coverage`. Relative to the declared obligation universe — a gap becomes a frontier when a verifier or coverage model is admitted.",
+    "total": 491695
+  },
+  "loop": "observe the map -> take an open obligation -> verify -> accept -> the gap closes and the next opens"
+}
