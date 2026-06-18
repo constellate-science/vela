@@ -1,6 +1,8 @@
 //! Frontier calculus v2: the projection machinery, the discount kappa, and the
-//! graded bilattice status — the Rust port of `research/frontier-calculus/
-//! frontier_calculus_kernel.py` (sessions 5-6 of the consolidation program).
+//! graded bilattice status. The load-bearing laws (conservativity, and the kappa
+//! / context / transfer-closure properties) are machine-checked in
+//! `lean/Vela/Frontier/FrontierCalculus.lean`, which is ground truth; this module
+//! is the executable Rust reading of that calculus.
 //!
 //! The kernel stores ONE free object, the provenance polynomial in N[X]
 //! ([`crate::provenance_poly::ProvenancePoly`]), and derives every finding flag
@@ -15,6 +17,26 @@
 //! reference's `Fraction`), never floats, so the Rust and Python projections
 //! agree exactly. The kernel's cross-implementation check fixtures (checks
 //! 15-20) are ported as the test module below.
+//!
+//! ## Live surface vs. spec (the load-bearing boundary)
+//!
+//! Only three of this module's public items sit on a production path, all via
+//! the Belnap/bilattice STATUS read that feeds `vela claim state`
+//! (`status_provenance`, then `evidence_diff`): [`Rational`], [`BilatticePoint`],
+//! and [`status_point`], plus the closure they need (the [`Semiring`] trait,
+//! [`Viterbi`], [`eval_poly`], [`kappa`]). That is the entire cross-module
+//! surface; nothing else is referenced as `frontier_calculus::*` from any other
+//! module or crate.
+//!
+//! Everything else here is SPEC, not trust path: a complete provenance-semiring
+//! calculus (the other five semirings `Boolean`/`Counting`/`Bottleneck`/
+//! `Tropical`/`ProbSum`, the cost / existence / count projections, the admission
+//! boundary `AdmissionPolicy`/`admit`, the replay-tier grading
+//! `ReplayReceipt`/`replay_trust_grade`, and transfer faithfulness
+//! `compose_faithfulness`). It is exercised only by this module's own test
+//! fixtures and has NO production consumer; it is promoted to the live surface
+//! the day a domain consumes it. vela-protocol is an internal workspace crate,
+//! so this banner, not crate visibility, is the boundary of record.
 
 use crate::provenance_poly::ProvenancePoly;
 use crate::status_provenance::BelnapStatus;
