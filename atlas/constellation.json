@@ -329,6 +329,208 @@
       "note": "249 cross-field pairs (module dep graph)"
     }
   ],
+  "field_links": [
+    {
+      "a": "Algebra",
+      "b": "RingTheory",
+      "weight": 717
+    },
+    {
+      "a": "Algebra",
+      "b": "Data",
+      "weight": 714
+    },
+    {
+      "a": "Algebra",
+      "b": "LinearAlgebra",
+      "weight": 399
+    },
+    {
+      "a": "Analysis",
+      "b": "Topology",
+      "weight": 387
+    },
+    {
+      "a": "Algebra",
+      "b": "CategoryTheory",
+      "weight": 382
+    },
+    {
+      "a": "Data",
+      "b": "Order",
+      "weight": 335
+    },
+    {
+      "a": "LinearAlgebra",
+      "b": "RingTheory",
+      "weight": 259
+    },
+    {
+      "a": "Algebra",
+      "b": "GroupTheory",
+      "weight": 241
+    },
+    {
+      "a": "Analysis",
+      "b": "MeasureTheory",
+      "weight": 233
+    },
+    {
+      "a": "Algebra",
+      "b": "Tactic",
+      "weight": 228
+    },
+    {
+      "a": "Algebra",
+      "b": "Order",
+      "weight": 191
+    },
+    {
+      "a": "Algebra",
+      "b": "Topology",
+      "weight": 190
+    },
+    {
+      "a": "Data",
+      "b": "Tactic",
+      "weight": 173
+    },
+    {
+      "a": "Algebra",
+      "b": "Analysis",
+      "weight": 169
+    },
+    {
+      "a": "AlgebraicTopology",
+      "b": "CategoryTheory",
+      "weight": 133
+    },
+    {
+      "a": "Init",
+      "b": "Tactic",
+      "weight": 130
+    },
+    {
+      "a": "Analysis",
+      "b": "NumberTheory",
+      "weight": 126
+    },
+    {
+      "a": "Data",
+      "b": "Logic",
+      "weight": 124
+    },
+    {
+      "a": "Combinatorics",
+      "b": "Data",
+      "weight": 122
+    },
+    {
+      "a": "Analysis",
+      "b": "LinearAlgebra",
+      "weight": 121
+    },
+    {
+      "a": "FieldTheory",
+      "b": "RingTheory",
+      "weight": 118
+    },
+    {
+      "a": "Algebra",
+      "b": "Combinatorics",
+      "weight": 118
+    },
+    {
+      "a": "NumberTheory",
+      "b": "RingTheory",
+      "weight": 114
+    },
+    {
+      "a": "Data",
+      "b": "LinearAlgebra",
+      "weight": 105
+    },
+    {
+      "a": "CategoryTheory",
+      "b": "Tactic",
+      "weight": 104
+    },
+    {
+      "a": "Data",
+      "b": "RingTheory",
+      "weight": 104
+    },
+    {
+      "a": "Order",
+      "b": "Topology",
+      "weight": 103
+    },
+    {
+      "a": "CategoryTheory",
+      "b": "Topology",
+      "weight": 100
+    },
+    {
+      "a": "MeasureTheory",
+      "b": "Probability",
+      "weight": 97
+    },
+    {
+      "a": "Algebra",
+      "b": "NumberTheory",
+      "weight": 96
+    },
+    {
+      "a": "Data",
+      "b": "Topology",
+      "weight": 94
+    },
+    {
+      "a": "Analysis",
+      "b": "Geometry",
+      "weight": 91
+    },
+    {
+      "a": "Data",
+      "b": "GroupTheory",
+      "weight": 87
+    },
+    {
+      "a": "MeasureTheory",
+      "b": "Topology",
+      "weight": 81
+    },
+    {
+      "a": "Data",
+      "b": "NumberTheory",
+      "weight": 75
+    },
+    {
+      "a": "AlgebraicGeometry",
+      "b": "CategoryTheory",
+      "weight": 72
+    },
+    {
+      "a": "Order",
+      "b": "Tactic",
+      "weight": 69
+    },
+    {
+      "a": "Algebra",
+      "b": "FieldTheory",
+      "weight": 67
+    },
+    {
+      "a": "CategoryTheory",
+      "b": "Data",
+      "weight": 66
+    },
+    {
+      "a": "CategoryTheory",
+      "b": "Order",
+      "weight": 62
+    }
+  ],
   "frontier": {
     "what": "What to push: attackable obligations where an exact verifier admits the loop.",
     "total": 796,
