@@ -1,0 +1,1482 @@
+{
+  "schema": "vela.atlas.v1",
+  "what": "A map of math, verified where it can be. Every node is checked-or-claimed; the verified spine is Mathlib (kernel-checked) plus Vela frozen-verifier frontiers.",
+  "totals": {
+    "nodes": 809282,
+    "verified": 317587,
+    "verified_pct": 39
+  },
+  "sources": [
+    {
+      "id": "oeis",
+      "kind": "integer-sequences",
+      "nodes": 396966,
+      "verified": 1,
+      "role": "breadth (claims)",
+      "bulk": "https://oeis.org/names.gz"
+    },
+    {
+      "id": "mathlib",
+      "kind": "formalized-math",
+      "nodes": 412316,
+      "verified": 317586,
+      "role": "verified spine (kernel-checked)",
+      "bulk": "https://leanprover-community.github.io/mathlib4_docs/declarations/declaration-data.bmp"
+    }
+  ],
+  "territories": [
+    {
+      "domain": "integer-sequences",
+      "nodes": 396966,
+      "verified": 1,
+      "verified_pct": 0,
+      "regions": [
+        {
+          "name": "all",
+          "nodes": 396966,
+          "verified": 1
+        }
+      ]
+    },
+    {
+      "domain": "Core",
+      "nodes": 100435,
+      "verified": 56789,
+      "verified_pct": 57,
+      "regions": [
+        {
+          "name": "all",
+          "nodes": 7588,
+          "verified": 2296
+        },
+        {
+          "name": "Tactic",
+          "nodes": 6033,
+          "verified": 374
+        },
+        {
+          "name": "DTreeMap",
+          "nodes": 6020,
+          "verified": 5184
+        },
+        {
+          "name": "List",
+          "nodes": 3823,
+          "verified": 3409
+        },
+        {
+          "name": "DHashMap",
+          "nodes": 3513,
+          "verified": 3193
+        },
+        {
+          "name": "String",
+          "nodes": 3500,
+          "verified": 2691
+        },
+        {
+          "name": "UInt",
+          "nodes": 2949,
+          "verified": 2799
+        },
+        {
+          "name": "SInt",
+          "nodes": 2635,
+          "verified": 2413
+        }
+      ]
+    },
+    {
+      "domain": "Algebra",
+      "nodes": 56331,
+      "verified": 47957,
+      "verified_pct": 85,
+      "regions": [
+        {
+          "name": "Group",
+          "nodes": 10959,
+          "verified": 9549
+        },
+        {
+          "name": "Order",
+          "nodes": 9140,
+          "verified": 8486
+        },
+        {
+          "name": "Homology",
+          "nodes": 6638,
+          "verified": 5085
+        },
+        {
+          "name": "Category",
+          "nodes": 4272,
+          "verified": 2992
+        },
+        {
+          "name": "Polynomial",
+          "nodes": 2809,
+          "verified": 2638
+        },
+        {
+          "name": "Ring",
+          "nodes": 2752,
+          "verified": 2287
+        },
+        {
+          "name": "Module",
+          "nodes": 2713,
+          "verified": 2252
+        },
+        {
+          "name": "Lie",
+          "nodes": 2153,
+          "verified": 1755
+        }
+      ]
+    },
+    {
+      "domain": "CategoryTheory",
+      "nodes": 42795,
+      "verified": 31349,
+      "verified_pct": 73,
+      "regions": [
+        {
+          "name": "Limits",
+          "nodes": 9913,
+          "verified": 6846
+        },
+        {
+          "name": "Monoidal",
+          "nodes": 5601,
+          "verified": 4288
+        },
+        {
+          "name": "Sites",
+          "nodes": 3506,
+          "verified": 2564
+        },
+        {
+          "name": "Bicategory",
+          "nodes": 2407,
+          "verified": 1714
+        },
+        {
+          "name": "Comma",
+          "nodes": 1460,
+          "verified": 1121
+        },
+        {
+          "name": "Triangulated",
+          "nodes": 1421,
+          "verified": 1182
+        },
+        {
+          "name": "MorphismProperty",
+          "nodes": 1219,
+          "verified": 943
+        },
+        {
+          "name": "Functor",
+          "nodes": 1191,
+          "verified": 854
+        }
+      ]
+    },
+    {
+      "domain": "Analysis",
+      "nodes": 28576,
+      "verified": 26103,
+      "verified_pct": 91,
+      "regions": [
+        {
+          "name": "Normed",
+          "nodes": 6105,
+          "verified": 5224
+        },
+        {
+          "name": "SpecialFunctions",
+          "nodes": 4276,
+          "verified": 4105
+        },
+        {
+          "name": "Calculus",
+          "nodes": 4223,
+          "verified": 4057
+        },
+        {
+          "name": "Convex",
+          "nodes": 1984,
+          "verified": 1893
+        },
+        {
+          "name": "InnerProductSpace",
+          "nodes": 1956,
+          "verified": 1740
+        },
+        {
+          "name": "Complex",
+          "nodes": 1825,
+          "verified": 1692
+        },
+        {
+          "name": "CStarAlgebra",
+          "nodes": 1435,
+          "verified": 1288
+        },
+        {
+          "name": "Asymptotics",
+          "nodes": 929,
+          "verified": 903
+        }
+      ]
+    },
+    {
+      "domain": "Topology",
+      "nodes": 27983,
+      "verified": 24226,
+      "verified_pct": 87,
+      "regions": [
+        {
+          "name": "Algebra",
+          "nodes": 7565,
+          "verified": 6625
+        },
+        {
+          "name": "MetricSpace",
+          "nodes": 2661,
+          "verified": 2406
+        },
+        {
+          "name": "Order",
+          "nodes": 2076,
+          "verified": 1908
+        },
+        {
+          "name": "UniformSpace",
+          "nodes": 1533,
+          "verified": 1371
+        },
+        {
+          "name": "Category",
+          "nodes": 1303,
+          "verified": 866
+        },
+        {
+          "name": "ContinuousMap",
+          "nodes": 1276,
+          "verified": 1067
+        },
+        {
+          "name": "Instances",
+          "nodes": 698,
+          "verified": 658
+        },
+        {
+          "name": "Sets",
+          "nodes": 614,
+          "verified": 534
+        }
+      ]
+    },
+    {
+      "domain": "Data",
+      "nodes": 25143,
+      "verified": 22218,
+      "verified_pct": 88,
+      "regions": [
+        {
+          "name": "Set",
+          "nodes": 3356,
+          "verified": 3207
+        },
+        {
+          "name": "Finset",
+          "nodes": 2696,
+          "verified": 2570
+        },
+        {
+          "name": "List",
+          "nodes": 2194,
+          "verified": 2036
+        },
+        {
+          "name": "Nat",
+          "nodes": 2052,
+          "verified": 1906
+        },
+        {
+          "name": "Multiset",
+          "nodes": 1040,
+          "verified": 960
+        },
+        {
+          "name": "Finsupp",
+          "nodes": 947,
+          "verified": 839
+        },
+        {
+          "name": "Fin",
+          "nodes": 817,
+          "verified": 712
+        },
+        {
+          "name": "Matrix",
+          "nodes": 799,
+          "verified": 697
+        }
+      ]
+    },
+    {
+      "domain": "Order",
+      "nodes": 19804,
+      "verified": 17503,
+      "verified_pct": 88,
+      "regions": [
+        {
+          "name": "Filter",
+          "nodes": 3097,
+          "verified": 2888
+        },
+        {
+          "name": "Interval",
+          "nodes": 2349,
+          "verified": 2240
+        },
+        {
+          "name": "Hom",
+          "nodes": 1187,
+          "verified": 912
+        },
+        {
+          "name": "Category",
+          "nodes": 819,
+          "verified": 583
+        },
+        {
+          "name": "SuccPred",
+          "nodes": 715,
+          "verified": 653
+        },
+        {
+          "name": "CompleteLattice",
+          "nodes": 603,
+          "verified": 557
+        },
+        {
+          "name": "UpperLower",
+          "nodes": 490,
+          "verified": 465
+        },
+        {
+          "name": "Heyting",
+          "nodes": 451,
+          "verified": 379
+        }
+      ]
+    },
+    {
+      "domain": "RingTheory",
+      "nodes": 19275,
+      "verified": 16576,
+      "verified_pct": 86,
+      "regions": [
+        {
+          "name": "Ideal",
+          "nodes": 1544,
+          "verified": 1386
+        },
+        {
+          "name": "Polynomial",
+          "nodes": 1020,
+          "verified": 939
+        },
+        {
+          "name": "Valuation",
+          "nodes": 1014,
+          "verified": 861
+        },
+        {
+          "name": "Localization",
+          "nodes": 836,
+          "verified": 716
+        },
+        {
+          "name": "PowerSeries",
+          "nodes": 702,
+          "verified": 619
+        },
+        {
+          "name": "MvPowerSeries",
+          "nodes": 594,
+          "verified": 537
+        },
+        {
+          "name": "DedekindDomain",
+          "nodes": 573,
+          "verified": 505
+        },
+        {
+          "name": "HahnSeries",
+          "nodes": 573,
+          "verified": 503
+        }
+      ]
+    },
+    {
+      "domain": "LinearAlgebra",
+      "nodes": 12399,
+      "verified": 10571,
+      "verified_pct": 85,
+      "regions": [
+        {
+          "name": "Matrix",
+          "nodes": 2744,
+          "verified": 2441
+        },
+        {
+          "name": "AffineSpace",
+          "nodes": 1282,
+          "verified": 1157
+        },
+        {
+          "name": "RootSystem",
+          "nodes": 872,
+          "verified": 705
+        },
+        {
+          "name": "TensorProduct",
+          "nodes": 760,
+          "verified": 612
+        },
+        {
+          "name": "QuadraticForm",
+          "nodes": 498,
+          "verified": 386
+        },
+        {
+          "name": "Dimension",
+          "nodes": 435,
+          "verified": 409
+        },
+        {
+          "name": "CliffordAlgebra",
+          "nodes": 394,
+          "verified": 325
+        },
+        {
+          "name": "Finsupp",
+          "nodes": 288,
+          "verified": 242
+        }
+      ]
+    },
+    {
+      "domain": "MeasureTheory",
+      "nodes": 12354,
+      "verified": 11407,
+      "verified_pct": 92,
+      "regions": [
+        {
+          "name": "Measure",
+          "nodes": 3566,
+          "verified": 3307
+        },
+        {
+          "name": "Function",
+          "nodes": 2720,
+          "verified": 2567
+        },
+        {
+          "name": "Integral",
+          "nodes": 2152,
+          "verified": 2065
+        },
+        {
+          "name": "Group",
+          "nodes": 1071,
+          "verified": 961
+        },
+        {
+          "name": "Constructions",
+          "nodes": 768,
+          "verified": 712
+        },
+        {
+          "name": "MeasurableSpace",
+          "nodes": 754,
+          "verified": 653
+        },
+        {
+          "name": "VectorMeasure",
+          "nodes": 531,
+          "verified": 464
+        },
+        {
+          "name": "OuterMeasure",
+          "nodes": 328,
+          "verified": 301
+        }
+      ]
+    },
+    {
+      "domain": "GroupTheory",
+      "nodes": 8900,
+      "verified": 7518,
+      "verified_pct": 84,
+      "regions": [
+        {
+          "name": "GroupAction",
+          "nodes": 1621,
+          "verified": 1362
+        },
+        {
+          "name": "Perm",
+          "nodes": 802,
+          "verified": 739
+        },
+        {
+          "name": "FreeGroup",
+          "nodes": 506,
+          "verified": 426
+        },
+        {
+          "name": "MonoidLocalization",
+          "nodes": 480,
+          "verified": 399
+        },
+        {
+          "name": "SpecificGroups",
+          "nodes": 442,
+          "verified": 392
+        },
+        {
+          "name": "OrderOfElement",
+          "nodes": 397,
+          "verified": 369
+        },
+        {
+          "name": "Congruence",
+          "nodes": 351,
+          "verified": 269
+        },
+        {
+          "name": "Nilpotent",
+          "nodes": 288,
+          "verified": 260
+        }
+      ]
+    },
+    {
+      "domain": "Combinatorics",
+      "nodes": 7895,
+      "verified": 6779,
+      "verified_pct": 86,
+      "regions": [
+        {
+          "name": "SimpleGraph",
+          "nodes": 3698,
+          "verified": 3192
+        },
+        {
+          "name": "Matroid",
+          "nodes": 1471,
+          "verified": 1365
+        },
+        {
+          "name": "Additive",
+          "nodes": 619,
+          "verified": 559
+        },
+        {
+          "name": "Enumerative",
+          "nodes": 493,
+          "verified": 399
+        },
+        {
+          "name": "Quiver",
+          "nodes": 417,
+          "verified": 286
+        },
+        {
+          "name": "Graph",
+          "nodes": 283,
+          "verified": 248
+        },
+        {
+          "name": "SetFamily",
+          "nodes": 239,
+          "verified": 217
+        },
+        {
+          "name": "Young",
+          "nodes": 97,
+          "verified": 78
+        }
+      ]
+    },
+    {
+      "domain": "NumberTheory",
+      "nodes": 6630,
+      "verified": 5743,
+      "verified_pct": 87,
+      "regions": [
+        {
+          "name": "NumberField",
+          "nodes": 1396,
+          "verified": 1178
+        },
+        {
+          "name": "ModularForms",
+          "nodes": 839,
+          "verified": 703
+        },
+        {
+          "name": "Padics",
+          "nodes": 577,
+          "verified": 513
+        },
+        {
+          "name": "LSeries",
+          "nodes": 552,
+          "verified": 484
+        },
+        {
+          "name": "ArithmeticFunction",
+          "nodes": 281,
+          "verified": 244
+        },
+        {
+          "name": "Zsqrtd",
+          "nodes": 211,
+          "verified": 192
+        },
+        {
+          "name": "LegendreSymbol",
+          "nodes": 190,
+          "verified": 171
+        },
+        {
+          "name": "Cyclotomic",
+          "nodes": 170,
+          "verified": 151
+        }
+      ]
+    },
+    {
+      "domain": "Geometry",
+      "nodes": 6105,
+      "verified": 5317,
+      "verified_pct": 87,
+      "regions": [
+        {
+          "name": "Manifold",
+          "nodes": 3443,
+          "verified": 2972
+        },
+        {
+          "name": "Euclidean",
+          "nodes": 1461,
+          "verified": 1378
+        },
+        {
+          "name": "RingedSpace",
+          "nodes": 573,
+          "verified": 438
+        },
+        {
+          "name": "Convex",
+          "nodes": 498,
+          "verified": 432
+        },
+        {
+          "name": "Diffeology",
+          "nodes": 98,
+          "verified": 75
+        },
+        {
+          "name": "Polygon",
+          "nodes": 20,
+          "verified": 10
+        },
+        {
+          "name": "Group",
+          "nodes": 12,
+          "verified": 12
+        }
+      ]
+    },
+    {
+      "domain": "AlgebraicGeometry",
+      "nodes": 5895,
+      "verified": 4842,
+      "verified_pct": 82,
+      "regions": [
+        {
+          "name": "EllipticCurve",
+          "nodes": 1374,
+          "verified": 1149
+        },
+        {
+          "name": "Morphisms",
+          "nodes": 1004,
+          "verified": 912
+        },
+        {
+          "name": "Sites",
+          "nodes": 286,
+          "verified": 209
+        },
+        {
+          "name": "ProjectiveSpectrum",
+          "nodes": 265,
+          "verified": 205
+        },
+        {
+          "name": "IdealSheaf",
+          "nodes": 264,
+          "verified": 217
+        },
+        {
+          "name": "Scheme",
+          "nodes": 232,
+          "verified": 190
+        },
+        {
+          "name": "Cover",
+          "nodes": 230,
+          "verified": 162
+        },
+        {
+          "name": "AffineScheme",
+          "nodes": 203,
+          "verified": 170
+        }
+      ]
+    },
+    {
+      "domain": "Tactic",
+      "nodes": 5134,
+      "verified": 1417,
+      "verified_pct": 28,
+      "regions": [
+        {
+          "name": "CategoryTheory",
+          "nodes": 616,
+          "verified": 212
+        },
+        {
+          "name": "NormNum",
+          "nodes": 520,
+          "verified": 277
+        },
+        {
+          "name": "ComputeAsymptotics",
+          "nodes": 319,
+          "verified": 236
+        },
+        {
+          "name": "Ring",
+          "nodes": 310,
+          "verified": 127
+        },
+        {
+          "name": "FunProp",
+          "nodes": 256,
+          "verified": 30
+        },
+        {
+          "name": "Linarith",
+          "nodes": 254,
+          "verified": 34
+        },
+        {
+          "name": "Translate",
+          "nodes": 186,
+          "verified": 9
+        },
+        {
+          "name": "Widget",
+          "nodes": 185,
+          "verified": 8
+        }
+      ]
+    },
+    {
+      "domain": "AlgebraicTopology",
+      "nodes": 4733,
+      "verified": 3457,
+      "verified_pct": 73,
+      "regions": [
+        {
+          "name": "SimplicialSet",
+          "nodes": 1990,
+          "verified": 1457
+        },
+        {
+          "name": "ModelCategory",
+          "nodes": 737,
+          "verified": 539
+        },
+        {
+          "name": "SimplexCategory",
+          "nodes": 495,
+          "verified": 377
+        },
+        {
+          "name": "SimplicialObject",
+          "nodes": 490,
+          "verified": 373
+        },
+        {
+          "name": "DoldKan",
+          "nodes": 382,
+          "verified": 289
+        },
+        {
+          "name": "FundamentalGroupoid",
+          "nodes": 156,
+          "verified": 103
+        },
+        {
+          "name": "Quasicategory",
+          "nodes": 76,
+          "verified": 55
+        },
+        {
+          "name": "CechNerve",
+          "nodes": 73,
+          "verified": 48
+        }
+      ]
+    },
+    {
+      "domain": "Probability",
+      "nodes": 4276,
+      "verified": 3922,
+      "verified_pct": 92,
+      "regions": [
+        {
+          "name": "Kernel",
+          "nodes": 1374,
+          "verified": 1250
+        },
+        {
+          "name": "Independence",
+          "nodes": 645,
+          "verified": 616
+        },
+        {
+          "name": "Distributions",
+          "nodes": 517,
+          "verified": 466
+        },
+        {
+          "name": "Process",
+          "nodes": 450,
+          "verified": 407
+        },
+        {
+          "name": "Moments",
+          "nodes": 446,
+          "verified": 420
+        },
+        {
+          "name": "Martingale",
+          "nodes": 220,
+          "verified": 206
+        },
+        {
+          "name": "ProbabilityMassFunction",
+          "nodes": 153,
+          "verified": 137
+        },
+        {
+          "name": "Decision",
+          "nodes": 72,
+          "verified": 62
+        }
+      ]
+    },
+    {
+      "domain": "SetTheory",
+      "nodes": 3516,
+      "verified": 3224,
+      "verified_pct": 92,
+      "regions": [
+        {
+          "name": "Cardinal",
+          "nodes": 1534,
+          "verified": 1475
+        },
+        {
+          "name": "Ordinal",
+          "nodes": 1400,
+          "verified": 1285
+        },
+        {
+          "name": "ZFC",
+          "nodes": 487,
+          "verified": 398
+        },
+        {
+          "name": "Lists",
+          "nodes": 64,
+          "verified": 40
+        },
+        {
+          "name": "Descriptive",
+          "nodes": 31,
+          "verified": 26
+        }
+      ]
+    },
+    {
+      "domain": "FieldTheory",
+      "nodes": 3000,
+      "verified": 2622,
+      "verified_pct": 87,
+      "regions": [
+        {
+          "name": "IntermediateField",
+          "nodes": 507,
+          "verified": 455
+        },
+        {
+          "name": "RatFunc",
+          "nodes": 296,
+          "verified": 248
+        },
+        {
+          "name": "Galois",
+          "nodes": 255,
+          "verified": 206
+        },
+        {
+          "name": "Minpoly",
+          "nodes": 187,
+          "verified": 174
+        },
+        {
+          "name": "PurelyInseparable",
+          "nodes": 172,
+          "verified": 156
+        },
+        {
+          "name": "Finite",
+          "nodes": 168,
+          "verified": 151
+        },
+        {
+          "name": "IsAlgClosed",
+          "nodes": 118,
+          "verified": 97
+        },
+        {
+          "name": "Relrank",
+          "nodes": 114,
+          "verified": 110
+        }
+      ]
+    },
+    {
+      "domain": "Logic",
+      "nodes": 2824,
+      "verified": 2275,
+      "verified_pct": 81,
+      "regions": [
+        {
+          "name": "Equiv",
+          "nodes": 1259,
+          "verified": 948
+        },
+        {
+          "name": "Function",
+          "nodes": 440,
+          "verified": 381
+        },
+        {
+          "name": "Basic",
+          "nodes": 265,
+          "verified": 245
+        },
+        {
+          "name": "Relation",
+          "nodes": 188,
+          "verified": 171
+        },
+        {
+          "name": "Embedding",
+          "nodes": 135,
+          "verified": 90
+        },
+        {
+          "name": "Encodable",
+          "nodes": 119,
+          "verified": 87
+        },
+        {
+          "name": "Small",
+          "nodes": 64,
+          "verified": 59
+        },
+        {
+          "name": "IsEmpty",
+          "nodes": 61,
+          "verified": 56
+        }
+      ]
+    },
+    {
+      "domain": "RepresentationTheory",
+      "nodes": 1998,
+      "verified": 1462,
+      "verified_pct": 73,
+      "regions": [
+        {
+          "name": "Homological",
+          "nodes": 907,
+          "verified": 684
+        },
+        {
+          "name": "Rep",
+          "nodes": 266,
+          "verified": 192
+        },
+        {
+          "name": "Intertwining",
+          "nodes": 172,
+          "verified": 138
+        },
+        {
+          "name": "Continuous",
+          "nodes": 111,
+          "verified": 69
+        },
+        {
+          "name": "Basic",
+          "nodes": 93,
+          "verified": 64
+        },
+        {
+          "name": "Coinvariants",
+          "nodes": 90,
+          "verified": 61
+        },
+        {
+          "name": "Action",
+          "nodes": 41,
+          "verified": 32
+        },
+        {
+          "name": "Invariants",
+          "nodes": 39,
+          "verified": 25
+        }
+      ]
+    },
+    {
+      "domain": "Computability",
+      "nodes": 1865,
+      "verified": 1328,
+      "verified_pct": 71,
+      "regions": [
+        {
+          "name": "TuringMachine",
+          "nodes": 543,
+          "verified": 260
+        },
+        {
+          "name": "Primrec",
+          "nodes": 265,
+          "verified": 239
+        },
+        {
+          "name": "AkraBazzi",
+          "nodes": 133,
+          "verified": 123
+        },
+        {
+          "name": "Partrec",
+          "nodes": 120,
+          "verified": 104
+        },
+        {
+          "name": "Language",
+          "nodes": 86,
+          "verified": 77
+        },
+        {
+          "name": "Reduce",
+          "nodes": 79,
+          "verified": 67
+        },
+        {
+          "name": "ContextFreeGrammar",
+          "nodes": 79,
+          "verified": 58
+        },
+        {
+          "name": "NFA",
+          "nodes": 67,
+          "verified": 50
+        }
+      ]
+    },
+    {
+      "domain": "ModelTheory",
+      "nodes": 1767,
+      "verified": 1313,
+      "verified_pct": 74,
+      "regions": [
+        {
+          "name": "Basic",
+          "nodes": 184,
+          "verified": 133
+        },
+        {
+          "name": "Substructures",
+          "nodes": 177,
+          "verified": 152
+        },
+        {
+          "name": "Syntax",
+          "nodes": 149,
+          "verified": 55
+        },
+        {
+          "name": "Semantics",
+          "nodes": 149,
+          "verified": 138
+        },
+        {
+          "name": "LanguageMap",
+          "nodes": 126,
+          "verified": 87
+        },
+        {
+          "name": "Arithmetic",
+          "nodes": 101,
+          "verified": 90
+        },
+        {
+          "name": "Definability",
+          "nodes": 93,
+          "verified": 85
+        },
+        {
+          "name": "Algebra",
+          "nodes": 92,
+          "verified": 46
+        }
+      ]
+    },
+    {
+      "domain": "Dynamics",
+      "nodes": 903,
+      "verified": 801,
+      "verified_pct": 89,
+      "regions": [
+        {
+          "name": "Ergodic",
+          "nodes": 172,
+          "verified": 158
+        },
+        {
+          "name": "TopologicalEntropy",
+          "nodes": 158,
+          "verified": 146
+        },
+        {
+          "name": "PeriodicPts",
+          "nodes": 140,
+          "verified": 133
+        },
+        {
+          "name": "Circle",
+          "nodes": 138,
+          "verified": 131
+        },
+        {
+          "name": "Flow",
+          "nodes": 60,
+          "verified": 42
+        },
+        {
+          "name": "SymbolicDynamics",
+          "nodes": 58,
+          "verified": 32
+        },
+        {
+          "name": "FixedPoints",
+          "nodes": 41,
+          "verified": 38
+        },
+        {
+          "name": "BirkhoffSum",
+          "nodes": 41,
+          "verified": 39
+        }
+      ]
+    },
+    {
+      "domain": "Control",
+      "nodes": 606,
+      "verified": 392,
+      "verified_pct": 65,
+      "regions": [
+        {
+          "name": "Monad",
+          "nodes": 117,
+          "verified": 69
+        },
+        {
+          "name": "Traversable",
+          "nodes": 93,
+          "verified": 75
+        },
+        {
+          "name": "Functor",
+          "nodes": 67,
+          "verified": 37
+        },
+        {
+          "name": "Bitraversable",
+          "nodes": 54,
+          "verified": 39
+        },
+        {
+          "name": "Fold",
+          "nodes": 49,
+          "verified": 25
+        },
+        {
+          "name": "Bifunctor",
+          "nodes": 37,
+          "verified": 30
+        },
+        {
+          "name": "ULiftable",
+          "nodes": 30,
+          "verified": 14
+        },
+        {
+          "name": "LawfulFix",
+          "nodes": 30,
+          "verified": 23
+        }
+      ]
+    },
+    {
+      "domain": "Condensed",
+      "nodes": 430,
+      "verified": 250,
+      "verified_pct": 58,
+      "regions": [
+        {
+          "name": "Discrete",
+          "nodes": 190,
+          "verified": 106
+        },
+        {
+          "name": "Light",
+          "nodes": 110,
+          "verified": 74
+        },
+        {
+          "name": "TopCatAdjunction",
+          "nodes": 26,
+          "verified": 12
+        },
+        {
+          "name": "Explicit",
+          "nodes": 17,
+          "verified": 5
+        },
+        {
+          "name": "Functors",
+          "nodes": 15,
+          "verified": 7
+        },
+        {
+          "name": "TopComparison",
+          "nodes": 11,
+          "verified": 7
+        },
+        {
+          "name": "Module",
+          "nodes": 10,
+          "verified": 2
+        },
+        {
+          "name": "Solid",
+          "nodes": 10,
+          "verified": 2
+        }
+      ]
+    },
+    {
+      "domain": "Lean",
+      "nodes": 293,
+      "verified": 43,
+      "verified_pct": 15,
+      "regions": [
+        {
+          "name": "Meta",
+          "nodes": 158,
+          "verified": 28
+        },
+        {
+          "name": "Expr",
+          "nodes": 58,
+          "verified": 0
+        },
+        {
+          "name": "Elab",
+          "nodes": 14,
+          "verified": 0
+        },
+        {
+          "name": "MessageData",
+          "nodes": 12,
+          "verified": 1
+        },
+        {
+          "name": "Thunk",
+          "nodes": 9,
+          "verified": 7
+        },
+        {
+          "name": "ContextInfo",
+          "nodes": 8,
+          "verified": 0
+        },
+        {
+          "name": "Json",
+          "nodes": 8,
+          "verified": 6
+        },
+        {
+          "name": "Name",
+          "nodes": 4,
+          "verified": 0
+        }
+      ]
+    },
+    {
+      "domain": "Util",
+      "nodes": 268,
+      "verified": 23,
+      "verified_pct": 9,
+      "regions": [
+        {
+          "name": "Notation3",
+          "nodes": 53,
+          "verified": 2
+        },
+        {
+          "name": "Export",
+          "nodes": 37,
+          "verified": 9
+        },
+        {
+          "name": "AtomM",
+          "nodes": 33,
+          "verified": 4
+        },
+        {
+          "name": "Superscript",
+          "nodes": 26,
+          "verified": 2
+        },
+        {
+          "name": "AtLocation",
+          "nodes": 14,
+          "verified": 3
+        },
+        {
+          "name": "CountHeartbeats",
+          "nodes": 14,
+          "verified": 0
+        },
+        {
+          "name": "PrintSorries",
+          "nodes": 10,
+          "verified": 0
+        },
+        {
+          "name": "FormatTable",
+          "nodes": 9,
+          "verified": 2
+        }
+      ]
+    },
+    {
+      "domain": "InformationTheory",
+      "nodes": 144,
+      "verified": 136,
+      "verified_pct": 94,
+      "regions": [
+        {
+          "name": "Hamming",
+          "nodes": 79,
+          "verified": 74
+        },
+        {
+          "name": "KullbackLeibler",
+          "nodes": 61,
+          "verified": 59
+        },
+        {
+          "name": "Coding",
+          "nodes": 4,
+          "verified": 3
+        }
+      ]
+    },
+    {
+      "domain": "Testing",
+      "nodes": 36,
+      "verified": 23,
+      "verified_pct": 64,
+      "regions": [
+        {
+          "name": "Plausible",
+          "nodes": 36,
+          "verified": 23
+        }
+      ]
+    },
+    {
+      "domain": "Init",
+      "nodes": 3,
+      "verified": 0,
+      "verified_pct": 0,
+      "regions": [
+        {
+          "name": "all",
+          "nodes": 3,
+          "verified": 0
+        }
+      ]
+    }
+  ],
+  "golden_threads": [
+    {
+      "thread": "Sidon sets",
+      "oeis": "A309370",
+      "vela_frontier": "vfr_496956067dc5ad79",
+      "mathlib": [
+        "Behrend.bound",
+        "Finset.addEnergy"
+      ],
+      "note": "the OEIS sequence, Vela's frozen-verified records, and Mathlib's additive-combinatorics home, one chain"
+    },
+    {
+      "thread": "Erdos-Ginzburg-Ziv",
+      "vela": "Vela.EGZ",
+      "mathlib": "Int.erdos_ginzburg_ziv",
+      "note": "the same theorem, formalized in both Vela and Mathlib"
+    }
+  ],
+  "frontier": "Nodes ingest cheaply; the connective edges (decl dependencies, cross-source links) are the real work and are only seeded. The full Mathlib dependency graph is the next pull."
+}
