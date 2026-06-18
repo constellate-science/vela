@@ -259,58 +259,8 @@ fn entity_resolve_cli_and_ui_produce_identical_proposal_ids() {
     assert!(cli_id.starts_with("vpr_"));
 }
 
-// v0.59: federation conflict resolution. Same proposal-builder
-// pattern as the other primitives; ensures the CLI helper and the
-// Workbench POST handler produce byte-identical proposal ids for
-// the same logical content.
-fn conflict_resolve_proposal(
-    frontier_id: &str,
-    conflict_event_id: &str,
-    resolution_note: &str,
-    reviewer: &str,
-    reason: &str,
-) -> String {
-    new_proposal(
-        "frontier.conflict_resolve",
-        StateTarget {
-            r#type: "frontier_observation".to_string(),
-            id: frontier_id.to_string(),
-        },
-        reviewer,
-        "human",
-        reason,
-        json!({
-            "conflict_event_id": conflict_event_id,
-            "resolution_note": resolution_note,
-        }),
-        Vec::new(),
-        Vec::new(),
-    )
-    .id
-}
-
-#[test]
-fn conflict_resolve_cli_and_ui_produce_identical_proposal_ids() {
-    let cli_id = conflict_resolve_proposal(
-        "vfr_abc",
-        "vev_conflict",
-        "Reviewer accepts our view; peer's wording is stale.",
-        "reviewer:test",
-        "Conflict resolution: Reviewer accepts our view; peer's wording is stale.",
-    );
-    let ui_id = conflict_resolve_proposal(
-        "vfr_abc",
-        "vev_conflict",
-        "Reviewer accepts our view; peer's wording is stale.",
-        "reviewer:test",
-        "Conflict resolution: Reviewer accepts our view; peer's wording is stale.",
-    );
-    assert_eq!(
-        cli_id, ui_id,
-        "conflict-resolve CLI and UI must produce identical proposal ids"
-    );
-    assert!(cli_id.starts_with("vpr_"));
-}
+// v0.59 federation conflict-resolution parity test removed with the
+// federation surface.
 
 #[test]
 fn proposal_ids_change_when_payload_changes() {

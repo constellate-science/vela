@@ -107,7 +107,6 @@ pub fn roles_for_event_kind(kind: &str) -> Vec<CreditRole> {
         "evidence_atom.locator_repair" => vec![CreditRole::DataCuration],
         "evidence_atom.locator_repaired" => vec![CreditRole::DataCuration],
         "finding.span_repair" => vec![CreditRole::DataCuration],
-        "frontier.conflict_resolve" => vec![CreditRole::Validation],
 
         // Attestation = explicit validation.
         "attestation.recorded" => vec![CreditRole::Validation],

@@ -911,7 +911,6 @@ mod tests {
             artifacts: Vec::new(),
             predictions: Vec::new(),
             resolutions: Vec::new(),
-            peers: vec![],
             negative_results: vec![],
             trajectories: vec![],
             released_diff_packs: vec![],

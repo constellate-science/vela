@@ -174,24 +174,6 @@ pub const EVENT_KIND_BRIDGE_REVIEWED: &str = "bridge.reviewed";
 /// entered the review ledger without asserting a finding by itself.
 pub const EVENT_KIND_FRONTIER_OBSERVATION_REVIEWED: &str = "frontier.observation_reviewed";
 
-/// v0.59: Federation conflict resolution. Pairs with the existing
-/// `frontier.conflict_detected` event. The conflict event itself
-/// stays in the log unchanged (immutable history); the resolved
-/// event records the reviewer's verdict, the conflict it pertains
-/// to, and an optional pointer at the winning proposal.
-///
-/// Like its sibling `frontier.conflict_detected` and
-/// `frontier.synced_with_peer`, this is a frontier-level
-/// observation, not a finding-state mutation: the reducer arm is
-/// a no-op on `Project.findings`. Consumers (Workbench inbox,
-/// audit scripts, hub mirrors) pair a `conflict_detected` with
-/// its `conflict_resolved` by matching `conflict_event_id` to the
-/// detected event's id on read.
-///
-/// Required payload: `{conflict_event_id, resolved_by,
-/// resolution_note}`. Optional: `winning_proposal_id`.
-pub const EVENT_KIND_FRONTIER_CONFLICT_RESOLVED: &str = "frontier.conflict_resolved";
-
 /// T7: a reviewer's decision on a Contradiction object (`vcx_`). The
 /// event carries the full resolved `Contradiction` in
 /// `payload.contradiction`; the reducer upserts it into
@@ -295,10 +277,6 @@ pub const KNOWN_EVENT_KINDS: &[&str] = &[
     "tier.set",
     "evidence_atom.locator_repaired",
     "attestation.recorded",
-    "frontier.synced_with_peer",
-    "frontier.conflict_detected",
-    "frontier.conflict_resolved",
-    "frontier.forked_from",
     "frontier.observation_reviewed",
     "bridge.reviewed",
     "replication.deposited",
@@ -426,10 +404,6 @@ event_kinds! {
     FindingEntityResolved => "finding.entity_resolved",
     FindingEntityAdded => "finding.entity_added",
     AttestationRecorded => "attestation.recorded",
-    FrontierSyncedWithPeer => "frontier.synced_with_peer",
-    FrontierConflictDetected => "frontier.conflict_detected",
-    FrontierConflictResolved => "frontier.conflict_resolved",
-    FrontierForkedFrom => "frontier.forked_from",
     BridgeReviewed => "bridge.reviewed",
     ReplicationDeposited => "replication.deposited",
     PredictionDeposited => "prediction.deposited",
@@ -794,44 +768,6 @@ pub fn new_evidence_atom_locator_repair_event(
         reason: reason.to_string(),
         before_hash: before_hash.to_string(),
         after_hash: after_hash.to_string(),
-        payload,
-        caveats,
-        signature: None,
-        schema_artifact_id: None,
-    };
-    event.id = event_id(&event);
-    event
-}
-
-/// v0.59: build a `frontier.conflict_resolved` event. Frontier-level
-/// observation; the target is the conflict's frontier_id (same
-/// shape as `frontier.synced_with_peer` and
-/// `frontier.conflict_detected`).
-pub fn new_frontier_conflict_resolved_event(
-    frontier_id: &str,
-    actor_id: &str,
-    actor_type: &str,
-    reason: &str,
-    payload: Value,
-    caveats: Vec<String>,
-) -> StateEvent {
-    let timestamp = Utc::now().to_rfc3339();
-    let mut event = StateEvent {
-        schema: EVENT_SCHEMA.to_string(),
-        id: String::new(),
-        kind: EVENT_KIND_FRONTIER_CONFLICT_RESOLVED.into(),
-        target: StateTarget {
-            r#type: "frontier_observation".to_string(),
-            id: frontier_id.to_string(),
-        },
-        actor: StateActor {
-            id: actor_id.to_string(),
-            r#type: actor_type.to_string(),
-        },
-        timestamp,
-        reason: reason.to_string(),
-        before_hash: NULL_HASH.to_string(),
-        after_hash: NULL_HASH.to_string(),
         payload,
         caveats,
         signature: None,
@@ -1508,81 +1444,6 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
             require_str("prediction_id")?;
             require_str("resolves_by")?;
             require_str("expired_at")?;
-        }
-        // v0.39: federation events. Both record interactions with a
-        // peer hub registered in `Project.peers`. The actual sync
-        // runtime (HTTP fetch + manifest verification) ships in
-        // v0.39.1+; v0.39.0 only validates the event schema so a
-        // hand-emitted sync record can already be replay-checked.
-        "frontier.synced_with_peer" => {
-            require_str("peer_id")?;
-            require_str("peer_snapshot_hash")?;
-            require_str("our_snapshot_hash")?;
-            let _ = object
-                .get("divergence_count")
-                .and_then(Value::as_u64)
-                .ok_or("missing required non-negative integer 'divergence_count'")?;
-        }
-        // A private fork is a recorded, replayable governance decision:
-        // `F_private = F_public@base_frontier@base_root ⊕ Δ_private`. Like the
-        // other `frontier.*` observations it mutates no finding state (reducer
-        // no-op); it pins the public checkpoint the private overlay extends, so
-        // a later frontier request can be diffed against the right base.
-        "frontier.forked_from" => {
-            let base = require_str("base_frontier")?;
-            if !base.starts_with("vfr_") {
-                return Err("payload.base_frontier must be a 'vfr_' frontier id".to_string());
-            }
-            require_str("base_root")?;
-            let reason = require_str("fork_reason")?;
-            if reason.trim().is_empty() {
-                return Err("payload.fork_reason must be a non-empty string".to_string());
-            }
-            if let Some(a) = object.get("triggering_ancestors")
-                && !a.is_array()
-            {
-                return Err(
-                    "payload.triggering_ancestors must be an array when present".to_string()
-                );
-            }
-        }
-        "frontier.conflict_detected" => {
-            require_str("peer_id")?;
-            require_str("finding_id")?;
-            let kind = require_str("kind")?;
-            // The conflict kind is open-ended for now; v0.39.1+ will
-            // tighten this enum once the sync runtime lands. For
-            // v0.39.0 we only require it to be non-empty so a replay
-            // can group conflicts by category.
-            if kind.trim().is_empty() {
-                return Err("payload.kind must be a non-empty string".to_string());
-            }
-        }
-        // v0.59: paired resolution event for a previously emitted
-        // `frontier.conflict_detected`. The conflict event itself
-        // remains in the log; this is an append-only verdict trail.
-        "frontier.conflict_resolved" => {
-            let conflict_event_id = require_str("conflict_event_id")?;
-            if conflict_event_id.trim().is_empty() {
-                return Err("payload.conflict_event_id must be a non-empty string".to_string());
-            }
-            let resolved_by = require_str("resolved_by")?;
-            if resolved_by.trim().is_empty() {
-                return Err("payload.resolved_by must be a non-empty string".to_string());
-            }
-            let note = require_str("resolution_note")?;
-            if note.trim().is_empty() {
-                return Err("payload.resolution_note must be a non-empty string".to_string());
-            }
-            // winning_proposal_id is optional; some conflicts resolve
-            // by reviewer judgment without picking a specific proposal
-            // (for example "neither side is the canonical wording").
-            if let Some(value) = object.get("winning_proposal_id")
-                && !value.is_null()
-                && !value.is_string()
-            {
-                return Err("payload.winning_proposal_id must be a string when present".to_string());
-            }
         }
         // v0.70: Replication deposit. Required payload field
         // `replication` is the full Replication record (object).
@@ -2603,87 +2464,6 @@ mod tests {
         let report = replay_report(&frontier);
         assert!(report.ok, "{:?}", report.conflicts);
         assert_eq!(report.status, "ok");
-    }
-
-    // v0.39 — federation event validation
-    #[test]
-    fn validates_synced_with_peer_payload() {
-        // OK: full payload.
-        assert!(
-            validate_event_payload(
-                "frontier.synced_with_peer",
-                &json!({
-                    "peer_id": "hub:peer",
-                    "peer_snapshot_hash": "abc",
-                    "our_snapshot_hash": "def",
-                    "divergence_count": 3,
-                }),
-            )
-            .is_ok()
-        );
-        // FAIL: missing divergence_count.
-        assert!(
-            validate_event_payload(
-                "frontier.synced_with_peer",
-                &json!({
-                    "peer_id": "hub:peer",
-                    "peer_snapshot_hash": "abc",
-                    "our_snapshot_hash": "def",
-                }),
-            )
-            .is_err()
-        );
-        // FAIL: missing peer_id.
-        assert!(
-            validate_event_payload(
-                "frontier.synced_with_peer",
-                &json!({
-                    "peer_snapshot_hash": "abc",
-                    "our_snapshot_hash": "def",
-                    "divergence_count": 0,
-                }),
-            )
-            .is_err()
-        );
-    }
-
-    #[test]
-    fn validates_conflict_detected_payload() {
-        // OK: full payload.
-        assert!(
-            validate_event_payload(
-                "frontier.conflict_detected",
-                &json!({
-                    "peer_id": "hub:peer",
-                    "finding_id": "vf_xyz",
-                    "kind": "different_review_verdict",
-                }),
-            )
-            .is_ok()
-        );
-        // FAIL: empty kind.
-        assert!(
-            validate_event_payload(
-                "frontier.conflict_detected",
-                &json!({
-                    "peer_id": "hub:peer",
-                    "finding_id": "vf_xyz",
-                    "kind": "  ",
-                }),
-            )
-            .is_err()
-        );
-        // FAIL: missing finding_id.
-        assert!(
-            validate_event_payload(
-                "frontier.conflict_detected",
-                &json!({
-                    "peer_id": "hub:peer",
-                    "kind": "missing_in_peer",
-                }),
-            )
-            .is_err()
-        );
     }
 
     #[test]

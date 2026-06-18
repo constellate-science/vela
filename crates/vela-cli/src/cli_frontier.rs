@@ -61,7 +61,6 @@ pub(crate) fn cmd_frontier(action: FrontierAction) {
                 artifacts: Vec::new(),
                 predictions: Vec::new(),
                 resolutions: Vec::new(),
-                peers: Vec::new(),
                 negative_results: Vec::new(),
                 trajectories: Vec::new(),
                 released_diff_packs: Vec::new(),

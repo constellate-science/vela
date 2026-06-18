@@ -478,7 +478,7 @@ pub fn accept_preimage_bytes(
 
 /// v0.128: protocol-side authority gate for the public accept boundary.
 ///
-/// This closes the gap `publish_entry` / `post_entry_event` leave open:
+/// This closes the gap `publish_entry` leaves open:
 /// open submission is fine because a self-signature *is* the bind, but a
 /// reviewer **accept** must additionally prove the signer is a
 /// registered, non-revoked actor on this frontier carrying reviewer
@@ -2314,81 +2314,6 @@ fn validate_proposal_shape(frontier: &Project, proposal: &StateProposal) -> Resu
                 ));
             }
         }
-        // v0.59: federation conflict resolution. Reviewer-driven
-        // verdict on a previously emitted `frontier.conflict_detected`
-        // event. The conflict event itself is not modified; this
-        // proposal records the resolution as a paired event.
-        "frontier.conflict_resolve" => {
-            if proposal.target.r#type != "frontier_observation" {
-                return Err(format!(
-                    "frontier.conflict_resolve target.type must be 'frontier_observation', got '{}'",
-                    proposal.target.r#type
-                ));
-            }
-            let conflict_event_id = proposal
-                .payload
-                .get("conflict_event_id")
-                .and_then(Value::as_str)
-                .ok_or("frontier.conflict_resolve proposal missing payload.conflict_event_id")?;
-            if conflict_event_id.trim().is_empty() {
-                return Err(
-                    "frontier.conflict_resolve payload.conflict_event_id must be non-empty"
-                        .to_string(),
-                );
-            }
-            // The named conflict event must actually be present on
-            // this frontier. A reviewer can't resolve a conflict that
-            // hasn't been detected.
-            let conflict_event = frontier
-                .events
-                .iter()
-                .find(|e| e.id == conflict_event_id)
-                .ok_or_else(|| {
-                    format!(
-                        "frontier.conflict_resolve targets unknown event id '{conflict_event_id}'"
-                    )
-                })?;
-            if conflict_event.kind != "frontier.conflict_detected" {
-                return Err(format!(
-                    "frontier.conflict_resolve target event '{conflict_event_id}' has kind '{}', expected 'frontier.conflict_detected'",
-                    conflict_event.kind
-                ));
-            }
-            // Refuse double-resolution: if a `frontier.conflict_resolved`
-            // event already exists pointing at this conflict_event_id,
-            // there's nothing to resolve.
-            if frontier.events.iter().any(|e| {
-                e.kind == "frontier.conflict_resolved"
-                    && e.payload.get("conflict_event_id").and_then(Value::as_str)
-                        == Some(conflict_event_id)
-            }) {
-                return Err(format!(
-                    "Conflict event '{conflict_event_id}' already has a recorded resolution"
-                ));
-            }
-            let note = proposal
-                .payload
-                .get("resolution_note")
-                .and_then(Value::as_str)
-                .ok_or("frontier.conflict_resolve proposal missing payload.resolution_note")?;
-            if note.trim().is_empty() {
-                return Err(
-                    "frontier.conflict_resolve payload.resolution_note must be non-empty"
-                        .to_string(),
-                );
-            }
-            // winning_proposal_id is optional; some conflicts resolve
-            // by reviewer judgment without picking a specific proposal.
-            if let Some(value) = proposal.payload.get("winning_proposal_id")
-                && !value.is_null()
-                && value.as_str().is_none()
-            {
-                return Err(
-                    "frontier.conflict_resolve payload.winning_proposal_id must be a string when present"
-                        .to_string(),
-                );
-            }
-        }
         "research_trace.review" => {
             validate_research_trace_review_payload(proposal)?;
         }
@@ -2679,39 +2604,6 @@ fn validate_standalone_proposal(
             if source_id.trim().is_empty() {
                 return Err(
                     "evidence_atom.locator_repair payload.source_id must be non-empty".to_string(),
-                );
-            }
-        }
-        // v0.59: federation conflict resolution (standalone shape;
-        // no frontier-existence checks here, the apply step verifies
-        // the conflict_event_id is present).
-        "frontier.conflict_resolve" => {
-            if proposal.target.r#type != "frontier_observation" {
-                return Err(format!(
-                    "frontier.conflict_resolve target.type must be 'frontier_observation', got '{}'",
-                    proposal.target.r#type
-                ));
-            }
-            let conflict_event_id = proposal
-                .payload
-                .get("conflict_event_id")
-                .and_then(Value::as_str)
-                .ok_or("frontier.conflict_resolve proposal missing payload.conflict_event_id")?;
-            if conflict_event_id.trim().is_empty() {
-                return Err(
-                    "frontier.conflict_resolve payload.conflict_event_id must be non-empty"
-                        .to_string(),
-                );
-            }
-            let note = proposal
-                .payload
-                .get("resolution_note")
-                .and_then(Value::as_str)
-                .ok_or("frontier.conflict_resolve proposal missing payload.resolution_note")?;
-            if note.trim().is_empty() {
-                return Err(
-                    "frontier.conflict_resolve payload.resolution_note must be non-empty"
-                        .to_string(),
                 );
             }
         }
@@ -3395,10 +3287,6 @@ pub(crate) fn apply_proposal(
         // Closes the v0.78.4 honest gap.
         "finding.entity_add" => {
             apply_finding_entity_add(frontier, proposal, reviewer, decision_reason)?
-        }
-        // v0.59: federation conflict resolution.
-        "frontier.conflict_resolve" => {
-            apply_frontier_conflict_resolve(frontier, proposal, reviewer, decision_reason)?
         }
         other => return Err(format!("Unsupported proposal kind '{other}'")),
     };
@@ -4212,85 +4100,6 @@ fn apply_evidence_atom_locator_repair(
         &proposal.reason,
         &before_hash,
         &after_hash,
-        payload,
-        proposal.caveats.clone(),
-    ))
-}
-
-/// v0.59: apply a `frontier.conflict_resolve` proposal. Emits one
-/// `frontier.conflict_resolved` event recording the reviewer's
-/// verdict on a previously detected conflict. The conflict event
-/// itself is not modified; consumers pair the two by matching
-/// `payload.conflict_event_id` on the resolved event to the
-/// detected event's id.
-fn apply_frontier_conflict_resolve(
-    frontier: &mut Project,
-    proposal: &StateProposal,
-    reviewer: &str,
-    _decision_reason: &str,
-) -> Result<StateEvent, String> {
-    let conflict_event_id = proposal
-        .payload
-        .get("conflict_event_id")
-        .and_then(Value::as_str)
-        .ok_or("frontier.conflict_resolve proposal missing payload.conflict_event_id")?
-        .to_string();
-    let resolution_note = proposal
-        .payload
-        .get("resolution_note")
-        .and_then(Value::as_str)
-        .ok_or("frontier.conflict_resolve proposal missing payload.resolution_note")?
-        .to_string();
-    let winning_proposal_id = proposal
-        .payload
-        .get("winning_proposal_id")
-        .and_then(Value::as_str)
-        .map(|s| s.to_string());
-
-    // Confirm the conflict event exists and is the right kind.
-    // Refuse double-resolution at apply time too (the validator
-    // already checks but we check again because validation is best
-    // effort against the live frontier and apply is the authority).
-    let conflict_event = frontier
-        .events
-        .iter()
-        .find(|e| e.id == conflict_event_id)
-        .ok_or_else(|| {
-            format!("frontier.conflict_resolve targets unknown event id '{conflict_event_id}'")
-        })?
-        .clone();
-    if conflict_event.kind != "frontier.conflict_detected" {
-        return Err(format!(
-            "frontier.conflict_resolve target event '{conflict_event_id}' has kind '{}', expected 'frontier.conflict_detected'",
-            conflict_event.kind
-        ));
-    }
-    if frontier.events.iter().any(|e| {
-        e.kind == "frontier.conflict_resolved"
-            && e.payload.get("conflict_event_id").and_then(Value::as_str)
-                == Some(&conflict_event_id)
-    }) {
-        return Err(format!(
-            "Conflict event '{conflict_event_id}' already has a recorded resolution"
-        ));
-    }
-
-    let mut payload = json!({
-        "proposal_id": proposal.id,
-        "conflict_event_id": conflict_event_id,
-        "resolved_by": reviewer,
-        "resolution_note": resolution_note,
-    });
-    if let Some(wpid) = &winning_proposal_id {
-        payload["winning_proposal_id"] = json!(wpid);
-    }
-
-    let frontier_id = frontier.frontier_id();
-    Ok(events::new_frontier_conflict_resolved_event(
-        &frontier_id,
-        reviewer,
-        "human",
-        &proposal.reason,
         payload,
         proposal.caveats.clone(),
     ))

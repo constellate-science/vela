@@ -759,59 +759,6 @@ pub fn repair_evidence_atom_locator(
     })
 }
 
-/// v0.59: record a reviewer's verdict on a previously detected
-/// federation conflict. Pairs with the existing
-/// `frontier.conflict_detected` event by `conflict_event_id`. The
-/// conflict event itself is not modified; this helper appends a
-/// new `frontier.conflict_resolved` canonical event to the log.
-pub fn resolve_frontier_conflict(
-    path: &Path,
-    conflict_event_id: &str,
-    resolution_note: &str,
-    reviewer: &str,
-    winning_proposal_id: Option<&str>,
-    apply: bool,
-) -> Result<StateCommandReport, String> {
-    let frontier_view = repo::load_from_path(path)?;
-    let frontier_id = frontier_view.frontier_id();
-    let mut payload = json!({
-        "conflict_event_id": conflict_event_id,
-        "resolution_note": resolution_note,
-    });
-    if let Some(wpid) = winning_proposal_id {
-        payload["winning_proposal_id"] = json!(wpid);
-    }
-    let proposal = proposals::new_proposal(
-        "frontier.conflict_resolve",
-        events::StateTarget {
-            r#type: "frontier_observation".to_string(),
-            id: frontier_id,
-        },
-        reviewer,
-        "human",
-        format!("Conflict resolution: {resolution_note}"),
-        payload,
-        Vec::new(),
-        Vec::new(),
-    );
-    let result = proposals::create_or_apply(path, proposal, apply)?;
-    Ok(StateCommandReport {
-        ok: true,
-        command: "conflict-resolve".to_string(),
-        frontier: frontier_view.project.name,
-        finding_id: conflict_event_id.to_string(),
-        proposal_id: result.proposal_id,
-        proposal_status: result.status,
-        applied_event_id: result.applied_event_id,
-        wrote_to: path.display().to_string(),
-        message: if apply {
-            "Conflict resolution applied".to_string()
-        } else {
-            "Conflict resolution proposal recorded".to_string()
-        },
-    })
-}
-
 /// v0.70: deposit a Replication record onto the frontier as a
 /// signed canonical `replication.deposited` event. Idempotent under
 /// re-application: if the `vrep_*` id already exists on the

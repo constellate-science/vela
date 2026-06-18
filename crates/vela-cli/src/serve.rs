@@ -318,7 +318,6 @@ fn merge_projects(frontiers: Vec<(String, Project)>) -> Project {
         artifacts,
         predictions,
         resolutions,
-        peers: Vec::new(),
         negative_results: Vec::new(),
         trajectories: Vec::new(),
         released_diff_packs: Vec::new(),

@@ -864,7 +864,6 @@ fn empty_project(name: &str, description: &str, compiled_at: &str) -> Project {
         artifacts: Vec::new(),
         predictions: Vec::new(),
         resolutions: Vec::new(),
-        peers: Vec::new(),
         negative_results: Vec::new(),
         trajectories: Vec::new(),
         released_diff_packs: Vec::new(),

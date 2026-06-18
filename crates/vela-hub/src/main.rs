@@ -661,10 +661,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/entries/{vfr_id}/log/consistency",
             get(get_log_consistency),
         )
-        .route(
-            "/entries/{vfr_id}/events",
-            get(get_entry_events).post(post_entry_event),
-        )
+        .route("/entries/{vfr_id}/events", get(get_entry_events))
         // v0.128: public-write boundary. Open, signature-gated submission
         // of pending StateProposals; access-controlled reviewer accept.
         // Each carries its own KB-scale body cap (NOT the 128 MB publish
@@ -3361,238 +3358,10 @@ async fn get_entry_events(
     }
 }
 
-/// v0.70: Reviewer-driven push of a single
-/// `frontier.conflict_resolved` event back to the originating hub.
-///
-/// Today the consumer's resolution event sits on the consumer's
-/// frontier only. Without this endpoint a peer hub never learns of
-/// the verdict, so subsequent pulls from anyone else cannot return
-/// the resolution. This is the federation back-channel: one event,
-/// signed, paired, idempotent.
-///
-/// Auth: HTTP headers `X-Vela-Signer-Pubkey: <hex>` and
-/// `X-Vela-Signature: <hex>`. The signer's pubkey must match an
-/// `ActorRecord` already declared on the hub's materialized
-/// frontier — this is the bind. The signature must verify against
-/// the canonical event preimage (same bytes
-/// `vela_protocol::sign::sign_event` produces). The body is the
-/// `StateEvent` JSON.
-///
-/// Validation order (fail-fast):
-///   1. Headers present and well-formed.
-///   2. Body parses as `StateEvent`.
-///   3. Frontier exists in the registry.
-///   4. Pubkey resolves to an actor on the materialized frontier.
-///   5. Signature verifies against canonical preimage.
-///   6. Event kind is `frontier.conflict_resolved` (this endpoint
-///      refuses every other kind in v0.70 — a future expansion can
-///      open the door, but every kind opened is a new attack
-///      surface and this scope keeps the surface small).
-///   7. DB-side pairing + idempotency (`append_resolution_event`).
-///
-/// Idempotency strategy: the same signed event can be replayed; the
-/// event id is content-addressed over canonical bytes, and the
-/// hub's `UNIQUE (vfr_id, event_id)` constraint short-circuits a
-/// retry to a 200 OK with `duplicate=true`. A *different* event id
-/// pointing at the same `conflict_event_id` is the
-/// double-resolution case and is rejected at 409 Conflict.
-async fn post_entry_event(
-    State(state): State<AppState>,
-    Path(vfr_id): Path<String>,
-    headers: HeaderMap,
-    Json(body): Json<Value>,
-) -> (StatusCode, Json<Value>) {
-    let signer_pubkey = match headers
-        .get("X-Vela-Signer-Pubkey")
-        .and_then(|v| v.to_str().ok())
-    {
-        Some(s) if s.trim().len() == 64 => s.trim().to_string(),
-        _ => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({
-                    "ok": false,
-                    "error": "missing or malformed X-Vela-Signer-Pubkey header (expect 64 hex chars)"
-                })),
-            );
-        }
-    };
-    let signature_hex = match headers
-        .get("X-Vela-Signature")
-        .and_then(|v| v.to_str().ok())
-    {
-        Some(s) if s.trim().len() == 128 => s.trim().to_string(),
-        _ => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({
-                    "ok": false,
-                    "error": "missing or malformed X-Vela-Signature header (expect 128 hex chars)"
-                })),
-            );
-        }
-    };
-
-    let mut event: vela_protocol::events::StateEvent = match serde_json::from_value(body.clone()) {
-        Ok(e) => e,
-        Err(e) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"ok": false, "error": format!("event schema: {e}")})),
-            );
-        }
-    };
-    // v0.70: lock the kind at the route boundary. Future kinds can be
-    // opened deliberately, one at a time.
-    if event.kind != "frontier.conflict_resolved" {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(json!({
-                "ok": false,
-                "error": format!(
-                    "this endpoint accepts only frontier.conflict_resolved events; got {}",
-                    event.kind
-                )
-            })),
-        );
-    }
-
-    // Frontier must exist on this hub.
-    match state.db.get_live_entry(&vfr_id).await {
-        Ok(Some(_)) => {}
-        Ok(None) => {
-            return (
-                StatusCode::NOT_FOUND,
-                Json(json!({"ok": false, "error": format!("{vfr_id} not found on this hub")})),
-            );
-        }
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"ok": false, "error": format!("registry query: {e}")})),
-            );
-        }
-    }
-
-    // Resolve the signer's pubkey against the frontier's actors.
-    let project = match state.db.get_materialized_project(&vfr_id).await {
-        Ok(Some(p)) => p,
-        Ok(None) => {
-            return (
-                StatusCode::FAILED_DEPENDENCY,
-                Json(json!({
-                    "ok": false,
-                    "error": "frontier registered but materialized projection unavailable"
-                })),
-            );
-        }
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"ok": false, "error": format!("project query: {e}")})),
-            );
-        }
-    };
-    let matching_actor = project
-        .actors
-        .iter()
-        .find(|a| a.public_key.eq_ignore_ascii_case(&signer_pubkey));
-    let actor = match matching_actor {
-        Some(a) => a,
-        None => {
-            return (
-                StatusCode::UNAUTHORIZED,
-                Json(json!({
-                    "ok": false,
-                    "error": "signer pubkey does not match any registered actor on this frontier"
-                })),
-            );
-        }
-    };
-    if event.actor.id != actor.id {
-        return (
-            StatusCode::UNAUTHORIZED,
-            Json(json!({
-                "ok": false,
-                "error": format!(
-                    "event.actor.id ({}) does not match the actor record bound to this signer ({})",
-                    event.actor.id, actor.id
-                )
-            })),
-        );
-    }
-
-    // Attach the supplied signature so the standard verifier path
-    // (canonical preimage + Ed25519) does the heavy lifting. The wire
-    // format is "headers carry the signature so the body remains the
-    // canonical event JSON" — but the verifier checks `event.signature`,
-    // so we splice them together here. Either presentation produces
-    // the same canonical preimage (signature is excluded from the
-    // preimage by construction).
-    event.signature = Some(signature_hex.clone());
-    match vsign::verify_event_signature(&event, &signer_pubkey) {
-        Ok(true) => {}
-        Ok(false) => {
-            return (
-                StatusCode::UNAUTHORIZED,
-                Json(json!({
-                    "ok": false,
-                    "error": "event signature did not verify under the supplied pubkey"
-                })),
-            );
-        }
-        Err(e) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"ok": false, "error": format!("verify: {e}")})),
-            );
-        }
-    }
-
-    // DB-side pairing + idempotency.
-    match state.db.append_resolution_event(&vfr_id, &event).await {
-        Ok(db::AppendOutcome::Inserted { seq }) => {
-            // Bust the read cache so the next /events page reflects
-            // the new tail without waiting for the fresh-window TTL.
-            state.db_cache.write().await.clear();
-            (
-                StatusCode::ACCEPTED,
-                Json(json!({
-                    "ok": true,
-                    "vfr_id": vfr_id,
-                    "event_id": event.id,
-                    "seq": seq,
-                    "duplicate": false,
-                })),
-            )
-        }
-        Ok(db::AppendOutcome::Duplicate { .. }) => (
-            StatusCode::OK,
-            Json(json!({
-                "ok": true,
-                "vfr_id": vfr_id,
-                "event_id": event.id,
-                "duplicate": true,
-            })),
-        ),
-        Err(e) if e.starts_with("no frontier.conflict_detected") => (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Json(json!({"ok": false, "error": e})),
-        ),
-        Err(e) if e.starts_with("frontier.conflict_resolved already exists") => {
-            (StatusCode::CONFLICT, Json(json!({"ok": false, "error": e})))
-        }
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"ok": false, "error": format!("append: {e}")})),
-        ),
-    }
-}
-
 // ─── Public-write boundary (v0.128) ───────────────────────────────────
 //
-// Two endpoints close the gap publish_entry / post_entry_event leave
-// open. POST /proposals mirrors publish_entry: open submission, the
+// Two endpoints close the gap publish_entry leaves open. POST
+// /proposals mirrors publish_entry: open submission, the
 // signature is the bind. POST /proposals/.../accept is the
 // access-controlled reviewer write — the signer MUST resolve to a
 // registered, non-revoked actor on the frontier carrying reviewer
@@ -3601,7 +3370,7 @@ async fn post_entry_event(
 // and the accept runs the strict Engine gate with force HARD-WIRED off.
 
 /// Parse the `X-Vela-Signer-Pubkey` (64 hex) + `X-Vela-Signature` (128
-/// hex) headers, same shape as `post_entry_event`. Returns `(pubkey,
+/// hex) headers, same shape as `publish_entry`. Returns `(pubkey,
 /// signature)` or a 400 response describing the malformed header.
 fn parse_sig_headers(headers: &HeaderMap) -> Result<(String, String), (StatusCode, Json<Value>)> {
     let signer_pubkey = match headers
@@ -3773,7 +3542,7 @@ async fn propose_to_frontier(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> (StatusCode, Json<Value>) {
-    // 1. Headers (fail-fast, same shape/order as post_entry_event).
+    // 1. Headers (fail-fast, same shape/order as publish_entry).
     let (signer_pubkey, signature_hex) = match parse_sig_headers(&headers) {
         Ok(pair) => pair,
         Err(resp) => return resp,
@@ -3937,8 +3706,8 @@ async fn propose_to_frontier(
 }
 
 /// POST /entries/{vfr_id}/proposals/{proposal_id}/accept —
-/// access-controlled reviewer write. Closes the gap publish_entry /
-/// post_entry_event leave (no reviewer-authority check). The signer must
+/// access-controlled reviewer write. Closes the gap publish_entry
+/// leaves (no reviewer-authority check). The signer must
 /// resolve to a REGISTERED, NON-REVOKED actor on this frontier carrying
 /// reviewer authority. strict is hard-wired true, force hard-wired false,
 /// and any `force`/`strict` override key in the body is rejected at 400.

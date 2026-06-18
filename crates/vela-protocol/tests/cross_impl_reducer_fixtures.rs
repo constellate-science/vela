@@ -1539,102 +1539,6 @@ fn build_entity_added_log(
     }]
 }
 
-/// v0.64: federation event fixture builder. Exercises the no-op
-/// contract for `frontier.synced_with_peer`,
-/// `frontier.conflict_detected`, and `frontier.conflict_resolved`
-/// at the cross-impl fixture level. Each event lands at the
-/// frontier-observation level; reducer arms are no-ops on
-/// finding state. The cross-impl finding-effects digest covers
-/// findings only, so these contribute zero to the digest by
-/// design. The fixture's job is to prove that adding them to a
-/// log doesn't perturb the cross-impl byte-equivalence promise.
-fn build_federation_events_log(
-    frontier_idx: usize,
-    _findings: &[FindingBundle],
-) -> Vec<events::StateEvent> {
-    let frontier_id = format!("vfr_fixture_{frontier_idx:08x}");
-    let conflict_event_id = format!("vev_fixture_conflict_{frontier_idx}");
-    let synced = StateEvent {
-        schema: events::EVENT_SCHEMA.to_string(),
-        id: String::new(),
-        kind: "frontier.synced_with_peer".into(),
-        target: StateTarget {
-            r#type: "frontier_observation".to_string(),
-            id: frontier_id.clone(),
-        },
-        actor: StateActor {
-            id: "federation".to_string(),
-            r#type: "system".to_string(),
-        },
-        timestamp: fixture_timestamp(frontier_idx, 0),
-        reason: "Fixture sync pass".to_string(),
-        before_hash: NULL_HASH.to_string(),
-        after_hash: NULL_HASH.to_string(),
-        payload: json!({
-            "peer_id": format!("peer:fixture-east-{frontier_idx}"),
-            "peer_snapshot_hash": "fixture_peer_snapshot",
-            "our_snapshot_hash": "fixture_our_snapshot",
-            "divergence_count": 1,
-        }),
-        caveats: vec![],
-        signature: None,
-        schema_artifact_id: None,
-    };
-    let detected = StateEvent {
-        schema: events::EVENT_SCHEMA.to_string(),
-        id: conflict_event_id.clone(),
-        kind: "frontier.conflict_detected".into(),
-        target: StateTarget {
-            r#type: "frontier_observation".to_string(),
-            id: frontier_id.clone(),
-        },
-        actor: StateActor {
-            id: "federation".to_string(),
-            r#type: "system".to_string(),
-        },
-        timestamp: fixture_timestamp(frontier_idx, 1),
-        reason: "Fixture conflict".to_string(),
-        before_hash: NULL_HASH.to_string(),
-        after_hash: NULL_HASH.to_string(),
-        payload: json!({
-            "peer_id": format!("peer:fixture-east-{frontier_idx}"),
-            "finding_id": format!("vf_fixture_{frontier_idx}"),
-            "kind": "verdict_disagreement",
-            "detail": "Fixture peer disagrees on review_state",
-        }),
-        caveats: vec![],
-        signature: None,
-        schema_artifact_id: None,
-    };
-    let resolved = StateEvent {
-        schema: events::EVENT_SCHEMA.to_string(),
-        id: String::new(),
-        kind: "frontier.conflict_resolved".into(),
-        target: StateTarget {
-            r#type: "frontier_observation".to_string(),
-            id: frontier_id.clone(),
-        },
-        actor: StateActor {
-            id: format!("reviewer:fixture-{frontier_idx}"),
-            r#type: "human".to_string(),
-        },
-        timestamp: fixture_timestamp(frontier_idx, 2),
-        reason: "Fixture resolution".to_string(),
-        before_hash: NULL_HASH.to_string(),
-        after_hash: NULL_HASH.to_string(),
-        payload: json!({
-            "proposal_id": format!("vpr_fixture_resolve_{frontier_idx}"),
-            "conflict_event_id": conflict_event_id,
-            "resolved_by": format!("reviewer:fixture-{frontier_idx}"),
-            "resolution_note": "Reviewer accepts our view",
-        }),
-        caveats: vec![],
-        signature: None,
-        schema_artifact_id: None,
-    };
-    vec![synced, detected, resolved]
-}
-
 /// v0.67: bridge.reviewed fixture builder. The reducer arm is a
 /// no-op on `Project.findings`; bridges live in `.vela/bridges/` as
 /// a side table and the verdict is projected onto `Bridge.status` at
@@ -2827,14 +2731,12 @@ fn export_cross_impl_reducer_fixtures() {
         export_one(&out_dir, frontier_idx, "entity_added", findings, event_log);
     }
 
-    // Fixture 12 — side-table / federation events. Pins the reducer
-    // arms that mutate side tables outside the finding-effects digest
-    // (released_diff_packs, verdict_conflicts, contradictions) plus the
-    // federation observation trio into the public conformance set, so
-    // all three reducers are exercised on `diff_pack.released`,
-    // `diff_pack.reviewed`, `verdict_conflict.resolved`,
-    // `contradiction.resolved`, `frontier.synced_with_peer`,
-    // `frontier.conflict_detected`, and `frontier.conflict_resolved`.
+    // Fixture 12 — side-table events. Pins the reducer arms that
+    // mutate side tables outside the finding-effects digest
+    // (released_diff_packs, verdict_conflicts, contradictions) into the
+    // public conformance set, so all three reducers are exercised on
+    // `diff_pack.released`, `diff_pack.reviewed`,
+    // `verdict_conflict.resolved`, and `contradiction.resolved`.
     // Every one is a no-op on the seven digested collections, so the
     // expected_* arrays are the untouched genesis findings; a reducer
     // that ERRORS on any of these kinds (rather than implementing or
@@ -2848,7 +2750,6 @@ fn export_cross_impl_reducer_fixtures() {
         event_log.extend(build_diff_pack_reviewed_log(frontier_idx, &findings));
         event_log.extend(build_verdict_conflict_resolved_log(frontier_idx, &findings));
         event_log.extend(build_contradiction_resolved_log(frontier_idx, &findings));
-        event_log.extend(build_federation_events_log(frontier_idx, &findings));
         export_one(
             &out_dir,
             frontier_idx,
@@ -3122,44 +3023,6 @@ fn fixture_coverage_includes_every_reducer_arm() {
              any fixture builder)"
         );
     }
-}
-
-/// v0.64: federation event fixture builder smoke. The fixture is
-/// intentionally not part of the cross-impl finding-effects digest
-/// (federation events are no-ops on finding state). This test
-/// proves the builder produces a well-formed three-event log
-/// with the expected kinds and the conflict + resolved events
-/// pair correctly by `conflict_event_id`.
-#[test]
-fn federation_events_fixture_pairs_conflict_with_resolution() {
-    let frontier_idx = 7;
-    let findings: Vec<FindingBundle> = (0..FINDINGS_PER_FRONTIER)
-        .map(|i| make_finding(frontier_idx, i))
-        .collect();
-    let log = build_federation_events_log(frontier_idx, &findings);
-    assert_eq!(log.len(), 3, "expected synced + detected + resolved");
-
-    let kinds: Vec<&str> = log.iter().map(|e| e.kind.as_str()).collect();
-    assert_eq!(
-        kinds,
-        vec![
-            "frontier.synced_with_peer",
-            "frontier.conflict_detected",
-            "frontier.conflict_resolved",
-        ]
-    );
-
-    let detected = &log[1];
-    let resolved = &log[2];
-    assert_eq!(
-        detected.id,
-        resolved
-            .payload
-            .get("conflict_event_id")
-            .and_then(|v| v.as_str())
-            .unwrap_or(""),
-        "resolved event must reference detected event by id"
-    );
 }
 
 /// Build the (A, B) genesis pair for the supersession-propagation

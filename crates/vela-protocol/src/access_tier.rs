@@ -206,7 +206,6 @@ fn clone_project_metadata(p: &crate::project::Project) -> crate::project::Projec
         artifacts: Vec::new(),
         predictions: p.predictions.clone(),
         resolutions: p.resolutions.clone(),
-        peers: p.peers.clone(),
         negative_results: Vec::new(),
         trajectories: Vec::new(),
         released_diff_packs: Vec::new(),

@@ -238,17 +238,6 @@ pub fn apply_event_indexed(
         // attestations live as append-only canonical events
         // pointing at a target event id.
         EventKind::AttestationRecorded => Ok(()),
-        // v0.39 + v0.59: federation events. These are frontier-level
-        // observations (sync passes, peer divergence, reviewer
-        // resolution verdicts), not finding-state mutations. The
-        // reducer arm is a no-op on `Project.findings`; the events
-        // themselves still append to `state.events` via the caller
-        // and stay queryable from the Workbench inbox + audit
-        // scripts.
-        EventKind::FrontierSyncedWithPeer
-        | EventKind::FrontierConflictDetected
-        | EventKind::FrontierConflictResolved
-        | EventKind::FrontierForkedFrom => Ok(()),
         // v0.67: bridge review verdict. Bridges live in `.vela/bridges/`
         // as a side table; the reducer arm is a no-op on
         // `Project.findings`. Consumers (Workbench, audit scripts,
@@ -384,7 +373,6 @@ pub fn replay_from_genesis(
         artifacts: Vec::new(),
         predictions: Vec::new(),
         resolutions: Vec::new(),
-        peers: Vec::new(),
         negative_results: Vec::new(),
         trajectories: Vec::new(),
         released_diff_packs: Vec::new(),
@@ -2311,55 +2299,6 @@ mod tests {
                      can emit it) but the reducer dispatch rejects it: {e}"
                 );
             }
-        }
-    }
-
-    /// v0.59 + v0.63: federation events live in `apply_event` as
-    /// no-ops on finding state. They are intentionally absent from
-    /// `REDUCER_MUTATION_KINDS` (they do not mutate any finding,
-    /// negative_result, trajectory, artifact, or evidence_atom);
-    /// the coverage assertion above does not exercise them. This
-    /// test pins the no-op contract directly: the reducer accepts
-    /// the kind without error, and the finding-state digest is
-    /// unchanged after replay.
-    #[test]
-    fn federation_events_are_finding_state_noops() {
-        for kind in &[
-            "frontier.synced_with_peer",
-            "frontier.conflict_detected",
-            "frontier.conflict_resolved",
-            "frontier.forked_from",
-        ] {
-            let mut state = project::assemble("test", vec![], 0, 0, "test");
-            let snapshot_before = events::snapshot_hash(&state);
-            let event = StateEvent {
-                schema: events::EVENT_SCHEMA.to_string(),
-                id: format!("vev_federation_{kind}"),
-                kind: (*kind).into(),
-                target: StateTarget {
-                    r#type: "frontier_observation".to_string(),
-                    id: "vfr_x".to_string(),
-                },
-                actor: StateActor {
-                    id: "federation".to_string(),
-                    r#type: "system".to_string(),
-                },
-                timestamp: Utc::now().to_rfc3339(),
-                reason: format!("no-op contract test for {kind}"),
-                before_hash: NULL_HASH.to_string(),
-                after_hash: NULL_HASH.to_string(),
-                payload: Value::Null,
-                caveats: vec![],
-                signature: None,
-                schema_artifact_id: None,
-            };
-            apply_event(&mut state, &event)
-                .unwrap_or_else(|e| panic!("federation kind {kind} rejected by reducer: {e}"));
-            let snapshot_after = events::snapshot_hash(&state);
-            assert_eq!(
-                snapshot_before, snapshot_after,
-                "federation event {kind} mutated finding-state snapshot; expected no-op"
-            );
         }
     }
 

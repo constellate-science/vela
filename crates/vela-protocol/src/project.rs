@@ -134,13 +134,6 @@ pub struct Project {
     /// epistemic accountability ledger.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub resolutions: Vec<crate::bundle::Resolution>,
-    /// v0.39: Federation peer registry. Each `PeerHub` declares
-    /// another hub this frontier knows about — id, HTTPS URL, and the
-    /// Ed25519 pubkey that peer signs their manifests with. Adding a
-    /// peer doesn't yet trust their state; it just establishes who we
-    /// know about. The actual sync runtime ships in v0.39.1+.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub peers: Vec<crate::federation::PeerHub>,
     /// v0.50: Trajectories as first-class kernel objects. A
     /// `vtr_<hash>` records the ordered search path that produced (or
     /// did not produce) a finding — hypotheses considered, branches
@@ -447,7 +440,6 @@ pub fn assemble(
         artifacts: Vec::new(),
         predictions: Vec::new(),
         resolutions: Vec::new(),
-        peers: Vec::new(),
         negative_results: Vec::new(),
         trajectories: Vec::new(),
         released_diff_packs: Vec::new(),

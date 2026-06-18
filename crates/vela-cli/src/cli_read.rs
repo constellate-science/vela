@@ -59,33 +59,6 @@ pub(crate) fn cmd_status(path: &Path, json: bool) {
     let audit = vela_edge::causal_reasoning::audit_frontier(&project);
     let audit_summary = vela_edge::causal_reasoning::summarize_audit(&audit);
 
-    // Federation health: peers + last sync.
-    let mut last_sync: Option<&vela_protocol::events::StateEvent> = None;
-    let mut last_conflict: Option<&vela_protocol::events::StateEvent> = None;
-    let mut total_conflicts = 0usize;
-    for e in &project.events {
-        match e.kind.as_str() {
-            "frontier.synced_with_peer" => {
-                if last_sync
-                    .map(|prev| e.timestamp > prev.timestamp)
-                    .unwrap_or(true)
-                {
-                    last_sync = Some(e);
-                }
-            }
-            "frontier.conflict_detected" => {
-                total_conflicts += 1;
-                if last_conflict
-                    .map(|prev| e.timestamp > prev.timestamp)
-                    .unwrap_or(true)
-                {
-                    last_conflict = Some(e);
-                }
-            }
-            _ => {}
-        }
-    }
-
     // Replication health.
     let mut targets_with_success = std::collections::HashSet::new();
     let mut failed_replications = 0usize;
@@ -108,7 +81,6 @@ pub(crate) fn cmd_status(path: &Path, json: bool) {
                 "findings": project.findings.len(),
                 "events": project.events.len(),
                 "actors": project.actors.len(),
-                "peers": project.peers.len(),
                 "inbox": {
                     "pending_total": pending_total,
                     "pending_by_kind": pending_by_kind,
@@ -123,12 +95,6 @@ pub(crate) fn cmd_status(path: &Path, json: bool) {
                     "total": project.replications.len(),
                     "findings_with_success": targets_with_success.len(),
                     "failed": failed_replications,
-                },
-                "federation": {
-                    "peers": project.peers.len(),
-                    "last_sync": last_sync.map(|e| e.timestamp.clone()),
-                    "last_conflict": last_conflict.map(|e| e.timestamp.clone()),
-                    "total_conflicts": total_conflicts,
                 },
             }))
             .expect("serialize status")
@@ -171,10 +137,9 @@ pub(crate) fn cmd_status(path: &Path, json: bool) {
         );
     }
     println!(
-        "  findings:    {}    events: {}    peers: {}    actors: {}",
+        "  findings:    {}    events: {}    actors: {}",
         project.findings.len(),
         project.events.len(),
-        project.peers.len(),
         project.actors.len(),
     );
     println!();
@@ -232,28 +197,6 @@ pub(crate) fn cmd_status(path: &Path, json: bool) {
             project.replications.len(),
             targets_with_success.len(),
             failed_replications,
-        );
-    }
-    if project.peers.is_empty() {
-        println!(
-            "  {}  no federation peers registered",
-            style::warn("federation")
-        );
-    } else {
-        let last = last_sync
-            .map(|e| fmt_timestamp(&e.timestamp))
-            .unwrap_or_else(|| "never".to_string());
-        let chip = if total_conflicts > 0 {
-            style::warn("federation")
-        } else {
-            style::ok("federation")
-        };
-        println!(
-            "  {}  {} peer(s) · last sync {} · {} conflict events",
-            chip,
-            project.peers.len(),
-            last,
-            total_conflicts,
         );
     }
     println!();

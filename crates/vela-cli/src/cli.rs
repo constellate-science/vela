@@ -2409,7 +2409,6 @@ pub(crate) fn answer(project: &vela_protocol::project::Project, q: &str, json: b
     if lower.starts_with("how many") || lower.contains("count") || lower.contains("total") {
         let n = project.findings.len();
         let evs = project.events.len();
-        let peers = project.peers.len();
         let actors = project.actors.len();
         if json {
             println!(
@@ -2418,7 +2417,6 @@ pub(crate) fn answer(project: &vela_protocol::project::Project, q: &str, json: b
                     "answer": "counts",
                     "findings": n,
                     "events": evs,
-                    "peers": peers,
                     "actors": actors,
                     "replications": project.replications.len(),
                     "predictions": project.predictions.len(),
@@ -2426,7 +2424,7 @@ pub(crate) fn answer(project: &vela_protocol::project::Project, q: &str, json: b
                 .unwrap()
             );
         } else {
-            println!("  {n} findings · {evs} events · {actors} actors · {peers} peers.");
+            println!("  {n} findings · {evs} events · {actors} actors.");
             println!(
                 "  {} replications · {} predictions · {} datasets · {} code artifacts.",
                 project.replications.len(),
@@ -2462,38 +2460,6 @@ pub(crate) fn answer(project: &vela_protocol::project::Project, q: &str, json: b
         return;
     }
 
-    // Pattern: federation / peers / sync.
-    if lower.contains("peer")
-        || lower.contains("federat")
-        || lower.contains("sync")
-        || lower.contains("conflict")
-    {
-        let mut total_conflicts = 0usize;
-        for e in &project.events {
-            if e.kind == "frontier.conflict_detected" {
-                total_conflicts += 1;
-            }
-        }
-        if json {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({
-                    "answer": "federation",
-                    "peers": project.peers.iter().map(|p| &p.id).collect::<Vec<_>>(),
-                    "total_conflicts": total_conflicts,
-                }))
-                .unwrap()
-            );
-        } else {
-            println!("  {} peer(s) registered:", project.peers.len());
-            for p in &project.peers {
-                println!("    · {:<24}  {}", p.id, p.url);
-            }
-            println!("  {total_conflicts} conflict events on the canonical log.");
-        }
-        return;
-    }
-
     // Fallback.
     if json {
         println!(
@@ -2501,13 +2467,13 @@ pub(crate) fn answer(project: &vela_protocol::project::Project, q: &str, json: b
             serde_json::to_string_pretty(&json!({
                 "answer": "unknown_question",
                 "question": q,
-                "hint": "Try: pending, audit, recent, how many, calibration, peers."
+                "hint": "Try: pending, audit, recent, how many, calibration."
             }))
             .unwrap()
         );
     } else {
         println!("  Don't know how to route that question yet.");
-        println!("  Try: pending · audit · recent · how many · calibration · peers");
+        println!("  Try: pending · audit · recent · how many · calibration");
     }
 }
 
