@@ -1478,5 +1478,107 @@
       "note": "the same theorem, formalized in both Vela and Mathlib"
     }
   ],
-  "frontier": "Nodes ingest cheaply; the connective edges (decl dependencies, cross-source links) are the real work and are only seeded. The full Mathlib dependency graph is the next pull."
+  "field_connections": [
+    {
+      "a": "Algebra",
+      "b": "RingTheory",
+      "imports": 717
+    },
+    {
+      "a": "Algebra",
+      "b": "Data",
+      "imports": 714
+    },
+    {
+      "a": "Algebra",
+      "b": "LinearAlgebra",
+      "imports": 399
+    },
+    {
+      "a": "Analysis",
+      "b": "Topology",
+      "imports": 387
+    },
+    {
+      "a": "Algebra",
+      "b": "CategoryTheory",
+      "imports": 382
+    },
+    {
+      "a": "Data",
+      "b": "Order",
+      "imports": 335
+    },
+    {
+      "a": "LinearAlgebra",
+      "b": "RingTheory",
+      "imports": 259
+    },
+    {
+      "a": "Algebra",
+      "b": "GroupTheory",
+      "imports": 241
+    },
+    {
+      "a": "Analysis",
+      "b": "MeasureTheory",
+      "imports": 233
+    },
+    {
+      "a": "Algebra",
+      "b": "Tactic",
+      "imports": 228
+    },
+    {
+      "a": "Algebra",
+      "b": "Order",
+      "imports": 191
+    },
+    {
+      "a": "Algebra",
+      "b": "Topology",
+      "imports": 190
+    },
+    {
+      "a": "Data",
+      "b": "Tactic",
+      "imports": 173
+    },
+    {
+      "a": "Algebra",
+      "b": "Analysis",
+      "imports": 169
+    },
+    {
+      "a": "AlgebraicTopology",
+      "b": "CategoryTheory",
+      "imports": 133
+    },
+    {
+      "a": "Init",
+      "b": "Tactic",
+      "imports": 130
+    },
+    {
+      "a": "Analysis",
+      "b": "NumberTheory",
+      "imports": 126
+    },
+    {
+      "a": "Data",
+      "b": "Logic",
+      "imports": 124
+    },
+    {
+      "a": "Combinatorics",
+      "b": "Data",
+      "imports": 122
+    },
+    {
+      "a": "Analysis",
+      "b": "LinearAlgebra",
+      "imports": 121
+    }
+  ],
+  "frontier": "Node ingest is cheap; the connective edges are the real work. The Mathlib module dependency graph (8k modules) gives field-level connectivity; the decl-level graph (the full blast-radius structure) is the next pull, and needs a Lean build."
 }
