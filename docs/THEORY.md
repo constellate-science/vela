@@ -2222,6 +2222,16 @@ atom values and a polynomial maps to the finite sum of its monomial values.
 This property is the reason `N[X]` is the carrier. Vela records lineage once, in the
 free positive object, and obtains each lawful positive reading by interpretation.
 
+> **Checked scope (honesty note).** The full free-commutative-semiring universal
+> property stated above is a mathematical claim, *not yet machine-checked*. What Lean
+> proves is its load-bearing consequence: the finite ranked lineage model exists and is
+> **unique** as a fold into any operation bundle, axiom-clean
+> (`VelaV09.ranked_model_exists_unique`, `VelaV09.initial_lineage_model` in
+> `lean/Vela/Frontier/ScientificStateKernel.lean`, both now in the CI axiom-audit
+> registry). The freeness *laws* over `CommSemiring` are a future obligation, provable
+> on Mathlib's `MvPolynomial`; until then read this subsection as motivation and the
+> uniqueness-of-fold result as its proven core.
+
 ### 20.2 Separation in the free carrier
 
 If two lineage polynomials differ, some positive semiring interpretation distinguishes
@@ -3868,6 +3878,16 @@ scope contains that witness.
 ---
 
 ## 38. Checked scope and deferred extensions
+
+**Three trust tiers.** Vela's guarantees come at three distinct strengths. Conflating
+them is the main way a "no silent gaps" project can overclaim, so they are named here
+explicitly; a claim's tier is part of the claim.
+
+| Tier | What it means | How it is enforced | Examples |
+|---|---|---|---|
+| **Lean-checked** | A machine-checked theorem, axiom-clean (`{propext, Classical.choice, Quot.sound}` or fewer) | `lake build` + `vela lean verify-all --axioms-report`; the decl is registered in `lean/Vela/AxiomAudit.lean`, so a rename or a `sorry` fails CI | Theorems 1-34; the kernel/calculus laws (`graded_corner_conservative`, `ranked_model_exists_unique`, `context_confined`, …) |
+| **Conformance-checked** | An executable invariant verified at runtime over real accepted state, not proven in Lean | `./scripts/full-conformance.sh`; failure exits non-zero | loader=reducer replay (`verify_replay`), review-decision parity, the activity/state boundary (`activity_ids_in_lineage`), no-hidden-state |
+| **Doctrine-only** | A design law stated and reviewed, not yet a theorem or an executable gate | Human review against this document | Laws 13-23 (§39); the prose framing of the Conformance Laws |
 
 The finite-ranked core is checked in:
 

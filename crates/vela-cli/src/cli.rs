@@ -1836,6 +1836,31 @@ pub(crate) fn check_json_payload(src: &Path, schema_only: bool, strict: bool) ->
             })
         }));
     }
+    // Activity/state boundary: an activity-plane id (vac_/vrr_) in a
+    // lineage-bearing position of accepted state is a soundness break (activity
+    // is non-authoritative). Counted as a hard error, strict or not.
+    let activity_leaks: Vec<(String, String)> = loaded
+        .as_ref()
+        .map(|f| {
+            vela_protocol::activity::activity_ids_in_lineage(&f.findings, &f.verifier_attachments)
+        })
+        .unwrap_or_default();
+    diagnostics.extend(activity_leaks.iter().map(|(holder, atom)| {
+        json!({
+            "severity": "error",
+            "rule_id": "activity_state_boundary",
+            "check": "lineage",
+            "finding_id": holder,
+            "field_path": null,
+            "message": format!(
+                "{holder} references activity-plane id {atom} in a lineage-bearing position; activity is non-authoritative and cannot enter accepted lineage"
+            ),
+            "suggestion": "Remove the activity id from the finding link / verifier attachment; reference the trace by content address in the activity plane instead.",
+            "fixable": false,
+            "normalize_action": null,
+        })
+    }));
+    let activity_leak_errors = activity_leaks.len();
     let event_errors = replay_report
         .as_ref()
         .map_or(0, |replay| usize::from(!replay.ok))
@@ -1977,8 +2002,12 @@ pub(crate) fn check_json_payload(src: &Path, schema_only: bool, strict: bool) ->
         .as_ref()
         .map(|frontier| signals::analyze(frontier, &diagnostics))
         .unwrap_or_else(empty_signal_report);
-    let errors =
-        report.errors.len() + method_errors + graph_errors + event_errors + state_integrity_errors;
+    let errors = report.errors.len()
+        + method_errors
+        + graph_errors
+        + event_errors
+        + state_integrity_errors
+        + activity_leak_errors;
     let warnings = method_warnings + graph_warnings + signal_report.proof_readiness.warnings;
     let infos = method_infos + graph_infos;
     let strict_blockers = signal_report

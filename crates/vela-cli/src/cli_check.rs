@@ -118,6 +118,26 @@ pub(crate) fn cmd_check(
         for conflict in parity_conflicts.iter().take(20) {
             println!("  - {conflict}");
         }
+        // Activity/state boundary: no activity-plane id (vac_/vrr_) may appear
+        // in a lineage-bearing position of accepted state (a finding's
+        // dependency link, a verifier gate's target/independence). Activity is
+        // non-authoritative by construction; a leak here is a soundness break
+        // (the `activity::assert_not_in_lineage` law, over the live frontier).
+        let activity_leaks = vela_protocol::activity::activity_ids_in_lineage(
+            &frontier.findings,
+            &frontier.verifier_attachments,
+        );
+        println!(
+            "activity/state boundary: {}",
+            if activity_leaks.is_empty() {
+                "ok".to_string()
+            } else {
+                format!("{} leak(s)", activity_leaks.len())
+            }
+        );
+        for (holder, atom) in activity_leaks.iter().take(20) {
+            println!("  - {holder} references activity id {atom} in lineage");
+        }
         // Key-custody audit: once a reviewer is registered WITH a key,
         // their accept events should carry a signature (key possession is
         // the accept authority). Unsigned accepts predating key
@@ -174,6 +194,7 @@ pub(crate) fn cmd_check(
         if !replay_report.ok
             || !replay_verification.ok
             || !parity_conflicts.is_empty()
+            || !activity_leaks.is_empty()
             || (strict
                 && (!signal_report.review_queue.is_empty()
                     || signal_report.proof_readiness.status != "ready"))

@@ -276,6 +276,38 @@ pub fn assert_not_in_lineage(accepted_atoms: &BTreeSet<String>) -> Result<(), St
     }
 }
 
+/// Activity-plane ids found in LINEAGE-BEARING positions of accepted records:
+/// the dependency-link targets of live findings, and the target / independence
+/// refs of verifier-gate attachments. These are the only positions a `vac_`/
+/// `vrr_` id could occupy to become load-bearing, since activity envelopes live
+/// in a separate store and never enter the event log. Returns `(holder_id,
+/// leaked_atom)` pairs; empty means the activity/state boundary holds on this
+/// record. This is [`assert_not_in_lineage`] applied to a live frontier: the
+/// accept path rejects these at write, and `vela check` fails on any that exist.
+pub fn activity_ids_in_lineage(
+    findings: &[crate::bundle::FindingBundle],
+    attachments: &[crate::verifier_attachment::VerifierAttachment],
+) -> Vec<(String, String)> {
+    let mut leaks = Vec::new();
+    for f in findings
+        .iter()
+        .filter(|f| !f.flags.superseded && !f.flags.retracted)
+    {
+        for l in f.links.iter().filter(|l| is_activity_id(&l.target)) {
+            leaks.push((f.id.clone(), l.target.clone()));
+        }
+    }
+    for a in attachments {
+        if is_activity_id(&a.target) {
+            leaks.push((a.id.clone(), a.target.clone()));
+        }
+        for indep in a.independent_of.iter().filter(|i| is_activity_id(i)) {
+            leaks.push((a.id.clone(), indep.clone()));
+        }
+    }
+    leaks
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -340,5 +372,24 @@ mod tests {
         assert!(assert_not_in_lineage(&atoms).is_ok());
         atoms.insert("vac_deadbeefdeadbeef".to_string()); // activity leaked into lineage
         assert!(assert_not_in_lineage(&atoms).is_err());
+    }
+
+    #[test]
+    fn lineage_scan_flags_activity_link_targets() {
+        let mut f = crate::test_support::make_finding("vf_a", 1.0, "computational");
+        // a normal finding carries no activity-plane lineage
+        assert!(activity_ids_in_lineage(std::slice::from_ref(&f), &[]).is_empty());
+        // depending on an activity envelope is a boundary break
+        f.links.push(crate::bundle::Link {
+            target: "vac_deadbeefdeadbeef".to_string(),
+            link_type: "depends_on".to_string(),
+            note: String::new(),
+            inferred_by: "agent:test".to_string(),
+            created_at: "2026-06-18T00:00:00Z".to_string(),
+            mechanism: None,
+        });
+        let leaks = activity_ids_in_lineage(std::slice::from_ref(&f), &[]);
+        assert_eq!(leaks.len(), 1);
+        assert_eq!(leaks[0].1, "vac_deadbeefdeadbeef");
     }
 }

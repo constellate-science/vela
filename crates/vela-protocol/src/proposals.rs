@@ -3567,6 +3567,20 @@ fn apply_add(
     let finding: FindingBundle = serde_json::from_value(finding_value)
         .map_err(|e| format!("Invalid finding.add payload: {e}"))?;
     let finding_id = finding.id.clone();
+    // Activity is not state: an accepted finding may not depend on an
+    // activity-plane id (`vac_`/`vrr_`). A search/trace/retrieval is recorded in
+    // the activity plane and referenced by content address, never admitted as
+    // accepted lineage (the `activity::assert_not_in_lineage` law, at the write).
+    if let Some(l) = finding
+        .links
+        .iter()
+        .find(|l| crate::activity::is_activity_id(&l.target))
+    {
+        return Err(format!(
+            "finding.add refused: link target `{}` is an activity-plane id; activity is non-authoritative and cannot enter lineage",
+            l.target
+        ));
+    }
     if frontier
         .findings
         .iter()
@@ -3698,6 +3712,23 @@ fn apply_verifier_attach(
         return Err(format!(
             "verifier.attach attachment.target {} does not match proposal target {}",
             att.target, proposal.target.id
+        ));
+    }
+    // Activity is not state: a verifier gate may not attach to, or claim
+    // independence from, an activity-plane id (`vac_`/`vrr_`).
+    if crate::activity::is_activity_id(&att.target) {
+        return Err(format!(
+            "verifier.attach refused: target `{}` is an activity-plane id (activity is not lineage)",
+            att.target
+        ));
+    }
+    if let Some(indep) = att
+        .independent_of
+        .iter()
+        .find(|i| crate::activity::is_activity_id(i))
+    {
+        return Err(format!(
+            "verifier.attach refused: independent_of `{indep}` is an activity-plane id"
         ));
     }
     if !frontier.verifier_attachments.iter().any(|a| a.id == att.id) {
