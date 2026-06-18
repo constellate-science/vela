@@ -42,4 +42,6 @@ pub use packets::{
     PACKET_ID_DOMAIN, SCHEMA_VERSION, SIGNATURE_DOMAIN, deterministic_signing_key, packet_body,
     packet_id, prefix_for, public_key_b64, signed_packet, signing_preimage, verify_signed_packet,
 };
-pub use producer::{fixture_time, make_observation, make_support_function};
+pub use producer::{
+    fixture_time, make_observation, make_result, make_support_function, make_task, validate_shape,
+};

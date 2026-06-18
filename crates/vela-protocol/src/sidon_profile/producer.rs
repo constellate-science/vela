@@ -20,7 +20,7 @@ use std::collections::BTreeSet;
 
 use super::canonical::{content_id, digest};
 use super::evaluator::{
-    EVALUATOR_ID, FRONTIER_ID, VIEW_POLICY_ID, best_bounds,
+    EVALUATOR_ID, FRONTIER_ID, VIEW_POLICY_ID, best_bounds, claim, current_bound, state_commitment,
 };
 use super::kernel::{
     Presentation, active_environments, active_view_root, compile_gamma, evaluator_digest,
@@ -29,6 +29,126 @@ use super::kernel::{
 use super::packets::signed_packet;
 
 const EVALUATOR_SEMANTICS: &str = "max supported lower-bound cell per n";
+
+/// Validate a Sidon witness shape (the `vela.sidon-witness.v1` contract):
+/// `kind == "sidon"`, a positive `n`, a non-empty list of distinct binary
+/// vectors of length `n`, and `claimed_size == point count`. Returns
+/// `(n, points)`.
+pub fn validate_shape(witness: &Value) -> Result<(i64, Vec<Vec<i64>>), String> {
+    if witness.get("kind").and_then(Value::as_str) != Some("sidon") {
+        return Err("witness kind must be sidon".to_string());
+    }
+    let n = witness
+        .get("n")
+        .and_then(Value::as_i64)
+        .filter(|n| *n > 0)
+        .ok_or("invalid n or empty points")?;
+    let raw = witness
+        .get("points")
+        .and_then(Value::as_array)
+        .filter(|a| !a.is_empty())
+        .ok_or("invalid n or empty points")?;
+    let mut points = Vec::with_capacity(raw.len());
+    for point in raw {
+        let row = point.as_array().ok_or("each point must be a binary vector")?;
+        if row.len() as i64 != n {
+            return Err("each point must be a binary vector of length n".to_string());
+        }
+        let mut bits = Vec::with_capacity(row.len());
+        for bit in row {
+            match bit.as_i64() {
+                Some(b @ (0 | 1)) => bits.push(b),
+                _ => return Err("each point must be a binary vector of length n".to_string()),
+            }
+        }
+        points.push(bits);
+    }
+    let distinct: BTreeSet<&Vec<i64>> = points.iter().collect();
+    if distinct.len() != points.len() {
+        return Err("points must be distinct".to_string());
+    }
+    if witness.get("claimed_size").and_then(Value::as_i64) != Some(points.len() as i64) {
+        return Err("claimed_size must equal point count".to_string());
+    }
+    Ok((n, points))
+}
+
+/// A `TaskPacket` pinned to an observation's base state: the work request to
+/// improve (or confirm) the lower bound at dimension `n`. The whole `base_state`
+/// commitment is carried byte-for-byte and may not be rewritten downstream.
+pub fn make_task(
+    observation: &Value,
+    n: i64,
+    objective_kind: &str,
+    signing_key: &SigningKey,
+    actor: &str,
+    step: u32,
+) -> Result<Value, String> {
+    let current = current_bound(observation, n)?;
+    let required_minimum = if objective_kind == "strict_improvement" {
+        current + 1
+    } else {
+        current
+    };
+    let objective = json!({
+        "kind": objective_kind,
+        "current": current,
+        "required_minimum": required_minimum,
+    });
+    let frontier_id = observation["frontier_id"].clone();
+    let task_id = content_id(
+        "vtsk_",
+        &json!({
+            "frontier_id": frontier_id,
+            "base_observation_id": observation["packet_id"],
+            "n": n,
+            "objective": objective,
+        }),
+    )?;
+    let fields = json!({
+        "frontier_id": frontier_id,
+        "base_state": state_commitment(observation)?,
+        "task_id": task_id,
+        "cell_target": { "sequence": "oeis:A309370", "n": n },
+        "objective": objective,
+        "verifier_contract": "vela.sidon.gate.v1",
+        "required_result_schema": "vela.sidon-witness.v1",
+        "lease": { "state_effect": "none", "required": false },
+        "created_at": fixture_time(step),
+    });
+    signed_packet("task", fields_of(fields), signing_key, actor)
+}
+
+/// A `ResultPacket`: a producer's signed witness for a task. It repeats the
+/// task's `base_state` byte-for-byte and binds the claim and artifact digests.
+/// This is the packet a `vela sidon submit` emits.
+pub fn make_result(
+    task: &Value,
+    witness: &Value,
+    signing_key: &SigningKey,
+    actor: &str,
+    step: u32,
+) -> Result<Value, String> {
+    let (n, points) = validate_shape(witness)?;
+    if Some(n) != task["cell_target"]["n"].as_i64() {
+        return Err("witness dimension does not match task".to_string());
+    }
+    let k = points.len() as i64;
+    let claim_obj = claim(n, k);
+    let fields = json!({
+        "frontier_id": task["frontier_id"],
+        "task_id": task["task_id"],
+        "base_state": task["base_state"],
+        "producer_actor": actor,
+        "claim": claim_obj,
+        "claim_digest": digest(&claim_obj)?,
+        "artifact": witness,
+        "artifact_digest": digest(witness)?,
+        "certificate_kind": "sidon-witness-v1",
+        "created_at": fixture_time(step),
+    });
+    signed_packet("result", fields_of(fields), signing_key, actor)
+}
 
 /// The fixture's deterministic timestamp for an orchestration step. Real
 /// producers stamp wall-clock time; the fixture pins these so regeneration is

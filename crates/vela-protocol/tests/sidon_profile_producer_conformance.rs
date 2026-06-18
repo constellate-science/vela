@@ -15,12 +15,12 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use serde_json::{Value, json};
+use vela_protocol::sidon_profile::canonical::content_id;
 use vela_protocol::sidon_profile::{
     Presentation, append_verified_route, bound_cell, claim, deterministic_signing_key, digest,
-    make_observation, make_support_function, register_bound_metadata, verify_observation_replay,
-    verify_signed_packet,
+    make_observation, make_result, make_support_function, make_task, register_bound_metadata,
+    verify_observation_replay, verify_signed_packet,
 };
-use vela_protocol::sidon_profile::canonical::content_id;
 
 fn load(name: &str) -> Value {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -49,11 +49,10 @@ fn witness_base() -> Value {
     })
 }
 
-#[test]
-fn rust_regenerates_the_genesis_observation_byte_for_byte() {
-    let fx = load("sidon-root-pinned-loop.json");
-
-    // Rebuild the genesis presentation exactly as generate_fixture.py does.
+/// Rebuild the fixture's genesis state in Rust: the genesis presentation, the
+/// genesis support function, and the genesis observation. Returns
+/// `(presentation, sf0, obs0, base_event)`.
+fn genesis(fx: &Value) -> (Presentation, Value, Value, String) {
     let mut p = Presentation {
         cell_ranks: Default::default(),
         clauses: Vec::new(),
@@ -67,7 +66,6 @@ fn rust_regenerates_the_genesis_observation_byte_for_byte() {
         &json!({ "fixture_genesis": "A309370-n4-k6", "artifact": base_artifact }),
     )
     .unwrap();
-    // The genesis event id is pinned by the fixture.
     assert_eq!(
         base_event,
         fx["genesis"]["accepted_event_id"].as_str().unwrap()
@@ -93,7 +91,6 @@ fn rust_regenerates_the_genesis_observation_byte_for_byte() {
     let observer = deterministic_signing_key("observer");
     let disabled = BTreeSet::new();
     let cell = bound_cell(4, 6).unwrap();
-
     let sf0 = make_support_function(&p, &disabled, &cell, &observer, "hub:observer", 0).unwrap();
     let obs0 = make_observation(
         &p,
@@ -105,6 +102,14 @@ fn rust_regenerates_the_genesis_observation_byte_for_byte() {
         1,
     )
     .unwrap();
+    (p, sf0, obs0, base_event)
+}
+
+#[test]
+fn rust_regenerates_the_genesis_observation_byte_for_byte() {
+    let fx = load("sidon-root-pinned-loop.json");
+    let (p, sf0, obs0, _base_event) = genesis(&fx);
+    let disabled = BTreeSet::new();
 
     // The fixture's first support_function and first observation are genesis.
     let fx_sf0 = fx["packets"]
@@ -132,4 +137,43 @@ fn rust_regenerates_the_genesis_observation_byte_for_byte() {
         obs0["canonical_output"]["bounds"][0]["best_lower_bound"],
         json!(6)
     );
+}
+
+/// The producer's own submission path — a `TaskPacket` and the `ResultPacket`
+/// answering it (the `vela sidon submit` payload) — regenerates byte for byte.
+#[test]
+fn rust_regenerates_the_task_and_result_byte_for_byte() {
+    let fx = load("sidon-root-pinned-loop.json");
+    let (_p, _sf0, obs0, _base_event) = genesis(&fx);
+
+    let task_key = deterministic_signing_key("task-issuer");
+    let producer_a = deterministic_signing_key("producer-alpha");
+
+    // task_a: strict-improvement task at n=4 pinned to the genesis observation.
+    let task_a = make_task(&obs0, 4, "strict_improvement", &task_key, "hub:task-issuer", 2).unwrap();
+    // result_a: producer alpha's 7-point witness answering task_a.
+    let witness_a = fx["witnesses"]["route_a"].clone();
+    let result_a = make_result(&task_a, &witness_a, &producer_a, "producer:alpha", 4).unwrap();
+
+    let find = |id: &Value| -> Value {
+        fx["packets"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| &p["packet_id"] == id)
+            .unwrap_or_else(|| panic!("packet {id} not in fixture"))
+            .clone()
+    };
+
+    assert_eq!(task_a, find(&task_a["packet_id"]), "task diverges");
+    assert_eq!(result_a, find(&result_a["packet_id"]), "result diverges");
+
+    // The task is root-pinned to the genesis observation; the result repeats it.
+    assert_eq!(task_a["base_state"]["observation_id"], obs0["packet_id"]);
+    assert_eq!(result_a["base_state"], task_a["base_state"]);
+    assert_eq!(result_a["claim"]["value"], json!(7));
+    assert_eq!(task_a["objective"]["required_minimum"], json!(7));
+
+    verify_signed_packet(&task_a).unwrap();
+    verify_signed_packet(&result_a).unwrap();
 }
