@@ -628,6 +628,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "/entries/{vfr_id}/sidon-frontier-map",
             get(get_sidon_frontier_map),
         )
+        .route(
+            "/entries/{vfr_id}/sidon-observation",
+            get(get_sidon_observation),
+        )
         .route("/entries/{vfr_id}/summary", get(get_entry_summary))
         .route("/entries/{vfr_id}/manifest", get(get_entry_manifest))
         .route("/entries/{vfr_id}/status", get(get_entry_status))
@@ -1079,7 +1083,10 @@ async fn get_sidon_frontier_map(
                 .into_response();
         }
         Err(e) => {
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": e })))
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e })),
+            )
                 .into_response();
         }
     };
@@ -1101,10 +1108,78 @@ async fn get_sidon_frontier_map(
         next_bound_obligations(&pres).and_then(|obls| build_frontier_map(&pres, &obls, &disabled));
     match map {
         Ok(m) => (StatusCode::OK, Json(m)).into_response(),
-        Err(e) => {
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({ "error": e }))).into_response()
-        }
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({ "error": e })),
+        )
+            .into_response(),
     }
+}
+
+/// The live authoritative Sidon bounds over HTTP: the best lower bound at each n,
+/// compiled from the frontier's accepted record, with the presentation root so a
+/// consumer can independently replay it. The read half of the loop, paired with
+/// sidon-frontier-map. Keyless and replayable; the SIGNED ObservationPacket is the
+/// producer's own read (`vela sidon export`). Sidon-specific; non-Sidon → 422.
+async fn get_sidon_observation(
+    State(state): State<AppState>,
+    Path(vfr_id): Path<String>,
+) -> Response {
+    use std::collections::BTreeSet;
+    use vela_protocol::sidon_profile::{best_bounds, live_presentation};
+    let project = match state.db.get_materialized_project(&vfr_id).await {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({ "error": "frontier not found", "vfr_id": vfr_id })),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e })),
+            )
+                .into_response();
+        }
+    };
+    let pres = match live_presentation(&project) {
+        Ok(p) => p,
+        Err(e) => {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({
+                    "error": format!("not a live Sidon frontier: {e}"),
+                    "vfr_id": vfr_id,
+                })),
+            )
+                .into_response();
+        }
+    };
+    let disabled = BTreeSet::new();
+    let bounds = match best_bounds(&pres, &disabled) {
+        Ok(b) => b,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({ "error": e })),
+            )
+                .into_response();
+        }
+    };
+    let root = pres.presentation_root().unwrap_or_default();
+    (
+        StatusCode::OK,
+        Json(json!({
+            "schema": "vela.sidon-bounds.v1",
+            "vfr_id": vfr_id,
+            "presentation_root": root,
+            "bounds": bounds,
+            "replay": "vela sidon export --frontier <dir> reproduces this as a signed observation",
+        })),
+    )
+        .into_response()
 }
 
 async fn get_entry(

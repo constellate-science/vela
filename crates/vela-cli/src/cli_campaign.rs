@@ -9,7 +9,9 @@ use crate::campaign;
 use crate::cli::{fail_return, print_json};
 use crate::cli_commands::CampaignAction;
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::path::Path;
+use vela_protocol::activity::{ActivityDraft, ActivityEnvelope};
 
 pub(crate) fn cmd_campaign(action: CampaignAction) {
     match action {
@@ -148,8 +150,60 @@ fn cmd_run(
     }
     let body = serde_json::to_string_pretty(&f.witness)
         .unwrap_or_else(|e| fail_return(&format!("serialize witness: {e}")));
-    std::fs::write(&out_path, body + "\n")
+    let witness_bytes = format!("{body}\n");
+    std::fs::write(&out_path, &witness_bytes)
         .unwrap_or_else(|e| fail_return(&format!("write {}: {e}", out_path.display())));
+
+    // Record the search as ACTIVITY, never as state. The engine is a heuristic
+    // producer; `search_target` already ran the FROZEN verifier (vela-verify) on
+    // this witness before returning it, so the candidate is target-checked, but a
+    // target-checked candidate is still a PROPOSAL until a key-holder accepts it.
+    // The envelope is content-addressed (`vac_`), non-authoritative by
+    // construction, and the `assert_not_in_lineage` law forbids it from ever
+    // entering accepted lineage. This is the target-checked lane made legible:
+    // agent activity → deterministic target check → candidate + trace, with no
+    // model anywhere in the trust path.
+    let assertion = assertion_for(kind, n, h, f.score);
+    // Address the exact on-disk bytes, so `sha256sum <witness>` reproduces this
+    // root independently, so the trace is verifiable against the artifact, not a
+    // private re-serialization.
+    let witness_digest = format!(
+        "sha256:{}",
+        hex::encode(Sha256::digest(witness_bytes.as_bytes()))
+    );
+    let envelope = ActivityEnvelope::new(ActivityDraft {
+        actor_id: "agent:vela-campaign".to_string(),
+        actor_type: "agent".to_string(),
+        kind: "search.candidate".to_string(),
+        base_root: target_descriptor(kind, n, h),
+        input_roots: Vec::new(),
+        output_roots: vec![witness_digest.clone()],
+        tool_digests: vec![format!("vela-verify:{kind}")],
+        trace_root: Some(witness_digest),
+        risk_tags: vec![
+            "heuristic-search".to_string(),
+            "lower-bound-only".to_string(),
+        ],
+        claimed_relation: assertion.clone(),
+        created_at: chrono::Utc::now().to_rfc3339(),
+    })
+    .unwrap_or_else(|e| fail_return(&format!("build activity envelope: {e}")));
+    let activity_dir = frontier
+        .as_ref()
+        .map(|f| f.join("activity"))
+        .unwrap_or_else(|| {
+            out_path
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| std::path::PathBuf::from("."))
+        });
+    std::fs::create_dir_all(&activity_dir)
+        .unwrap_or_else(|e| fail_return(&format!("create {}: {e}", activity_dir.display())));
+    let activity_path = activity_dir.join(format!("{}.json", envelope.activity_id));
+    let env_body = serde_json::to_string_pretty(&envelope)
+        .unwrap_or_else(|e| fail_return(&format!("serialize activity envelope: {e}")));
+    std::fs::write(&activity_path, env_body + "\n")
+        .unwrap_or_else(|e| fail_return(&format!("write {}: {e}", activity_path.display())));
 
     // Optionally land a pending finding.add proposal (no key -> pending; a
     // key-holder accepts). Shell to the same `vela finding add` the rest of the
@@ -159,9 +213,8 @@ fn cmd_run(
         let fr = frontier
             .as_ref()
             .unwrap_or_else(|| fail_return("campaign run --propose needs --frontier <dir>"));
-        let assertion = assertion_for(kind, n, h, f.score);
         propose_pending(fr, &assertion, reviewer);
-        proposal_note = Some(assertion);
+        proposal_note = Some(assertion.clone());
     }
 
     if json_out {
@@ -173,6 +226,8 @@ fn cmd_run(
             "seed": seed,
             "witness_path": out_path.display().to_string(),
             "verified": true,
+            "activity_id": envelope.activity_id,
+            "activity_path": activity_path.display().to_string(),
             "proposed": propose,
             "assertion": proposal_note,
         }));
@@ -182,6 +237,11 @@ fn cmd_run(
             f.score,
             out_path.display()
         );
+        println!(
+            "  activity (non-authoritative): {} → {}",
+            envelope.activity_id,
+            activity_path.display()
+        );
         if let Some(a) = proposal_note {
             println!("  proposed (pending review): {a}");
             println!(
@@ -190,6 +250,18 @@ fn cmd_run(
         } else {
             println!("  re-verify: vela reproduce {}", out_path.display());
         }
+    }
+}
+
+/// A stable descriptor of the target a campaign ran against: the activity
+/// envelope's `base_root`. The engine searches fresh against a named cell, so the
+/// honest base is that target spec, not a frontier presentation root (it reads
+/// none). Mirrors the witness filename convention so the two line up.
+fn target_descriptor(kind: &str, n: usize, h: usize) -> String {
+    if kind == "bh" {
+        format!("campaign-target:{kind}:n{n}:h{h}")
+    } else {
+        format!("campaign-target:{kind}:n{n}")
     }
 }
 
@@ -248,5 +320,49 @@ fn propose_pending(frontier: &Path, assertion: &str, reviewer: &str) {
         .unwrap_or_else(|e| fail_return(&format!("shell finding add: {e}")));
     if !status.success() {
         fail_return::<()>("campaign: finding add proposal failed");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn target_descriptor_matches_witness_naming() {
+        // Set/order kinds key on n only; `bh` additionally carries the order h,
+        // the same split the witness filename uses.
+        assert_eq!(target_descriptor("sidon", 5, 2), "campaign-target:sidon:n5");
+        assert_eq!(target_descriptor("bh", 9, 3), "campaign-target:bh:n9:h3");
+    }
+
+    #[test]
+    fn campaign_output_is_activity_never_lineage() {
+        // The exact envelope shape `cmd_run` builds. The point of the demonstrator:
+        // a heuristic search that the frozen verifier target-checked is still only
+        // ACTIVITY: content-addressed, non-authoritative, and forbidden from
+        // accepted lineage. The candidate becomes state only via a human accept.
+        let env = ActivityEnvelope::new(ActivityDraft {
+            actor_id: "agent:vela-campaign".into(),
+            actor_type: "agent".into(),
+            kind: "search.candidate".into(),
+            base_root: target_descriptor("sidon", 5, 2),
+            output_roots: vec!["sha256:abc".into()],
+            tool_digests: vec!["vela-verify:sidon".into()],
+            trace_root: Some("sha256:abc".into()),
+            risk_tags: vec!["heuristic-search".into(), "lower-bound-only".into()],
+            claimed_relation: assertion_for("sidon", 5, 2, 12),
+            created_at: "2026-06-18T00:00:00Z".into(),
+            ..Default::default()
+        })
+        .unwrap();
+        assert!(env.activity_id.starts_with("vac_"));
+        assert!(!env.is_authoritative());
+        env.verify().unwrap();
+
+        // The activity/state boundary law rejects it if it ever leaks into lineage.
+        let mut leaked = BTreeSet::new();
+        leaked.insert(env.activity_id.clone());
+        assert!(vela_protocol::activity::assert_not_in_lineage(&leaked).is_err());
     }
 }
