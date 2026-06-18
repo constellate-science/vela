@@ -3409,6 +3409,7 @@ dependencies = [
 name = "vela-protocol"
 version = "0.700.0"
 dependencies = [
+ "base64",
  "chrono",
  "colored",
  "ed25519-dalek",
@@ -3423,6 +3424,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "toml",
+ "unicode-normalization",
  "vela-protocol-core",
 ]
 
