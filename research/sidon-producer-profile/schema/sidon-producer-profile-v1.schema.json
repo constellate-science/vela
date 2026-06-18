@@ -1,0 +1,1001 @@
+{
+  "$defs": {
+    "acceptance": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "properties": {
+            "accepted_event_id": {
+              "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "append_contract": {
+              "type": "object"
+            },
+            "decision": {
+              "const": "accepted"
+            },
+            "decision_state": {
+              "$ref": "#/$defs/stateCommitment"
+            },
+            "frontier_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "gate_receipt_id": {
+              "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "packet_type": {
+              "const": "acceptance"
+            },
+            "reason": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "result_base_state": {
+              "$ref": "#/$defs/stateCommitment"
+            },
+            "result_packet_id": {
+              "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "reviewer_actor": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "staleness_resolution": {
+              "enum": [
+                "fresh",
+                "stale_revalidated_as_improvement",
+                "stale_revalidated_as_confirmation"
+              ]
+            }
+          },
+          "required": [
+            "packet_type",
+            "frontier_id",
+            "result_packet_id",
+            "gate_receipt_id",
+            "reviewer_actor",
+            "result_base_state",
+            "decision_state",
+            "staleness_resolution",
+            "accepted_event_id",
+            "decision",
+            "append_contract",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "base": {
+      "properties": {
+        "created_at": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "packet_id": {
+          "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "packet_type": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "vela.sidon-producer-profile.v1"
+        },
+        "signature": {
+          "$ref": "#/$defs/signature"
+        },
+        "signer_actor": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "signer_public_key": {
+          "pattern": "^[A-Za-z0-9+/]{43}=$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "schema_version",
+        "packet_type",
+        "packet_id",
+        "signer_actor",
+        "signer_public_key",
+        "created_at",
+        "signature"
+      ],
+      "type": "object"
+    },
+    "challenge": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "properties": {
+            "base_state": {
+              "$ref": "#/$defs/stateCommitment"
+            },
+            "challenger_actor": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "frontier_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "hitting_set_receipt": {
+              "additionalProperties": false,
+              "properties": {
+                "active_environment_count": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "hits_every_active_environment": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "active_environment_count",
+                "hits_every_active_environment"
+              ],
+              "type": "object"
+            },
+            "packet_type": {
+              "const": "challenge"
+            },
+            "proposed_disabled_atoms": {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array",
+              "uniqueItems": true
+            },
+            "proposed_kill": {
+              "type": "boolean"
+            },
+            "reason": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "state_effect": {
+              "const": "none_until_view_decision"
+            },
+            "support_function_packet_id": {
+              "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "target_cell_id": {
+              "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "packet_type",
+            "frontier_id",
+            "base_state",
+            "target_cell_id",
+            "support_function_packet_id",
+            "proposed_disabled_atoms",
+            "hitting_set_receipt",
+            "proposed_kill",
+            "state_effect",
+            "reason",
+            "challenger_actor"
+          ],
+          "type": "object"
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "gate": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "properties": {
+            "adversarial_probes": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "mutated_artifact_digest": {
+                    "pattern": "^sha256:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "mutation_id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "original_artifact_digest": {
+                    "pattern": "^sha256:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "passed": {
+                    "type": "boolean"
+                  },
+                  "probe_id": {
+                    "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "verifier_results": {
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "accepted_mutation": {
+                          "type": "boolean"
+                        },
+                        "detail": {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "executable_digest": {
+                          "pattern": "^sha256:[0-9a-f]{64}$",
+                          "type": "string"
+                        },
+                        "method_family": {
+                          "minLength": 1,
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "method_family",
+                        "executable_digest",
+                        "accepted_mutation",
+                        "detail"
+                      ],
+                      "type": "object"
+                    },
+                    "minItems": 2,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "probe_id",
+                  "mutation_id",
+                  "original_artifact_digest",
+                  "mutated_artifact_digest",
+                  "verifier_results",
+                  "passed"
+                ],
+                "type": "object"
+              },
+              "minItems": 3,
+              "type": "array"
+            },
+            "artifact_digest": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "attachments": {
+              "items": {
+                "additionalProperties": false,
+                "properties": {
+                  "artifact_digest": {
+                    "pattern": "^sha256:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "claim_digest": {
+                    "pattern": "^sha256:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "detail": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "executable_digest": {
+                    "pattern": "^sha256:[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "executable_id": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "method_family": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "passed": {
+                    "type": "boolean"
+                  },
+                  "receipt_id": {
+                    "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "result_packet_id": {
+                    "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "receipt_id",
+                  "result_packet_id",
+                  "method_family",
+                  "executable_id",
+                  "executable_digest",
+                  "claim_digest",
+                  "artifact_digest",
+                  "passed",
+                  "detail"
+                ],
+                "type": "object"
+              },
+              "minItems": 2,
+              "type": "array"
+            },
+            "base_state": {
+              "$ref": "#/$defs/stateCommitment"
+            },
+            "claim_digest": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "claim_match_check": {
+              "additionalProperties": false,
+              "properties": {
+                "artifact_digest_matches": {
+                  "type": "boolean"
+                },
+                "claim_digest_matches": {
+                  "type": "boolean"
+                }
+              },
+              "required": [
+                "claim_digest_matches",
+                "artifact_digest_matches"
+              ],
+              "type": "object"
+            },
+            "frontier_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "gate_status": {
+              "enum": [
+                "verified",
+                "needs_verification",
+                "refuted"
+              ]
+            },
+            "packet_type": {
+              "const": "gate_receipt"
+            },
+            "result_packet_id": {
+              "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "verification_diversity": {
+              "additionalProperties": false,
+              "properties": {
+                "distinct_executable_digests": {
+                  "type": "boolean"
+                },
+                "distinct_method_families": {
+                  "type": "boolean"
+                },
+                "interpretation": {
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "distinct_method_families",
+                "distinct_executable_digests",
+                "interpretation"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "packet_type",
+            "frontier_id",
+            "result_packet_id",
+            "base_state",
+            "claim_digest",
+            "artifact_digest",
+            "attachments",
+            "verification_diversity",
+            "claim_match_check",
+            "adversarial_probes",
+            "gate_status"
+          ],
+          "type": "object"
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "observation": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "properties": {
+            "active_view_root": {
+              "pattern": "^v(?:pr|cr|lr|av)_[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "canonical_output": {
+              "type": "object"
+            },
+            "circuit_root": {
+              "pattern": "^v(?:pr|cr|lr|av)_[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "evaluator_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "evaluator_inputs": {
+              "type": "object"
+            },
+            "frontier_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "lineage_root": {
+              "pattern": "^v(?:pr|cr|lr|av)_[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "packet_type": {
+              "const": "observation"
+            },
+            "presentation_root": {
+              "pattern": "^v(?:pr|cr|lr|av)_[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "replay_receipt": {
+              "additionalProperties": false,
+              "properties": {
+                "caused_by_event_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "circuit_semantics": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "evaluator_digest": {
+                  "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "input_roots_digest": {
+                  "pattern": "^sha256:[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "output_digest": {
+                  "pattern": "^sha256:[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "receipt_id": {
+                  "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "receipt_id",
+                "input_roots_digest",
+                "evaluator_digest",
+                "output_digest",
+                "caused_by_event_id",
+                "circuit_semantics"
+              ],
+              "type": "object"
+            }
+          },
+          "required": [
+            "packet_type",
+            "frontier_id",
+            "presentation_root",
+            "circuit_root",
+            "lineage_root",
+            "active_view_root",
+            "evaluator_id",
+            "evaluator_inputs",
+            "canonical_output",
+            "replay_receipt"
+          ],
+          "type": "object"
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "repair": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "properties": {
+            "frontier_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "new_active_environments": {
+              "items": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array",
+                "uniqueItems": true
+              },
+              "type": "array",
+              "uniqueItems": true
+            },
+            "packet_type": {
+              "const": "repair"
+            },
+            "prior_observation_id": {
+              "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "prior_support_function_packet_id": {
+              "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "repair_kind": {
+              "const": "accepted_alternative_route"
+            },
+            "repaired_observation_id": {
+              "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "repaired_support_function_packet_id": {
+              "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "restores_target": {
+              "type": "boolean"
+            },
+            "state_effect": {
+              "const": "none; append acceptance already changed historical lineage"
+            },
+            "target_cell_id": {
+              "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "packet_type",
+            "frontier_id",
+            "prior_observation_id",
+            "repaired_observation_id",
+            "target_cell_id",
+            "prior_support_function_packet_id",
+            "repaired_support_function_packet_id",
+            "repair_kind",
+            "new_active_environments",
+            "restores_target",
+            "state_effect"
+          ],
+          "type": "object"
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "result": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "properties": {
+            "artifact": {
+              "type": "object"
+            },
+            "artifact_digest": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "base_state": {
+              "$ref": "#/$defs/stateCommitment"
+            },
+            "certificate_kind": {
+              "const": "sidon-witness-v1"
+            },
+            "claim": {
+              "type": "object"
+            },
+            "claim_digest": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "frontier_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "packet_type": {
+              "const": "result"
+            },
+            "producer_actor": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "task_id": {
+              "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "packet_type",
+            "frontier_id",
+            "task_id",
+            "base_state",
+            "producer_actor",
+            "claim",
+            "claim_digest",
+            "artifact",
+            "artifact_digest",
+            "certificate_kind"
+          ],
+          "type": "object"
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "signature": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "const": "ed25519"
+        },
+        "value": {
+          "pattern": "^[A-Za-z0-9+/]{86}==$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "algorithm",
+        "value"
+      ],
+      "type": "object"
+    },
+    "stateCommitment": {
+      "additionalProperties": false,
+      "properties": {
+        "active_view_root": {
+          "pattern": "^v(?:pr|cr|lr|av)_[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "canonical_output_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "circuit_root": {
+          "pattern": "^v(?:pr|cr|lr|av)_[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "evaluator_id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "evaluator_inputs_digest": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "lineage_root": {
+          "pattern": "^v(?:pr|cr|lr|av)_[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "observation_id": {
+          "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "presentation_root": {
+          "pattern": "^v(?:pr|cr|lr|av)_[0-9a-f]{64}$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "observation_id",
+        "presentation_root",
+        "circuit_root",
+        "lineage_root",
+        "active_view_root",
+        "evaluator_id",
+        "evaluator_inputs_digest",
+        "canonical_output_digest"
+      ],
+      "type": "object"
+    },
+    "support": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "properties": {
+            "active_minimal_environments": {
+              "items": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array",
+                "uniqueItems": true
+              },
+              "type": "array",
+              "uniqueItems": true
+            },
+            "active_view_root": {
+              "pattern": "^v(?:pr|cr|lr|av)_[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "cell_id": {
+              "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "circuit_root": {
+              "pattern": "^v(?:pr|cr|lr|av)_[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "frontier_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "historical_lineage_root": {
+              "pattern": "^v(?:pr|cr|lr|av)_[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "historical_minimal_environments": {
+              "items": {
+                "items": {
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "type": "array",
+                "uniqueItems": true
+              },
+              "type": "array",
+              "uniqueItems": true
+            },
+            "packet_type": {
+              "const": "support_function"
+            },
+            "presentation_root": {
+              "pattern": "^v(?:pr|cr|lr|av)_[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "support_function_digest": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "packet_type",
+            "frontier_id",
+            "cell_id",
+            "presentation_root",
+            "circuit_root",
+            "historical_lineage_root",
+            "active_view_root",
+            "historical_minimal_environments",
+            "active_minimal_environments",
+            "support_function_digest"
+          ],
+          "type": "object"
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "task": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "properties": {
+            "base_state": {
+              "$ref": "#/$defs/stateCommitment"
+            },
+            "cell_target": {
+              "additionalProperties": false,
+              "properties": {
+                "n": {
+                  "minimum": 1,
+                  "type": "integer"
+                },
+                "sequence": {
+                  "const": "oeis:A309370"
+                }
+              },
+              "required": [
+                "sequence",
+                "n"
+              ],
+              "type": "object"
+            },
+            "frontier_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "lease": {
+              "additionalProperties": false,
+              "properties": {
+                "required": {
+                  "type": "boolean"
+                },
+                "state_effect": {
+                  "const": "none"
+                }
+              },
+              "required": [
+                "state_effect",
+                "required"
+              ],
+              "type": "object"
+            },
+            "objective": {
+              "additionalProperties": false,
+              "properties": {
+                "current": {
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "kind": {
+                  "enum": [
+                    "strict_improvement",
+                    "independent_confirmation"
+                  ]
+                },
+                "required_minimum": {
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "kind",
+                "current",
+                "required_minimum"
+              ],
+              "type": "object"
+            },
+            "packet_type": {
+              "const": "task"
+            },
+            "required_result_schema": {
+              "const": "vela.sidon-witness.v1"
+            },
+            "task_id": {
+              "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "verifier_contract": {
+              "const": "vela.sidon.gate.v1"
+            }
+          },
+          "required": [
+            "packet_type",
+            "frontier_id",
+            "base_state",
+            "task_id",
+            "cell_target",
+            "objective",
+            "verifier_contract",
+            "required_result_schema",
+            "lease"
+          ],
+          "type": "object"
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "view": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/base"
+        },
+        {
+          "properties": {
+            "base_state": {
+              "$ref": "#/$defs/stateCommitment"
+            },
+            "challenge_packet_id": {
+              "pattern": "^v[a-z0-9]+_[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "decision": {
+              "const": "accepted"
+            },
+            "frontier_id": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "packet_type": {
+              "const": "view_decision"
+            },
+            "prior_disabled_atoms": {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array",
+              "uniqueItems": true
+            },
+            "reason": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "resulting_active_view_root": {
+              "pattern": "^v(?:pr|cr|lr|av)_[0-9a-f]{64}$",
+              "type": "string"
+            },
+            "resulting_disabled_atoms": {
+              "items": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "type": "array",
+              "uniqueItems": true
+            },
+            "reviewer_actor": {
+              "minLength": 1,
+              "type": "string"
+            },
+            "view_policy_id": {
+              "const": "vela.view.public.v1"
+            }
+          },
+          "required": [
+            "packet_type",
+            "frontier_id",
+            "base_state",
+            "challenge_packet_id",
+            "reviewer_actor",
+            "decision",
+            "view_policy_id",
+            "prior_disabled_atoms",
+            "resulting_disabled_atoms",
+            "resulting_active_view_root",
+            "reason"
+          ],
+          "type": "object"
+        }
+      ],
+      "unevaluatedProperties": false
+    }
+  },
+  "$id": "https://constellate.science/schema/vela-sidon-producer-profile-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/observation"
+    },
+    {
+      "$ref": "#/$defs/task"
+    },
+    {
+      "$ref": "#/$defs/result"
+    },
+    {
+      "$ref": "#/$defs/gate"
+    },
+    {
+      "$ref": "#/$defs/acceptance"
+    },
+    {
+      "$ref": "#/$defs/support"
+    },
+    {
+      "$ref": "#/$defs/challenge"
+    },
+    {
+      "$ref": "#/$defs/view"
+    },
+    {
+      "$ref": "#/$defs/repair"
+    }
+  ],
+  "title": "Vela Sidon Producer Profile v1 packet"
+}

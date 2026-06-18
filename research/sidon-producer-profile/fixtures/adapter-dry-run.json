@@ -1,0 +1,113 @@
+{
+  "ok": true,
+  "action": "dry_run",
+  "counts_toward_adoption_gate": false,
+  "task": {
+    "schema_version": "vela.sidon-producer-adapter.v1",
+    "frontier_id": "vfr_496956067dc5ad79",
+    "base_state": {
+      "observation_id": "vop_aff462f0adbd30572eccf2718987fd47b33009b3c63514b119c08dfb224a0d3e",
+      "presentation_root": "vpr_a66ba5c5d7a62631e6f7e4a1cb7c093a6d9b10e23ea349ca98cea6e15e6cc11a",
+      "circuit_root": "transition:unavailable",
+      "lineage_root": "transition:unavailable",
+      "active_view_root": "transition:unavailable",
+      "evaluator_id": "transition:bounds-json",
+      "evaluator_inputs_digest": "sha256:f21f8fedec7158c98fa6c54a5635fc11e070bf48b9adb438f3814cb75cb244b9",
+      "canonical_output_digest": "sha256:525fd3c7be010854d88ec139b3520002f3296a8558f2dcb09142810d48085cc0"
+    },
+    "target": {
+      "sequence": "oeis:A309370",
+      "n": 4
+    },
+    "objective": {
+      "kind": "strict_improvement",
+      "current": 6,
+      "required_minimum": 7
+    },
+    "verifier_contract": "vela.sidon.gate.v1"
+  },
+  "result_preview": {
+    "schema_version": "vela.sidon-result-preview.v1",
+    "frontier_id": "vfr_496956067dc5ad79",
+    "base_state": {
+      "observation_id": "vop_aff462f0adbd30572eccf2718987fd47b33009b3c63514b119c08dfb224a0d3e",
+      "presentation_root": "vpr_a66ba5c5d7a62631e6f7e4a1cb7c093a6d9b10e23ea349ca98cea6e15e6cc11a",
+      "circuit_root": "transition:unavailable",
+      "lineage_root": "transition:unavailable",
+      "active_view_root": "transition:unavailable",
+      "evaluator_id": "transition:bounds-json",
+      "evaluator_inputs_digest": "sha256:f21f8fedec7158c98fa6c54a5635fc11e070bf48b9adb438f3814cb75cb244b9",
+      "canonical_output_digest": "sha256:525fd3c7be010854d88ec139b3520002f3296a8558f2dcb09142810d48085cc0"
+    },
+    "claim": {
+      "sequence": "oeis:A309370",
+      "n": 4,
+      "relation": ">=",
+      "value": 7
+    },
+    "artifact_digest": "sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+    "artifact": {
+      "kind": "sidon",
+      "n": 4,
+      "claimed_size": 7,
+      "points": [
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          1,
+          1,
+          1,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          1,
+          1,
+          1
+        ]
+      ]
+    },
+    "local_verification": [
+      {
+        "method": "pair-sum-hash-set",
+        "passed": true,
+        "detail": "28 pair sums unique"
+      },
+      {
+        "method": "base3-encode-sort",
+        "passed": true,
+        "detail": "28 sorted encodings unique"
+      }
+    ],
+    "delta": 1,
+    "authoritative_observation_consumed": false
+  }
+}

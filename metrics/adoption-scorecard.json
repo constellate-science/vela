@@ -1,0 +1,41 @@
+{
+  "schema": "vela.adoption-scorecard.v2",
+  "counts": {
+    "external_signed_writes": 0,
+    "external_accepted_writes": 0,
+    "independent_producer_organizations": 0,
+    "retained_automated_integrations": 0,
+    "external_observation_packet_consumers": 0,
+    "second_root_consumptions": 0,
+    "maintainer_written_bespoke_integrations": 0,
+    "independent_conformant_implementations": 0
+  },
+  "stages": {
+    "loop": {
+      "external_signed_writes": 1,
+      "external_accepted_writes": 1,
+      "retained_automated_integrations": 1,
+      "second_root_consumptions": 1,
+      "maintainer_written_bespoke_integrations_max": 0
+    },
+    "protocol": {
+      "external_signed_writes": 2,
+      "external_accepted_writes": 2,
+      "independent_producer_organizations": 2,
+      "retained_automated_integrations": 1,
+      "external_observation_packet_consumers": 1,
+      "second_root_consumptions": 1,
+      "maintainer_written_bespoke_integrations_max": 0
+    },
+    "foundation": {
+      "external_signed_writes": 10,
+      "external_accepted_writes": 5,
+      "independent_producer_organizations": 3,
+      "retained_automated_integrations": 2,
+      "external_observation_packet_consumers": 2,
+      "second_root_consumptions": 3,
+      "independent_conformant_implementations": 1,
+      "maintainer_written_bespoke_integrations_max": 0
+    }
+  }
+}

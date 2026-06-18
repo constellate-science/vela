@@ -1,0 +1,255 @@
+{
+  "frontier": {
+    "bounds": [
+      {
+        "_state": {
+          "best_lower_bound": {
+            "observation_packet_id": "vop_7c6deda11013961880e583ce27f3d188624740265bcd4495ad6aa79e990ff3c9",
+            "output_pointer": "/canonical_output/bounds/0/best_lower_bound"
+          }
+        },
+        "best_lower_bound": 7,
+        "n": 4
+      }
+    ],
+    "id": "vfr_496956067dc5ad79"
+  },
+  "observation_packets": [
+    {
+      "active_view_root": "vav_a86d475b2c4f7680d53ef7256daf967e4e0c417ef100a829f26d90ab050beee8",
+      "canonical_output": {
+        "bounds": [
+          {
+            "best_lower_bound": 6,
+            "n": 4,
+            "supported_cell_ids": [
+              "vsc_d8bf67b00541737bfb9d573ba0336a141dfbb381936f891010ff8c7b41bd96b7"
+            ]
+          }
+        ],
+        "sequence": "oeis:A309370",
+        "support_function_packet_ids": [
+          "vsf_9f28fa163bd3a37665ed7e59db2d5248bc0a2fd14fe057c56b04942893bd39fe"
+        ]
+      },
+      "circuit_root": "vcr_b959302bfc7a79ed6f388a81f1e44ae01d0a3029b94e20faadc7f58466a3700d",
+      "created_at": "2026-06-18T14:01:00+00:00",
+      "evaluator_id": "vela.sidon.best-lower-bound.v1",
+      "evaluator_inputs": {
+        "selection": "maximum-k-per-n",
+        "sequence": "oeis:A309370",
+        "support_policy": "positive-existence-under-active-view",
+        "view_policy_id": "vela.view.public.v1"
+      },
+      "frontier_id": "vfr_496956067dc5ad79",
+      "lineage_root": "vlr_02b6bcfbe19718dcea84d97eb46e6e533e404b491671c032ddfd34b8c016fe3d",
+      "packet_id": "vop_aff462f0adbd30572eccf2718987fd47b33009b3c63514b119c08dfb224a0d3e",
+      "packet_type": "observation",
+      "presentation_root": "vpr_a66ba5c5d7a62631e6f7e4a1cb7c093a6d9b10e23ea349ca98cea6e15e6cc11a",
+      "replay_receipt": {
+        "caused_by_event_id": "vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+        "circuit_semantics": "expanded-lineage-equals-ranked-circuit-on-this-fixture",
+        "evaluator_digest": "veval_1440db672baca9abc713a25330005febc9656217632ccfef7de7c744371cfdf1",
+        "input_roots_digest": "sha256:c5c2182944f41c15194ae27d9b906ec4676e8f4da8817fae89a3a0674da324e3",
+        "output_digest": "sha256:4a082e18942b937e876d953ee752e34fad5a6fc43ef0eada3c93a70c81aaa44d",
+        "receipt_id": "vor_4dfdf5d6e5d28084185662bb054e7bdbea71c06a676504d2e64170c2a74c9212"
+      },
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "S5ESfvszLeYLBSBjpuvr6GPk4ypFKUvhfGF8gNr6G58XDJlJwrS8yGhT5cCAy9yjMSPSEjEymuSZdHeOJWUpBQ=="
+      },
+      "signer_actor": "hub:observer",
+      "signer_public_key": "ycZdFYKem60vY8TpYrJk7T+jOlVQfG7O+n6xQ4oeOVM="
+    },
+    {
+      "active_view_root": "vav_a86d475b2c4f7680d53ef7256daf967e4e0c417ef100a829f26d90ab050beee8",
+      "canonical_output": {
+        "bounds": [
+          {
+            "best_lower_bound": 7,
+            "n": 4,
+            "supported_cell_ids": [
+              "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb"
+            ]
+          }
+        ],
+        "sequence": "oeis:A309370",
+        "support_function_packet_ids": [
+          "vsf_0a67b5034c519e94aa018759ce60e2ba155ed331a739e1b00fb38d5dfdb826ee"
+        ]
+      },
+      "circuit_root": "vcr_fec7dcc0597f0823f0c5d334cdfd3a4452bc56bbd72a858a9bab533c92ff7def",
+      "created_at": "2026-06-18T14:10:00+00:00",
+      "evaluator_id": "vela.sidon.best-lower-bound.v1",
+      "evaluator_inputs": {
+        "selection": "maximum-k-per-n",
+        "sequence": "oeis:A309370",
+        "support_policy": "positive-existence-under-active-view",
+        "view_policy_id": "vela.view.public.v1"
+      },
+      "frontier_id": "vfr_496956067dc5ad79",
+      "lineage_root": "vlr_b551e999553fa5dfa102b6dc277af26fca2faf2fe53e5db2cfa6747a2223ee5b",
+      "packet_id": "vop_8829fde37b72ba68a24466ad779e1c360b996700d229bd7bba7e8471f2d90560",
+      "packet_type": "observation",
+      "presentation_root": "vpr_7d4b686035bb4c06cf99f08a17cb37a7e5c24b06d0f8386b3c2f8b30a80f3c97",
+      "replay_receipt": {
+        "caused_by_event_id": "vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+        "circuit_semantics": "expanded-lineage-equals-ranked-circuit-on-this-fixture",
+        "evaluator_digest": "veval_1440db672baca9abc713a25330005febc9656217632ccfef7de7c744371cfdf1",
+        "input_roots_digest": "sha256:863170ca95810bdfe0fc72cff6d4fa16c5ac1ebc9e4ef83fc3a1289ac1779efe",
+        "output_digest": "sha256:09fc600358410010629f70145ee091094e7866da16e7488485d2a7cda308bf8e",
+        "receipt_id": "vor_28078e9e69a55fb24ed7f243040edb050f725acbdca05af871a6c901220f60df"
+      },
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "Q1VdBy9oTOu1SS2QAcbWr6z/X3j15U+MrpSXvBQl2KB6htBnQLppC4A4YgAQZmweh+Vo2NwisYptne1Z+4/qCw=="
+      },
+      "signer_actor": "hub:observer",
+      "signer_public_key": "ycZdFYKem60vY8TpYrJk7T+jOlVQfG7O+n6xQ4oeOVM="
+    },
+    {
+      "active_view_root": "vav_a86d475b2c4f7680d53ef7256daf967e4e0c417ef100a829f26d90ab050beee8",
+      "canonical_output": {
+        "bounds": [
+          {
+            "best_lower_bound": 7,
+            "n": 4,
+            "supported_cell_ids": [
+              "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb"
+            ]
+          }
+        ],
+        "sequence": "oeis:A309370",
+        "support_function_packet_ids": [
+          "vsf_a122836824a316fbbdc6037101353e6e98307ac441df1f37a37349ba615839e3"
+        ]
+      },
+      "circuit_root": "vcr_bd3e7ae96135a66716034c87a7fe3712919cfb66d91435e9dd4dbe988c4aa548",
+      "created_at": "2026-06-18T14:13:00+00:00",
+      "evaluator_id": "vela.sidon.best-lower-bound.v1",
+      "evaluator_inputs": {
+        "selection": "maximum-k-per-n",
+        "sequence": "oeis:A309370",
+        "support_policy": "positive-existence-under-active-view",
+        "view_policy_id": "vela.view.public.v1"
+      },
+      "frontier_id": "vfr_496956067dc5ad79",
+      "lineage_root": "vlr_0a6b3ee88b3e80aa64d671ea33fb667f06027395ef5c023523ea8bae021b0211",
+      "packet_id": "vop_8d79ed0fbfb3b65e98d4752bb6cef72b48f9883597da0e455b9c6c93c1cf74b7",
+      "packet_type": "observation",
+      "presentation_root": "vpr_5c1c46f80e6680194820668d58556568a15ffb98f485c5799d7457cd12112729",
+      "replay_receipt": {
+        "caused_by_event_id": "vev_224563e4c2ab967c2123c9964e7eb09c5ea6cd5aa560798d8f1bf98f7c70b5a3",
+        "circuit_semantics": "expanded-lineage-equals-ranked-circuit-on-this-fixture",
+        "evaluator_digest": "veval_1440db672baca9abc713a25330005febc9656217632ccfef7de7c744371cfdf1",
+        "input_roots_digest": "sha256:be87b5fee64d600aeb8eb4375b7f87a2fddab6f608a3bc87bee382af8e930996",
+        "output_digest": "sha256:3c1b9df1c633ef4939b809e42c0c6b19331dc9de6b864f1474c34cd39af07704",
+        "receipt_id": "vor_e7a54feae9f737c2531eab72246aa569dca339291dca39c879d9edcb04664045"
+      },
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "MXE38lR/uY1rKBFRg7yqBwJkFRGztZtOjTdcVmS9VDyYSF4nWyEC9PJktF4UIC4iflXce8rtttLwPyteqndMCA=="
+      },
+      "signer_actor": "hub:observer",
+      "signer_public_key": "ycZdFYKem60vY8TpYrJk7T+jOlVQfG7O+n6xQ4oeOVM="
+    },
+    {
+      "active_view_root": "vav_fd1e7694f6eecf90973c4f34e80f1606508c44507fe9f4c0512ceef50868e356",
+      "canonical_output": {
+        "bounds": [
+          {
+            "best_lower_bound": 6,
+            "n": 4,
+            "supported_cell_ids": [
+              "vsc_d8bf67b00541737bfb9d573ba0336a141dfbb381936f891010ff8c7b41bd96b7"
+            ]
+          }
+        ],
+        "sequence": "oeis:A309370",
+        "support_function_packet_ids": [
+          "vsf_81aa5491004e797b85cf17201ed3d42606aaf832f4f601cc274da3e2dacf041a"
+        ]
+      },
+      "circuit_root": "vcr_bd3e7ae96135a66716034c87a7fe3712919cfb66d91435e9dd4dbe988c4aa548",
+      "created_at": "2026-06-18T14:17:00+00:00",
+      "evaluator_id": "vela.sidon.best-lower-bound.v1",
+      "evaluator_inputs": {
+        "selection": "maximum-k-per-n",
+        "sequence": "oeis:A309370",
+        "support_policy": "positive-existence-under-active-view",
+        "view_policy_id": "vela.view.public.v1"
+      },
+      "frontier_id": "vfr_496956067dc5ad79",
+      "lineage_root": "vlr_0a6b3ee88b3e80aa64d671ea33fb667f06027395ef5c023523ea8bae021b0211",
+      "packet_id": "vop_7bfc10a5e0264d6dd8f57454b1b6f139e551d17a66a1eb8861693e4009472007",
+      "packet_type": "observation",
+      "presentation_root": "vpr_5c1c46f80e6680194820668d58556568a15ffb98f485c5799d7457cd12112729",
+      "replay_receipt": {
+        "caused_by_event_id": "vvd_a1d92acddecb748ae2b0fdd24ac8fcc59c1f83d88db2c180bf9313af5781cf9d",
+        "circuit_semantics": "expanded-lineage-equals-ranked-circuit-on-this-fixture",
+        "evaluator_digest": "veval_1440db672baca9abc713a25330005febc9656217632ccfef7de7c744371cfdf1",
+        "input_roots_digest": "sha256:3cf6083fd8f227181b02d4d8ccdac1f9c81631e9607f4c05b23891fe17ba2f0b",
+        "output_digest": "sha256:773aa9d0a77161296332e898ab71b372fed67d13f26a7e7dfad046e7ca06b692",
+        "receipt_id": "vor_6741981abb8f39540bd356739dcf62483d210ffa48e23fa06e6bab26b5acb65e"
+      },
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "CEm6gqv1VIEfhzJy+4ZJhnBrqJYQXwoumoaDQD5RU/iqjsuiLV3R/jHV1vOOBwbG/CXj9tN/toIcEsnyniHKCA=="
+      },
+      "signer_actor": "hub:observer",
+      "signer_public_key": "ycZdFYKem60vY8TpYrJk7T+jOlVQfG7O+n6xQ4oeOVM="
+    },
+    {
+      "active_view_root": "vav_fd1e7694f6eecf90973c4f34e80f1606508c44507fe9f4c0512ceef50868e356",
+      "canonical_output": {
+        "bounds": [
+          {
+            "best_lower_bound": 7,
+            "n": 4,
+            "supported_cell_ids": [
+              "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb"
+            ]
+          }
+        ],
+        "sequence": "oeis:A309370",
+        "support_function_packet_ids": [
+          "vsf_cd9b772baedde02e288e9132fe4211b20b54377f4f755f95a800988569f7a890"
+        ]
+      },
+      "circuit_root": "vcr_fe24175296603911b04100710bc5b3b0aef873ccc4fe07606f983f9a2af2529a",
+      "created_at": "2026-06-18T14:23:00+00:00",
+      "evaluator_id": "vela.sidon.best-lower-bound.v1",
+      "evaluator_inputs": {
+        "selection": "maximum-k-per-n",
+        "sequence": "oeis:A309370",
+        "support_policy": "positive-existence-under-active-view",
+        "view_policy_id": "vela.view.public.v1"
+      },
+      "frontier_id": "vfr_496956067dc5ad79",
+      "lineage_root": "vlr_60438f0a8b9b951b4b5fd34a2086ca06e419346125add6c882e89185b107b7e1",
+      "packet_id": "vop_7c6deda11013961880e583ce27f3d188624740265bcd4495ad6aa79e990ff3c9",
+      "packet_type": "observation",
+      "presentation_root": "vpr_5e05ea35f6eab74c6354e824b6cdcc30a9ace509ce0159fd67efee9b6c6a8628",
+      "replay_receipt": {
+        "caused_by_event_id": "vev_7006a427458f1cd39675339a9c9c7b1089a11a5d915e4eca4939a3f3b7b4e29b",
+        "circuit_semantics": "expanded-lineage-equals-ranked-circuit-on-this-fixture",
+        "evaluator_digest": "veval_1440db672baca9abc713a25330005febc9656217632ccfef7de7c744371cfdf1",
+        "input_roots_digest": "sha256:2cf0f3b9691ceba3763e7c850727661d38dc8c7957608f76c4d963d170544f1a",
+        "output_digest": "sha256:9ee851715337c881ae71b9c489b8d0f0d6ce2b62b2858c53af826551dc21f8e0",
+        "receipt_id": "vor_9bbcbd006e5dcbec040adc2df5e2fdd9c1ac1c0f1326d9c794a85cad7d51ddf4"
+      },
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "BonV6nlpmgxN/762hY/74Z3mKVqqEY4i8i5jP8U2hf3VCLKiW/czZZzc2uUyOMdm5fNiCvEIhn8GPmymiMbxCg=="
+      },
+      "signer_actor": "hub:observer",
+      "signer_public_key": "ycZdFYKem60vY8TpYrJk7T+jOlVQfG7O+n6xQ4oeOVM="
+    }
+  ],
+  "schema": "vela.authoritative-state-export.v1"
+}

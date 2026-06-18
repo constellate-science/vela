@@ -1,0 +1,17 @@
+{
+  "bounds": [
+    {
+      "accepted": true,
+      "best_lower_bound": 6,
+      "finding_id": "vf_fixture_n4_k6",
+      "n": 4
+    }
+  ],
+  "frontier": "sidon-sets-fixture",
+  "frontier_id": "vfr_496956067dc5ad79",
+  "generated_from": {
+    "source_event_log_hash": "vpr_a66ba5c5d7a62631e6f7e4a1cb7c093a6d9b10e23ea349ca98cea6e15e6cc11a"
+  },
+  "observation_packet_id": "vop_aff462f0adbd30572eccf2718987fd47b33009b3c63514b119c08dfb224a0d3e",
+  "schema": "vela.frontier-bounds.v1"
+}

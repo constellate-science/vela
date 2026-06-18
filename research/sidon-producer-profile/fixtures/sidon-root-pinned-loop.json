@@ -1,0 +1,2275 @@
+{
+  "description": "Composed-lineage Sidon producer loop with concurrent root-pinned tasks, explicit stale resolution, human-authorized restriction, hitting-set kill, and append repair.",
+  "expected": {
+    "best_bound_trace": [
+      6,
+      7,
+      7,
+      6,
+      7
+    ],
+    "challenge_packet_id": "vch_914a92e0cbd4685538760a9e47010f4e3cad105d9e8f78cedd0dfed8c9011e73",
+    "challenged_atoms": [
+      "verifier:vva_5a39d9175bfc48e24e3ce996157d944459f5b15ca43d3f5caabc6a6b8589967e",
+      "verifier:vva_dae2def25f2a6c5b499136322f5312039c5f4e4a4ffdc3abf1109a0b43e6414a"
+    ],
+    "historical_lineage_unchanged_by_restrict": true,
+    "repair_packet_id": "vrp_2550c1b31eabe4597f5cd11345ae47145a497e572cdd560cb6f0bea18ca277d7",
+    "repair_restores": true,
+    "route_b_staleness_resolution": "stale_revalidated_as_confirmation",
+    "target_cell_id": "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb",
+    "view_decision_packet_id": "vvd_a1d92acddecb748ae2b0fdd24ac8fcc59c1f83d88db2c180bf9313af5781cf9d"
+  },
+  "frontier_id": "vfr_496956067dc5ad79",
+  "genesis": {
+    "accepted_event_id": "vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+    "artifact_digest": "sha256:e14b5dadf978d2c82b54de1102f511ca523dd8c0b03b85224bc03b3db25246c1",
+    "bound_cell_id": "vsc_d8bf67b00541737bfb9d573ba0336a141dfbb381936f891010ff8c7b41bd96b7"
+  },
+  "packets": [
+    {
+      "active_minimal_environments": [
+        [
+          "acceptance-event:vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+          "artifact:sha256:e14b5dadf978d2c82b54de1102f511ca523dd8c0b03b85224bc03b3db25246c1",
+          "gate:fixture-genesis",
+          "probe:fixture-genesis-negative-controls",
+          "rule:vela.sidon.lower-bound.v1",
+          "statement:sha256:b4008a50d54bffeb84eb3ce287e45bd7376f26f67424432eee48ff3445300384",
+          "verifier:fixture-genesis-base3",
+          "verifier:fixture-genesis-pairsum"
+        ]
+      ],
+      "active_view_root": "vav_a86d475b2c4f7680d53ef7256daf967e4e0c417ef100a829f26d90ab050beee8",
+      "cell_id": "vsc_d8bf67b00541737bfb9d573ba0336a141dfbb381936f891010ff8c7b41bd96b7",
+      "circuit_root": "vcr_b959302bfc7a79ed6f388a81f1e44ae01d0a3029b94e20faadc7f58466a3700d",
+      "created_at": "2026-06-18T14:00:00+00:00",
+      "frontier_id": "vfr_496956067dc5ad79",
+      "historical_lineage_root": "vlr_02b6bcfbe19718dcea84d97eb46e6e533e404b491671c032ddfd34b8c016fe3d",
+      "historical_minimal_environments": [
+        [
+          "acceptance-event:vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+          "artifact:sha256:e14b5dadf978d2c82b54de1102f511ca523dd8c0b03b85224bc03b3db25246c1",
+          "gate:fixture-genesis",
+          "probe:fixture-genesis-negative-controls",
+          "rule:vela.sidon.lower-bound.v1",
+          "statement:sha256:b4008a50d54bffeb84eb3ce287e45bd7376f26f67424432eee48ff3445300384",
+          "verifier:fixture-genesis-base3",
+          "verifier:fixture-genesis-pairsum"
+        ]
+      ],
+      "packet_id": "vsf_9f28fa163bd3a37665ed7e59db2d5248bc0a2fd14fe057c56b04942893bd39fe",
+      "packet_type": "support_function",
+      "presentation_root": "vpr_a66ba5c5d7a62631e6f7e4a1cb7c093a6d9b10e23ea349ca98cea6e15e6cc11a",
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "uEABqCy6pqjJmzqihrkYwDXMTbYJNq+hA54f9Bw7ieA8qRxLgM98Kqxw9IEZChGhP9Dgeov+3wxV2oJTU4m7AA=="
+      },
+      "signer_actor": "hub:observer",
+      "signer_public_key": "ycZdFYKem60vY8TpYrJk7T+jOlVQfG7O+n6xQ4oeOVM=",
+      "support_function_digest": "sha256:dce62603f675c61250659852fffadaab09b748eb09dca2256713edc6a72b5cdf"
+    },
+    {
+      "active_view_root": "vav_a86d475b2c4f7680d53ef7256daf967e4e0c417ef100a829f26d90ab050beee8",
+      "canonical_output": {
+        "bounds": [
+          {
+            "best_lower_bound": 6,
+            "n": 4,
+            "supported_cell_ids": [
+              "vsc_d8bf67b00541737bfb9d573ba0336a141dfbb381936f891010ff8c7b41bd96b7"
+            ]
+          }
+        ],
+        "sequence": "oeis:A309370",
+        "support_function_packet_ids": [
+          "vsf_9f28fa163bd3a37665ed7e59db2d5248bc0a2fd14fe057c56b04942893bd39fe"
+        ]
+      },
+      "circuit_root": "vcr_b959302bfc7a79ed6f388a81f1e44ae01d0a3029b94e20faadc7f58466a3700d",
+      "created_at": "2026-06-18T14:01:00+00:00",
+      "evaluator_id": "vela.sidon.best-lower-bound.v1",
+      "evaluator_inputs": {
+        "selection": "maximum-k-per-n",
+        "sequence": "oeis:A309370",
+        "support_policy": "positive-existence-under-active-view",
+        "view_policy_id": "vela.view.public.v1"
+      },
+      "frontier_id": "vfr_496956067dc5ad79",
+      "lineage_root": "vlr_02b6bcfbe19718dcea84d97eb46e6e533e404b491671c032ddfd34b8c016fe3d",
+      "packet_id": "vop_aff462f0adbd30572eccf2718987fd47b33009b3c63514b119c08dfb224a0d3e",
+      "packet_type": "observation",
+      "presentation_root": "vpr_a66ba5c5d7a62631e6f7e4a1cb7c093a6d9b10e23ea349ca98cea6e15e6cc11a",
+      "replay_receipt": {
+        "caused_by_event_id": "vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+        "circuit_semantics": "expanded-lineage-equals-ranked-circuit-on-this-fixture",
+        "evaluator_digest": "veval_1440db672baca9abc713a25330005febc9656217632ccfef7de7c744371cfdf1",
+        "input_roots_digest": "sha256:c5c2182944f41c15194ae27d9b906ec4676e8f4da8817fae89a3a0674da324e3",
+        "output_digest": "sha256:4a082e18942b937e876d953ee752e34fad5a6fc43ef0eada3c93a70c81aaa44d",
+        "receipt_id": "vor_4dfdf5d6e5d28084185662bb054e7bdbea71c06a676504d2e64170c2a74c9212"
+      },
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "S5ESfvszLeYLBSBjpuvr6GPk4ypFKUvhfGF8gNr6G58XDJlJwrS8yGhT5cCAy9yjMSPSEjEymuSZdHeOJWUpBQ=="
+      },
+      "signer_actor": "hub:observer",
+      "signer_public_key": "ycZdFYKem60vY8TpYrJk7T+jOlVQfG7O+n6xQ4oeOVM="
+    },
+    {
+      "base_state": {
+        "active_view_root": "vav_a86d475b2c4f7680d53ef7256daf967e4e0c417ef100a829f26d90ab050beee8",
+        "canonical_output_digest": "sha256:4a082e18942b937e876d953ee752e34fad5a6fc43ef0eada3c93a70c81aaa44d",
+        "circuit_root": "vcr_b959302bfc7a79ed6f388a81f1e44ae01d0a3029b94e20faadc7f58466a3700d",
+        "evaluator_id": "vela.sidon.best-lower-bound.v1",
+        "evaluator_inputs_digest": "sha256:2bd52bfbe01003338a1bfdde8b8bdb73e90ee2a180de4645b012361f428b4bdb",
+        "lineage_root": "vlr_02b6bcfbe19718dcea84d97eb46e6e533e404b491671c032ddfd34b8c016fe3d",
+        "observation_id": "vop_aff462f0adbd30572eccf2718987fd47b33009b3c63514b119c08dfb224a0d3e",
+        "presentation_root": "vpr_a66ba5c5d7a62631e6f7e4a1cb7c093a6d9b10e23ea349ca98cea6e15e6cc11a"
+      },
+      "cell_target": {
+        "n": 4,
+        "sequence": "oeis:A309370"
+      },
+      "created_at": "2026-06-18T14:02:00+00:00",
+      "frontier_id": "vfr_496956067dc5ad79",
+      "lease": {
+        "required": false,
+        "state_effect": "none"
+      },
+      "objective": {
+        "current": 6,
+        "kind": "strict_improvement",
+        "required_minimum": 7
+      },
+      "packet_id": "vtk_7080c530df067c22cbf0c3eed0b2a6da9322353a188a2f5f9d554df044bb5f8e",
+      "packet_type": "task",
+      "required_result_schema": "vela.sidon-witness.v1",
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "zciT23dEi+HxFederRWIPKNeCjb1k0ngCK5oOFeMO+3ZZgk0RQMf58IxB2ykZss4bccMa16lD6XDUkiw9OojCw=="
+      },
+      "signer_actor": "hub:task-issuer",
+      "signer_public_key": "pFxe+RYBVcky5yFcESc0U1KHAuMY1kZFT623bcRk7fI=",
+      "task_id": "vtsk_2625fdafc43e3a1fa566bddcd65ce0377c97b4e19ddabab48782af19a5032808",
+      "verifier_contract": "vela.sidon.gate.v1"
+    },
+    {
+      "base_state": {
+        "active_view_root": "vav_a86d475b2c4f7680d53ef7256daf967e4e0c417ef100a829f26d90ab050beee8",
+        "canonical_output_digest": "sha256:4a082e18942b937e876d953ee752e34fad5a6fc43ef0eada3c93a70c81aaa44d",
+        "circuit_root": "vcr_b959302bfc7a79ed6f388a81f1e44ae01d0a3029b94e20faadc7f58466a3700d",
+        "evaluator_id": "vela.sidon.best-lower-bound.v1",
+        "evaluator_inputs_digest": "sha256:2bd52bfbe01003338a1bfdde8b8bdb73e90ee2a180de4645b012361f428b4bdb",
+        "lineage_root": "vlr_02b6bcfbe19718dcea84d97eb46e6e533e404b491671c032ddfd34b8c016fe3d",
+        "observation_id": "vop_aff462f0adbd30572eccf2718987fd47b33009b3c63514b119c08dfb224a0d3e",
+        "presentation_root": "vpr_a66ba5c5d7a62631e6f7e4a1cb7c093a6d9b10e23ea349ca98cea6e15e6cc11a"
+      },
+      "cell_target": {
+        "n": 4,
+        "sequence": "oeis:A309370"
+      },
+      "created_at": "2026-06-18T14:03:00+00:00",
+      "frontier_id": "vfr_496956067dc5ad79",
+      "lease": {
+        "required": false,
+        "state_effect": "none"
+      },
+      "objective": {
+        "current": 6,
+        "kind": "strict_improvement",
+        "required_minimum": 7
+      },
+      "packet_id": "vtk_c015f177d664276d5486b700e75452841d159716387d4fca250114ae08d93455",
+      "packet_type": "task",
+      "required_result_schema": "vela.sidon-witness.v1",
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "DoI1ERm5nQaI/y4+Ui9vMllIKo6/3wYlU8pGUoRJcSSFZlsGNVhDngN82Hpw/utOJTy+ag8653hQL9YW/yA8AQ=="
+      },
+      "signer_actor": "hub:task-issuer",
+      "signer_public_key": "pFxe+RYBVcky5yFcESc0U1KHAuMY1kZFT623bcRk7fI=",
+      "task_id": "vtsk_2625fdafc43e3a1fa566bddcd65ce0377c97b4e19ddabab48782af19a5032808",
+      "verifier_contract": "vela.sidon.gate.v1"
+    },
+    {
+      "artifact": {
+        "claimed_size": 7,
+        "kind": "sidon",
+        "n": 4,
+        "points": [
+          [
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            0
+          ],
+          [
+            1,
+            1,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            1,
+            1,
+            1
+          ]
+        ]
+      },
+      "artifact_digest": "sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+      "base_state": {
+        "active_view_root": "vav_a86d475b2c4f7680d53ef7256daf967e4e0c417ef100a829f26d90ab050beee8",
+        "canonical_output_digest": "sha256:4a082e18942b937e876d953ee752e34fad5a6fc43ef0eada3c93a70c81aaa44d",
+        "circuit_root": "vcr_b959302bfc7a79ed6f388a81f1e44ae01d0a3029b94e20faadc7f58466a3700d",
+        "evaluator_id": "vela.sidon.best-lower-bound.v1",
+        "evaluator_inputs_digest": "sha256:2bd52bfbe01003338a1bfdde8b8bdb73e90ee2a180de4645b012361f428b4bdb",
+        "lineage_root": "vlr_02b6bcfbe19718dcea84d97eb46e6e533e404b491671c032ddfd34b8c016fe3d",
+        "observation_id": "vop_aff462f0adbd30572eccf2718987fd47b33009b3c63514b119c08dfb224a0d3e",
+        "presentation_root": "vpr_a66ba5c5d7a62631e6f7e4a1cb7c093a6d9b10e23ea349ca98cea6e15e6cc11a"
+      },
+      "certificate_kind": "sidon-witness-v1",
+      "claim": {
+        "context": "binary-cube-sidon-exact-v1",
+        "n": 4,
+        "namespace": "oeis",
+        "polarity": "support",
+        "relation": ">=",
+        "sequence": "A309370",
+        "value": 7
+      },
+      "claim_digest": "sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+      "created_at": "2026-06-18T14:04:00+00:00",
+      "frontier_id": "vfr_496956067dc5ad79",
+      "packet_id": "vrs_dd6a385d5b3920f2553433d8e7b74fa736965d9571f658476346e8aa05e90825",
+      "packet_type": "result",
+      "producer_actor": "producer:alpha",
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "tJgdOGjBGWihT18f4ldhKGP2jPVBxwUjqRgdF8xvKc3G+/4RCTzTYRHrUzIHYncTdjHiNDPPAGAnAMm58ygfDg=="
+      },
+      "signer_actor": "producer:alpha",
+      "signer_public_key": "kGRI/rNW+nmN30bQCxYNSctFvIrBxouopwX3cPI0Tks=",
+      "task_id": "vtsk_2625fdafc43e3a1fa566bddcd65ce0377c97b4e19ddabab48782af19a5032808"
+    },
+    {
+      "artifact": {
+        "claimed_size": 7,
+        "kind": "sidon",
+        "n": 4,
+        "points": [
+          [
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            0
+          ],
+          [
+            1,
+            1,
+            1,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            1
+          ],
+          [
+            1,
+            0,
+            1,
+            1
+          ]
+        ]
+      },
+      "artifact_digest": "sha256:61d953fac95dd47413051b5d7e8b71720fbf34475019612c6bba05ca6f6c171a",
+      "base_state": {
+        "active_view_root": "vav_a86d475b2c4f7680d53ef7256daf967e4e0c417ef100a829f26d90ab050beee8",
+        "canonical_output_digest": "sha256:4a082e18942b937e876d953ee752e34fad5a6fc43ef0eada3c93a70c81aaa44d",
+        "circuit_root": "vcr_b959302bfc7a79ed6f388a81f1e44ae01d0a3029b94e20faadc7f58466a3700d",
+        "evaluator_id": "vela.sidon.best-lower-bound.v1",
+        "evaluator_inputs_digest": "sha256:2bd52bfbe01003338a1bfdde8b8bdb73e90ee2a180de4645b012361f428b4bdb",
+        "lineage_root": "vlr_02b6bcfbe19718dcea84d97eb46e6e533e404b491671c032ddfd34b8c016fe3d",
+        "observation_id": "vop_aff462f0adbd30572eccf2718987fd47b33009b3c63514b119c08dfb224a0d3e",
+        "presentation_root": "vpr_a66ba5c5d7a62631e6f7e4a1cb7c093a6d9b10e23ea349ca98cea6e15e6cc11a"
+      },
+      "certificate_kind": "sidon-witness-v1",
+      "claim": {
+        "context": "binary-cube-sidon-exact-v1",
+        "n": 4,
+        "namespace": "oeis",
+        "polarity": "support",
+        "relation": ">=",
+        "sequence": "A309370",
+        "value": 7
+      },
+      "claim_digest": "sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+      "created_at": "2026-06-18T14:05:00+00:00",
+      "frontier_id": "vfr_496956067dc5ad79",
+      "packet_id": "vrs_aac45bfec4dc47687ddea318262dccdfde07a830d099a1d8977cfd0e231655ef",
+      "packet_type": "result",
+      "producer_actor": "producer:beta",
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "+1ZpmvbpivW9U5jfPr0b0v+0W8YIqj1CV0WaVMn5S0gDpxiQ3n2M15A3VcIHuFcu06PzBG5sUv+t4pLgqNuZDg=="
+      },
+      "signer_actor": "producer:beta",
+      "signer_public_key": "Su/15Dx5VkmTs6PPrbziMgnmJ36c7+OYywFPi/GtGCg=",
+      "task_id": "vtsk_2625fdafc43e3a1fa566bddcd65ce0377c97b4e19ddabab48782af19a5032808"
+    },
+    {
+      "adversarial_probes": [
+        {
+          "mutated_artifact_digest": "sha256:e478a533d0e89253c5a16ce9b2188b310aee09db98ddea4977d6f5e528cf0f91",
+          "mutation_id": "duplicate-point-v1",
+          "original_artifact_digest": "sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+          "passed": true,
+          "probe_id": "vprobe_959e3ce185b89356e02587f9d8ef7bb44bb21c6977bff4e79007fdfdcbd9274d",
+          "verifier_results": [
+            {
+              "accepted_mutation": false,
+              "detail": "points must be distinct",
+              "executable_digest": "sha256:f7a187876dc1e6152bc137b118fbd975446c5e36ddac6db9466a7950971ae8d4",
+              "method_family": "pair-sum-hash-set"
+            },
+            {
+              "accepted_mutation": false,
+              "detail": "points must be distinct",
+              "executable_digest": "sha256:e905d7c933344c45ddf3c87fc32ac5ed6570dc2782ab95279cee48f6ea05849e",
+              "method_family": "base3-encode-sort"
+            }
+          ]
+        },
+        {
+          "mutated_artifact_digest": "sha256:e92f943cf5d7ded80a8c3a3028d74335537b3aa3d6ab9a8c5325b8ba74cca9a7",
+          "mutation_id": "claimed-size-mismatch-v1",
+          "original_artifact_digest": "sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+          "passed": true,
+          "probe_id": "vprobe_e8fde1937e3af3d8e0c551e330dabf6a95265f4a08183bf351cf73caeb58f4da",
+          "verifier_results": [
+            {
+              "accepted_mutation": false,
+              "detail": "claimed_size must equal point count",
+              "executable_digest": "sha256:f7a187876dc1e6152bc137b118fbd975446c5e36ddac6db9466a7950971ae8d4",
+              "method_family": "pair-sum-hash-set"
+            },
+            {
+              "accepted_mutation": false,
+              "detail": "claimed_size must equal point count",
+              "executable_digest": "sha256:e905d7c933344c45ddf3c87fc32ac5ed6570dc2782ab95279cee48f6ea05849e",
+              "method_family": "base3-encode-sort"
+            }
+          ]
+        },
+        {
+          "mutated_artifact_digest": "sha256:e0a9f3e368349ee606a3a2fca7851d9e9a3bc7f58cf5a9cdb8dbb934757f0819",
+          "mutation_id": "single-bit-pairsum-collision-v1",
+          "original_artifact_digest": "sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+          "passed": true,
+          "probe_id": "vprobe_a5e914b43a612e292092b7a1358b0d17a8a485122c42953a82250c74f6e38d6f",
+          "verifier_results": [
+            {
+              "accepted_mutation": false,
+              "detail": "duplicate pair sum at pair (1,6)",
+              "executable_digest": "sha256:f7a187876dc1e6152bc137b118fbd975446c5e36ddac6db9466a7950971ae8d4",
+              "method_family": "pair-sum-hash-set"
+            },
+            {
+              "accepted_mutation": false,
+              "detail": "duplicate base-3 pair-sum encoding",
+              "executable_digest": "sha256:e905d7c933344c45ddf3c87fc32ac5ed6570dc2782ab95279cee48f6ea05849e",
+              "method_family": "base3-encode-sort"
+            }
+          ]
+        }
+      ],
+      "artifact_digest": "sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+      "attachments": [
+        {
+          "artifact_digest": "sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+          "claim_digest": "sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+          "detail": "28 pair sums unique",
+          "executable_digest": "sha256:f7a187876dc1e6152bc137b118fbd975446c5e36ddac6db9466a7950971ae8d4",
+          "executable_id": "python:sidon_pairsum_set.py",
+          "method_family": "pair-sum-hash-set",
+          "passed": true,
+          "receipt_id": "vva_97a6ed6ee2a4ef255b31ea39dafc6ecfea63fcfb7e2e18f89e77c5d3801ff0bf",
+          "result_packet_id": "vrs_dd6a385d5b3920f2553433d8e7b74fa736965d9571f658476346e8aa05e90825"
+        },
+        {
+          "artifact_digest": "sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+          "claim_digest": "sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+          "detail": "28 sorted encodings unique",
+          "executable_digest": "sha256:e905d7c933344c45ddf3c87fc32ac5ed6570dc2782ab95279cee48f6ea05849e",
+          "executable_id": "python:sidon_base3_sort.py",
+          "method_family": "base3-encode-sort",
+          "passed": true,
+          "receipt_id": "vva_dae2def25f2a6c5b499136322f5312039c5f4e4a4ffdc3abf1109a0b43e6414a",
+          "result_packet_id": "vrs_dd6a385d5b3920f2553433d8e7b74fa736965d9571f658476346e8aa05e90825"
+        }
+      ],
+      "base_state": {
+        "active_view_root": "vav_a86d475b2c4f7680d53ef7256daf967e4e0c417ef100a829f26d90ab050beee8",
+        "canonical_output_digest": "sha256:4a082e18942b937e876d953ee752e34fad5a6fc43ef0eada3c93a70c81aaa44d",
+        "circuit_root": "vcr_b959302bfc7a79ed6f388a81f1e44ae01d0a3029b94e20faadc7f58466a3700d",
+        "evaluator_id": "vela.sidon.best-lower-bound.v1",
+        "evaluator_inputs_digest": "sha256:2bd52bfbe01003338a1bfdde8b8bdb73e90ee2a180de4645b012361f428b4bdb",
+        "lineage_root": "vlr_02b6bcfbe19718dcea84d97eb46e6e533e404b491671c032ddfd34b8c016fe3d",
+        "observation_id": "vop_aff462f0adbd30572eccf2718987fd47b33009b3c63514b119c08dfb224a0d3e",
+        "presentation_root": "vpr_a66ba5c5d7a62631e6f7e4a1cb7c093a6d9b10e23ea349ca98cea6e15e6cc11a"
+      },
+      "claim_digest": "sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+      "claim_match_check": {
+        "artifact_digest_matches": true,
+        "claim_digest_matches": true
+      },
+      "created_at": "2026-06-18T14:06:00+00:00",
+      "frontier_id": "vfr_496956067dc5ad79",
+      "gate_status": "verified",
+      "packet_id": "vgr_1fa0f7305a46fd18616575edc76c16b268351210b1f08cb201036b1b02e74160",
+      "packet_type": "gate_receipt",
+      "result_packet_id": "vrs_dd6a385d5b3920f2553433d8e7b74fa736965d9571f658476346e8aa05e90825",
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "4kCUyZJFGWbtd5hAkdyzt027jttieHawgDwrbJIvB7GgRKhPI4CrqhxItEi4zVEki/pMvBUWn7s5kwrwd9fpAA=="
+      },
+      "signer_actor": "hub:gate",
+      "signer_public_key": "KqppAz9IfBtHD5frU9nNMivIrUdgI+Htas8D+8Vbgoc=",
+      "verification_diversity": {
+        "distinct_executable_digests": true,
+        "distinct_method_families": true,
+        "interpretation": "algorithmic diversity; not a claim of statistical or organizational independence"
+      }
+    },
+    {
+      "adversarial_probes": [
+        {
+          "mutated_artifact_digest": "sha256:2d4fee9c0109c2c499b24bee942c700f817dcc35e51035efea9a568fc65eb9d6",
+          "mutation_id": "duplicate-point-v1",
+          "original_artifact_digest": "sha256:61d953fac95dd47413051b5d7e8b71720fbf34475019612c6bba05ca6f6c171a",
+          "passed": true,
+          "probe_id": "vprobe_8a5a73d48eac7564878c8b2a3128379f426ec83db941f539a2b909b88f0585d3",
+          "verifier_results": [
+            {
+              "accepted_mutation": false,
+              "detail": "points must be distinct",
+              "executable_digest": "sha256:f7a187876dc1e6152bc137b118fbd975446c5e36ddac6db9466a7950971ae8d4",
+              "method_family": "pair-sum-hash-set"
+            },
+            {
+              "accepted_mutation": false,
+              "detail": "points must be distinct",
+              "executable_digest": "sha256:e905d7c933344c45ddf3c87fc32ac5ed6570dc2782ab95279cee48f6ea05849e",
+              "method_family": "base3-encode-sort"
+            }
+          ]
+        },
+        {
+          "mutated_artifact_digest": "sha256:6ce8268d43ff7658175b929249e57bd03485891763158f444b70a2a909534c69",
+          "mutation_id": "claimed-size-mismatch-v1",
+          "original_artifact_digest": "sha256:61d953fac95dd47413051b5d7e8b71720fbf34475019612c6bba05ca6f6c171a",
+          "passed": true,
+          "probe_id": "vprobe_a1cd553a1166e092901daaae2e8fd3523f11e41838b5fc11060a1a2f7b73bd11",
+          "verifier_results": [
+            {
+              "accepted_mutation": false,
+              "detail": "claimed_size must equal point count",
+              "executable_digest": "sha256:f7a187876dc1e6152bc137b118fbd975446c5e36ddac6db9466a7950971ae8d4",
+              "method_family": "pair-sum-hash-set"
+            },
+            {
+              "accepted_mutation": false,
+              "detail": "claimed_size must equal point count",
+              "executable_digest": "sha256:e905d7c933344c45ddf3c87fc32ac5ed6570dc2782ab95279cee48f6ea05849e",
+              "method_family": "base3-encode-sort"
+            }
+          ]
+        },
+        {
+          "mutated_artifact_digest": "sha256:0bd41bd366cd9d51f9015cc045d682509d440b69acf61ba1626bc1d4ec0003fc",
+          "mutation_id": "single-bit-pairsum-collision-v1",
+          "original_artifact_digest": "sha256:61d953fac95dd47413051b5d7e8b71720fbf34475019612c6bba05ca6f6c171a",
+          "passed": true,
+          "probe_id": "vprobe_a865b89ff8bbdff3b8c403f7cd0046aec0ae841154afbfa1cb48d676bf5e496e",
+          "verifier_results": [
+            {
+              "accepted_mutation": false,
+              "detail": "duplicate pair sum at pair (2,6)",
+              "executable_digest": "sha256:f7a187876dc1e6152bc137b118fbd975446c5e36ddac6db9466a7950971ae8d4",
+              "method_family": "pair-sum-hash-set"
+            },
+            {
+              "accepted_mutation": false,
+              "detail": "duplicate base-3 pair-sum encoding",
+              "executable_digest": "sha256:e905d7c933344c45ddf3c87fc32ac5ed6570dc2782ab95279cee48f6ea05849e",
+              "method_family": "base3-encode-sort"
+            }
+          ]
+        }
+      ],
+      "artifact_digest": "sha256:61d953fac95dd47413051b5d7e8b71720fbf34475019612c6bba05ca6f6c171a",
+      "attachments": [
+        {
+          "artifact_digest": "sha256:61d953fac95dd47413051b5d7e8b71720fbf34475019612c6bba05ca6f6c171a",
+          "claim_digest": "sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+          "detail": "28 pair sums unique",
+          "executable_digest": "sha256:f7a187876dc1e6152bc137b118fbd975446c5e36ddac6db9466a7950971ae8d4",
+          "executable_id": "python:sidon_pairsum_set.py",
+          "method_family": "pair-sum-hash-set",
+          "passed": true,
+          "receipt_id": "vva_2251abed1902798a93dcf90e9d0c8d7d2fc58ab1c23f02a4ce2d3358fda6d555",
+          "result_packet_id": "vrs_aac45bfec4dc47687ddea318262dccdfde07a830d099a1d8977cfd0e231655ef"
+        },
+        {
+          "artifact_digest": "sha256:61d953fac95dd47413051b5d7e8b71720fbf34475019612c6bba05ca6f6c171a",
+          "claim_digest": "sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+          "detail": "28 sorted encodings unique",
+          "executable_digest": "sha256:e905d7c933344c45ddf3c87fc32ac5ed6570dc2782ab95279cee48f6ea05849e",
+          "executable_id": "python:sidon_base3_sort.py",
+          "method_family": "base3-encode-sort",
+          "passed": true,
+          "receipt_id": "vva_5a39d9175bfc48e24e3ce996157d944459f5b15ca43d3f5caabc6a6b8589967e",
+          "result_packet_id": "vrs_aac45bfec4dc47687ddea318262dccdfde07a830d099a1d8977cfd0e231655ef"
+        }
+      ],
+      "base_state": {
+        "active_view_root": "vav_a86d475b2c4f7680d53ef7256daf967e4e0c417ef100a829f26d90ab050beee8",
+        "canonical_output_digest": "sha256:4a082e18942b937e876d953ee752e34fad5a6fc43ef0eada3c93a70c81aaa44d",
+        "circuit_root": "vcr_b959302bfc7a79ed6f388a81f1e44ae01d0a3029b94e20faadc7f58466a3700d",
+        "evaluator_id": "vela.sidon.best-lower-bound.v1",
+        "evaluator_inputs_digest": "sha256:2bd52bfbe01003338a1bfdde8b8bdb73e90ee2a180de4645b012361f428b4bdb",
+        "lineage_root": "vlr_02b6bcfbe19718dcea84d97eb46e6e533e404b491671c032ddfd34b8c016fe3d",
+        "observation_id": "vop_aff462f0adbd30572eccf2718987fd47b33009b3c63514b119c08dfb224a0d3e",
+        "presentation_root": "vpr_a66ba5c5d7a62631e6f7e4a1cb7c093a6d9b10e23ea349ca98cea6e15e6cc11a"
+      },
+      "claim_digest": "sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+      "claim_match_check": {
+        "artifact_digest_matches": true,
+        "claim_digest_matches": true
+      },
+      "created_at": "2026-06-18T14:07:00+00:00",
+      "frontier_id": "vfr_496956067dc5ad79",
+      "gate_status": "verified",
+      "packet_id": "vgr_643e89a3dd5f2de0ded88e54b8b87a0abfea156a75b04cadb827a5993e4c5abe",
+      "packet_type": "gate_receipt",
+      "result_packet_id": "vrs_aac45bfec4dc47687ddea318262dccdfde07a830d099a1d8977cfd0e231655ef",
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "yR3LRfYk+mF7MZ4kzoilXisy9hqu5ErVBynyU5mxV32FCTWgIUt3MG957FzhTXXTNwjbIHNYelQfRcsd87ZbDw=="
+      },
+      "signer_actor": "hub:gate",
+      "signer_public_key": "KqppAz9IfBtHD5frU9nNMivIrUdgI+Htas8D+8Vbgoc=",
+      "verification_diversity": {
+        "distinct_executable_digests": true,
+        "distinct_method_families": true,
+        "interpretation": "algorithmic diversity; not a claim of statistical or organizational independence"
+      }
+    },
+    {
+      "accepted_event_id": "vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+      "append_contract": {
+        "bound_cell_rank": 1,
+        "profile_id": "vela.sidon-producer-profile.v1",
+        "rule_atom": "rule:vela.sidon.lower-bound.v1",
+        "witness_cell_rank": 0
+      },
+      "created_at": "2026-06-18T14:08:00+00:00",
+      "decision": "accepted",
+      "decision_state": {
+        "active_view_root": "vav_a86d475b2c4f7680d53ef7256daf967e4e0c417ef100a829f26d90ab050beee8",
+        "canonical_output_digest": "sha256:4a082e18942b937e876d953ee752e34fad5a6fc43ef0eada3c93a70c81aaa44d",
+        "circuit_root": "vcr_b959302bfc7a79ed6f388a81f1e44ae01d0a3029b94e20faadc7f58466a3700d",
+        "evaluator_id": "vela.sidon.best-lower-bound.v1",
+        "evaluator_inputs_digest": "sha256:2bd52bfbe01003338a1bfdde8b8bdb73e90ee2a180de4645b012361f428b4bdb",
+        "lineage_root": "vlr_02b6bcfbe19718dcea84d97eb46e6e533e404b491671c032ddfd34b8c016fe3d",
+        "observation_id": "vop_aff462f0adbd30572eccf2718987fd47b33009b3c63514b119c08dfb224a0d3e",
+        "presentation_root": "vpr_a66ba5c5d7a62631e6f7e4a1cb7c093a6d9b10e23ea349ca98cea6e15e6cc11a"
+      },
+      "frontier_id": "vfr_496956067dc5ad79",
+      "gate_receipt_id": "vgr_1fa0f7305a46fd18616575edc76c16b268351210b1f08cb201036b1b02e74160",
+      "packet_id": "vac_50a3625159183adca640c031bc98689a6a2274dccca77e3af9e93b3d64c6bd99",
+      "packet_type": "acceptance",
+      "reason": "Exact gate passed and the result was evaluated against the current observation root.",
+      "result_base_state": {
+        "active_view_root": "vav_a86d475b2c4f7680d53ef7256daf967e4e0c417ef100a829f26d90ab050beee8",
+        "canonical_output_digest": "sha256:4a082e18942b937e876d953ee752e34fad5a6fc43ef0eada3c93a70c81aaa44d",
+        "circuit_root": "vcr_b959302bfc7a79ed6f388a81f1e44ae01d0a3029b94e20faadc7f58466a3700d",
+        "evaluator_id": "vela.sidon.best-lower-bound.v1",
+        "evaluator_inputs_digest": "sha256:2bd52bfbe01003338a1bfdde8b8bdb73e90ee2a180de4645b012361f428b4bdb",
+        "lineage_root": "vlr_02b6bcfbe19718dcea84d97eb46e6e533e404b491671c032ddfd34b8c016fe3d",
+        "observation_id": "vop_aff462f0adbd30572eccf2718987fd47b33009b3c63514b119c08dfb224a0d3e",
+        "presentation_root": "vpr_a66ba5c5d7a62631e6f7e4a1cb7c093a6d9b10e23ea349ca98cea6e15e6cc11a"
+      },
+      "result_packet_id": "vrs_dd6a385d5b3920f2553433d8e7b74fa736965d9571f658476346e8aa05e90825",
+      "reviewer_actor": "reviewer:human",
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "fFD7tT/G2MrDzNMxYBsnIUarm+caUvctdt5R7LugaKVuqWN4lPP23mUF+7lLgX6/WYrKK/mcqq+KTyJcP30RCg=="
+      },
+      "signer_actor": "reviewer:human",
+      "signer_public_key": "/GCB9mz1b6ebvvOcCXCIR9WM0W6H9IqdZR0kcYDdgWM=",
+      "staleness_resolution": "fresh"
+    },
+    {
+      "active_minimal_environments": [
+        [
+          "acceptance-event:vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+          "artifact:sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+          "claim-match:vcm_8890e5bf52c948d215aa20d7162d133352077b988d524c764889bb7a76eee773",
+          "gate:vgr_1fa0f7305a46fd18616575edc76c16b268351210b1f08cb201036b1b02e74160",
+          "probe:vprobe_959e3ce185b89356e02587f9d8ef7bb44bb21c6977bff4e79007fdfdcbd9274d",
+          "probe:vprobe_a5e914b43a612e292092b7a1358b0d17a8a485122c42953a82250c74f6e38d6f",
+          "probe:vprobe_e8fde1937e3af3d8e0c551e330dabf6a95265f4a08183bf351cf73caeb58f4da",
+          "rule:vela.sidon.lower-bound.v1",
+          "statement:sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+          "verifier:vva_97a6ed6ee2a4ef255b31ea39dafc6ecfea63fcfb7e2e18f89e77c5d3801ff0bf",
+          "verifier:vva_dae2def25f2a6c5b499136322f5312039c5f4e4a4ffdc3abf1109a0b43e6414a"
+        ]
+      ],
+      "active_view_root": "vav_a86d475b2c4f7680d53ef7256daf967e4e0c417ef100a829f26d90ab050beee8",
+      "cell_id": "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb",
+      "circuit_root": "vcr_fec7dcc0597f0823f0c5d334cdfd3a4452bc56bbd72a858a9bab533c92ff7def",
+      "created_at": "2026-06-18T14:09:00+00:00",
+      "frontier_id": "vfr_496956067dc5ad79",
+      "historical_lineage_root": "vlr_b551e999553fa5dfa102b6dc277af26fca2faf2fe53e5db2cfa6747a2223ee5b",
+      "historical_minimal_environments": [
+        [
+          "acceptance-event:vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+          "artifact:sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+          "claim-match:vcm_8890e5bf52c948d215aa20d7162d133352077b988d524c764889bb7a76eee773",
+          "gate:vgr_1fa0f7305a46fd18616575edc76c16b268351210b1f08cb201036b1b02e74160",
+          "probe:vprobe_959e3ce185b89356e02587f9d8ef7bb44bb21c6977bff4e79007fdfdcbd9274d",
+          "probe:vprobe_a5e914b43a612e292092b7a1358b0d17a8a485122c42953a82250c74f6e38d6f",
+          "probe:vprobe_e8fde1937e3af3d8e0c551e330dabf6a95265f4a08183bf351cf73caeb58f4da",
+          "rule:vela.sidon.lower-bound.v1",
+          "statement:sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+          "verifier:vva_97a6ed6ee2a4ef255b31ea39dafc6ecfea63fcfb7e2e18f89e77c5d3801ff0bf",
+          "verifier:vva_dae2def25f2a6c5b499136322f5312039c5f4e4a4ffdc3abf1109a0b43e6414a"
+        ]
+      ],
+      "packet_id": "vsf_0a67b5034c519e94aa018759ce60e2ba155ed331a739e1b00fb38d5dfdb826ee",
+      "packet_type": "support_function",
+      "presentation_root": "vpr_7d4b686035bb4c06cf99f08a17cb37a7e5c24b06d0f8386b3c2f8b30a80f3c97",
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "7NORlvHn2YtY+MkZhjFZXS1GftMuSnYSGRenSOesgPBIQIOwv8YuwCWFPmXTbfXAVobzOesLpqmiWYqVXaVZAQ=="
+      },
+      "signer_actor": "hub:observer",
+      "signer_public_key": "ycZdFYKem60vY8TpYrJk7T+jOlVQfG7O+n6xQ4oeOVM=",
+      "support_function_digest": "sha256:9299cc9ba0ec52001b264409f1e300185aac14e4aff75f0311a6f63801e184de"
+    },
+    {
+      "active_view_root": "vav_a86d475b2c4f7680d53ef7256daf967e4e0c417ef100a829f26d90ab050beee8",
+      "canonical_output": {
+        "bounds": [
+          {
+            "best_lower_bound": 7,
+            "n": 4,
+            "supported_cell_ids": [
+              "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb"
+            ]
+          }
+        ],
+        "sequence": "oeis:A309370",
+        "support_function_packet_ids": [
+          "vsf_0a67b5034c519e94aa018759ce60e2ba155ed331a739e1b00fb38d5dfdb826ee"
+        ]
+      },
+      "circuit_root": "vcr_fec7dcc0597f0823f0c5d334cdfd3a4452bc56bbd72a858a9bab533c92ff7def",
+      "created_at": "2026-06-18T14:10:00+00:00",
+      "evaluator_id": "vela.sidon.best-lower-bound.v1",
+      "evaluator_inputs": {
+        "selection": "maximum-k-per-n",
+        "sequence": "oeis:A309370",
+        "support_policy": "positive-existence-under-active-view",
+        "view_policy_id": "vela.view.public.v1"
+      },
+      "frontier_id": "vfr_496956067dc5ad79",
+      "lineage_root": "vlr_b551e999553fa5dfa102b6dc277af26fca2faf2fe53e5db2cfa6747a2223ee5b",
+      "packet_id": "vop_8829fde37b72ba68a24466ad779e1c360b996700d229bd7bba7e8471f2d90560",
+      "packet_type": "observation",
+      "presentation_root": "vpr_7d4b686035bb4c06cf99f08a17cb37a7e5c24b06d0f8386b3c2f8b30a80f3c97",
+      "replay_receipt": {
+        "caused_by_event_id": "vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+        "circuit_semantics": "expanded-lineage-equals-ranked-circuit-on-this-fixture",
+        "evaluator_digest": "veval_1440db672baca9abc713a25330005febc9656217632ccfef7de7c744371cfdf1",
+        "input_roots_digest": "sha256:863170ca95810bdfe0fc72cff6d4fa16c5ac1ebc9e4ef83fc3a1289ac1779efe",
+        "output_digest": "sha256:09fc600358410010629f70145ee091094e7866da16e7488485d2a7cda308bf8e",
+        "receipt_id": "vor_28078e9e69a55fb24ed7f243040edb050f725acbdca05af871a6c901220f60df"
+      },
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "Q1VdBy9oTOu1SS2QAcbWr6z/X3j15U+MrpSXvBQl2KB6htBnQLppC4A4YgAQZmweh+Vo2NwisYptne1Z+4/qCw=="
+      },
+      "signer_actor": "hub:observer",
+      "signer_public_key": "ycZdFYKem60vY8TpYrJk7T+jOlVQfG7O+n6xQ4oeOVM="
+    },
+    {
+      "accepted_event_id": "vev_224563e4c2ab967c2123c9964e7eb09c5ea6cd5aa560798d8f1bf98f7c70b5a3",
+      "append_contract": {
+        "bound_cell_rank": 1,
+        "profile_id": "vela.sidon-producer-profile.v1",
+        "rule_atom": "rule:vela.sidon.lower-bound.v1",
+        "witness_cell_rank": 0
+      },
+      "created_at": "2026-06-18T14:11:00+00:00",
+      "decision": "accepted",
+      "decision_state": {
+        "active_view_root": "vav_a86d475b2c4f7680d53ef7256daf967e4e0c417ef100a829f26d90ab050beee8",
+        "canonical_output_digest": "sha256:09fc600358410010629f70145ee091094e7866da16e7488485d2a7cda308bf8e",
+        "circuit_root": "vcr_fec7dcc0597f0823f0c5d334cdfd3a4452bc56bbd72a858a9bab533c92ff7def",
+        "evaluator_id": "vela.sidon.best-lower-bound.v1",
+        "evaluator_inputs_digest": "sha256:2bd52bfbe01003338a1bfdde8b8bdb73e90ee2a180de4645b012361f428b4bdb",
+        "lineage_root": "vlr_b551e999553fa5dfa102b6dc277af26fca2faf2fe53e5db2cfa6747a2223ee5b",
+        "observation_id": "vop_8829fde37b72ba68a24466ad779e1c360b996700d229bd7bba7e8471f2d90560",
+        "presentation_root": "vpr_7d4b686035bb4c06cf99f08a17cb37a7e5c24b06d0f8386b3c2f8b30a80f3c97"
+      },
+      "frontier_id": "vfr_496956067dc5ad79",
+      "gate_receipt_id": "vgr_643e89a3dd5f2de0ded88e54b8b87a0abfea156a75b04cadb827a5993e4c5abe",
+      "packet_id": "vac_a31e113a9210bf8ebbd561a6efb4e9d72acd0b8d530bc928e41c44b04c6f30bf",
+      "packet_type": "acceptance",
+      "reason": "Exact gate passed and the result was evaluated against the current observation root.",
+      "result_base_state": {
+        "active_view_root": "vav_a86d475b2c4f7680d53ef7256daf967e4e0c417ef100a829f26d90ab050beee8",
+        "canonical_output_digest": "sha256:4a082e18942b937e876d953ee752e34fad5a6fc43ef0eada3c93a70c81aaa44d",
+        "circuit_root": "vcr_b959302bfc7a79ed6f388a81f1e44ae01d0a3029b94e20faadc7f58466a3700d",
+        "evaluator_id": "vela.sidon.best-lower-bound.v1",
+        "evaluator_inputs_digest": "sha256:2bd52bfbe01003338a1bfdde8b8bdb73e90ee2a180de4645b012361f428b4bdb",
+        "lineage_root": "vlr_02b6bcfbe19718dcea84d97eb46e6e533e404b491671c032ddfd34b8c016fe3d",
+        "observation_id": "vop_aff462f0adbd30572eccf2718987fd47b33009b3c63514b119c08dfb224a0d3e",
+        "presentation_root": "vpr_a66ba5c5d7a62631e6f7e4a1cb7c093a6d9b10e23ea349ca98cea6e15e6cc11a"
+      },
+      "result_packet_id": "vrs_aac45bfec4dc47687ddea318262dccdfde07a830d099a1d8977cfd0e231655ef",
+      "reviewer_actor": "reviewer:human",
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "UHYsL9kCxnVu895rOfOVSMsb7BGeiUm9U7ajD3ltxlN2/vQGdYszL7AzmPMeBnioMRDEVAcF7FuFDQcjejD+AA=="
+      },
+      "signer_actor": "reviewer:human",
+      "signer_public_key": "/GCB9mz1b6ebvvOcCXCIR9WM0W6H9IqdZR0kcYDdgWM=",
+      "staleness_resolution": "stale_revalidated_as_confirmation"
+    },
+    {
+      "active_minimal_environments": [
+        [
+          "acceptance-event:vev_224563e4c2ab967c2123c9964e7eb09c5ea6cd5aa560798d8f1bf98f7c70b5a3",
+          "artifact:sha256:61d953fac95dd47413051b5d7e8b71720fbf34475019612c6bba05ca6f6c171a",
+          "claim-match:vcm_8890e5bf52c948d215aa20d7162d133352077b988d524c764889bb7a76eee773",
+          "gate:vgr_643e89a3dd5f2de0ded88e54b8b87a0abfea156a75b04cadb827a5993e4c5abe",
+          "probe:vprobe_8a5a73d48eac7564878c8b2a3128379f426ec83db941f539a2b909b88f0585d3",
+          "probe:vprobe_a1cd553a1166e092901daaae2e8fd3523f11e41838b5fc11060a1a2f7b73bd11",
+          "probe:vprobe_a865b89ff8bbdff3b8c403f7cd0046aec0ae841154afbfa1cb48d676bf5e496e",
+          "rule:vela.sidon.lower-bound.v1",
+          "statement:sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+          "verifier:vva_2251abed1902798a93dcf90e9d0c8d7d2fc58ab1c23f02a4ce2d3358fda6d555",
+          "verifier:vva_5a39d9175bfc48e24e3ce996157d944459f5b15ca43d3f5caabc6a6b8589967e"
+        ],
+        [
+          "acceptance-event:vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+          "artifact:sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+          "claim-match:vcm_8890e5bf52c948d215aa20d7162d133352077b988d524c764889bb7a76eee773",
+          "gate:vgr_1fa0f7305a46fd18616575edc76c16b268351210b1f08cb201036b1b02e74160",
+          "probe:vprobe_959e3ce185b89356e02587f9d8ef7bb44bb21c6977bff4e79007fdfdcbd9274d",
+          "probe:vprobe_a5e914b43a612e292092b7a1358b0d17a8a485122c42953a82250c74f6e38d6f",
+          "probe:vprobe_e8fde1937e3af3d8e0c551e330dabf6a95265f4a08183bf351cf73caeb58f4da",
+          "rule:vela.sidon.lower-bound.v1",
+          "statement:sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+          "verifier:vva_97a6ed6ee2a4ef255b31ea39dafc6ecfea63fcfb7e2e18f89e77c5d3801ff0bf",
+          "verifier:vva_dae2def25f2a6c5b499136322f5312039c5f4e4a4ffdc3abf1109a0b43e6414a"
+        ]
+      ],
+      "active_view_root": "vav_a86d475b2c4f7680d53ef7256daf967e4e0c417ef100a829f26d90ab050beee8",
+      "cell_id": "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb",
+      "circuit_root": "vcr_bd3e7ae96135a66716034c87a7fe3712919cfb66d91435e9dd4dbe988c4aa548",
+      "created_at": "2026-06-18T14:12:00+00:00",
+      "frontier_id": "vfr_496956067dc5ad79",
+      "historical_lineage_root": "vlr_0a6b3ee88b3e80aa64d671ea33fb667f06027395ef5c023523ea8bae021b0211",
+      "historical_minimal_environments": [
+        [
+          "acceptance-event:vev_224563e4c2ab967c2123c9964e7eb09c5ea6cd5aa560798d8f1bf98f7c70b5a3",
+          "artifact:sha256:61d953fac95dd47413051b5d7e8b71720fbf34475019612c6bba05ca6f6c171a",
+          "claim-match:vcm_8890e5bf52c948d215aa20d7162d133352077b988d524c764889bb7a76eee773",
+          "gate:vgr_643e89a3dd5f2de0ded88e54b8b87a0abfea156a75b04cadb827a5993e4c5abe",
+          "probe:vprobe_8a5a73d48eac7564878c8b2a3128379f426ec83db941f539a2b909b88f0585d3",
+          "probe:vprobe_a1cd553a1166e092901daaae2e8fd3523f11e41838b5fc11060a1a2f7b73bd11",
+          "probe:vprobe_a865b89ff8bbdff3b8c403f7cd0046aec0ae841154afbfa1cb48d676bf5e496e",
+          "rule:vela.sidon.lower-bound.v1",
+          "statement:sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+          "verifier:vva_2251abed1902798a93dcf90e9d0c8d7d2fc58ab1c23f02a4ce2d3358fda6d555",
+          "verifier:vva_5a39d9175bfc48e24e3ce996157d944459f5b15ca43d3f5caabc6a6b8589967e"
+        ],
+        [
+          "acceptance-event:vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+          "artifact:sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+          "claim-match:vcm_8890e5bf52c948d215aa20d7162d133352077b988d524c764889bb7a76eee773",
+          "gate:vgr_1fa0f7305a46fd18616575edc76c16b268351210b1f08cb201036b1b02e74160",
+          "probe:vprobe_959e3ce185b89356e02587f9d8ef7bb44bb21c6977bff4e79007fdfdcbd9274d",
+          "probe:vprobe_a5e914b43a612e292092b7a1358b0d17a8a485122c42953a82250c74f6e38d6f",
+          "probe:vprobe_e8fde1937e3af3d8e0c551e330dabf6a95265f4a08183bf351cf73caeb58f4da",
+          "rule:vela.sidon.lower-bound.v1",
+          "statement:sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+          "verifier:vva_97a6ed6ee2a4ef255b31ea39dafc6ecfea63fcfb7e2e18f89e77c5d3801ff0bf",
+          "verifier:vva_dae2def25f2a6c5b499136322f5312039c5f4e4a4ffdc3abf1109a0b43e6414a"
+        ]
+      ],
+      "packet_id": "vsf_a122836824a316fbbdc6037101353e6e98307ac441df1f37a37349ba615839e3",
+      "packet_type": "support_function",
+      "presentation_root": "vpr_5c1c46f80e6680194820668d58556568a15ffb98f485c5799d7457cd12112729",
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "jwL13LjCYI2CP4CS7gt7GIkmT5bNAlKrYysG0wvNTjV2829ZJzO05GF5cno2Fo++EP6570j3dvkWmJh0kaiEBg=="
+      },
+      "signer_actor": "hub:observer",
+      "signer_public_key": "ycZdFYKem60vY8TpYrJk7T+jOlVQfG7O+n6xQ4oeOVM=",
+      "support_function_digest": "sha256:1f1ba1537b6457e2418369b724b0afc5e1462902609c98459b14768e1202de90"
+    },
+    {
+      "active_view_root": "vav_a86d475b2c4f7680d53ef7256daf967e4e0c417ef100a829f26d90ab050beee8",
+      "canonical_output": {
+        "bounds": [
+          {
+            "best_lower_bound": 7,
+            "n": 4,
+            "supported_cell_ids": [
+              "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb"
+            ]
+          }
+        ],
+        "sequence": "oeis:A309370",
+        "support_function_packet_ids": [
+          "vsf_a122836824a316fbbdc6037101353e6e98307ac441df1f37a37349ba615839e3"
+        ]
+      },
+      "circuit_root": "vcr_bd3e7ae96135a66716034c87a7fe3712919cfb66d91435e9dd4dbe988c4aa548",
+      "created_at": "2026-06-18T14:13:00+00:00",
+      "evaluator_id": "vela.sidon.best-lower-bound.v1",
+      "evaluator_inputs": {
+        "selection": "maximum-k-per-n",
+        "sequence": "oeis:A309370",
+        "support_policy": "positive-existence-under-active-view",
+        "view_policy_id": "vela.view.public.v1"
+      },
+      "frontier_id": "vfr_496956067dc5ad79",
+      "lineage_root": "vlr_0a6b3ee88b3e80aa64d671ea33fb667f06027395ef5c023523ea8bae021b0211",
+      "packet_id": "vop_8d79ed0fbfb3b65e98d4752bb6cef72b48f9883597da0e455b9c6c93c1cf74b7",
+      "packet_type": "observation",
+      "presentation_root": "vpr_5c1c46f80e6680194820668d58556568a15ffb98f485c5799d7457cd12112729",
+      "replay_receipt": {
+        "caused_by_event_id": "vev_224563e4c2ab967c2123c9964e7eb09c5ea6cd5aa560798d8f1bf98f7c70b5a3",
+        "circuit_semantics": "expanded-lineage-equals-ranked-circuit-on-this-fixture",
+        "evaluator_digest": "veval_1440db672baca9abc713a25330005febc9656217632ccfef7de7c744371cfdf1",
+        "input_roots_digest": "sha256:be87b5fee64d600aeb8eb4375b7f87a2fddab6f608a3bc87bee382af8e930996",
+        "output_digest": "sha256:3c1b9df1c633ef4939b809e42c0c6b19331dc9de6b864f1474c34cd39af07704",
+        "receipt_id": "vor_e7a54feae9f737c2531eab72246aa569dca339291dca39c879d9edcb04664045"
+      },
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "MXE38lR/uY1rKBFRg7yqBwJkFRGztZtOjTdcVmS9VDyYSF4nWyEC9PJktF4UIC4iflXce8rtttLwPyteqndMCA=="
+      },
+      "signer_actor": "hub:observer",
+      "signer_public_key": "ycZdFYKem60vY8TpYrJk7T+jOlVQfG7O+n6xQ4oeOVM="
+    },
+    {
+      "base_state": {
+        "active_view_root": "vav_a86d475b2c4f7680d53ef7256daf967e4e0c417ef100a829f26d90ab050beee8",
+        "canonical_output_digest": "sha256:3c1b9df1c633ef4939b809e42c0c6b19331dc9de6b864f1474c34cd39af07704",
+        "circuit_root": "vcr_bd3e7ae96135a66716034c87a7fe3712919cfb66d91435e9dd4dbe988c4aa548",
+        "evaluator_id": "vela.sidon.best-lower-bound.v1",
+        "evaluator_inputs_digest": "sha256:2bd52bfbe01003338a1bfdde8b8bdb73e90ee2a180de4645b012361f428b4bdb",
+        "lineage_root": "vlr_0a6b3ee88b3e80aa64d671ea33fb667f06027395ef5c023523ea8bae021b0211",
+        "observation_id": "vop_8d79ed0fbfb3b65e98d4752bb6cef72b48f9883597da0e455b9c6c93c1cf74b7",
+        "presentation_root": "vpr_5c1c46f80e6680194820668d58556568a15ffb98f485c5799d7457cd12112729"
+      },
+      "challenger_actor": "challenger:gamma",
+      "created_at": "2026-06-18T14:14:00+00:00",
+      "frontier_id": "vfr_496956067dc5ad79",
+      "hitting_set_receipt": {
+        "active_environment_count": 2,
+        "hits_every_active_environment": true
+      },
+      "packet_id": "vch_914a92e0cbd4685538760a9e47010f4e3cad105d9e8f78cedd0dfed8c9011e73",
+      "packet_type": "challenge",
+      "proposed_disabled_atoms": [
+        "verifier:vva_5a39d9175bfc48e24e3ce996157d944459f5b15ca43d3f5caabc6a6b8589967e",
+        "verifier:vva_dae2def25f2a6c5b499136322f5312039c5f4e4a4ffdc3abf1109a0b43e6414a"
+      ],
+      "proposed_kill": true,
+      "reason": "Challenge one named verifier receipt in every active derivation route.",
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "GzKUJ9+6CEmy3BthFag2BOPnaZwj/1Z5JXa4SoHaAB1n7JUaU6EWbW47RFc+US4CHJnh5Ht9l9fybitEUrcOAg=="
+      },
+      "signer_actor": "challenger:gamma",
+      "signer_public_key": "WigKBlJJ6fnERC65VTt9jbglxgF/m+CuzU4ITFdfWK8=",
+      "state_effect": "none_until_view_decision",
+      "support_function_packet_id": "vsf_a122836824a316fbbdc6037101353e6e98307ac441df1f37a37349ba615839e3",
+      "target_cell_id": "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb"
+    },
+    {
+      "base_state": {
+        "active_view_root": "vav_a86d475b2c4f7680d53ef7256daf967e4e0c417ef100a829f26d90ab050beee8",
+        "canonical_output_digest": "sha256:3c1b9df1c633ef4939b809e42c0c6b19331dc9de6b864f1474c34cd39af07704",
+        "circuit_root": "vcr_bd3e7ae96135a66716034c87a7fe3712919cfb66d91435e9dd4dbe988c4aa548",
+        "evaluator_id": "vela.sidon.best-lower-bound.v1",
+        "evaluator_inputs_digest": "sha256:2bd52bfbe01003338a1bfdde8b8bdb73e90ee2a180de4645b012361f428b4bdb",
+        "lineage_root": "vlr_0a6b3ee88b3e80aa64d671ea33fb667f06027395ef5c023523ea8bae021b0211",
+        "observation_id": "vop_8d79ed0fbfb3b65e98d4752bb6cef72b48f9883597da0e455b9c6c93c1cf74b7",
+        "presentation_root": "vpr_5c1c46f80e6680194820668d58556568a15ffb98f485c5799d7457cd12112729"
+      },
+      "challenge_packet_id": "vch_914a92e0cbd4685538760a9e47010f4e3cad105d9e8f78cedd0dfed8c9011e73",
+      "created_at": "2026-06-18T14:15:00+00:00",
+      "decision": "accepted",
+      "frontier_id": "vfr_496956067dc5ad79",
+      "packet_id": "vvd_a1d92acddecb748ae2b0fdd24ac8fcc59c1f83d88db2c180bf9313af5781cf9d",
+      "packet_type": "view_decision",
+      "prior_disabled_atoms": [],
+      "reason": "Human reviewer accepted the named atom restrictions into the public view.",
+      "resulting_active_view_root": "vav_fd1e7694f6eecf90973c4f34e80f1606508c44507fe9f4c0512ceef50868e356",
+      "resulting_disabled_atoms": [
+        "verifier:vva_5a39d9175bfc48e24e3ce996157d944459f5b15ca43d3f5caabc6a6b8589967e",
+        "verifier:vva_dae2def25f2a6c5b499136322f5312039c5f4e4a4ffdc3abf1109a0b43e6414a"
+      ],
+      "reviewer_actor": "reviewer:human",
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "ApFZ0V9VFLEELmhnwiSn/xwR9G45bpbF8NxExPHn5GLTG3iUkstLnzKeFbyaylMiksZv9KHuYIXPthv+MBckDA=="
+      },
+      "signer_actor": "reviewer:human",
+      "signer_public_key": "/GCB9mz1b6ebvvOcCXCIR9WM0W6H9IqdZR0kcYDdgWM=",
+      "view_policy_id": "vela.view.public.v1"
+    },
+    {
+      "active_minimal_environments": [],
+      "active_view_root": "vav_fd1e7694f6eecf90973c4f34e80f1606508c44507fe9f4c0512ceef50868e356",
+      "cell_id": "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb",
+      "circuit_root": "vcr_bd3e7ae96135a66716034c87a7fe3712919cfb66d91435e9dd4dbe988c4aa548",
+      "created_at": "2026-06-18T14:16:00+00:00",
+      "frontier_id": "vfr_496956067dc5ad79",
+      "historical_lineage_root": "vlr_0a6b3ee88b3e80aa64d671ea33fb667f06027395ef5c023523ea8bae021b0211",
+      "historical_minimal_environments": [
+        [
+          "acceptance-event:vev_224563e4c2ab967c2123c9964e7eb09c5ea6cd5aa560798d8f1bf98f7c70b5a3",
+          "artifact:sha256:61d953fac95dd47413051b5d7e8b71720fbf34475019612c6bba05ca6f6c171a",
+          "claim-match:vcm_8890e5bf52c948d215aa20d7162d133352077b988d524c764889bb7a76eee773",
+          "gate:vgr_643e89a3dd5f2de0ded88e54b8b87a0abfea156a75b04cadb827a5993e4c5abe",
+          "probe:vprobe_8a5a73d48eac7564878c8b2a3128379f426ec83db941f539a2b909b88f0585d3",
+          "probe:vprobe_a1cd553a1166e092901daaae2e8fd3523f11e41838b5fc11060a1a2f7b73bd11",
+          "probe:vprobe_a865b89ff8bbdff3b8c403f7cd0046aec0ae841154afbfa1cb48d676bf5e496e",
+          "rule:vela.sidon.lower-bound.v1",
+          "statement:sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+          "verifier:vva_2251abed1902798a93dcf90e9d0c8d7d2fc58ab1c23f02a4ce2d3358fda6d555",
+          "verifier:vva_5a39d9175bfc48e24e3ce996157d944459f5b15ca43d3f5caabc6a6b8589967e"
+        ],
+        [
+          "acceptance-event:vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+          "artifact:sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+          "claim-match:vcm_8890e5bf52c948d215aa20d7162d133352077b988d524c764889bb7a76eee773",
+          "gate:vgr_1fa0f7305a46fd18616575edc76c16b268351210b1f08cb201036b1b02e74160",
+          "probe:vprobe_959e3ce185b89356e02587f9d8ef7bb44bb21c6977bff4e79007fdfdcbd9274d",
+          "probe:vprobe_a5e914b43a612e292092b7a1358b0d17a8a485122c42953a82250c74f6e38d6f",
+          "probe:vprobe_e8fde1937e3af3d8e0c551e330dabf6a95265f4a08183bf351cf73caeb58f4da",
+          "rule:vela.sidon.lower-bound.v1",
+          "statement:sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+          "verifier:vva_97a6ed6ee2a4ef255b31ea39dafc6ecfea63fcfb7e2e18f89e77c5d3801ff0bf",
+          "verifier:vva_dae2def25f2a6c5b499136322f5312039c5f4e4a4ffdc3abf1109a0b43e6414a"
+        ]
+      ],
+      "packet_id": "vsf_81aa5491004e797b85cf17201ed3d42606aaf832f4f601cc274da3e2dacf041a",
+      "packet_type": "support_function",
+      "presentation_root": "vpr_5c1c46f80e6680194820668d58556568a15ffb98f485c5799d7457cd12112729",
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "WXIxGRv4g+yUsFMgDgITHnLfdebl+/8v0jn1pHuzupMCjYqCqpuLbjlL+xx4k/94WGKqkmxvgDsRCc8yeOb3Cw=="
+      },
+      "signer_actor": "hub:observer",
+      "signer_public_key": "ycZdFYKem60vY8TpYrJk7T+jOlVQfG7O+n6xQ4oeOVM=",
+      "support_function_digest": "sha256:1f1ba1537b6457e2418369b724b0afc5e1462902609c98459b14768e1202de90"
+    },
+    {
+      "active_view_root": "vav_fd1e7694f6eecf90973c4f34e80f1606508c44507fe9f4c0512ceef50868e356",
+      "canonical_output": {
+        "bounds": [
+          {
+            "best_lower_bound": 6,
+            "n": 4,
+            "supported_cell_ids": [
+              "vsc_d8bf67b00541737bfb9d573ba0336a141dfbb381936f891010ff8c7b41bd96b7"
+            ]
+          }
+        ],
+        "sequence": "oeis:A309370",
+        "support_function_packet_ids": [
+          "vsf_81aa5491004e797b85cf17201ed3d42606aaf832f4f601cc274da3e2dacf041a"
+        ]
+      },
+      "circuit_root": "vcr_bd3e7ae96135a66716034c87a7fe3712919cfb66d91435e9dd4dbe988c4aa548",
+      "created_at": "2026-06-18T14:17:00+00:00",
+      "evaluator_id": "vela.sidon.best-lower-bound.v1",
+      "evaluator_inputs": {
+        "selection": "maximum-k-per-n",
+        "sequence": "oeis:A309370",
+        "support_policy": "positive-existence-under-active-view",
+        "view_policy_id": "vela.view.public.v1"
+      },
+      "frontier_id": "vfr_496956067dc5ad79",
+      "lineage_root": "vlr_0a6b3ee88b3e80aa64d671ea33fb667f06027395ef5c023523ea8bae021b0211",
+      "packet_id": "vop_7bfc10a5e0264d6dd8f57454b1b6f139e551d17a66a1eb8861693e4009472007",
+      "packet_type": "observation",
+      "presentation_root": "vpr_5c1c46f80e6680194820668d58556568a15ffb98f485c5799d7457cd12112729",
+      "replay_receipt": {
+        "caused_by_event_id": "vvd_a1d92acddecb748ae2b0fdd24ac8fcc59c1f83d88db2c180bf9313af5781cf9d",
+        "circuit_semantics": "expanded-lineage-equals-ranked-circuit-on-this-fixture",
+        "evaluator_digest": "veval_1440db672baca9abc713a25330005febc9656217632ccfef7de7c744371cfdf1",
+        "input_roots_digest": "sha256:3cf6083fd8f227181b02d4d8ccdac1f9c81631e9607f4c05b23891fe17ba2f0b",
+        "output_digest": "sha256:773aa9d0a77161296332e898ab71b372fed67d13f26a7e7dfad046e7ca06b692",
+        "receipt_id": "vor_6741981abb8f39540bd356739dcf62483d210ffa48e23fa06e6bab26b5acb65e"
+      },
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "CEm6gqv1VIEfhzJy+4ZJhnBrqJYQXwoumoaDQD5RU/iqjsuiLV3R/jHV1vOOBwbG/CXj9tN/toIcEsnyniHKCA=="
+      },
+      "signer_actor": "hub:observer",
+      "signer_public_key": "ycZdFYKem60vY8TpYrJk7T+jOlVQfG7O+n6xQ4oeOVM="
+    },
+    {
+      "base_state": {
+        "active_view_root": "vav_fd1e7694f6eecf90973c4f34e80f1606508c44507fe9f4c0512ceef50868e356",
+        "canonical_output_digest": "sha256:773aa9d0a77161296332e898ab71b372fed67d13f26a7e7dfad046e7ca06b692",
+        "circuit_root": "vcr_bd3e7ae96135a66716034c87a7fe3712919cfb66d91435e9dd4dbe988c4aa548",
+        "evaluator_id": "vela.sidon.best-lower-bound.v1",
+        "evaluator_inputs_digest": "sha256:2bd52bfbe01003338a1bfdde8b8bdb73e90ee2a180de4645b012361f428b4bdb",
+        "lineage_root": "vlr_0a6b3ee88b3e80aa64d671ea33fb667f06027395ef5c023523ea8bae021b0211",
+        "observation_id": "vop_7bfc10a5e0264d6dd8f57454b1b6f139e551d17a66a1eb8861693e4009472007",
+        "presentation_root": "vpr_5c1c46f80e6680194820668d58556568a15ffb98f485c5799d7457cd12112729"
+      },
+      "cell_target": {
+        "n": 4,
+        "sequence": "oeis:A309370"
+      },
+      "created_at": "2026-06-18T14:18:00+00:00",
+      "frontier_id": "vfr_496956067dc5ad79",
+      "lease": {
+        "required": false,
+        "state_effect": "none"
+      },
+      "objective": {
+        "current": 6,
+        "kind": "strict_improvement",
+        "required_minimum": 7
+      },
+      "packet_id": "vtk_ebb133236d181c2350d346700160bc3fd309d14f3a493770d82ad4afc3a21536",
+      "packet_type": "task",
+      "required_result_schema": "vela.sidon-witness.v1",
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "ku2apVZ7L7MxzP1ZWB6Ce9Tton/hNNzg65UaZwY7BE2vnlSYJUpEEbMpG3VKNc+DEjrw/Y41p47R6eSzOamhBQ=="
+      },
+      "signer_actor": "hub:task-issuer",
+      "signer_public_key": "pFxe+RYBVcky5yFcESc0U1KHAuMY1kZFT623bcRk7fI=",
+      "task_id": "vtsk_125d428a58de1c0d437f4b32f69bdf1a005554859c57791932cfd21b748a4215",
+      "verifier_contract": "vela.sidon.gate.v1"
+    },
+    {
+      "artifact": {
+        "claimed_size": 7,
+        "kind": "sidon",
+        "n": 4,
+        "points": [
+          [
+            0,
+            0,
+            0,
+            0
+          ],
+          [
+            1,
+            0,
+            0,
+            0
+          ],
+          [
+            0,
+            1,
+            0,
+            0
+          ],
+          [
+            0,
+            0,
+            1,
+            0
+          ],
+          [
+            1,
+            1,
+            1,
+            0
+          ],
+          [
+            1,
+            0,
+            0,
+            1
+          ],
+          [
+            0,
+            1,
+            1,
+            1
+          ]
+        ]
+      },
+      "artifact_digest": "sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+      "base_state": {
+        "active_view_root": "vav_fd1e7694f6eecf90973c4f34e80f1606508c44507fe9f4c0512ceef50868e356",
+        "canonical_output_digest": "sha256:773aa9d0a77161296332e898ab71b372fed67d13f26a7e7dfad046e7ca06b692",
+        "circuit_root": "vcr_bd3e7ae96135a66716034c87a7fe3712919cfb66d91435e9dd4dbe988c4aa548",
+        "evaluator_id": "vela.sidon.best-lower-bound.v1",
+        "evaluator_inputs_digest": "sha256:2bd52bfbe01003338a1bfdde8b8bdb73e90ee2a180de4645b012361f428b4bdb",
+        "lineage_root": "vlr_0a6b3ee88b3e80aa64d671ea33fb667f06027395ef5c023523ea8bae021b0211",
+        "observation_id": "vop_7bfc10a5e0264d6dd8f57454b1b6f139e551d17a66a1eb8861693e4009472007",
+        "presentation_root": "vpr_5c1c46f80e6680194820668d58556568a15ffb98f485c5799d7457cd12112729"
+      },
+      "certificate_kind": "sidon-witness-v1",
+      "claim": {
+        "context": "binary-cube-sidon-exact-v1",
+        "n": 4,
+        "namespace": "oeis",
+        "polarity": "support",
+        "relation": ">=",
+        "sequence": "A309370",
+        "value": 7
+      },
+      "claim_digest": "sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+      "created_at": "2026-06-18T14:19:00+00:00",
+      "frontier_id": "vfr_496956067dc5ad79",
+      "packet_id": "vrs_bd6a5fcf84e02f139c13eb86bf63ef4fb191939a146adbcfb0da48b47467ec6f",
+      "packet_type": "result",
+      "producer_actor": "producer:alpha",
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "lvNBLC1a/o6OdhHUxNnrVCMrxhMW0j7eu0+WT99BRkCrvxNR07Nh9KLHWipOnVP+VV9GxXT5gDXEsdsSNdyXCQ=="
+      },
+      "signer_actor": "producer:alpha",
+      "signer_public_key": "kGRI/rNW+nmN30bQCxYNSctFvIrBxouopwX3cPI0Tks=",
+      "task_id": "vtsk_125d428a58de1c0d437f4b32f69bdf1a005554859c57791932cfd21b748a4215"
+    },
+    {
+      "adversarial_probes": [
+        {
+          "mutated_artifact_digest": "sha256:e478a533d0e89253c5a16ce9b2188b310aee09db98ddea4977d6f5e528cf0f91",
+          "mutation_id": "duplicate-point-v1",
+          "original_artifact_digest": "sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+          "passed": true,
+          "probe_id": "vprobe_959e3ce185b89356e02587f9d8ef7bb44bb21c6977bff4e79007fdfdcbd9274d",
+          "verifier_results": [
+            {
+              "accepted_mutation": false,
+              "detail": "points must be distinct",
+              "executable_digest": "sha256:f7a187876dc1e6152bc137b118fbd975446c5e36ddac6db9466a7950971ae8d4",
+              "method_family": "pair-sum-hash-set"
+            },
+            {
+              "accepted_mutation": false,
+              "detail": "points must be distinct",
+              "executable_digest": "sha256:e905d7c933344c45ddf3c87fc32ac5ed6570dc2782ab95279cee48f6ea05849e",
+              "method_family": "base3-encode-sort"
+            }
+          ]
+        },
+        {
+          "mutated_artifact_digest": "sha256:e92f943cf5d7ded80a8c3a3028d74335537b3aa3d6ab9a8c5325b8ba74cca9a7",
+          "mutation_id": "claimed-size-mismatch-v1",
+          "original_artifact_digest": "sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+          "passed": true,
+          "probe_id": "vprobe_e8fde1937e3af3d8e0c551e330dabf6a95265f4a08183bf351cf73caeb58f4da",
+          "verifier_results": [
+            {
+              "accepted_mutation": false,
+              "detail": "claimed_size must equal point count",
+              "executable_digest": "sha256:f7a187876dc1e6152bc137b118fbd975446c5e36ddac6db9466a7950971ae8d4",
+              "method_family": "pair-sum-hash-set"
+            },
+            {
+              "accepted_mutation": false,
+              "detail": "claimed_size must equal point count",
+              "executable_digest": "sha256:e905d7c933344c45ddf3c87fc32ac5ed6570dc2782ab95279cee48f6ea05849e",
+              "method_family": "base3-encode-sort"
+            }
+          ]
+        },
+        {
+          "mutated_artifact_digest": "sha256:e0a9f3e368349ee606a3a2fca7851d9e9a3bc7f58cf5a9cdb8dbb934757f0819",
+          "mutation_id": "single-bit-pairsum-collision-v1",
+          "original_artifact_digest": "sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+          "passed": true,
+          "probe_id": "vprobe_a5e914b43a612e292092b7a1358b0d17a8a485122c42953a82250c74f6e38d6f",
+          "verifier_results": [
+            {
+              "accepted_mutation": false,
+              "detail": "duplicate pair sum at pair (1,6)",
+              "executable_digest": "sha256:f7a187876dc1e6152bc137b118fbd975446c5e36ddac6db9466a7950971ae8d4",
+              "method_family": "pair-sum-hash-set"
+            },
+            {
+              "accepted_mutation": false,
+              "detail": "duplicate base-3 pair-sum encoding",
+              "executable_digest": "sha256:e905d7c933344c45ddf3c87fc32ac5ed6570dc2782ab95279cee48f6ea05849e",
+              "method_family": "base3-encode-sort"
+            }
+          ]
+        }
+      ],
+      "artifact_digest": "sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+      "attachments": [
+        {
+          "artifact_digest": "sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+          "claim_digest": "sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+          "detail": "28 pair sums unique",
+          "executable_digest": "sha256:f7a187876dc1e6152bc137b118fbd975446c5e36ddac6db9466a7950971ae8d4",
+          "executable_id": "python:sidon_pairsum_set.py",
+          "method_family": "pair-sum-hash-set",
+          "passed": true,
+          "receipt_id": "vva_71ff8ba1402ccfa1f4148a29eaeaf27dfe8df9f4524ea5e1b96867ac0a48b6ad",
+          "result_packet_id": "vrs_bd6a5fcf84e02f139c13eb86bf63ef4fb191939a146adbcfb0da48b47467ec6f"
+        },
+        {
+          "artifact_digest": "sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+          "claim_digest": "sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+          "detail": "28 sorted encodings unique",
+          "executable_digest": "sha256:e905d7c933344c45ddf3c87fc32ac5ed6570dc2782ab95279cee48f6ea05849e",
+          "executable_id": "python:sidon_base3_sort.py",
+          "method_family": "base3-encode-sort",
+          "passed": true,
+          "receipt_id": "vva_610e7d32be975a41ac8270d93cd72dfabc59b7c07b7007309193117596efca37",
+          "result_packet_id": "vrs_bd6a5fcf84e02f139c13eb86bf63ef4fb191939a146adbcfb0da48b47467ec6f"
+        }
+      ],
+      "base_state": {
+        "active_view_root": "vav_fd1e7694f6eecf90973c4f34e80f1606508c44507fe9f4c0512ceef50868e356",
+        "canonical_output_digest": "sha256:773aa9d0a77161296332e898ab71b372fed67d13f26a7e7dfad046e7ca06b692",
+        "circuit_root": "vcr_bd3e7ae96135a66716034c87a7fe3712919cfb66d91435e9dd4dbe988c4aa548",
+        "evaluator_id": "vela.sidon.best-lower-bound.v1",
+        "evaluator_inputs_digest": "sha256:2bd52bfbe01003338a1bfdde8b8bdb73e90ee2a180de4645b012361f428b4bdb",
+        "lineage_root": "vlr_0a6b3ee88b3e80aa64d671ea33fb667f06027395ef5c023523ea8bae021b0211",
+        "observation_id": "vop_7bfc10a5e0264d6dd8f57454b1b6f139e551d17a66a1eb8861693e4009472007",
+        "presentation_root": "vpr_5c1c46f80e6680194820668d58556568a15ffb98f485c5799d7457cd12112729"
+      },
+      "claim_digest": "sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+      "claim_match_check": {
+        "artifact_digest_matches": true,
+        "claim_digest_matches": true
+      },
+      "created_at": "2026-06-18T14:20:00+00:00",
+      "frontier_id": "vfr_496956067dc5ad79",
+      "gate_status": "verified",
+      "packet_id": "vgr_d1379f25ac7de26fefb1dcb3fb5fb49cde23bcdc55376ca5ac506637782e5c35",
+      "packet_type": "gate_receipt",
+      "result_packet_id": "vrs_bd6a5fcf84e02f139c13eb86bf63ef4fb191939a146adbcfb0da48b47467ec6f",
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "mUEIWVvaHx/fA/6NgSVMfgDTZnPp8xmkmUwM1F/srrCSMZpWDta3Bs/6GS3d8c2VrHQiF6ejtXOpw6ZV1ivNBA=="
+      },
+      "signer_actor": "hub:gate",
+      "signer_public_key": "KqppAz9IfBtHD5frU9nNMivIrUdgI+Htas8D+8Vbgoc=",
+      "verification_diversity": {
+        "distinct_executable_digests": true,
+        "distinct_method_families": true,
+        "interpretation": "algorithmic diversity; not a claim of statistical or organizational independence"
+      }
+    },
+    {
+      "accepted_event_id": "vev_7006a427458f1cd39675339a9c9c7b1089a11a5d915e4eca4939a3f3b7b4e29b",
+      "append_contract": {
+        "bound_cell_rank": 1,
+        "profile_id": "vela.sidon-producer-profile.v1",
+        "rule_atom": "rule:vela.sidon.lower-bound.v1",
+        "witness_cell_rank": 0
+      },
+      "created_at": "2026-06-18T14:21:00+00:00",
+      "decision": "accepted",
+      "decision_state": {
+        "active_view_root": "vav_fd1e7694f6eecf90973c4f34e80f1606508c44507fe9f4c0512ceef50868e356",
+        "canonical_output_digest": "sha256:773aa9d0a77161296332e898ab71b372fed67d13f26a7e7dfad046e7ca06b692",
+        "circuit_root": "vcr_bd3e7ae96135a66716034c87a7fe3712919cfb66d91435e9dd4dbe988c4aa548",
+        "evaluator_id": "vela.sidon.best-lower-bound.v1",
+        "evaluator_inputs_digest": "sha256:2bd52bfbe01003338a1bfdde8b8bdb73e90ee2a180de4645b012361f428b4bdb",
+        "lineage_root": "vlr_0a6b3ee88b3e80aa64d671ea33fb667f06027395ef5c023523ea8bae021b0211",
+        "observation_id": "vop_7bfc10a5e0264d6dd8f57454b1b6f139e551d17a66a1eb8861693e4009472007",
+        "presentation_root": "vpr_5c1c46f80e6680194820668d58556568a15ffb98f485c5799d7457cd12112729"
+      },
+      "frontier_id": "vfr_496956067dc5ad79",
+      "gate_receipt_id": "vgr_d1379f25ac7de26fefb1dcb3fb5fb49cde23bcdc55376ca5ac506637782e5c35",
+      "packet_id": "vac_592f96a857770976b9e289dd42a651ba05625f024240eacbb800e985800e1ea3",
+      "packet_type": "acceptance",
+      "reason": "Exact gate passed and the result was evaluated against the current observation root.",
+      "result_base_state": {
+        "active_view_root": "vav_fd1e7694f6eecf90973c4f34e80f1606508c44507fe9f4c0512ceef50868e356",
+        "canonical_output_digest": "sha256:773aa9d0a77161296332e898ab71b372fed67d13f26a7e7dfad046e7ca06b692",
+        "circuit_root": "vcr_bd3e7ae96135a66716034c87a7fe3712919cfb66d91435e9dd4dbe988c4aa548",
+        "evaluator_id": "vela.sidon.best-lower-bound.v1",
+        "evaluator_inputs_digest": "sha256:2bd52bfbe01003338a1bfdde8b8bdb73e90ee2a180de4645b012361f428b4bdb",
+        "lineage_root": "vlr_0a6b3ee88b3e80aa64d671ea33fb667f06027395ef5c023523ea8bae021b0211",
+        "observation_id": "vop_7bfc10a5e0264d6dd8f57454b1b6f139e551d17a66a1eb8861693e4009472007",
+        "presentation_root": "vpr_5c1c46f80e6680194820668d58556568a15ffb98f485c5799d7457cd12112729"
+      },
+      "result_packet_id": "vrs_bd6a5fcf84e02f139c13eb86bf63ef4fb191939a146adbcfb0da48b47467ec6f",
+      "reviewer_actor": "reviewer:human",
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "CSyuOqCSQu0AurJbPY/uKXHhqwz7dNZp9fNkxv3+Bi6megvjSTfjlAdbL/hfwmBrwCvshZ5VGBWMQQX1xx9NDg=="
+      },
+      "signer_actor": "reviewer:human",
+      "signer_public_key": "/GCB9mz1b6ebvvOcCXCIR9WM0W6H9IqdZR0kcYDdgWM=",
+      "staleness_resolution": "fresh"
+    },
+    {
+      "active_minimal_environments": [
+        [
+          "acceptance-event:vev_7006a427458f1cd39675339a9c9c7b1089a11a5d915e4eca4939a3f3b7b4e29b",
+          "artifact:sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+          "claim-match:vcm_8890e5bf52c948d215aa20d7162d133352077b988d524c764889bb7a76eee773",
+          "gate:vgr_d1379f25ac7de26fefb1dcb3fb5fb49cde23bcdc55376ca5ac506637782e5c35",
+          "probe:vprobe_959e3ce185b89356e02587f9d8ef7bb44bb21c6977bff4e79007fdfdcbd9274d",
+          "probe:vprobe_a5e914b43a612e292092b7a1358b0d17a8a485122c42953a82250c74f6e38d6f",
+          "probe:vprobe_e8fde1937e3af3d8e0c551e330dabf6a95265f4a08183bf351cf73caeb58f4da",
+          "rule:vela.sidon.lower-bound.v1",
+          "statement:sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+          "verifier:vva_610e7d32be975a41ac8270d93cd72dfabc59b7c07b7007309193117596efca37",
+          "verifier:vva_71ff8ba1402ccfa1f4148a29eaeaf27dfe8df9f4524ea5e1b96867ac0a48b6ad"
+        ]
+      ],
+      "active_view_root": "vav_fd1e7694f6eecf90973c4f34e80f1606508c44507fe9f4c0512ceef50868e356",
+      "cell_id": "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb",
+      "circuit_root": "vcr_fe24175296603911b04100710bc5b3b0aef873ccc4fe07606f983f9a2af2529a",
+      "created_at": "2026-06-18T14:22:00+00:00",
+      "frontier_id": "vfr_496956067dc5ad79",
+      "historical_lineage_root": "vlr_60438f0a8b9b951b4b5fd34a2086ca06e419346125add6c882e89185b107b7e1",
+      "historical_minimal_environments": [
+        [
+          "acceptance-event:vev_224563e4c2ab967c2123c9964e7eb09c5ea6cd5aa560798d8f1bf98f7c70b5a3",
+          "artifact:sha256:61d953fac95dd47413051b5d7e8b71720fbf34475019612c6bba05ca6f6c171a",
+          "claim-match:vcm_8890e5bf52c948d215aa20d7162d133352077b988d524c764889bb7a76eee773",
+          "gate:vgr_643e89a3dd5f2de0ded88e54b8b87a0abfea156a75b04cadb827a5993e4c5abe",
+          "probe:vprobe_8a5a73d48eac7564878c8b2a3128379f426ec83db941f539a2b909b88f0585d3",
+          "probe:vprobe_a1cd553a1166e092901daaae2e8fd3523f11e41838b5fc11060a1a2f7b73bd11",
+          "probe:vprobe_a865b89ff8bbdff3b8c403f7cd0046aec0ae841154afbfa1cb48d676bf5e496e",
+          "rule:vela.sidon.lower-bound.v1",
+          "statement:sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+          "verifier:vva_2251abed1902798a93dcf90e9d0c8d7d2fc58ab1c23f02a4ce2d3358fda6d555",
+          "verifier:vva_5a39d9175bfc48e24e3ce996157d944459f5b15ca43d3f5caabc6a6b8589967e"
+        ],
+        [
+          "acceptance-event:vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+          "artifact:sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+          "claim-match:vcm_8890e5bf52c948d215aa20d7162d133352077b988d524c764889bb7a76eee773",
+          "gate:vgr_1fa0f7305a46fd18616575edc76c16b268351210b1f08cb201036b1b02e74160",
+          "probe:vprobe_959e3ce185b89356e02587f9d8ef7bb44bb21c6977bff4e79007fdfdcbd9274d",
+          "probe:vprobe_a5e914b43a612e292092b7a1358b0d17a8a485122c42953a82250c74f6e38d6f",
+          "probe:vprobe_e8fde1937e3af3d8e0c551e330dabf6a95265f4a08183bf351cf73caeb58f4da",
+          "rule:vela.sidon.lower-bound.v1",
+          "statement:sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+          "verifier:vva_97a6ed6ee2a4ef255b31ea39dafc6ecfea63fcfb7e2e18f89e77c5d3801ff0bf",
+          "verifier:vva_dae2def25f2a6c5b499136322f5312039c5f4e4a4ffdc3abf1109a0b43e6414a"
+        ],
+        [
+          "acceptance-event:vev_7006a427458f1cd39675339a9c9c7b1089a11a5d915e4eca4939a3f3b7b4e29b",
+          "artifact:sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+          "claim-match:vcm_8890e5bf52c948d215aa20d7162d133352077b988d524c764889bb7a76eee773",
+          "gate:vgr_d1379f25ac7de26fefb1dcb3fb5fb49cde23bcdc55376ca5ac506637782e5c35",
+          "probe:vprobe_959e3ce185b89356e02587f9d8ef7bb44bb21c6977bff4e79007fdfdcbd9274d",
+          "probe:vprobe_a5e914b43a612e292092b7a1358b0d17a8a485122c42953a82250c74f6e38d6f",
+          "probe:vprobe_e8fde1937e3af3d8e0c551e330dabf6a95265f4a08183bf351cf73caeb58f4da",
+          "rule:vela.sidon.lower-bound.v1",
+          "statement:sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+          "verifier:vva_610e7d32be975a41ac8270d93cd72dfabc59b7c07b7007309193117596efca37",
+          "verifier:vva_71ff8ba1402ccfa1f4148a29eaeaf27dfe8df9f4524ea5e1b96867ac0a48b6ad"
+        ]
+      ],
+      "packet_id": "vsf_cd9b772baedde02e288e9132fe4211b20b54377f4f755f95a800988569f7a890",
+      "packet_type": "support_function",
+      "presentation_root": "vpr_5e05ea35f6eab74c6354e824b6cdcc30a9ace509ce0159fd67efee9b6c6a8628",
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "3b/NIq1Pz//t9Wris62fArgj5eOxAUDk6yz93cCdPYBYqJeMfGO44JMCPhWruVpTtbjOmtE2W9zmIcPKjuupBQ=="
+      },
+      "signer_actor": "hub:observer",
+      "signer_public_key": "ycZdFYKem60vY8TpYrJk7T+jOlVQfG7O+n6xQ4oeOVM=",
+      "support_function_digest": "sha256:f51e24e83078871910a0ff24cca09a3a37945c49b546ca3e5b7ed332ad0de22f"
+    },
+    {
+      "active_view_root": "vav_fd1e7694f6eecf90973c4f34e80f1606508c44507fe9f4c0512ceef50868e356",
+      "canonical_output": {
+        "bounds": [
+          {
+            "best_lower_bound": 7,
+            "n": 4,
+            "supported_cell_ids": [
+              "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb"
+            ]
+          }
+        ],
+        "sequence": "oeis:A309370",
+        "support_function_packet_ids": [
+          "vsf_cd9b772baedde02e288e9132fe4211b20b54377f4f755f95a800988569f7a890"
+        ]
+      },
+      "circuit_root": "vcr_fe24175296603911b04100710bc5b3b0aef873ccc4fe07606f983f9a2af2529a",
+      "created_at": "2026-06-18T14:23:00+00:00",
+      "evaluator_id": "vela.sidon.best-lower-bound.v1",
+      "evaluator_inputs": {
+        "selection": "maximum-k-per-n",
+        "sequence": "oeis:A309370",
+        "support_policy": "positive-existence-under-active-view",
+        "view_policy_id": "vela.view.public.v1"
+      },
+      "frontier_id": "vfr_496956067dc5ad79",
+      "lineage_root": "vlr_60438f0a8b9b951b4b5fd34a2086ca06e419346125add6c882e89185b107b7e1",
+      "packet_id": "vop_7c6deda11013961880e583ce27f3d188624740265bcd4495ad6aa79e990ff3c9",
+      "packet_type": "observation",
+      "presentation_root": "vpr_5e05ea35f6eab74c6354e824b6cdcc30a9ace509ce0159fd67efee9b6c6a8628",
+      "replay_receipt": {
+        "caused_by_event_id": "vev_7006a427458f1cd39675339a9c9c7b1089a11a5d915e4eca4939a3f3b7b4e29b",
+        "circuit_semantics": "expanded-lineage-equals-ranked-circuit-on-this-fixture",
+        "evaluator_digest": "veval_1440db672baca9abc713a25330005febc9656217632ccfef7de7c744371cfdf1",
+        "input_roots_digest": "sha256:2cf0f3b9691ceba3763e7c850727661d38dc8c7957608f76c4d963d170544f1a",
+        "output_digest": "sha256:9ee851715337c881ae71b9c489b8d0f0d6ce2b62b2858c53af826551dc21f8e0",
+        "receipt_id": "vor_9bbcbd006e5dcbec040adc2df5e2fdd9c1ac1c0f1326d9c794a85cad7d51ddf4"
+      },
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "BonV6nlpmgxN/762hY/74Z3mKVqqEY4i8i5jP8U2hf3VCLKiW/czZZzc2uUyOMdm5fNiCvEIhn8GPmymiMbxCg=="
+      },
+      "signer_actor": "hub:observer",
+      "signer_public_key": "ycZdFYKem60vY8TpYrJk7T+jOlVQfG7O+n6xQ4oeOVM="
+    },
+    {
+      "created_at": "2026-06-18T14:24:00+00:00",
+      "frontier_id": "vfr_496956067dc5ad79",
+      "new_active_environments": [
+        [
+          "acceptance-event:vev_7006a427458f1cd39675339a9c9c7b1089a11a5d915e4eca4939a3f3b7b4e29b",
+          "artifact:sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+          "claim-match:vcm_8890e5bf52c948d215aa20d7162d133352077b988d524c764889bb7a76eee773",
+          "gate:vgr_d1379f25ac7de26fefb1dcb3fb5fb49cde23bcdc55376ca5ac506637782e5c35",
+          "probe:vprobe_959e3ce185b89356e02587f9d8ef7bb44bb21c6977bff4e79007fdfdcbd9274d",
+          "probe:vprobe_a5e914b43a612e292092b7a1358b0d17a8a485122c42953a82250c74f6e38d6f",
+          "probe:vprobe_e8fde1937e3af3d8e0c551e330dabf6a95265f4a08183bf351cf73caeb58f4da",
+          "rule:vela.sidon.lower-bound.v1",
+          "statement:sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5",
+          "verifier:vva_610e7d32be975a41ac8270d93cd72dfabc59b7c07b7007309193117596efca37",
+          "verifier:vva_71ff8ba1402ccfa1f4148a29eaeaf27dfe8df9f4524ea5e1b96867ac0a48b6ad"
+        ]
+      ],
+      "packet_id": "vrp_2550c1b31eabe4597f5cd11345ae47145a497e572cdd560cb6f0bea18ca277d7",
+      "packet_type": "repair",
+      "prior_observation_id": "vop_7bfc10a5e0264d6dd8f57454b1b6f139e551d17a66a1eb8861693e4009472007",
+      "prior_support_function_packet_id": "vsf_81aa5491004e797b85cf17201ed3d42606aaf832f4f601cc274da3e2dacf041a",
+      "repair_kind": "accepted_alternative_route",
+      "repaired_observation_id": "vop_7c6deda11013961880e583ce27f3d188624740265bcd4495ad6aa79e990ff3c9",
+      "repaired_support_function_packet_id": "vsf_cd9b772baedde02e288e9132fe4211b20b54377f4f755f95a800988569f7a890",
+      "restores_target": true,
+      "schema_version": "vela.sidon-producer-profile.v1",
+      "signature": {
+        "algorithm": "ed25519",
+        "value": "nZ5u7iRWAyW5cFwgH2JI5W3i+hg4NtxAhNQmlcMvTzVgIgIyVngOfx99jJ6ttMhZ/8G3kO6eqCXC4oJQyFFrBQ=="
+      },
+      "signer_actor": "hub:observer",
+      "signer_public_key": "ycZdFYKem60vY8TpYrJk7T+jOlVQfG7O+n6xQ4oeOVM=",
+      "state_effect": "none; append acceptance already changed historical lineage",
+      "target_cell_id": "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb"
+    }
+  ],
+  "public_keys": [
+    {
+      "actor": "hub:task-issuer",
+      "public_key": "pFxe+RYBVcky5yFcESc0U1KHAuMY1kZFT623bcRk7fI="
+    },
+    {
+      "actor": "producer:alpha",
+      "public_key": "kGRI/rNW+nmN30bQCxYNSctFvIrBxouopwX3cPI0Tks="
+    },
+    {
+      "actor": "producer:beta",
+      "public_key": "Su/15Dx5VkmTs6PPrbziMgnmJ36c7+OYywFPi/GtGCg="
+    },
+    {
+      "actor": "hub:gate",
+      "public_key": "KqppAz9IfBtHD5frU9nNMivIrUdgI+Htas8D+8Vbgoc="
+    },
+    {
+      "actor": "reviewer:human",
+      "public_key": "/GCB9mz1b6ebvvOcCXCIR9WM0W6H9IqdZR0kcYDdgWM="
+    },
+    {
+      "actor": "hub:observer",
+      "public_key": "ycZdFYKem60vY8TpYrJk7T+jOlVQfG7O+n6xQ4oeOVM="
+    },
+    {
+      "actor": "challenger:gamma",
+      "public_key": "WigKBlJJ6fnERC65VTt9jbglxgF/m+CuzU4ITFdfWK8="
+    }
+  ],
+  "schema": "vela.sidon-root-pinned-loop.fixture.v2",
+  "snapshots": [
+    {
+      "disabled_atoms": [],
+      "name": "genesis_bound_6",
+      "observation_packet_id": "vop_aff462f0adbd30572eccf2718987fd47b33009b3c63514b119c08dfb224a0d3e",
+      "presentation": {
+        "accepted_events": [
+          "vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0"
+        ],
+        "cell_metadata": {
+          "vsc_d8bf67b00541737bfb9d573ba0336a141dfbb381936f891010ff8c7b41bd96b7": {
+            "k": 6,
+            "kind": "sidon_lower_bound",
+            "n": 4
+          }
+        },
+        "cell_ranks": {
+          "vsc_b84864cf55b45de4b9d2228ca94e90f5cde21749224941d90442f2a76eb32812": 0,
+          "vsc_d8bf67b00541737bfb9d573ba0336a141dfbb381936f891010ff8c7b41bd96b7": 1
+        },
+        "clauses": [
+          {
+            "accepted_event_id": "vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+            "atoms": [
+              "acceptance-event:vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+              "artifact:sha256:e14b5dadf978d2c82b54de1102f511ca523dd8c0b03b85224bc03b3db25246c1",
+              "gate:fixture-genesis",
+              "probe:fixture-genesis-negative-controls",
+              "verifier:fixture-genesis-base3",
+              "verifier:fixture-genesis-pairsum"
+            ],
+            "body": [],
+            "clause_id": "vlc_421692073635680846b449312c7c0cfc1cd7e71412e2157d4a218c8b87a077d3",
+            "head": "vsc_b84864cf55b45de4b9d2228ca94e90f5cde21749224941d90442f2a76eb32812",
+            "head_rank": 0
+          },
+          {
+            "accepted_event_id": "vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+            "atoms": [
+              "rule:vela.sidon.lower-bound.v1",
+              "statement:sha256:b4008a50d54bffeb84eb3ce287e45bd7376f26f67424432eee48ff3445300384"
+            ],
+            "body": [
+              "vsc_b84864cf55b45de4b9d2228ca94e90f5cde21749224941d90442f2a76eb32812"
+            ],
+            "clause_id": "vlc_91b2ed408b6650836f5bbc7bfd35f3cba8accf040fea93f1f8d35f0cb025bb58",
+            "head": "vsc_d8bf67b00541737bfb9d573ba0336a141dfbb381936f891010ff8c7b41bd96b7",
+            "head_rank": 1
+          }
+        ]
+      }
+    },
+    {
+      "disabled_atoms": [],
+      "name": "route_a_bound_7",
+      "observation_packet_id": "vop_8829fde37b72ba68a24466ad779e1c360b996700d229bd7bba7e8471f2d90560",
+      "presentation": {
+        "accepted_events": [
+          "vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+          "vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29"
+        ],
+        "cell_metadata": {
+          "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb": {
+            "k": 7,
+            "kind": "sidon_lower_bound",
+            "n": 4
+          },
+          "vsc_d8bf67b00541737bfb9d573ba0336a141dfbb381936f891010ff8c7b41bd96b7": {
+            "k": 6,
+            "kind": "sidon_lower_bound",
+            "n": 4
+          }
+        },
+        "cell_ranks": {
+          "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb": 1,
+          "vsc_b84864cf55b45de4b9d2228ca94e90f5cde21749224941d90442f2a76eb32812": 0,
+          "vsc_d8bf67b00541737bfb9d573ba0336a141dfbb381936f891010ff8c7b41bd96b7": 1,
+          "vsc_f71324ed55c4f1cd7d0086bd3477559db06099e56f069fa5246dd130b56d12e0": 0
+        },
+        "clauses": [
+          {
+            "accepted_event_id": "vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+            "atoms": [
+              "acceptance-event:vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+              "artifact:sha256:e14b5dadf978d2c82b54de1102f511ca523dd8c0b03b85224bc03b3db25246c1",
+              "gate:fixture-genesis",
+              "probe:fixture-genesis-negative-controls",
+              "verifier:fixture-genesis-base3",
+              "verifier:fixture-genesis-pairsum"
+            ],
+            "body": [],
+            "clause_id": "vlc_421692073635680846b449312c7c0cfc1cd7e71412e2157d4a218c8b87a077d3",
+            "head": "vsc_b84864cf55b45de4b9d2228ca94e90f5cde21749224941d90442f2a76eb32812",
+            "head_rank": 0
+          },
+          {
+            "accepted_event_id": "vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+            "atoms": [
+              "acceptance-event:vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+              "artifact:sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+              "claim-match:vcm_8890e5bf52c948d215aa20d7162d133352077b988d524c764889bb7a76eee773",
+              "gate:vgr_1fa0f7305a46fd18616575edc76c16b268351210b1f08cb201036b1b02e74160",
+              "probe:vprobe_959e3ce185b89356e02587f9d8ef7bb44bb21c6977bff4e79007fdfdcbd9274d",
+              "probe:vprobe_a5e914b43a612e292092b7a1358b0d17a8a485122c42953a82250c74f6e38d6f",
+              "probe:vprobe_e8fde1937e3af3d8e0c551e330dabf6a95265f4a08183bf351cf73caeb58f4da",
+              "verifier:vva_97a6ed6ee2a4ef255b31ea39dafc6ecfea63fcfb7e2e18f89e77c5d3801ff0bf",
+              "verifier:vva_dae2def25f2a6c5b499136322f5312039c5f4e4a4ffdc3abf1109a0b43e6414a"
+            ],
+            "body": [],
+            "clause_id": "vlc_752253a70ea8b2ddf7c567069a3c7c2ddedbcf812fc4a745324fad5cb0baa799",
+            "head": "vsc_f71324ed55c4f1cd7d0086bd3477559db06099e56f069fa5246dd130b56d12e0",
+            "head_rank": 0
+          },
+          {
+            "accepted_event_id": "vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+            "atoms": [
+              "rule:vela.sidon.lower-bound.v1",
+              "statement:sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5"
+            ],
+            "body": [
+              "vsc_f71324ed55c4f1cd7d0086bd3477559db06099e56f069fa5246dd130b56d12e0"
+            ],
+            "clause_id": "vlc_a73079e5ba094f5444a15d2435b7c936d173e5ecedfa984e9bdb8a48f9e3be43",
+            "head": "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb",
+            "head_rank": 1
+          },
+          {
+            "accepted_event_id": "vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+            "atoms": [
+              "rule:vela.sidon.lower-bound.v1",
+              "statement:sha256:b4008a50d54bffeb84eb3ce287e45bd7376f26f67424432eee48ff3445300384"
+            ],
+            "body": [
+              "vsc_b84864cf55b45de4b9d2228ca94e90f5cde21749224941d90442f2a76eb32812"
+            ],
+            "clause_id": "vlc_91b2ed408b6650836f5bbc7bfd35f3cba8accf040fea93f1f8d35f0cb025bb58",
+            "head": "vsc_d8bf67b00541737bfb9d573ba0336a141dfbb381936f891010ff8c7b41bd96b7",
+            "head_rank": 1
+          }
+        ]
+      }
+    },
+    {
+      "disabled_atoms": [],
+      "name": "two_routes_bound_7",
+      "observation_packet_id": "vop_8d79ed0fbfb3b65e98d4752bb6cef72b48f9883597da0e455b9c6c93c1cf74b7",
+      "presentation": {
+        "accepted_events": [
+          "vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+          "vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+          "vev_224563e4c2ab967c2123c9964e7eb09c5ea6cd5aa560798d8f1bf98f7c70b5a3"
+        ],
+        "cell_metadata": {
+          "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb": {
+            "k": 7,
+            "kind": "sidon_lower_bound",
+            "n": 4
+          },
+          "vsc_d8bf67b00541737bfb9d573ba0336a141dfbb381936f891010ff8c7b41bd96b7": {
+            "k": 6,
+            "kind": "sidon_lower_bound",
+            "n": 4
+          }
+        },
+        "cell_ranks": {
+          "vsc_08f0e1944691b89d431f483b640359d51a86021015d59d17d07f2b4c650d889f": 0,
+          "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb": 1,
+          "vsc_b84864cf55b45de4b9d2228ca94e90f5cde21749224941d90442f2a76eb32812": 0,
+          "vsc_d8bf67b00541737bfb9d573ba0336a141dfbb381936f891010ff8c7b41bd96b7": 1,
+          "vsc_f71324ed55c4f1cd7d0086bd3477559db06099e56f069fa5246dd130b56d12e0": 0
+        },
+        "clauses": [
+          {
+            "accepted_event_id": "vev_224563e4c2ab967c2123c9964e7eb09c5ea6cd5aa560798d8f1bf98f7c70b5a3",
+            "atoms": [
+              "acceptance-event:vev_224563e4c2ab967c2123c9964e7eb09c5ea6cd5aa560798d8f1bf98f7c70b5a3",
+              "artifact:sha256:61d953fac95dd47413051b5d7e8b71720fbf34475019612c6bba05ca6f6c171a",
+              "claim-match:vcm_8890e5bf52c948d215aa20d7162d133352077b988d524c764889bb7a76eee773",
+              "gate:vgr_643e89a3dd5f2de0ded88e54b8b87a0abfea156a75b04cadb827a5993e4c5abe",
+              "probe:vprobe_8a5a73d48eac7564878c8b2a3128379f426ec83db941f539a2b909b88f0585d3",
+              "probe:vprobe_a1cd553a1166e092901daaae2e8fd3523f11e41838b5fc11060a1a2f7b73bd11",
+              "probe:vprobe_a865b89ff8bbdff3b8c403f7cd0046aec0ae841154afbfa1cb48d676bf5e496e",
+              "verifier:vva_2251abed1902798a93dcf90e9d0c8d7d2fc58ab1c23f02a4ce2d3358fda6d555",
+              "verifier:vva_5a39d9175bfc48e24e3ce996157d944459f5b15ca43d3f5caabc6a6b8589967e"
+            ],
+            "body": [],
+            "clause_id": "vlc_bd719482f5b76c8dad68b9f52b5eae9602c3b435eb090536645bf3053f12ac87",
+            "head": "vsc_08f0e1944691b89d431f483b640359d51a86021015d59d17d07f2b4c650d889f",
+            "head_rank": 0
+          },
+          {
+            "accepted_event_id": "vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+            "atoms": [
+              "acceptance-event:vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+              "artifact:sha256:e14b5dadf978d2c82b54de1102f511ca523dd8c0b03b85224bc03b3db25246c1",
+              "gate:fixture-genesis",
+              "probe:fixture-genesis-negative-controls",
+              "verifier:fixture-genesis-base3",
+              "verifier:fixture-genesis-pairsum"
+            ],
+            "body": [],
+            "clause_id": "vlc_421692073635680846b449312c7c0cfc1cd7e71412e2157d4a218c8b87a077d3",
+            "head": "vsc_b84864cf55b45de4b9d2228ca94e90f5cde21749224941d90442f2a76eb32812",
+            "head_rank": 0
+          },
+          {
+            "accepted_event_id": "vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+            "atoms": [
+              "acceptance-event:vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+              "artifact:sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+              "claim-match:vcm_8890e5bf52c948d215aa20d7162d133352077b988d524c764889bb7a76eee773",
+              "gate:vgr_1fa0f7305a46fd18616575edc76c16b268351210b1f08cb201036b1b02e74160",
+              "probe:vprobe_959e3ce185b89356e02587f9d8ef7bb44bb21c6977bff4e79007fdfdcbd9274d",
+              "probe:vprobe_a5e914b43a612e292092b7a1358b0d17a8a485122c42953a82250c74f6e38d6f",
+              "probe:vprobe_e8fde1937e3af3d8e0c551e330dabf6a95265f4a08183bf351cf73caeb58f4da",
+              "verifier:vva_97a6ed6ee2a4ef255b31ea39dafc6ecfea63fcfb7e2e18f89e77c5d3801ff0bf",
+              "verifier:vva_dae2def25f2a6c5b499136322f5312039c5f4e4a4ffdc3abf1109a0b43e6414a"
+            ],
+            "body": [],
+            "clause_id": "vlc_752253a70ea8b2ddf7c567069a3c7c2ddedbcf812fc4a745324fad5cb0baa799",
+            "head": "vsc_f71324ed55c4f1cd7d0086bd3477559db06099e56f069fa5246dd130b56d12e0",
+            "head_rank": 0
+          },
+          {
+            "accepted_event_id": "vev_224563e4c2ab967c2123c9964e7eb09c5ea6cd5aa560798d8f1bf98f7c70b5a3",
+            "atoms": [
+              "rule:vela.sidon.lower-bound.v1",
+              "statement:sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5"
+            ],
+            "body": [
+              "vsc_08f0e1944691b89d431f483b640359d51a86021015d59d17d07f2b4c650d889f"
+            ],
+            "clause_id": "vlc_226690d352ea3001b8e47000ee769ff23a0abfee64d221c1044ee1d3124f9a0d",
+            "head": "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb",
+            "head_rank": 1
+          },
+          {
+            "accepted_event_id": "vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+            "atoms": [
+              "rule:vela.sidon.lower-bound.v1",
+              "statement:sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5"
+            ],
+            "body": [
+              "vsc_f71324ed55c4f1cd7d0086bd3477559db06099e56f069fa5246dd130b56d12e0"
+            ],
+            "clause_id": "vlc_a73079e5ba094f5444a15d2435b7c936d173e5ecedfa984e9bdb8a48f9e3be43",
+            "head": "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb",
+            "head_rank": 1
+          },
+          {
+            "accepted_event_id": "vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+            "atoms": [
+              "rule:vela.sidon.lower-bound.v1",
+              "statement:sha256:b4008a50d54bffeb84eb3ce287e45bd7376f26f67424432eee48ff3445300384"
+            ],
+            "body": [
+              "vsc_b84864cf55b45de4b9d2228ca94e90f5cde21749224941d90442f2a76eb32812"
+            ],
+            "clause_id": "vlc_91b2ed408b6650836f5bbc7bfd35f3cba8accf040fea93f1f8d35f0cb025bb58",
+            "head": "vsc_d8bf67b00541737bfb9d573ba0336a141dfbb381936f891010ff8c7b41bd96b7",
+            "head_rank": 1
+          }
+        ]
+      }
+    },
+    {
+      "disabled_atoms": [
+        "verifier:vva_5a39d9175bfc48e24e3ce996157d944459f5b15ca43d3f5caabc6a6b8589967e",
+        "verifier:vva_dae2def25f2a6c5b499136322f5312039c5f4e4a4ffdc3abf1109a0b43e6414a"
+      ],
+      "name": "accepted_restriction_falls_back_to_6",
+      "observation_packet_id": "vop_7bfc10a5e0264d6dd8f57454b1b6f139e551d17a66a1eb8861693e4009472007",
+      "presentation": {
+        "accepted_events": [
+          "vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+          "vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+          "vev_224563e4c2ab967c2123c9964e7eb09c5ea6cd5aa560798d8f1bf98f7c70b5a3"
+        ],
+        "cell_metadata": {
+          "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb": {
+            "k": 7,
+            "kind": "sidon_lower_bound",
+            "n": 4
+          },
+          "vsc_d8bf67b00541737bfb9d573ba0336a141dfbb381936f891010ff8c7b41bd96b7": {
+            "k": 6,
+            "kind": "sidon_lower_bound",
+            "n": 4
+          }
+        },
+        "cell_ranks": {
+          "vsc_08f0e1944691b89d431f483b640359d51a86021015d59d17d07f2b4c650d889f": 0,
+          "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb": 1,
+          "vsc_b84864cf55b45de4b9d2228ca94e90f5cde21749224941d90442f2a76eb32812": 0,
+          "vsc_d8bf67b00541737bfb9d573ba0336a141dfbb381936f891010ff8c7b41bd96b7": 1,
+          "vsc_f71324ed55c4f1cd7d0086bd3477559db06099e56f069fa5246dd130b56d12e0": 0
+        },
+        "clauses": [
+          {
+            "accepted_event_id": "vev_224563e4c2ab967c2123c9964e7eb09c5ea6cd5aa560798d8f1bf98f7c70b5a3",
+            "atoms": [
+              "acceptance-event:vev_224563e4c2ab967c2123c9964e7eb09c5ea6cd5aa560798d8f1bf98f7c70b5a3",
+              "artifact:sha256:61d953fac95dd47413051b5d7e8b71720fbf34475019612c6bba05ca6f6c171a",
+              "claim-match:vcm_8890e5bf52c948d215aa20d7162d133352077b988d524c764889bb7a76eee773",
+              "gate:vgr_643e89a3dd5f2de0ded88e54b8b87a0abfea156a75b04cadb827a5993e4c5abe",
+              "probe:vprobe_8a5a73d48eac7564878c8b2a3128379f426ec83db941f539a2b909b88f0585d3",
+              "probe:vprobe_a1cd553a1166e092901daaae2e8fd3523f11e41838b5fc11060a1a2f7b73bd11",
+              "probe:vprobe_a865b89ff8bbdff3b8c403f7cd0046aec0ae841154afbfa1cb48d676bf5e496e",
+              "verifier:vva_2251abed1902798a93dcf90e9d0c8d7d2fc58ab1c23f02a4ce2d3358fda6d555",
+              "verifier:vva_5a39d9175bfc48e24e3ce996157d944459f5b15ca43d3f5caabc6a6b8589967e"
+            ],
+            "body": [],
+            "clause_id": "vlc_bd719482f5b76c8dad68b9f52b5eae9602c3b435eb090536645bf3053f12ac87",
+            "head": "vsc_08f0e1944691b89d431f483b640359d51a86021015d59d17d07f2b4c650d889f",
+            "head_rank": 0
+          },
+          {
+            "accepted_event_id": "vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+            "atoms": [
+              "acceptance-event:vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+              "artifact:sha256:e14b5dadf978d2c82b54de1102f511ca523dd8c0b03b85224bc03b3db25246c1",
+              "gate:fixture-genesis",
+              "probe:fixture-genesis-negative-controls",
+              "verifier:fixture-genesis-base3",
+              "verifier:fixture-genesis-pairsum"
+            ],
+            "body": [],
+            "clause_id": "vlc_421692073635680846b449312c7c0cfc1cd7e71412e2157d4a218c8b87a077d3",
+            "head": "vsc_b84864cf55b45de4b9d2228ca94e90f5cde21749224941d90442f2a76eb32812",
+            "head_rank": 0
+          },
+          {
+            "accepted_event_id": "vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+            "atoms": [
+              "acceptance-event:vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+              "artifact:sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+              "claim-match:vcm_8890e5bf52c948d215aa20d7162d133352077b988d524c764889bb7a76eee773",
+              "gate:vgr_1fa0f7305a46fd18616575edc76c16b268351210b1f08cb201036b1b02e74160",
+              "probe:vprobe_959e3ce185b89356e02587f9d8ef7bb44bb21c6977bff4e79007fdfdcbd9274d",
+              "probe:vprobe_a5e914b43a612e292092b7a1358b0d17a8a485122c42953a82250c74f6e38d6f",
+              "probe:vprobe_e8fde1937e3af3d8e0c551e330dabf6a95265f4a08183bf351cf73caeb58f4da",
+              "verifier:vva_97a6ed6ee2a4ef255b31ea39dafc6ecfea63fcfb7e2e18f89e77c5d3801ff0bf",
+              "verifier:vva_dae2def25f2a6c5b499136322f5312039c5f4e4a4ffdc3abf1109a0b43e6414a"
+            ],
+            "body": [],
+            "clause_id": "vlc_752253a70ea8b2ddf7c567069a3c7c2ddedbcf812fc4a745324fad5cb0baa799",
+            "head": "vsc_f71324ed55c4f1cd7d0086bd3477559db06099e56f069fa5246dd130b56d12e0",
+            "head_rank": 0
+          },
+          {
+            "accepted_event_id": "vev_224563e4c2ab967c2123c9964e7eb09c5ea6cd5aa560798d8f1bf98f7c70b5a3",
+            "atoms": [
+              "rule:vela.sidon.lower-bound.v1",
+              "statement:sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5"
+            ],
+            "body": [
+              "vsc_08f0e1944691b89d431f483b640359d51a86021015d59d17d07f2b4c650d889f"
+            ],
+            "clause_id": "vlc_226690d352ea3001b8e47000ee769ff23a0abfee64d221c1044ee1d3124f9a0d",
+            "head": "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb",
+            "head_rank": 1
+          },
+          {
+            "accepted_event_id": "vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+            "atoms": [
+              "rule:vela.sidon.lower-bound.v1",
+              "statement:sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5"
+            ],
+            "body": [
+              "vsc_f71324ed55c4f1cd7d0086bd3477559db06099e56f069fa5246dd130b56d12e0"
+            ],
+            "clause_id": "vlc_a73079e5ba094f5444a15d2435b7c936d173e5ecedfa984e9bdb8a48f9e3be43",
+            "head": "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb",
+            "head_rank": 1
+          },
+          {
+            "accepted_event_id": "vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+            "atoms": [
+              "rule:vela.sidon.lower-bound.v1",
+              "statement:sha256:b4008a50d54bffeb84eb3ce287e45bd7376f26f67424432eee48ff3445300384"
+            ],
+            "body": [
+              "vsc_b84864cf55b45de4b9d2228ca94e90f5cde21749224941d90442f2a76eb32812"
+            ],
+            "clause_id": "vlc_91b2ed408b6650836f5bbc7bfd35f3cba8accf040fea93f1f8d35f0cb025bb58",
+            "head": "vsc_d8bf67b00541737bfb9d573ba0336a141dfbb381936f891010ff8c7b41bd96b7",
+            "head_rank": 1
+          }
+        ]
+      }
+    },
+    {
+      "disabled_atoms": [
+        "verifier:vva_5a39d9175bfc48e24e3ce996157d944459f5b15ca43d3f5caabc6a6b8589967e",
+        "verifier:vva_dae2def25f2a6c5b499136322f5312039c5f4e4a4ffdc3abf1109a0b43e6414a"
+      ],
+      "name": "alternative_route_repairs_bound_7",
+      "observation_packet_id": "vop_7c6deda11013961880e583ce27f3d188624740265bcd4495ad6aa79e990ff3c9",
+      "presentation": {
+        "accepted_events": [
+          "vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+          "vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+          "vev_224563e4c2ab967c2123c9964e7eb09c5ea6cd5aa560798d8f1bf98f7c70b5a3",
+          "vev_7006a427458f1cd39675339a9c9c7b1089a11a5d915e4eca4939a3f3b7b4e29b"
+        ],
+        "cell_metadata": {
+          "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb": {
+            "k": 7,
+            "kind": "sidon_lower_bound",
+            "n": 4
+          },
+          "vsc_d8bf67b00541737bfb9d573ba0336a141dfbb381936f891010ff8c7b41bd96b7": {
+            "k": 6,
+            "kind": "sidon_lower_bound",
+            "n": 4
+          }
+        },
+        "cell_ranks": {
+          "vsc_08f0e1944691b89d431f483b640359d51a86021015d59d17d07f2b4c650d889f": 0,
+          "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb": 1,
+          "vsc_b84864cf55b45de4b9d2228ca94e90f5cde21749224941d90442f2a76eb32812": 0,
+          "vsc_d8bf67b00541737bfb9d573ba0336a141dfbb381936f891010ff8c7b41bd96b7": 1,
+          "vsc_f71324ed55c4f1cd7d0086bd3477559db06099e56f069fa5246dd130b56d12e0": 0
+        },
+        "clauses": [
+          {
+            "accepted_event_id": "vev_224563e4c2ab967c2123c9964e7eb09c5ea6cd5aa560798d8f1bf98f7c70b5a3",
+            "atoms": [
+              "acceptance-event:vev_224563e4c2ab967c2123c9964e7eb09c5ea6cd5aa560798d8f1bf98f7c70b5a3",
+              "artifact:sha256:61d953fac95dd47413051b5d7e8b71720fbf34475019612c6bba05ca6f6c171a",
+              "claim-match:vcm_8890e5bf52c948d215aa20d7162d133352077b988d524c764889bb7a76eee773",
+              "gate:vgr_643e89a3dd5f2de0ded88e54b8b87a0abfea156a75b04cadb827a5993e4c5abe",
+              "probe:vprobe_8a5a73d48eac7564878c8b2a3128379f426ec83db941f539a2b909b88f0585d3",
+              "probe:vprobe_a1cd553a1166e092901daaae2e8fd3523f11e41838b5fc11060a1a2f7b73bd11",
+              "probe:vprobe_a865b89ff8bbdff3b8c403f7cd0046aec0ae841154afbfa1cb48d676bf5e496e",
+              "verifier:vva_2251abed1902798a93dcf90e9d0c8d7d2fc58ab1c23f02a4ce2d3358fda6d555",
+              "verifier:vva_5a39d9175bfc48e24e3ce996157d944459f5b15ca43d3f5caabc6a6b8589967e"
+            ],
+            "body": [],
+            "clause_id": "vlc_bd719482f5b76c8dad68b9f52b5eae9602c3b435eb090536645bf3053f12ac87",
+            "head": "vsc_08f0e1944691b89d431f483b640359d51a86021015d59d17d07f2b4c650d889f",
+            "head_rank": 0
+          },
+          {
+            "accepted_event_id": "vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+            "atoms": [
+              "acceptance-event:vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+              "artifact:sha256:e14b5dadf978d2c82b54de1102f511ca523dd8c0b03b85224bc03b3db25246c1",
+              "gate:fixture-genesis",
+              "probe:fixture-genesis-negative-controls",
+              "verifier:fixture-genesis-base3",
+              "verifier:fixture-genesis-pairsum"
+            ],
+            "body": [],
+            "clause_id": "vlc_421692073635680846b449312c7c0cfc1cd7e71412e2157d4a218c8b87a077d3",
+            "head": "vsc_b84864cf55b45de4b9d2228ca94e90f5cde21749224941d90442f2a76eb32812",
+            "head_rank": 0
+          },
+          {
+            "accepted_event_id": "vev_7006a427458f1cd39675339a9c9c7b1089a11a5d915e4eca4939a3f3b7b4e29b",
+            "atoms": [
+              "acceptance-event:vev_7006a427458f1cd39675339a9c9c7b1089a11a5d915e4eca4939a3f3b7b4e29b",
+              "artifact:sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+              "claim-match:vcm_8890e5bf52c948d215aa20d7162d133352077b988d524c764889bb7a76eee773",
+              "gate:vgr_d1379f25ac7de26fefb1dcb3fb5fb49cde23bcdc55376ca5ac506637782e5c35",
+              "probe:vprobe_959e3ce185b89356e02587f9d8ef7bb44bb21c6977bff4e79007fdfdcbd9274d",
+              "probe:vprobe_a5e914b43a612e292092b7a1358b0d17a8a485122c42953a82250c74f6e38d6f",
+              "probe:vprobe_e8fde1937e3af3d8e0c551e330dabf6a95265f4a08183bf351cf73caeb58f4da",
+              "verifier:vva_610e7d32be975a41ac8270d93cd72dfabc59b7c07b7007309193117596efca37",
+              "verifier:vva_71ff8ba1402ccfa1f4148a29eaeaf27dfe8df9f4524ea5e1b96867ac0a48b6ad"
+            ],
+            "body": [],
+            "clause_id": "vlc_57c6dd5d391736681fceaf2047e6c4fe719eaeedf615122b003a2ce6545244b2",
+            "head": "vsc_f71324ed55c4f1cd7d0086bd3477559db06099e56f069fa5246dd130b56d12e0",
+            "head_rank": 0
+          },
+          {
+            "accepted_event_id": "vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+            "atoms": [
+              "acceptance-event:vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+              "artifact:sha256:b9786ae63c300b5335628d0237281330254b64a5550d6c4cb4e1937682e6d955",
+              "claim-match:vcm_8890e5bf52c948d215aa20d7162d133352077b988d524c764889bb7a76eee773",
+              "gate:vgr_1fa0f7305a46fd18616575edc76c16b268351210b1f08cb201036b1b02e74160",
+              "probe:vprobe_959e3ce185b89356e02587f9d8ef7bb44bb21c6977bff4e79007fdfdcbd9274d",
+              "probe:vprobe_a5e914b43a612e292092b7a1358b0d17a8a485122c42953a82250c74f6e38d6f",
+              "probe:vprobe_e8fde1937e3af3d8e0c551e330dabf6a95265f4a08183bf351cf73caeb58f4da",
+              "verifier:vva_97a6ed6ee2a4ef255b31ea39dafc6ecfea63fcfb7e2e18f89e77c5d3801ff0bf",
+              "verifier:vva_dae2def25f2a6c5b499136322f5312039c5f4e4a4ffdc3abf1109a0b43e6414a"
+            ],
+            "body": [],
+            "clause_id": "vlc_752253a70ea8b2ddf7c567069a3c7c2ddedbcf812fc4a745324fad5cb0baa799",
+            "head": "vsc_f71324ed55c4f1cd7d0086bd3477559db06099e56f069fa5246dd130b56d12e0",
+            "head_rank": 0
+          },
+          {
+            "accepted_event_id": "vev_224563e4c2ab967c2123c9964e7eb09c5ea6cd5aa560798d8f1bf98f7c70b5a3",
+            "atoms": [
+              "rule:vela.sidon.lower-bound.v1",
+              "statement:sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5"
+            ],
+            "body": [
+              "vsc_08f0e1944691b89d431f483b640359d51a86021015d59d17d07f2b4c650d889f"
+            ],
+            "clause_id": "vlc_226690d352ea3001b8e47000ee769ff23a0abfee64d221c1044ee1d3124f9a0d",
+            "head": "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb",
+            "head_rank": 1
+          },
+          {
+            "accepted_event_id": "vev_7006a427458f1cd39675339a9c9c7b1089a11a5d915e4eca4939a3f3b7b4e29b",
+            "atoms": [
+              "rule:vela.sidon.lower-bound.v1",
+              "statement:sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5"
+            ],
+            "body": [
+              "vsc_f71324ed55c4f1cd7d0086bd3477559db06099e56f069fa5246dd130b56d12e0"
+            ],
+            "clause_id": "vlc_9d8600ebcf5b99405ac520746a52fec8e5fcbf7feb7d4af4d164cea45a820bac",
+            "head": "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb",
+            "head_rank": 1
+          },
+          {
+            "accepted_event_id": "vev_48c4549115933e89bae1bf86488bc4a64eb1188d447d269fbcbc442970a3ad29",
+            "atoms": [
+              "rule:vela.sidon.lower-bound.v1",
+              "statement:sha256:d730b24ded50af5aaf696e6053d9fe4b820a9c73322f03ee014a6d5fac173bd5"
+            ],
+            "body": [
+              "vsc_f71324ed55c4f1cd7d0086bd3477559db06099e56f069fa5246dd130b56d12e0"
+            ],
+            "clause_id": "vlc_a73079e5ba094f5444a15d2435b7c936d173e5ecedfa984e9bdb8a48f9e3be43",
+            "head": "vsc_aa09518849a9947c93f78ae7f8e4f7b956d443b51bb76ea6c9ffbcf3a218e4bb",
+            "head_rank": 1
+          },
+          {
+            "accepted_event_id": "vev_53658bea08fdd65bb04efb12698b9ef2aeb2d57da8ccc52ad2e78ec053357ea0",
+            "atoms": [
+              "rule:vela.sidon.lower-bound.v1",
+              "statement:sha256:b4008a50d54bffeb84eb3ce287e45bd7376f26f67424432eee48ff3445300384"
+            ],
+            "body": [
+              "vsc_b84864cf55b45de4b9d2228ca94e90f5cde21749224941d90442f2a76eb32812"
+            ],
+            "clause_id": "vlc_91b2ed408b6650836f5bbc7bfd35f3cba8accf040fea93f1f8d35f0cb025bb58",
+            "head": "vsc_d8bf67b00541737bfb9d573ba0336a141dfbb381936f891010ff8c7b41bd96b7",
+            "head_rank": 1
+          }
+        ]
+      }
+    }
+  ],
+  "witnesses": {
+    "base": {
+      "claimed_size": 6,
+      "kind": "sidon",
+      "n": 4,
+      "points": [
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          1,
+          1,
+          1,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          1
+        ]
+      ]
+    },
+    "route_a": {
+      "claimed_size": 7,
+      "kind": "sidon",
+      "n": 4,
+      "points": [
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          1,
+          1,
+          1,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          1
+        ],
+        [
+          0,
+          1,
+          1,
+          1
+        ]
+      ]
+    },
+    "route_b": {
+      "claimed_size": 7,
+      "kind": "sidon",
+      "n": 4,
+      "points": [
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          1,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1,
+          0
+        ],
+        [
+          1,
+          1,
+          1,
+          0
+        ],
+        [
+          0,
+          1,
+          0,
+          1
+        ],
+        [
+          1,
+          0,
+          1,
+          1
+        ]
+      ]
+    }
+  }
+}
