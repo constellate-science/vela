@@ -19,8 +19,9 @@ use std::path::Path;
 use serde_json::{Value, json};
 
 use vela_protocol::sidon_profile::{
-    Presentation, build_frontier_map, make_observation, make_result, make_task,
-    next_bound_obligations, validate_shape, verify_observation_replay, verify_signed_packet,
+    Presentation, bound_cell, build_frontier_map, live_presentation_from_path, make_observation,
+    make_result, make_support_function, make_task, next_bound_obligations, validate_shape,
+    verify_observation_replay, verify_signed_packet,
 };
 
 use crate::cli::parse_signing_key;
@@ -138,11 +139,10 @@ pub(crate) fn cmd_sidon(action: SidonAction) {
 
         SidonAction::FrontierMap {
             presentation,
+            frontier,
             json: json_out,
         } => {
-            let pj = read_json(&presentation);
-            let pres = Presentation::from_json(&pj)
-                .unwrap_or_else(|e| die(format!("invalid presentation: {e}")));
+            let pres = resolve_presentation(presentation.as_deref(), frontier.as_deref());
             let disabled = BTreeSet::new();
             // Derive the open frontier: the next bound to beat at each n.
             let obls = next_bound_obligations(&pres)
@@ -175,5 +175,107 @@ pub(crate) fn cmd_sidon(action: SidonAction) {
                 );
             }
         }
+
+        SidonAction::Export {
+            frontier,
+            key,
+            actor,
+            out,
+            json: json_out,
+        } => {
+            let pres = live_presentation_from_path(&frontier)
+                .unwrap_or_else(|e| die(format!("compile live presentation: {e}")));
+            let disabled = BTreeSet::new();
+            let sk = read_key(&key);
+            let now = now_rfc3339();
+            let obs = make_observation(&pres, &disabled, &[], None, &sk, &actor, &now)
+                .unwrap_or_else(|e| die(format!("build observation: {e}")));
+            verify_observation_replay(&obs, &pres, &disabled)
+                .unwrap_or_else(|e| die(format!("observation does not replay: {e}")));
+
+            // bounds.json as a replayable export of the observation.
+            let bounds_doc = json!({
+                "schema": "vela.frontier-bounds.v1",
+                "frontier_id": obs["frontier_id"],
+                "observation_packet_id": obs["packet_id"],
+                "presentation_root": obs["presentation_root"],
+                "lineage_root": obs["lineage_root"],
+                "generated_from": "vela sidon export (authoritative observation)",
+                "bounds": obs["canonical_output"]["bounds"],
+            });
+            let text = serde_json::to_string_pretty(&bounds_doc).unwrap();
+            let n_bounds = obs["canonical_output"]["bounds"].as_array().map(Vec::len).unwrap_or(0);
+            if let Some(path) = out {
+                std::fs::write(&path, format!("{text}\n"))
+                    .unwrap_or_else(|e| die(format!("write {}: {e}", path.display())));
+                eprintln!(
+                    "wrote {} ({n_bounds} bounds) — observation {}",
+                    path.display(),
+                    obs["packet_id"].as_str().unwrap_or("?")
+                );
+            } else if json_out {
+                println!("{text}");
+            } else {
+                println!(
+                    "authoritative observation {} ({n_bounds} bounds)",
+                    obs["packet_id"].as_str().unwrap()
+                );
+                let empty = Vec::new();
+                for b in obs["canonical_output"]["bounds"].as_array().unwrap_or(&empty) {
+                    println!("  A309370(n={}) >= {}", b["n"], b["best_lower_bound"]);
+                }
+            }
+        }
+
+        SidonAction::Support {
+            frontier,
+            n,
+            k,
+            key,
+            actor,
+            json: json_out,
+        } => {
+            let pres = live_presentation_from_path(&frontier)
+                .unwrap_or_else(|e| die(format!("compile live presentation: {e}")));
+            let disabled = BTreeSet::new();
+            let cell = bound_cell(n, k).unwrap_or_else(|e| die(format!("bound cell: {e}")));
+            let sk = read_key(&key);
+            let now = now_rfc3339();
+            let sf = make_support_function(&pres, &disabled, &cell, &sk, &actor, &now)
+                .unwrap_or_else(|e| die(format!("build support function (is a({n}) >= {k} an accepted bound?): {e}")));
+
+            if json_out {
+                println!("{}", serde_json::to_string_pretty(&sf).unwrap());
+            } else {
+                println!("support for A309370(n={n}) >= {k}");
+                let empty = Vec::new();
+                let envs = sf["active_minimal_environments"].as_array().unwrap_or(&empty);
+                println!("  {} active minimal environment(s) hold this bound:", envs.len());
+                for e in envs {
+                    let atoms: Vec<String> = e
+                        .as_array()
+                        .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
+                        .unwrap_or_default();
+                    println!("    {{ {} }}", atoms.join(", "));
+                }
+                println!("  A challenge kills the bound only by hitting every environment.");
+            }
+        }
+    }
+}
+
+/// Resolve a presentation from either a JSON file (`--presentation`) or a live
+/// frontier directory (`--frontier`); exactly one must be given.
+fn resolve_presentation(presentation: Option<&Path>, frontier: Option<&Path>) -> Presentation {
+    match (presentation, frontier) {
+        (Some(p), None) => {
+            let pj = read_json(p);
+            Presentation::from_json(&pj)
+                .unwrap_or_else(|e| die(format!("invalid presentation: {e}")))
+        }
+        (None, Some(f)) => live_presentation_from_path(f)
+            .unwrap_or_else(|e| die(format!("compile live presentation: {e}"))),
+        (Some(_), Some(_)) => die("pass exactly one of --presentation or --frontier".to_string()),
+        (None, None) => die("pass --presentation <file> or --frontier <dir>".to_string()),
     }
 }

@@ -1516,15 +1516,59 @@ pub(crate) enum SidonAction {
         #[arg(long)]
         json: bool,
     },
-    /// The open frontier: the next bound to beat at each n, derived from the
-    /// presentation's registered bounds. Each row is `latent`, `open`, or
-    /// `discharged`; the map is bound to the presentation root. This is the
-    /// view a producer reads to choose work. No key required (a planning view,
-    /// not accepted state).
+    /// The open frontier: the next bound to beat at each n, latent/open/discharged,
+    /// bound to the presentation root. The view a producer reads to choose work.
+    /// No key required (a planning view, not accepted state). Source the
+    /// presentation from a JSON file (`--presentation`) or compile it live from a
+    /// frontier directory's accepted record (`--frontier`).
     FrontierMap {
-        /// A presentation JSON: `{cell_ranks, clauses, accepted_events, cell_metadata}`.
+        /// A presentation JSON file.
         #[arg(long)]
-        presentation: PathBuf,
+        presentation: Option<PathBuf>,
+        /// A live frontier dir (contains `.vela/`); the presentation is compiled
+        /// from its accepted Sidon record.
+        #[arg(long)]
+        frontier: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Compile the live accepted Sidon record into the authoritative current-bound
+    /// `ObservationPacket` and export `bounds.json` from it (carrying the
+    /// observation id + presentation root). The frontier's numbers become a
+    /// replayable export, not a scraped file. Signs with your own key.
+    Export {
+        /// A live frontier dir (contains `.vela/`), e.g. `examples/sidon-sets`.
+        #[arg(long)]
+        frontier: PathBuf,
+        /// Path to your Ed25519 signing key (hex).
+        #[arg(long)]
+        key: PathBuf,
+        /// Your observer actor id, e.g. `hub:observer`.
+        #[arg(long)]
+        actor: String,
+        /// Where to write bounds.json (defaults to stdout).
+        #[arg(long)]
+        out: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// The support / correction packet for one bound cell over the live record:
+    /// the minimal assumption environments that hold `a(n) >= k`, and (by
+    /// implication) what a challenge must hit to kill it. Signs with your own key.
+    Support {
+        /// A live frontier dir (contains `.vela/`).
+        #[arg(long)]
+        frontier: PathBuf,
+        #[arg(long)]
+        n: i64,
+        #[arg(long)]
+        k: i64,
+        /// Path to your Ed25519 signing key (hex).
+        #[arg(long)]
+        key: PathBuf,
+        /// Your actor id.
+        #[arg(long)]
+        actor: String,
         #[arg(long)]
         json: bool,
     },

@@ -28,6 +28,7 @@ pub mod frontier;
 pub mod kernel;
 pub mod packets;
 pub mod producer;
+pub mod reducer;
 
 pub use canonical::{CANON_DOMAIN, canonical_bytes, content_id, digest, sha256_value};
 pub use evaluator::{
@@ -49,4 +50,7 @@ pub use packets::{
 };
 pub use producer::{
     fixture_time, make_observation, make_result, make_support_function, make_task, validate_shape,
+};
+pub use reducer::{
+    LiveBound, collect_live_bounds, live_presentation, live_presentation_from_path, parse_bound,
 };
