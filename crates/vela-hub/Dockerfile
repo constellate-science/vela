@@ -1,28 +1,46 @@
-# vela-hub container — multi-stage build.
+# vela-hub container — multi-stage build with cargo-chef dependency caching.
 #
-# Doctrine: the hub is dumb transport; the container ships the binary
-# and nothing else. The Postgres URL is injected at runtime via Fly
-# secrets, never baked in.
+# Doctrine: the hub is dumb transport; the runtime image ships the binary and
+# nothing else. The Postgres URL is injected at runtime via Fly secrets.
+#
+# Why cargo-chef: without it, every source edit invalidated the single build
+# layer and recompiled all ~400 dependencies from scratch (8-10 min/deploy).
+# cargo-chef isolates the dependency build into a layer keyed on the Cargo
+# manifests alone, so a source-only deploy reuses the cached deps and only
+# recompiles the workspace crates that changed (~1-2 min). Deploy from the
+# substrate root:
+#   flyctl deploy --config crates/vela-hub/fly.toml
+#
+# `web/styles/*.css` and `assets/brand/*.svg` are embedded into the binary at
+# compile time via `include_str!`, so the runtime image carries no asset dir.
 
-FROM rust:1.91-slim-bookworm AS builder
+FROM rust:1.91-slim-bookworm AS chef
 WORKDIR /build
-
 RUN apt-get update \
  && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/* \
+ && cargo install cargo-chef --locked
 
-# Workspace context: copy everything we need to build the hub.
-# `web/styles/*.css` and `assets/brand/*.svg` are embedded into the
-# binary at compile time via `include_str!` so the runtime image carries
-# no static-asset directory.
+# --- planner: compute the dependency recipe from the manifests ---
+FROM chef AS planner
+COPY Cargo.toml Cargo.lock ./
+COPY crates ./crates
+RUN cargo chef prepare --recipe-path recipe.json
+
+# --- builder: cook deps (cached layer), then build the app ---
+FROM chef AS builder
+COPY --from=planner /build/recipe.json recipe.json
+# Build + cache every dependency. This layer is invalidated only when the recipe
+# changes (Cargo.toml / Cargo.lock), not on source edits.
+# CARGO_BUILD_JOBS=1: serialize to fit the remote builder's memory (a parallel
+# release build of vela-protocol OOM-killed it once).
+RUN CARGO_BUILD_JOBS=1 cargo chef cook --release -p vela-hub --recipe-path recipe.json
+# Now the real source. Deps are already compiled above, so this step only
+# recompiles the workspace crates that actually changed.
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 COPY web ./web
 COPY assets ./assets
-
-# CARGO_BUILD_JOBS=1: serialize compilation so only one rustc runs at a time.
-# The remote builder OOM-killed the parallel release build of vela-protocol
-# once the write-security layer grew the crate; compiling it alone fits.
 RUN CARGO_BUILD_JOBS=1 cargo build --release -p vela-hub
 
 FROM debian:bookworm-slim AS runtime
