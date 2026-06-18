@@ -269,7 +269,11 @@ fn str_vec(value: &Value) -> Result<Vec<String>, String> {
         .as_array()
         .ok_or("expected array of strings")?
         .iter()
-        .map(|v| v.as_str().map(str::to_string).ok_or("non-string in array".to_string()))
+        .map(|v| {
+            v.as_str()
+                .map(str::to_string)
+                .ok_or("non-string in array".to_string())
+        })
         .collect()
 }
 

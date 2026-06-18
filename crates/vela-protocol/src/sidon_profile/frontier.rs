@@ -113,7 +113,10 @@ fn cell_supported(
         return Ok(false);
     }
     let gamma = compile_gamma(presentation)?;
-    Ok(gamma.get(cell).map(|p| supported(p, disabled)).unwrap_or(false))
+    Ok(gamma
+        .get(cell)
+        .map(|p| supported(p, disabled))
+        .unwrap_or(false))
 }
 
 pub fn obligation_discharged(
@@ -260,7 +263,9 @@ pub fn verify_positive_gap_monotonicity(
         }
     }
     if !reopened.is_empty() {
-        return Err(format!("positive append reopened obligations: {reopened:?}"));
+        return Err(format!(
+            "positive append reopened obligations: {reopened:?}"
+        ));
     }
     Ok(())
 }
@@ -352,7 +357,10 @@ mod tests {
         .unwrap();
 
         // Frontier moved: 7 discharged, 8 now open.
-        assert_eq!(obligation_status(&obl7, &p, &disabled).unwrap(), "discharged");
+        assert_eq!(
+            obligation_status(&obl7, &p, &disabled).unwrap(),
+            "discharged"
+        );
         assert_eq!(obligation_status(&obl8, &p, &disabled).unwrap(), "open");
     }
 
@@ -367,7 +375,12 @@ mod tests {
         let disabled = BTreeSet::new();
         let obls = [sidon_obligation(4, 7, &[])];
         let map = build_frontier_map(&p, &obls, &disabled).unwrap();
-        assert!(map["frontier_map_root"].as_str().unwrap().starts_with("vfm_"));
+        assert!(
+            map["frontier_map_root"]
+                .as_str()
+                .unwrap()
+                .starts_with("vfm_")
+        );
         assert_eq!(map["open_obligations"].as_array().unwrap().len(), 1);
         assert_eq!(map["discharged_obligations"].as_array().unwrap().len(), 0);
     }

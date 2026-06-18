@@ -54,7 +54,9 @@ pub fn validate_shape(witness: &Value) -> Result<(i64, Vec<Vec<i64>>), String> {
         .ok_or("invalid n or empty points")?;
     let mut points = Vec::with_capacity(raw.len());
     for point in raw {
-        let row = point.as_array().ok_or("each point must be a binary vector")?;
+        let row = point
+            .as_array()
+            .ok_or("each point must be a binary vector")?;
         if row.len() as i64 != n {
             return Err("each point must be a binary vector of length n".to_string());
         }

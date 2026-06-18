@@ -5413,6 +5413,7 @@ Verification:
   gate          Verification gate: deliverable-grade + verifier-attachment checks
   reproduce     Re-verify stored witnesses from scratch (frozen exact verifiers)
   campaign      Discovery engine: search verifier-gated constructions, verify, propose
+  sidon         Sidon Producer Profile (A309370): submit, observe, export, frontier-map, support
   attach        Bind a verifier attachment to a finding (propose -> accept in one step)
   attempt       Verify banked attempts (vat_): id re-derivation + signature + claim digest
   transfer      Verify cross-domain transfers (vtr_): id re-derivation + signature

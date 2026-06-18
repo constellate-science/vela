@@ -96,12 +96,15 @@ pub fn append_verified_route(
     Ok((wcell, bcell))
 }
 
-pub fn register_bound_metadata(presentation: &mut Presentation, n: i64, k: i64) -> Result<(), String> {
+pub fn register_bound_metadata(
+    presentation: &mut Presentation,
+    n: i64,
+    k: i64,
+) -> Result<(), String> {
     let cell = bound_cell(n, k)?;
-    presentation.cell_metadata.insert(
-        cell,
-        json!({ "kind": "sidon_lower_bound", "n": n, "k": k }),
-    );
+    presentation
+        .cell_metadata
+        .insert(cell, json!({ "kind": "sidon_lower_bound", "n": n, "k": k }));
     Ok(())
 }
 
@@ -124,8 +127,12 @@ pub fn best_bounds(
             continue;
         };
         if supported(poly, disabled) {
-            let n = meta["n"].as_i64().ok_or("bound metadata n not an integer")?;
-            let k = meta["k"].as_i64().ok_or("bound metadata k not an integer")?;
+            let n = meta["n"]
+                .as_i64()
+                .ok_or("bound metadata n not an integer")?;
+            let k = meta["k"]
+                .as_i64()
+                .ok_or("bound metadata k not an integer")?;
             candidates.entry(n).or_default().push((k, cell_id.clone()));
         }
     }

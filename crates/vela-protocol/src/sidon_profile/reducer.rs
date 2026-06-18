@@ -120,7 +120,9 @@ pub fn live_presentation(project: &crate::project::Project) -> Result<Presentati
             continue;
         }
         for fid in &a.target_findings {
-            witness.entry(fid.as_str()).or_insert(a.content_hash.as_str());
+            witness
+                .entry(fid.as_str())
+                .or_insert(a.content_hash.as_str());
         }
     }
     let rows: Vec<(String, String, Option<String>)> = project
@@ -186,7 +188,12 @@ mod tests {
         // one supported lower-bound row per n, at the best k
         let by_n: std::collections::BTreeMap<i64, i64> = bounds
             .iter()
-            .map(|r| (r["n"].as_i64().unwrap(), r["best_lower_bound"].as_i64().unwrap()))
+            .map(|r| {
+                (
+                    r["n"].as_i64().unwrap(),
+                    r["best_lower_bound"].as_i64().unwrap(),
+                )
+            })
             .collect();
         assert_eq!(by_n.get(&7), Some(&24));
         assert_eq!(by_n.get(&9), Some(&47));

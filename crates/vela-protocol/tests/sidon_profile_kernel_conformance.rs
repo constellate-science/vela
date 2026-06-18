@@ -121,7 +121,10 @@ fn tasks_pin_an_exact_observation_state() {
         );
         tasks += 1;
     }
-    assert!(tasks >= 2, "fixture should issue at least two root-pinned tasks");
+    assert!(
+        tasks >= 2,
+        "fixture should issue at least two root-pinned tasks"
+    );
 }
 
 #[test]
@@ -157,8 +160,9 @@ fn human_restrict_kills_and_append_repairs_the_target_through_environments() {
     );
 
     // The accepted view decision commits to exactly prior ∪ proposed.
-    let mut expected_disabled: BTreeSet<String> =
-        str_vec(&decision["prior_disabled_atoms"]).into_iter().collect();
+    let mut expected_disabled: BTreeSet<String> = str_vec(&decision["prior_disabled_atoms"])
+        .into_iter()
+        .collect();
     expected_disabled.extend(proposed.iter().cloned());
     assert_eq!(
         decision["resulting_active_view_root"].as_str().unwrap(),

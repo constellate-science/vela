@@ -2184,6 +2184,22 @@ pub(crate) enum TransferAction {
         #[arg(long)]
         out: PathBuf,
     },
+    /// Index the cross-domain transfers (`vtr_`) into the transfer registry: a
+    /// derived, lane-organized view (certified / target-checked / exploratory)
+    /// grouped by domain pair, with each link's proof roots and structural check.
+    /// Reads `examples/transfers/*.vtr.json` (or `--dir`); a projection, never a
+    /// re-verification or an admission decision.
+    Registry {
+        /// Directory of `*.vtr.json` transfer records (default examples/transfers).
+        #[arg(long)]
+        dir: Option<PathBuf>,
+        /// Emit the registry as JSON (for the web export) instead of a summary.
+        #[arg(long)]
+        json: bool,
+        /// Write the JSON registry to a file as well.
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]

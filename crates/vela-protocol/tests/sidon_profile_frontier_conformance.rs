@@ -20,11 +20,11 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use serde_json::Value;
+use serde_json::json;
 use vela_protocol::sidon_profile::{
     Obligation, Presentation, bound_cell, build_frontier_map, frontier::SUPPORT_EXISTS_EVALUATOR,
     obligation_status, verify_positive_gap_monotonicity,
 };
-use serde_json::json;
 
 fn load(name: &str) -> Value {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -84,8 +84,14 @@ fn frontier_migrates_open_to_discharged_and_back_over_live_sidon_cells() {
 
     assert_eq!(st("genesis_bound_6"), ("open", "latent"));
     assert_eq!(st("route_a_bound_7"), ("discharged", "open"));
-    assert_eq!(st("accepted_restriction_falls_back_to_6"), ("open", "latent"));
-    assert_eq!(st("alternative_route_repairs_bound_7"), ("discharged", "open"));
+    assert_eq!(
+        st("accepted_restriction_falls_back_to_6"),
+        ("open", "latent")
+    );
+    assert_eq!(
+        st("alternative_route_repairs_bound_7"),
+        ("discharged", "open")
+    );
 
     // A positive append (genesis -> route A) advances the frontier without
     // reopening anything discharged.
@@ -100,8 +106,14 @@ fn frontier_migrates_open_to_discharged_and_back_over_live_sidon_cells() {
     assert_eq!(map["open_obligations"].as_array().unwrap().len(), 1);
     assert_eq!(map["discharged_obligations"].as_array().unwrap().len(), 1);
     assert_eq!(
-        map["presentation_root"], route_a.presentation_root().unwrap(),
+        map["presentation_root"],
+        route_a.presentation_root().unwrap(),
         "frontier map is bound to the live presentation root"
     );
-    assert!(map["frontier_map_root"].as_str().unwrap().starts_with("vfm_"));
+    assert!(
+        map["frontier_map_root"]
+            .as_str()
+            .unwrap()
+            .starts_with("vfm_")
+    );
 }

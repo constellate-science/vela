@@ -47,6 +47,7 @@ pub mod statement_attestation;
 pub mod status_provenance;
 pub mod tcb_policy;
 pub mod transfer;
+pub mod transfer_registry;
 pub mod verdict_conflict;
 pub mod verifier_attachment;
 

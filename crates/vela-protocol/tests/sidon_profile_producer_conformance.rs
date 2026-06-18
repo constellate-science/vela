@@ -91,8 +91,15 @@ fn genesis(fx: &Value) -> (Presentation, Value, Value, String) {
     let observer = deterministic_signing_key("observer");
     let disabled = BTreeSet::new();
     let cell = bound_cell(4, 6).unwrap();
-    let sf0 = make_support_function(&p, &disabled, &cell, &observer, "hub:observer", &fixture_time(0))
-        .unwrap();
+    let sf0 = make_support_function(
+        &p,
+        &disabled,
+        &cell,
+        &observer,
+        "hub:observer",
+        &fixture_time(0),
+    )
+    .unwrap();
     let obs0 = make_observation(
         &p,
         &disabled,
@@ -162,8 +169,14 @@ fn rust_regenerates_the_task_and_result_byte_for_byte() {
     .unwrap();
     // result_a: producer alpha's 7-point witness answering task_a.
     let witness_a = fx["witnesses"]["route_a"].clone();
-    let result_a =
-        make_result(&task_a, &witness_a, &producer_a, "producer:alpha", &fixture_time(4)).unwrap();
+    let result_a = make_result(
+        &task_a,
+        &witness_a,
+        &producer_a,
+        "producer:alpha",
+        &fixture_time(4),
+    )
+    .unwrap();
 
     let find = |id: &Value| -> Value {
         fx["packets"]

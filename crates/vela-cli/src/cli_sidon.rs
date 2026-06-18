@@ -86,7 +86,10 @@ pub(crate) fn cmd_sidon(action: SidonAction) {
             } else {
                 let k = points.len();
                 println!("signed Sidon result for A309370 n={n}, size {k}");
-                println!("  result packet : {}", result["packet_id"].as_str().unwrap());
+                println!(
+                    "  result packet : {}",
+                    result["packet_id"].as_str().unwrap()
+                );
                 println!("  claim         : A309370(n={n}) >= {k}");
                 println!(
                     "  pinned to     : {}",
@@ -124,15 +127,14 @@ pub(crate) fn cmd_sidon(action: SidonAction) {
                     obs["packet_id"].as_str().unwrap()
                 );
                 let empty = Vec::new();
-                let bounds = obs["canonical_output"]["bounds"].as_array().unwrap_or(&empty);
+                let bounds = obs["canonical_output"]["bounds"]
+                    .as_array()
+                    .unwrap_or(&empty);
                 if bounds.is_empty() {
                     println!("  (no supported lower-bound cells)");
                 }
                 for b in bounds {
-                    println!(
-                        "  A309370(n={}) >= {}",
-                        b["n"], b["best_lower_bound"]
-                    );
+                    println!("  A309370(n={}) >= {}", b["n"], b["best_lower_bound"]);
                 }
             }
         }
@@ -153,7 +155,10 @@ pub(crate) fn cmd_sidon(action: SidonAction) {
             if json_out {
                 println!("{}", serde_json::to_string_pretty(&map).unwrap());
             } else {
-                println!("frontier map {}", map["frontier_map_root"].as_str().unwrap());
+                println!(
+                    "frontier map {}",
+                    map["frontier_map_root"].as_str().unwrap()
+                );
                 let empty = Vec::new();
                 let rows = map["obligations"].as_array().unwrap_or(&empty);
                 if rows.is_empty() {
@@ -171,7 +176,10 @@ pub(crate) fn cmd_sidon(action: SidonAction) {
                 }
                 println!(
                     "\nOpen frontier: {} obligation(s). Beat one with `vela sidon submit`.",
-                    map["open_obligations"].as_array().map(Vec::len).unwrap_or(0)
+                    map["open_obligations"]
+                        .as_array()
+                        .map(Vec::len)
+                        .unwrap_or(0)
                 );
             }
         }
@@ -204,7 +212,10 @@ pub(crate) fn cmd_sidon(action: SidonAction) {
                 "bounds": obs["canonical_output"]["bounds"],
             });
             let text = serde_json::to_string_pretty(&bounds_doc).unwrap();
-            let n_bounds = obs["canonical_output"]["bounds"].as_array().map(Vec::len).unwrap_or(0);
+            let n_bounds = obs["canonical_output"]["bounds"]
+                .as_array()
+                .map(Vec::len)
+                .unwrap_or(0);
             if let Some(path) = out {
                 std::fs::write(&path, format!("{text}\n"))
                     .unwrap_or_else(|e| die(format!("write {}: {e}", path.display())));
@@ -221,7 +232,10 @@ pub(crate) fn cmd_sidon(action: SidonAction) {
                     obs["packet_id"].as_str().unwrap()
                 );
                 let empty = Vec::new();
-                for b in obs["canonical_output"]["bounds"].as_array().unwrap_or(&empty) {
+                for b in obs["canonical_output"]["bounds"]
+                    .as_array()
+                    .unwrap_or(&empty)
+                {
                     println!("  A309370(n={}) >= {}", b["n"], b["best_lower_bound"]);
                 }
             }
@@ -242,19 +256,32 @@ pub(crate) fn cmd_sidon(action: SidonAction) {
             let sk = read_key(&key);
             let now = now_rfc3339();
             let sf = make_support_function(&pres, &disabled, &cell, &sk, &actor, &now)
-                .unwrap_or_else(|e| die(format!("build support function (is a({n}) >= {k} an accepted bound?): {e}")));
+                .unwrap_or_else(|e| {
+                    die(format!(
+                        "build support function (is a({n}) >= {k} an accepted bound?): {e}"
+                    ))
+                });
 
             if json_out {
                 println!("{}", serde_json::to_string_pretty(&sf).unwrap());
             } else {
                 println!("support for A309370(n={n}) >= {k}");
                 let empty = Vec::new();
-                let envs = sf["active_minimal_environments"].as_array().unwrap_or(&empty);
-                println!("  {} active minimal environment(s) hold this bound:", envs.len());
+                let envs = sf["active_minimal_environments"]
+                    .as_array()
+                    .unwrap_or(&empty);
+                println!(
+                    "  {} active minimal environment(s) hold this bound:",
+                    envs.len()
+                );
                 for e in envs {
                     let atoms: Vec<String> = e
                         .as_array()
-                        .map(|a| a.iter().filter_map(|x| x.as_str().map(str::to_string)).collect())
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(|x| x.as_str().map(str::to_string))
+                                .collect()
+                        })
                         .unwrap_or_default();
                     println!("    {{ {} }}", atoms.join(", "));
                 }

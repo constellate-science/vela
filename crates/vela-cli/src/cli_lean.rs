@@ -703,6 +703,84 @@ pub(crate) fn cmd_transfer(action: TransferAction) {
                 out.display()
             );
         }
+        TransferAction::Registry { dir, json, out } => {
+            use vela_protocol::transfer_registry::build_registry;
+            let dir = dir.unwrap_or_else(|| std::path::PathBuf::from("examples/transfers"));
+            let read = std::fs::read_dir(&dir)
+                .unwrap_or_else(|e| fail_return(&format!("read dir {}: {e}", dir.display())));
+            let mut files: Vec<std::path::PathBuf> = read
+                .filter_map(|e| e.ok().map(|e| e.path()))
+                .filter(|p| p.to_string_lossy().ends_with(".vtr.json"))
+                .collect();
+            files.sort();
+
+            let mut transfers: Vec<Transfer> = Vec::new();
+            let mut skipped: Vec<String> = Vec::new();
+            for f in &files {
+                let body = match std::fs::read_to_string(f) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        skipped.push(format!("{}: {e}", f.display()));
+                        continue;
+                    }
+                };
+                let val: serde_json::Value = match serde_json::from_str(&body) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        skipped.push(format!("{}: {e}", f.display()));
+                        continue;
+                    }
+                };
+                let records = val
+                    .get("records")
+                    .and_then(|r| r.as_array())
+                    .cloned()
+                    .unwrap_or_else(|| vec![val]);
+                for rv in records {
+                    match serde_json::from_value::<Transfer>(rv) {
+                        Ok(t) => transfers.push(t),
+                        Err(e) => skipped.push(format!("{}: {e}", f.display())),
+                    }
+                }
+            }
+
+            let reg = build_registry(&transfers);
+            if let Some(path) = &out {
+                let txt = serde_json::to_string_pretty(&reg).unwrap_or_default();
+                std::fs::write(path, format!("{txt}\n"))
+                    .unwrap_or_else(|e| fail_return(&format!("write {}: {e}", path.display())));
+                eprintln!("wrote {} ({} transfers)", path.display(), reg.total);
+            }
+            if json {
+                print_json(&serde_json::to_value(&reg).unwrap_or_default());
+            } else if out.is_none() {
+                println!(
+                    "{} {} transfer(s), {} structurally ok",
+                    style::ok("transfer.registry"),
+                    reg.total,
+                    reg.structural_ok
+                );
+                println!(
+                    "  lanes: {} certified · {} target-checked · {} exploratory",
+                    reg.lanes.certified, reg.lanes.target_checked, reg.lanes.exploratory
+                );
+                for (pair, ids) in &reg.by_domain_pair {
+                    println!("  {} ({})", pair, ids.len());
+                }
+                for r in &reg.records {
+                    let mark = if r.structural_ok { "ok" } else { "FAIL" };
+                    let thm = r.theorem_id.map(|i| format!(" T{i}")).unwrap_or_default();
+                    println!("    [{mark}] {}  {}{thm}", r.transfer_id, r.map_decl);
+                }
+            }
+            if !skipped.is_empty() {
+                eprintln!(
+                    "note: {} file(s)/record(s) skipped:\n  {}",
+                    skipped.len(),
+                    skipped.join("\n  ")
+                );
+            }
+        }
     }
 }
 
