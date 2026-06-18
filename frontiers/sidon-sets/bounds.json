@@ -1,0 +1,204 @@
+{
+  "schema": "vela.frontier-bounds.v1",
+  "frontier": "sidon-sets",
+  "frontier_id": "vfr_496956067dc5ad79",
+  "sequence": {
+    "namespace": "oeis",
+    "id": "A309370",
+    "url": "https://oeis.org/A309370",
+    "title": "Largest Sidon set (B2 set) in the n-dimensional 0/1 cube under componentwise addition"
+  },
+  "verifier": {
+    "kind": "sidon",
+    "crate": "vela-verify",
+    "check": "every pairwise sum (with repetition) of the binary vectors is distinct",
+    "reproduce": "vela reproduce <witness>.json"
+  },
+  "generated_from": {
+    "source_event_log_hash": "sha256:a3dd5e8de3b98d18d54ebce25d4a6577d2711fbdf3699b5a685e583f626daf8d",
+    "newest_finding_at": "2026-06-16T23:28:04.115631+00:00"
+  },
+  "how_to_beat": "For an n below, construct a Sidon set in the n-dim 0/1 cube with more than best_lower_bound vectors, then run frontiers/sidon-sets/submit.py. A strictly larger frozen-verified witness updates the bound with your key on the accepted state transition. Poll this file before searching so you never repeat banked work.",
+  "bounds": [
+    {
+      "n": 7,
+      "best_lower_bound": 24,
+      "accepted": true,
+      "finding_id": "vf_400001d3c1444495",
+      "witness": {
+        "sha256": "sha256:1626f7eaaa8c5df1f6cbe4bd27df4c7fb2e687fc85c93923a38d3888e8da2a94",
+        "elements": 24
+      }
+    },
+    {
+      "n": 8,
+      "best_lower_bound": 33,
+      "accepted": true,
+      "finding_id": "vf_b517036c31ba0350",
+      "witness": {
+        "sha256": "sha256:48736d74468b9e190784e767951b945ed6195bb1c3a0f76a0a68f40480dd9e84",
+        "elements": 33
+      }
+    },
+    {
+      "n": 9,
+      "best_lower_bound": 47,
+      "accepted": true,
+      "finding_id": "vf_0a629eaa09e29f6b",
+      "witness": {
+        "sha256": "sha256:1866dd398b582e974515b123ad4fdcf507d3268fd7a1f1c12d81b5ebd1f1a540",
+        "elements": 47
+      }
+    },
+    {
+      "n": 10,
+      "best_lower_bound": 66,
+      "accepted": true,
+      "finding_id": "vf_bf7707a82c7bb252",
+      "witness": {
+        "sha256": "sha256:8f071c9d65d6343c4c342f15a585c27602ebeac53aac6a1ad9da090227822e8c",
+        "elements": 66
+      }
+    },
+    {
+      "n": 11,
+      "best_lower_bound": 92,
+      "accepted": true,
+      "finding_id": "vf_92f782f0e1791fad",
+      "witness": {
+        "sha256": "sha256:77c72b0ab22361e2084fdbf0688a63199651eab64f512d09635c1b4324e8a602",
+        "elements": 92
+      }
+    },
+    {
+      "n": 12,
+      "best_lower_bound": 133,
+      "accepted": true,
+      "finding_id": "vf_72f5f06b273261eb",
+      "witness": {
+        "sha256": "sha256:23d89ab723b3f8f4ae608c4d7fd69317fddabe6a2d3b4eab636e466760e78ace",
+        "elements": 133
+      }
+    },
+    {
+      "n": 13,
+      "best_lower_bound": 185,
+      "accepted": true,
+      "finding_id": "vf_5efe3f8c894c16e2",
+      "witness": {
+        "sha256": "sha256:e932b5fd2999d29d8c752898f32860149b39f23baf2ed3978ed602600143fdfd",
+        "elements": 185
+      }
+    },
+    {
+      "n": 14,
+      "best_lower_bound": 257,
+      "accepted": true,
+      "finding_id": "vf_e45b382d85f5ebde",
+      "witness": {
+        "sha256": "sha256:e8ce3d7048baa014aaa05a24d49758ad4bfbd2f7947a721945a1a1ce052d9a5e",
+        "elements": 257
+      }
+    },
+    {
+      "n": 15,
+      "best_lower_bound": 364,
+      "accepted": true,
+      "finding_id": "vf_896034224082b173",
+      "witness": {
+        "sha256": "sha256:afd534aeb55d4a4bfa0a9d046842d2eb67ec3a17ba75580dc0807ab7d0dd7d42",
+        "elements": 364
+      }
+    },
+    {
+      "n": 16,
+      "best_lower_bound": 505,
+      "accepted": true,
+      "finding_id": "vf_4b8b2f3759855d6a",
+      "witness": {
+        "sha256": "sha256:f80962f268c22db318316a4c364c172d9fc1d8bcb346c6651003b0e51b20e539",
+        "elements": 505
+      }
+    },
+    {
+      "n": 17,
+      "best_lower_bound": 712,
+      "accepted": true,
+      "finding_id": "vf_aab348416bfdf292",
+      "witness": {
+        "sha256": "sha256:cc8ebd5feaff02f322d22408d8ae360649715d3979988a43bf697acb6e5eb21d",
+        "elements": 712
+      }
+    },
+    {
+      "n": 18,
+      "best_lower_bound": 1010,
+      "accepted": true,
+      "finding_id": "vf_4f5940a76981f17a",
+      "witness": {
+        "sha256": "sha256:bf4ba20140540ff8f70d2a3f9fd7d14de10e9838a64b05caecca981bce1227f2",
+        "elements": 1010
+      }
+    },
+    {
+      "n": 19,
+      "best_lower_bound": 1435,
+      "accepted": true,
+      "finding_id": "vf_e173d0be6bbcea46",
+      "witness": {
+        "sha256": "sha256:75b70b928d431136b913c47fce9633bfa2bbf28cc7b45f6364ed9304b17689ac",
+        "elements": 1435
+      }
+    },
+    {
+      "n": 20,
+      "best_lower_bound": 1989,
+      "accepted": true,
+      "finding_id": "vf_745184f1556eee4b",
+      "witness": {
+        "sha256": "sha256:d66f5fb53742957bcd41fe15f9a6f1e0e802b9e6956676a8adb79f1888afd18a",
+        "elements": 1989
+      }
+    },
+    {
+      "n": 21,
+      "best_lower_bound": 2694,
+      "accepted": true,
+      "finding_id": "vf_b0c0945bfce712a6",
+      "witness": {
+        "sha256": "sha256:eb9635a852df0f0b3fb2730f90e8ace250fe261f2543d7ea9a91e84c88c563fa",
+        "elements": 2694
+      }
+    },
+    {
+      "n": 22,
+      "best_lower_bound": 3770,
+      "accepted": true,
+      "finding_id": "vf_0ad9900c3858a900",
+      "witness": {
+        "sha256": "sha256:9507d36a0a00ee9d87ea40c95af31e1e7044ff52464786239e469b9b7180f623",
+        "elements": 3770
+      }
+    },
+    {
+      "n": 23,
+      "best_lower_bound": 5179,
+      "accepted": true,
+      "finding_id": "vf_d1e1f73ee682f11b",
+      "witness": {
+        "sha256": "sha256:9610c181d60f89417634d78c65466e6ab03d83b8b6dcab6682ac6a4925f42bbd",
+        "elements": 5179
+      }
+    },
+    {
+      "n": 24,
+      "best_lower_bound": 7179,
+      "accepted": true,
+      "finding_id": "vf_06d19986c13130e7",
+      "witness": {
+        "sha256": "sha256:992f42bad74872ebe5ac90f40deaa1c56f2be31914ba9ba1c9ab914f388a85e4",
+        "elements": 7179
+      }
+    }
+  ]
+}

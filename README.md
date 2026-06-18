@@ -88,6 +88,7 @@ confidence. A finding can be reviewer-accepted and still gate
 | `bindings/` | Python HTTP SDK: a client for `vela serve --http` (read endpoints + signed write tools). Not a reducer. |
 | `conformance/` | The cross-implementation test-vector suite (reducer fixtures + gate reject-vectors). |
 | `examples/sidon-a309370` | A worked, re-verifiable reference: the OEIS A309370 Sidon records you can re-check with `vela reproduce`. |
+| `frontiers/sidon-sets` | The external-producer on-ramp: poll `bounds.json` for the current best Sidon bound per n, beat one, and `python3 submit.py witness.json` writes a signed transition with your key. The frictionless second-signer path; see its `README.md`. |
 | `lean/` | Machine-checked proofs of the governance-soundness theorems, plus `SidonCertificate.lean` (a kernel-checked vcert). |
 | `schema/` | Carina kernel schemas. |
 
