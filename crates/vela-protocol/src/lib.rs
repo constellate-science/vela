@@ -38,7 +38,6 @@ pub mod reducer;
 pub mod registry;
 pub mod released_diff_pack;
 pub mod repo;
-pub mod resolver;
 pub mod scientific_diff;
 pub mod sidon_profile;
 pub mod sign;

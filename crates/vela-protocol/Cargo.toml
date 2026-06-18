@@ -24,7 +24,6 @@ path = "src/lib.rs"
 test-support = []
 
 [dependencies]
-vela-protocol-core = { workspace = true }
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

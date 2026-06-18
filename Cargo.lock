@@ -3425,7 +3425,6 @@ dependencies = [
  "tokio",
  "toml",
  "unicode-normalization",
- "vela-protocol-core",
 ]
 
 [[package]]
