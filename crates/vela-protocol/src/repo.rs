@@ -1084,7 +1084,7 @@ mod tests {
             AttemptDraft {
                 problem: 1,
                 frontier: "f".to_string(),
-                kind: "construction".to_string(),
+                kind: "construction".into(),
                 claim: "a(8) >= 33".to_string(),
                 claimed_status: "banked".to_string(),
                 ..Default::default()
@@ -1111,7 +1111,7 @@ mod tests {
                         ts: &str| StateEvent {
             schema: crate::events::EVENT_SCHEMA.to_string(),
             id: format!("vev_sidetable_{kind}").replace('.', "_"),
-            kind: kind.to_string(),
+            kind: kind.into(),
             target: StateTarget {
                 r#type: target_type.to_string(),
                 id: target_id.to_string(),

@@ -635,7 +635,7 @@ pub fn compare(a: &Project, b: &Project) -> DiffResult {
     let mut review_impacts = Vec::new();
     if a.proof_state.latest_packet.status != b.proof_state.latest_packet.status {
         review_impacts.push(ReviewImpact {
-            kind: "proof_state".to_string(),
+            kind: "proof_state".into(),
             message: format!(
                 "Proof freshness changed: {} -> {}",
                 a.proof_state.latest_packet.status, b.proof_state.latest_packet.status
@@ -644,7 +644,7 @@ pub fn compare(a: &Project, b: &Project) -> DiffResult {
     }
     if proposal_summary_a.pending_review != proposal_summary_b.pending_review {
         review_impacts.push(ReviewImpact {
-            kind: "pending_review".to_string(),
+            kind: "pending_review".into(),
             message: format!(
                 "Pending proposals changed: {} -> {}",
                 proposal_summary_a.pending_review, proposal_summary_b.pending_review
@@ -653,7 +653,7 @@ pub fn compare(a: &Project, b: &Project) -> DiffResult {
     }
     if proposal_summary_a.applied != proposal_summary_b.applied {
         review_impacts.push(ReviewImpact {
-            kind: "applied_proposals".to_string(),
+            kind: "applied_proposals".into(),
             message: format!(
                 "Applied proposals changed: {} -> {}",
                 proposal_summary_a.applied, proposal_summary_b.applied
@@ -662,7 +662,7 @@ pub fn compare(a: &Project, b: &Project) -> DiffResult {
     }
     if a.sources.len() != b.sources.len() || a.evidence_atoms.len() != b.evidence_atoms.len() {
         review_impacts.push(ReviewImpact {
-            kind: "provenance_coverage".to_string(),
+            kind: "provenance_coverage".into(),
             message: format!(
                 "Sources {} -> {}, evidence atoms {} -> {}",
                 a.sources.len(),
@@ -674,7 +674,7 @@ pub fn compare(a: &Project, b: &Project) -> DiffResult {
     }
     if a.condition_records.len() != b.condition_records.len() {
         review_impacts.push(ReviewImpact {
-            kind: "condition_boundary".to_string(),
+            kind: "condition_boundary".into(),
             message: format!(
                 "Condition records changed: {} -> {}",
                 a.condition_records.len(),
@@ -687,7 +687,7 @@ pub fn compare(a: &Project, b: &Project) -> DiffResult {
         .any(|change| change.field == "conditions.text")
     {
         review_impacts.push(ReviewImpact {
-            kind: "condition_scope".to_string(),
+            kind: "condition_scope".into(),
             message: "Condition boundaries changed for one or more paired findings.".to_string(),
         });
     }
@@ -696,13 +696,13 @@ pub fn compare(a: &Project, b: &Project) -> DiffResult {
         .any(|change| change.field == "provenance.doi")
     {
         review_impacts.push(ReviewImpact {
-            kind: "provenance".to_string(),
+            kind: "provenance".into(),
             message: "Provenance identifiers changed for one or more paired findings.".to_string(),
         });
     }
     if !new_contradictions.is_empty() {
         review_impacts.push(ReviewImpact {
-            kind: "contradiction".to_string(),
+            kind: "contradiction".into(),
             message: format!(
                 "{} new contradiction links appeared in {}",
                 new_contradictions.len(),

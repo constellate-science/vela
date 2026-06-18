@@ -262,7 +262,7 @@ pub(crate) fn cmd_proof_add(
 
     let artifact = vela_protocol::bundle::Artifact {
         id: artifact_id.clone(),
-        kind: "source_file".to_string(),
+        kind: "source_file".into(),
         name: name.to_string(),
         content_hash: format!("sha256:{script_hash_hex}"),
         size_bytes: Some(script_bytes.len() as u64),

@@ -595,7 +595,7 @@ fn build_negative_results_log(
     log.push(StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "negative_result.asserted".to_string(),
+        kind: "negative_result.asserted".into(),
         target: StateTarget {
             r#type: "negative_result".to_string(),
             id: trial_id.clone(),
@@ -672,7 +672,7 @@ fn build_negative_results_log(
     log.push(StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "negative_result.asserted".to_string(),
+        kind: "negative_result.asserted".into(),
         target: StateTarget {
             r#type: "negative_result".to_string(),
             id: lab_id.clone(),
@@ -699,7 +699,7 @@ fn build_negative_results_log(
     log.push(StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "negative_result.reviewed".to_string(),
+        kind: "negative_result.reviewed".into(),
         target: StateTarget {
             r#type: "negative_result".to_string(),
             id: trial_id.clone(),
@@ -726,7 +726,7 @@ fn build_negative_results_log(
     log.push(StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "negative_result.retracted".to_string(),
+        kind: "negative_result.retracted".into(),
         target: StateTarget {
             r#type: "negative_result".to_string(),
             id: lab_id,
@@ -799,7 +799,7 @@ fn build_trajectories_log(
     log.push(StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "trajectory.created".to_string(),
+        kind: "trajectory.created".into(),
         target: StateTarget {
             r#type: "trajectory".to_string(),
             id: traj1_id.clone(),
@@ -848,7 +848,7 @@ fn build_trajectories_log(
         log.push(StateEvent {
             schema: events::EVENT_SCHEMA.to_string(),
             id: String::new(),
-            kind: "trajectory.step_appended".to_string(),
+            kind: "trajectory.step_appended".into(),
             target: StateTarget {
                 r#type: "trajectory".to_string(),
                 id: traj1_id.clone(),
@@ -875,7 +875,7 @@ fn build_trajectories_log(
     log.push(StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "trajectory.reviewed".to_string(),
+        kind: "trajectory.reviewed".into(),
         target: StateTarget {
             r#type: "trajectory".to_string(),
             id: traj1_id.clone(),
@@ -913,7 +913,7 @@ fn build_trajectories_log(
     log.push(StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "trajectory.created".to_string(),
+        kind: "trajectory.created".into(),
         target: StateTarget {
             r#type: "trajectory".to_string(),
             id: traj2_id.clone(),
@@ -937,7 +937,7 @@ fn build_trajectories_log(
     log.push(StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "trajectory.retracted".to_string(),
+        kind: "trajectory.retracted".into(),
         target: StateTarget {
             r#type: "trajectory".to_string(),
             id: traj2_id,
@@ -1035,7 +1035,7 @@ fn build_artifacts_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<e
     log.push(StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "artifact.asserted".to_string(),
+        kind: "artifact.asserted".into(),
         target: StateTarget {
             r#type: "artifact".to_string(),
             id: trial_id.clone(),
@@ -1060,7 +1060,7 @@ fn build_artifacts_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<e
     log.push(StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "artifact.reviewed".to_string(),
+        kind: "artifact.reviewed".into(),
         target: StateTarget {
             r#type: "artifact".to_string(),
             id: trial_id.clone(),
@@ -1085,7 +1085,7 @@ fn build_artifacts_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<e
     log.push(StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "tier.set".to_string(),
+        kind: "tier.set".into(),
         target: StateTarget {
             r#type: "artifact".to_string(),
             id: trial_id.clone(),
@@ -1133,7 +1133,7 @@ fn build_artifacts_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<e
     log.push(StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "artifact.asserted".to_string(),
+        kind: "artifact.asserted".into(),
         target: StateTarget {
             r#type: "artifact".to_string(),
             id: lab_id.clone(),
@@ -1158,7 +1158,7 @@ fn build_artifacts_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<e
     log.push(StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "artifact.retracted".to_string(),
+        kind: "artifact.retracted".into(),
         target: StateTarget {
             r#type: "artifact".to_string(),
             id: lab_id,
@@ -1265,7 +1265,7 @@ fn build_tier_set_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<ev
     log.push(StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "negative_result.asserted".to_string(),
+        kind: "negative_result.asserted".into(),
         target: StateTarget {
             r#type: "negative_result".to_string(),
             id: nr_id.clone(),
@@ -1301,7 +1301,7 @@ fn build_tier_set_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<ev
     log.push(StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "trajectory.created".to_string(),
+        kind: "trajectory.created".into(),
         target: StateTarget {
             r#type: "trajectory".to_string(),
             id: traj_id.clone(),
@@ -1349,7 +1349,7 @@ fn build_tier_set_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<ev
         log.push(StateEvent {
             schema: events::EVENT_SCHEMA.to_string(),
             id: String::new(),
-            kind: "tier.set".to_string(),
+            kind: "tier.set".into(),
             target: StateTarget {
                 r#type: object_type.to_string(),
                 id: object_id.clone(),
@@ -1394,7 +1394,7 @@ fn build_locator_repair_log(
     vec![StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "evidence_atom.locator_repaired".to_string(),
+        kind: "evidence_atom.locator_repaired".into(),
         target: StateTarget {
             r#type: "evidence_atom".to_string(),
             id: format!("vea_fixture_locator_{frontier_idx}"),
@@ -1431,7 +1431,7 @@ fn build_span_repair_log(
     vec![StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "finding.span_repaired".to_string(),
+        kind: "finding.span_repaired".into(),
         target: StateTarget {
             r#type: "finding".to_string(),
             id: target_finding.id.clone(),
@@ -1473,7 +1473,7 @@ fn build_entity_resolve_log(
     vec![StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "finding.entity_resolved".to_string(),
+        kind: "finding.entity_resolved".into(),
         target: StateTarget {
             r#type: "finding".to_string(),
             id: target_finding.id.clone(),
@@ -1514,7 +1514,7 @@ fn build_entity_added_log(
     vec![StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "finding.entity_added".to_string(),
+        kind: "finding.entity_added".into(),
         target: StateTarget {
             r#type: "finding".to_string(),
             id: target_finding.id.clone(),
@@ -1557,7 +1557,7 @@ fn build_federation_events_log(
     let synced = StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "frontier.synced_with_peer".to_string(),
+        kind: "frontier.synced_with_peer".into(),
         target: StateTarget {
             r#type: "frontier_observation".to_string(),
             id: frontier_id.clone(),
@@ -1583,7 +1583,7 @@ fn build_federation_events_log(
     let detected = StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: conflict_event_id.clone(),
-        kind: "frontier.conflict_detected".to_string(),
+        kind: "frontier.conflict_detected".into(),
         target: StateTarget {
             r#type: "frontier_observation".to_string(),
             id: frontier_id.clone(),
@@ -1609,7 +1609,7 @@ fn build_federation_events_log(
     let resolved = StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "frontier.conflict_resolved".to_string(),
+        kind: "frontier.conflict_resolved".into(),
         target: StateTarget {
             r#type: "frontier_observation".to_string(),
             id: frontier_id.clone(),
@@ -1649,7 +1649,7 @@ fn build_bridge_reviewed_log(
     vec![StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "bridge.reviewed".to_string(),
+        kind: "bridge.reviewed".into(),
         target: StateTarget {
             r#type: "bridge".to_string(),
             id: bridge_id.clone(),
@@ -1688,7 +1688,7 @@ fn build_superseded_log(
     vec![StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "finding.superseded".to_string(),
+        kind: "finding.superseded".into(),
         target: StateTarget {
             r#type: "finding".to_string(),
             id: target.id.clone(),
@@ -1822,7 +1822,7 @@ fn build_reinterpreted_causal_log(
     vec![StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "assertion.reinterpreted_causal".to_string(),
+        kind: "assertion.reinterpreted_causal".into(),
         target: StateTarget {
             r#type: "finding".to_string(),
             id: target.id.clone(),
@@ -1877,7 +1877,7 @@ fn build_statement_attested_log(
     vec![StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "statement.attested".to_string(),
+        kind: "statement.attested".into(),
         target: StateTarget {
             r#type: "finding".to_string(),
             id: findings[0].id.clone(),
@@ -1927,7 +1927,7 @@ fn build_anchor_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<even
     let mk = |kind: &str, payload: serde_json::Value, t: usize| StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: kind.to_string(),
+        kind: kind.into(),
         target: StateTarget {
             r#type: "finding".to_string(),
             id: findings[0].id.clone(),
@@ -1961,7 +1961,7 @@ fn build_claim_and_register_log(
     let mk = |kind: &str, ts_idx: usize, payload: serde_json::Value| StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: kind.to_string(),
+        kind: kind.into(),
         target: StateTarget {
             r#type: "finding".to_string(),
             id: findings[0].id.clone(),
@@ -2009,7 +2009,7 @@ fn build_register_with_finding_edge_log(
     let mk = |ts_idx: usize, target: &str, payload: serde_json::Value| StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "statement.registered".to_string(),
+        kind: "statement.registered".into(),
         target: StateTarget {
             r#type: "finding".to_string(),
             id: target.to_string(),
@@ -2066,7 +2066,7 @@ fn build_diff_pack_released_log(
     vec![StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: format!("vev_release_fixture_{frontier_idx:04x}"),
-        kind: "diff_pack.released".to_string(),
+        kind: "diff_pack.released".into(),
         target: StateTarget {
             r#type: "diff_pack".to_string(),
             id: pack_id.clone(),
@@ -2099,7 +2099,7 @@ fn build_diff_pack_reviewed_log(
     vec![StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: format!("vev_review_fixture_{frontier_idx:04x}"),
-        kind: "diff_pack.reviewed".to_string(),
+        kind: "diff_pack.reviewed".into(),
         target: StateTarget {
             r#type: "diff_pack".to_string(),
             id: pack_id.clone(),
@@ -2152,7 +2152,7 @@ fn build_verdict_conflict_resolved_log(
     vec![StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: format!("vev_conflict_fixture_{frontier_idx:04x}"),
-        kind: "verdict_conflict.resolved".to_string(),
+        kind: "verdict_conflict.resolved".into(),
         target: StateTarget {
             r#type: "verdict_conflict".to_string(),
             id: conflict.conflict_id.clone(),
@@ -2200,7 +2200,7 @@ fn build_contradiction_resolved_log(
     vec![StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: format!("vev_contradiction_fixture_{frontier_idx:04x}"),
-        kind: "contradiction.resolved".to_string(),
+        kind: "contradiction.resolved".into(),
         target: StateTarget {
             r#type: "contradiction".to_string(),
             id: contradiction_id,
@@ -2307,7 +2307,7 @@ fn build_replication_deposited_log(
     vec![StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "replication.deposited".to_string(),
+        kind: "replication.deposited".into(),
         target: StateTarget {
             r#type: "finding".to_string(),
             id: target_finding.id.clone(),
@@ -2387,7 +2387,7 @@ fn build_prediction_deposited_log(
     vec![StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "prediction.deposited".to_string(),
+        kind: "prediction.deposited".into(),
         target: StateTarget {
             r#type: "finding".to_string(),
             id: target_finding.id.clone(),
@@ -2596,7 +2596,7 @@ fn export_one(
     let mut kinds_seen: std::collections::BTreeMap<String, usize> =
         std::collections::BTreeMap::new();
     for ev in &event_log {
-        *kinds_seen.entry(ev.kind.clone()).or_insert(0) += 1;
+        *kinds_seen.entry(ev.kind.to_string()).or_insert(0) += 1;
     }
     let kinds_value: Value = serde_json::to_value(&kinds_seen).unwrap();
 
@@ -3054,64 +3054,64 @@ fn fixture_coverage_includes_every_reducer_arm() {
 
     let mut all_kinds: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     for ev in build_event_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind);
+        all_kinds.insert(ev.kind.to_string());
     }
     for ev in build_review_branches_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind);
+        all_kinds.insert(ev.kind.to_string());
     }
     for ev in build_annotations_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind);
+        all_kinds.insert(ev.kind.to_string());
     }
     for ev in build_negative_results_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind);
+        all_kinds.insert(ev.kind.to_string());
     }
     for ev in build_trajectories_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind);
+        all_kinds.insert(ev.kind.to_string());
     }
     for ev in build_tier_set_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind);
+        all_kinds.insert(ev.kind.to_string());
     }
     for ev in build_artifacts_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind);
+        all_kinds.insert(ev.kind.to_string());
     }
     for ev in build_locator_repair_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind);
+        all_kinds.insert(ev.kind.to_string());
     }
     for ev in build_span_repair_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind);
+        all_kinds.insert(ev.kind.to_string());
     }
     for ev in build_entity_resolve_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind);
+        all_kinds.insert(ev.kind.to_string());
     }
     for ev in build_entity_added_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind);
+        all_kinds.insert(ev.kind.to_string());
     }
     for ev in build_diff_pack_released_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind);
+        all_kinds.insert(ev.kind.to_string());
     }
     for ev in build_diff_pack_reviewed_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind);
+        all_kinds.insert(ev.kind.to_string());
     }
     for ev in build_verdict_conflict_resolved_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind);
+        all_kinds.insert(ev.kind.to_string());
     }
     for ev in build_contradiction_resolved_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind);
+        all_kinds.insert(ev.kind.to_string());
     }
     for ev in build_superseded_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind);
+        all_kinds.insert(ev.kind.to_string());
     }
     for ev in build_reinterpreted_causal_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind);
+        all_kinds.insert(ev.kind.to_string());
     }
     for ev in build_statement_attested_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind);
+        all_kinds.insert(ev.kind.to_string());
     }
     for ev in build_claim_and_register_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind);
+        all_kinds.insert(ev.kind.to_string());
     }
     for ev in build_anchor_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind);
+        all_kinds.insert(ev.kind.to_string());
     }
 
     for kind in REDUCER_MUTATION_KINDS {

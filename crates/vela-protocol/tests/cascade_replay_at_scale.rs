@@ -375,7 +375,7 @@ fn cascade_replay_is_deterministic_at_50_frontier_scale() {
         // through the reducer (which doesn't validate) and only fail
         // at the registry boundary.
         for ev in &event_log {
-            events::validate_event_payload(&ev.kind, &ev.payload).unwrap_or_else(|e| {
+            events::validate_event_payload(ev.kind.as_str(), &ev.payload).unwrap_or_else(|e| {
                 panic!(
                     "frontier {frontier_idx}: event {} ({}) failed payload validation: {e}",
                     ev.id, ev.kind
@@ -426,7 +426,7 @@ fn revocation_chain_validates_at_depth() {
             NULL_HASH,
         );
         // Validate against the v0.49 validator arm.
-        events::validate_event_payload(&event.kind, &event.payload)
+        events::validate_event_payload(event.kind.as_str(), &event.payload)
             .unwrap_or_else(|e| panic!("step {step} validation failed: {e}"));
         assert_eq!(event.kind, EVENT_KIND_KEY_REVOKE);
         // Each step's revoked key must differ from the previous step's

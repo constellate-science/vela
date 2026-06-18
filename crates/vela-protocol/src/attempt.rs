@@ -429,7 +429,7 @@ mod tests {
         AttemptDraft {
             problem: 309,
             frontier: "sidon-a309370".to_string(),
-            kind: "lower_bound".to_string(),
+            kind: "lower_bound".into(),
             claim: "a(8) >= 33".to_string(),
             detail: "witness of 33 binary vectors, pairwise sums distinct".to_string(),
             claimed_status: "verified_computationally".to_string(),
@@ -493,7 +493,7 @@ mod tests {
         let draft = AttemptDraft {
             problem: 1,
             frontier: "f".to_string(),
-            kind: "k".to_string(),
+            kind: "k".into(),
             claim: "c".to_string(),
             ..Default::default()
         };

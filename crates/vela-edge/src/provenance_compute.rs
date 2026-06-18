@@ -174,7 +174,7 @@ pub fn status_provenance_for_finding(
         .filter(|e| e.target.id == finding_id && e.target.r#type == "finding")
         .map(|e| ProvenanceEventRef {
             id: &e.id,
-            kind: &e.kind,
+            kind: e.kind.as_str(),
             finding_id: &e.target.id,
             payload: &e.payload,
         })
@@ -375,7 +375,7 @@ mod tests {
         StateEvent {
             schema: "vela.event.v0.1".into(),
             id: id.to_string(),
-            kind: kind.to_string(),
+            kind: kind.into(),
             target: StateTarget {
                 r#type: "finding".into(),
                 id: finding_id.to_string(),

@@ -501,10 +501,10 @@ mod tests {
             expected_outputs: vec![ExpectedOutput {
                 name: "first-cell-demo".to_string(),
                 by_date: "2027-09-30".to_string(),
-                kind: "experiment_result".to_string(),
+                kind: "experiment_result".into(),
             }],
             standard_candles: vec![StandardCandle {
-                kind: "person".to_string(),
+                kind: "person".into(),
                 candle_ref: "prs_alice-allen".to_string(),
                 outcome: "hired".to_string(),
                 notes: "anchor researcher".to_string(),

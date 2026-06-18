@@ -166,7 +166,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         {
             signals.push(SignalItem {
                 id: signal_id("source_hash_missing", &source.id),
-                kind: "source_hash_missing".to_string(),
+                kind: "source_hash_missing".into(),
                 severity: "info".to_string(),
                 target: SignalTarget {
                     r#type: "source".to_string(),
@@ -185,7 +185,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         if source.source_type == "agent_trace" {
             signals.push(SignalItem {
                 id: signal_id("agent_trace_unverified", &source.id),
-                kind: "agent_trace_unverified".to_string(),
+                kind: "agent_trace_unverified".into(),
                 severity: "warning".to_string(),
                 target: SignalTarget {
                     r#type: "source".to_string(),
@@ -209,7 +209,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         {
             signals.push(SignalItem {
                 id: signal_id("synthetic_source_requires_review", &source.id),
-                kind: "synthetic_source_requires_review".to_string(),
+                kind: "synthetic_source_requires_review".into(),
                 severity: "warning".to_string(),
                 target: SignalTarget {
                     r#type: "source".to_string(),
@@ -230,7 +230,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         if atom.locator.is_none() {
             signals.push(SignalItem {
                 id: signal_id("missing_evidence_locator", &atom.id),
-                kind: "missing_evidence_locator".to_string(),
+                kind: "missing_evidence_locator".into(),
                 severity: "warning".to_string(),
                 target: SignalTarget {
                     r#type: "finding".to_string(),
@@ -257,7 +257,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         {
             signals.push(SignalItem {
                 id: signal_id("synthetic_source_requires_review", &atom.id),
-                kind: "synthetic_source_requires_review".to_string(),
+                kind: "synthetic_source_requires_review".into(),
                 severity: "warning".to_string(),
                 target: SignalTarget {
                     r#type: "finding".to_string(),
@@ -279,7 +279,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         if record.text.trim().is_empty() {
             signals.push(SignalItem {
                 id: signal_id("missing_conditions", &record.id),
-                kind: "missing_conditions".to_string(),
+                kind: "missing_conditions".into(),
                 severity: "warning".to_string(),
                 target: SignalTarget {
                     r#type: "finding".to_string(),
@@ -299,7 +299,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         {
             signals.push(SignalItem {
                 id: signal_id("missing_comparator", &record.id),
-                kind: "missing_comparator".to_string(),
+                kind: "missing_comparator".into(),
                 severity: "info".to_string(),
                 target: SignalTarget {
                     r#type: "finding".to_string(),
@@ -319,7 +319,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         if record.exposure_or_efficacy == "both" {
             signals.push(SignalItem {
                 id: signal_id("exposure_efficacy_overgeneralization", &record.id),
-                kind: "condition_loss_risk".to_string(),
+                kind: "condition_loss_risk".into(),
                 severity: "info".to_string(),
                 target: SignalTarget {
                     r#type: "finding".to_string(),
@@ -346,7 +346,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         {
             signals.push(SignalItem {
                 id: signal_id("mouse_human_translation_risk", &record.id),
-                kind: "condition_loss_risk".to_string(),
+                kind: "condition_loss_risk".into(),
                 severity: "info".to_string(),
                 target: SignalTarget {
                     r#type: "finding".to_string(),
@@ -381,7 +381,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         {
             signals.push(SignalItem {
                 id: signal_id("weak_provenance", &finding.id),
-                kind: "weak_provenance".to_string(),
+                kind: "weak_provenance".into(),
                 severity: "warning".to_string(),
                 target: SignalTarget {
                     r#type: "finding".to_string(),
@@ -411,7 +411,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         {
             signals.push(SignalItem {
                 id: signal_id("conditions_undeclared", &finding.id),
-                kind: "conditions_undeclared".to_string(),
+                kind: "conditions_undeclared".into(),
                 severity: "error".to_string(),
                 target: SignalTarget {
                     r#type: "finding".to_string(),
@@ -436,7 +436,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         if !finding.flags.retracted && !evidence_grounded.contains(finding.id.as_str()) {
             signals.push(SignalItem {
                 id: signal_id("evidence_atom_missing", &finding.id),
-                kind: "evidence_atom_missing".to_string(),
+                kind: "evidence_atom_missing".into(),
                 severity: "error".to_string(),
                 target: SignalTarget {
                     r#type: "finding".to_string(),
@@ -473,7 +473,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         if agent_typed && !has_review && !finding.flags.gap && !finding.flags.retracted {
             signals.push(SignalItem {
                 id: signal_id("agent_typed_unreviewed", &finding.id),
-                kind: "agent_typed_unreviewed".to_string(),
+                kind: "agent_typed_unreviewed".into(),
                 severity: "warning".to_string(),
                 target: SignalTarget {
                     r#type: "finding".to_string(),
@@ -497,7 +497,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         if finding.evidence.evidence_spans.is_empty() {
             signals.push(SignalItem {
                 id: signal_id("missing_evidence_span", &finding.id),
-                kind: "missing_evidence_span".to_string(),
+                kind: "missing_evidence_span".into(),
                 severity: "warning".to_string(),
                 target: SignalTarget {
                     r#type: "finding".to_string(),
@@ -515,7 +515,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         if finding.conditions.text.trim().is_empty() {
             signals.push(SignalItem {
                 id: signal_id("missing_conditions", &finding.id),
-                kind: "missing_conditions".to_string(),
+                kind: "missing_conditions".into(),
                 severity: "warning".to_string(),
                 target: SignalTarget {
                     r#type: "finding".to_string(),
@@ -538,7 +538,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         {
             signals.push(SignalItem {
                 id: signal_id("condition_loss_risk", &finding.id),
-                kind: "condition_loss_risk".to_string(),
+                kind: "condition_loss_risk".into(),
                 severity: "warning".to_string(),
                 target: SignalTarget {
                     r#type: "finding".to_string(),
@@ -565,7 +565,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         {
             signals.push(SignalItem {
                 id: signal_id("needs_human_review", &finding.id),
-                kind: "needs_human_review".to_string(),
+                kind: "needs_human_review".into(),
                 severity: "warning".to_string(),
                 target: SignalTarget {
                     r#type: "finding".to_string(),
@@ -587,7 +587,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         {
             signals.push(SignalItem {
                 id: signal_id("rough_source_extraction", &finding.id),
-                kind: "rough_source_extraction".to_string(),
+                kind: "rough_source_extraction".into(),
                 severity: "warning".to_string(),
                 target: SignalTarget {
                     r#type: "finding".to_string(),
@@ -615,7 +615,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         {
             signals.push(SignalItem {
                 id: signal_id("synthesis_used_as_source", &finding.id),
-                kind: "synthesis_used_as_source".to_string(),
+                kind: "synthesis_used_as_source".into(),
                 severity: "warning".to_string(),
                 target: SignalTarget {
                     r#type: "finding".to_string(),
@@ -636,7 +636,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         if finding.flags.contested && finding.confidence.score >= 0.8 {
             signals.push(SignalItem {
                 id: signal_id("contested_high_confidence", &finding.id),
-                kind: "contested_high_confidence".to_string(),
+                kind: "contested_high_confidence".into(),
                 severity: "warning".to_string(),
                 target: SignalTarget {
                     r#type: "finding".to_string(),
@@ -720,7 +720,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         if !diffs.is_empty() {
             signals.push(SignalItem {
                 id: signal_id("provenance_drift", &finding.id),
-                kind: "provenance_drift".to_string(),
+                kind: "provenance_drift".into(),
                 severity: "error".to_string(),
                 target: SignalTarget {
                     r#type: "finding".to_string(),
@@ -770,7 +770,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
             if actor_record.is_revoked_at(event.timestamp.as_str()) {
                 signals.push(SignalItem {
                     id: signal_id("post_revocation_signature", &event.id),
-                    kind: "post_revocation_signature".to_string(),
+                    kind: "post_revocation_signature".into(),
                     severity: "error".to_string(),
                     target: SignalTarget {
                         r#type: "event".to_string(),
@@ -803,7 +803,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
             if let Some(reason) = invalid {
                 signals.push(SignalItem {
                     id: signal_id("unsigned_registered_actor", &event.id),
-                    kind: "unsigned_registered_actor".to_string(),
+                    kind: "unsigned_registered_actor".into(),
                     severity: "error".to_string(),
                     target: SignalTarget {
                         r#type: "event".to_string(),
@@ -830,7 +830,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
     for duplicate in &proposal_summary.duplicate_ids {
         signals.push(SignalItem {
             id: signal_id("proposal_conflict", duplicate),
-            kind: "proposal_conflict".to_string(),
+            kind: "proposal_conflict".into(),
             severity: "error".to_string(),
             target: SignalTarget {
                 r#type: "frontier".to_string(),
@@ -846,7 +846,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
     for target in &proposal_summary.invalid_targets {
         signals.push(SignalItem {
             id: signal_id("proposal_conflict", target),
-            kind: "proposal_conflict".to_string(),
+            kind: "proposal_conflict".into(),
             severity: "error".to_string(),
             target: SignalTarget {
                 r#type: "finding".to_string(),
@@ -867,7 +867,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
     {
         signals.push(SignalItem {
             id: signal_id("pending_proposal_review", &proposal.id),
-            kind: "pending_proposal_review".to_string(),
+            kind: "pending_proposal_review".into(),
             severity: "warning".to_string(),
             target: SignalTarget {
                 r#type: proposal.target.r#type.clone(),
@@ -890,7 +890,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
     {
         signals.push(SignalItem {
             id: signal_id("proposal_applied", &proposal.id),
-            kind: "proposal_applied".to_string(),
+            kind: "proposal_applied".into(),
             severity: "info".to_string(),
             target: SignalTarget {
                 r#type: proposal.target.r#type.clone(),
@@ -913,7 +913,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
     }) {
         signals.push(SignalItem {
             id: signal_id("reviewer_identity_missing", &proposal.id),
-            kind: "reviewer_identity_missing".to_string(),
+            kind: "reviewer_identity_missing".into(),
             severity: "error".to_string(),
             target: SignalTarget {
                 r#type: proposal.target.r#type.clone(),
@@ -935,7 +935,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
     if frontier.proof_state.latest_packet.status == "stale" {
         signals.push(SignalItem {
             id: signal_id("stale_proof_packet", &frontier.project.name),
-            kind: "stale_proof_packet".to_string(),
+            kind: "stale_proof_packet".into(),
             severity: "warning".to_string(),
             target: SignalTarget {
                 r#type: "frontier".to_string(),

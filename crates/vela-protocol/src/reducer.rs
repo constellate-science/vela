@@ -23,7 +23,7 @@ use std::collections::HashMap;
 use serde_json::Value;
 
 use crate::bundle::{Annotation, ConfidenceMethod};
-use crate::events::{self, StateEvent};
+use crate::events::{self, EventKind, StateEvent};
 use crate::project::{self, Project};
 
 /// v0.105: per-replay finding-id index. Keys are content-addressed
@@ -180,25 +180,25 @@ pub fn apply_event_indexed(
     event: &StateEvent,
     idx: &mut FindingIndex,
 ) -> Result<(), String> {
-    match event.kind.as_str() {
+    match &event.kind {
         // Phase J: `frontier.created` is the genesis event. It carries
         // identity (its canonical hash IS the frontier_id) but does not
         // mutate finding state. Replay treats it as a structural
         // anchor — the chain begins here.
-        "frontier.created" => Ok(()),
-        "finding.asserted" => apply_finding_asserted(state, event, idx),
-        "finding.reviewed" => apply_finding_reviewed(state, event, idx),
-        "finding.noted" => apply_finding_annotation(state, event, "noted", idx),
-        "finding.caveated" => apply_finding_annotation(state, event, "caveated", idx),
-        "source_text.reviewed" => Ok(()),
-        "finding.confidence_revised" => apply_finding_confidence_revised(state, event, idx),
-        "finding.rejected" => apply_finding_rejected(state, event, idx),
-        "finding.retracted" => apply_finding_retracted(state, event, idx),
+        EventKind::FrontierCreated => Ok(()),
+        EventKind::FindingAsserted => apply_finding_asserted(state, event, idx),
+        EventKind::FindingReviewed => apply_finding_reviewed(state, event, idx),
+        EventKind::FindingNoted => apply_finding_annotation(state, event, "noted", idx),
+        EventKind::FindingCaveated => apply_finding_annotation(state, event, "caveated", idx),
+        EventKind::SourceTextReviewed => Ok(()),
+        EventKind::FindingConfidenceRevised => apply_finding_confidence_revised(state, event, idx),
+        EventKind::FindingRejected => apply_finding_rejected(state, event, idx),
+        EventKind::FindingRetracted => apply_finding_retracted(state, event, idx),
         // Phase L: per-dependent cascade event. Replay marks the
         // dependent as contested and records the upstream chain in an
         // annotation so a fresh reduce reproduces the post-cascade
         // state without re-running the propagator.
-        "finding.dependency_invalidated" => apply_finding_dependency_invalidated(state, event, idx),
+        EventKind::FindingDependencyInvalidated => apply_finding_dependency_invalidated(state, event, idx),
         // v0.49: NegativeResult lifecycle. Each arm mutates
         // `state.negative_results`. None of them touch `state.findings`
         // — a null bears against a finding through the
@@ -207,37 +207,37 @@ pub fn apply_event_indexed(
         // confidence math reads `is_informative_trial_null` and
         // `target_findings` to decide whether to revise; that revision
         // is a separate `finding.confidence_revised` event.
-        "negative_result.asserted" => apply_negative_result_asserted(state, event),
-        "negative_result.reviewed" => apply_negative_result_reviewed(state, event),
-        "negative_result.retracted" => apply_negative_result_retracted(state, event),
+        EventKind::NegativeResultAsserted => apply_negative_result_asserted(state, event),
+        EventKind::NegativeResultReviewed => apply_negative_result_reviewed(state, event),
+        EventKind::NegativeResultRetracted => apply_negative_result_retracted(state, event),
         // v0.50: Trajectory lifecycle. Each arm mutates
         // `state.trajectories` (and the ordered `steps` on a
         // trajectory). None touch `state.findings`. Step-appended is
         // the interesting arm — it grows an existing trajectory
         // rather than creating a new top-level object, which makes a
         // search visible to readers as it unfolds.
-        "trajectory.created" => apply_trajectory_created(state, event),
-        "trajectory.step_appended" => apply_trajectory_step_appended(state, event),
-        "trajectory.reviewed" => apply_trajectory_reviewed(state, event),
-        "trajectory.retracted" => apply_trajectory_retracted(state, event),
-        "artifact.asserted" => apply_artifact_asserted(state, event),
-        "verifier_attachment.added" => apply_verifier_attachment_added(state, event),
-        "artifact.reviewed" => apply_artifact_reviewed(state, event),
-        "artifact.retracted" => apply_artifact_retracted(state, event),
+        EventKind::TrajectoryCreated => apply_trajectory_created(state, event),
+        EventKind::TrajectoryStepAppended => apply_trajectory_step_appended(state, event),
+        EventKind::TrajectoryReviewed => apply_trajectory_reviewed(state, event),
+        EventKind::TrajectoryRetracted => apply_trajectory_retracted(state, event),
+        EventKind::ArtifactAsserted => apply_artifact_asserted(state, event),
+        EventKind::VerifierAttachmentAdded => apply_verifier_attachment_added(state, event),
+        EventKind::ArtifactReviewed => apply_artifact_reviewed(state, event),
+        EventKind::ArtifactRetracted => apply_artifact_retracted(state, event),
         // v0.51: tier re-classification.
-        "tier.set" => apply_tier_set(state, event),
+        EventKind::TierSet => apply_tier_set(state, event),
         // v0.56: mechanical evidence-atom locator repair.
-        "evidence_atom.locator_repaired" => apply_evidence_atom_locator_repaired(state, event),
+        EventKind::EvidenceAtomLocatorRepaired => apply_evidence_atom_locator_repaired(state, event),
         // v0.57: mechanical finding-level span repair.
-        "finding.span_repaired" => apply_finding_span_repaired(state, event, idx),
+        EventKind::FindingSpanRepaired => apply_finding_span_repaired(state, event, idx),
         // v0.57: entity resolution.
-        "finding.entity_resolved" => apply_finding_entity_resolved(state, event, idx),
+        EventKind::FindingEntityResolved => apply_finding_entity_resolved(state, event, idx),
         // v0.79: append a new entity tag to an existing finding.
-        "finding.entity_added" => apply_finding_entity_added(state, event, idx),
+        EventKind::FindingEntityAdded => apply_finding_entity_added(state, event, idx),
         // v0.79.4: per-event attestation. No-op on findings;
         // attestations live as append-only canonical events
         // pointing at a target event id.
-        "attestation.recorded" => Ok(()),
+        EventKind::AttestationRecorded => Ok(()),
         // v0.39 + v0.59: federation events. These are frontier-level
         // observations (sync passes, peer divergence, reviewer
         // resolution verdicts), not finding-state mutations. The
@@ -245,25 +245,25 @@ pub fn apply_event_indexed(
         // themselves still append to `state.events` via the caller
         // and stay queryable from the Workbench inbox + audit
         // scripts.
-        "frontier.synced_with_peer"
-        | "frontier.conflict_detected"
-        | "frontier.conflict_resolved"
-        | "frontier.forked_from" => Ok(()),
+        EventKind::FrontierSyncedWithPeer
+        | EventKind::FrontierConflictDetected
+        | EventKind::FrontierConflictResolved
+        | EventKind::FrontierForkedFrom => Ok(()),
         // v0.67: bridge review verdict. Bridges live in `.vela/bridges/`
         // as a side table; the reducer arm is a no-op on
         // `Project.findings`. Consumers (Workbench, audit scripts,
         // hub mirrors) project the verdict onto Bridge.status by
         // reading the most recent bridge.reviewed event for that
         // bridge_id.
-        "bridge.reviewed" => Ok(()),
+        EventKind::BridgeReviewed => Ok(()),
         // v0.70: replication / prediction deposits. Each appends a
         // record to `Project.replications` or `Project.predictions`
         // if the content-addressed id is not already present
         // (idempotent under re-application). No-op on
         // `Project.findings`; cross-impl finding-effects digest
         // covers findings only.
-        "replication.deposited" => apply_replication_deposited(state, event),
-        "prediction.deposited" => apply_prediction_deposited(state, event),
+        EventKind::ReplicationDeposited => apply_replication_deposited(state, event),
+        EventKind::PredictionDeposited => apply_prediction_deposited(state, event),
         // v0.201: a `vsd_*` Scientific Diff Pack was signed, applied,
         // and is now federated. The event is a metadata-only handle —
         // its payload references the pack id; replay does not mutate
@@ -271,7 +271,7 @@ pub fn apply_event_indexed(
         // applied through their own `proposal.accepted` arms. The arm
         // exists so the event is a first-class federation handle that
         // hubs can index by `vsd_*`.
-        "diff_pack.released" => apply_diff_pack_released(state, event),
+        EventKind::DiffPackReleased => apply_diff_pack_released(state, event),
         // v0.205: a reviewer issued a verdict on a `vsd_*` Diff Pack.
         // The event payload carries (pack_id, verdict, reviewer_actor,
         // reason). Like `diff_pack.released`, this arm is metadata-
@@ -281,33 +281,33 @@ pub fn apply_event_indexed(
         // pins. Theorem 26 (Diff Pack verdict atomicity) pins the
         // promoter-side guarantee that accept either applies every
         // member or none.
-        "diff_pack.reviewed" => apply_diff_pack_reviewed(state, event),
+        EventKind::DiffPackReviewed => apply_diff_pack_reviewed(state, event),
         // v0.218: a verdict-conflict resolution lands on the log.
         // Append the VerdictConflict record to state.verdict_conflicts
         // (idempotent on conflict_id).
-        "verdict_conflict.resolved" => apply_verdict_conflict_resolved(state, event),
+        EventKind::VerdictConflictResolved => apply_verdict_conflict_resolved(state, event),
         // T7: a contradiction resolution lands on the log. Upsert the
         // resolved Contradiction into state.contradictions by id.
-        "contradiction.resolved" => apply_contradiction_resolved(state, event),
+        EventKind::ContradictionResolved => apply_contradiction_resolved(state, event),
         // Attempt lifecycle: a signed deposit, then append-only resolutions.
-        "attempt.deposited" => apply_attempt_deposited(state, event),
-        "transfer.deposited" => apply_transfer_deposited(state, event),
-        "endorsement.deposited" => apply_endorsement_deposited(state, event),
-        "attempt.resolved" => apply_attempt_resolved(state, event),
-        "statement.attested" => apply_statement_attested(state, event),
-        "anchor.attached" => apply_anchor_attached(state, event),
-        "anchor.retracted" => apply_anchor_retracted(state, event),
-        "attempt.claimed" => apply_attempt_claimed(state, event),
-        "statement.registered" => apply_statement_registered(state, event),
+        EventKind::AttemptDeposited => apply_attempt_deposited(state, event),
+        EventKind::TransferDeposited => apply_transfer_deposited(state, event),
+        EventKind::EndorsementDeposited => apply_endorsement_deposited(state, event),
+        EventKind::AttemptResolved => apply_attempt_resolved(state, event),
+        EventKind::StatementAttested => apply_statement_attested(state, event),
+        EventKind::AnchorAttached => apply_anchor_attached(state, event),
+        EventKind::AnchorRetracted => apply_anchor_retracted(state, event),
+        EventKind::AttemptClaimed => apply_attempt_claimed(state, event),
+        EventKind::StatementRegistered => apply_statement_registered(state, event),
         // Supersession: the event targets the *old* finding and flips its
         // `flags.superseded`. The replacement finding's body lives in the
         // accepted proposal's `payload.new_finding` and enters replay via
         // genesis seeding (`repo::seed_genesis`), not via this arm — the
         // event payload is deliberately thin ({proposal_id, new_finding_id}).
-        "finding.superseded" => apply_finding_superseded(state, event, idx),
+        EventKind::FindingSuperseded => apply_finding_superseded(state, event, idx),
         // Causal re-grading (`vela finding causal-set`): replays the
         // claim/grade mutation from the event's `payload.after`.
-        "assertion.reinterpreted_causal" => apply_assertion_reinterpreted_causal(state, event, idx),
+        EventKind::AssertionReinterpretedCausal => apply_assertion_reinterpreted_causal(state, event, idx),
         // Audit-only / writerless kinds. Each is validated at emit time and
         // appended to the log, but mutates no projected state on replay:
         // their consumers read the events directly. The threshold,
@@ -319,12 +319,12 @@ pub fn apply_event_indexed(
         // historical log containing any of them replays instead of erroring.
         // A reviewer-tier key's recommend-accept: audit record consumed by
         // owner/maintainer keys; no projected-state mutation.
-        "proposal.recommended"
-        | "prediction.expired_unresolved"
-        | "frontier.observation_reviewed"
-        | "correction_return.review"
-        | "research_trace.review"
-        | "key.revoke"
+        EventKind::ProposalRecommended
+        | EventKind::PredictionExpiredUnresolved
+        | EventKind::FrontierObservationReviewed
+        | EventKind::CorrectionReturnReview
+        | EventKind::ResearchTraceReview
+        | EventKind::KeyRevoke
         // Reviewer decision records. Audit-only on the FINDING projection:
         // the accept's effect on state is the domain event it produced
         // (finding.asserted, …), already replayed by its own arm; the
@@ -332,10 +332,10 @@ pub fn apply_event_indexed(
         // a separate projection over these events, verified by
         // `proposals::verify_proposal_decision_parity` — not reconstructed
         // here, so verify_replay's finding hashes are untouched.
-        | "review.accepted"
-        | "review.rejected"
-        | "review.revision_requested" => Ok(()),
-        other => Err(format!("reducer: unsupported event kind '{other}'")),
+        | EventKind::ReviewAccepted
+        | EventKind::ReviewRejected
+        | EventKind::ReviewRevisionRequested => Ok(()),
+        EventKind::Other(other) => Err(format!("reducer: unsupported event kind '{other}'")),
     }
 }
 
@@ -2129,7 +2129,7 @@ mod tests {
         let event = StateEvent {
             schema: events::EVENT_SCHEMA.to_string(),
             id: "vev_test".to_string(),
-            kind: "finding.retracted".to_string(),
+            kind: "finding.retracted".into(),
             target: StateTarget {
                 r#type: "finding".to_string(),
                 id: f.id.clone(),
@@ -2168,7 +2168,7 @@ mod tests {
         let event = StateEvent {
             schema: events::EVENT_SCHEMA.to_string(),
             id: "vev_confidence".to_string(),
-            kind: "finding.confidence_revised".to_string(),
+            kind: "finding.confidence_revised".into(),
             target: StateTarget {
                 r#type: "finding".to_string(),
                 id: f.id.clone(),
@@ -2203,7 +2203,7 @@ mod tests {
         let event = StateEvent {
             schema: events::EVENT_SCHEMA.to_string(),
             id: "vev_test".to_string(),
-            kind: "finding.unknown_kind".to_string(),
+            kind: "finding.unknown_kind".into(),
             target: StateTarget {
                 r#type: "finding".to_string(),
                 id: "vf_x".to_string(),
@@ -2243,7 +2243,7 @@ mod tests {
             let event = StateEvent {
                 schema: events::EVENT_SCHEMA.to_string(),
                 id: "vev_dispatch_check".to_string(),
-                kind: (*kind).to_string(),
+                kind: (*kind).into(),
                 target: StateTarget {
                     r#type: "finding".to_string(),
                     id: "vf_x".to_string(),
@@ -2286,7 +2286,7 @@ mod tests {
             let event = StateEvent {
                 schema: events::EVENT_SCHEMA.to_string(),
                 id: "vev_known_kind_check".to_string(),
-                kind: (*kind).to_string(),
+                kind: (*kind).into(),
                 target: StateTarget {
                     r#type: "finding".to_string(),
                     id: "vf_x".to_string(),
@@ -2335,7 +2335,7 @@ mod tests {
             let event = StateEvent {
                 schema: events::EVENT_SCHEMA.to_string(),
                 id: format!("vev_federation_{kind}"),
-                kind: (*kind).to_string(),
+                kind: (*kind).into(),
                 target: StateTarget {
                     r#type: "frontier_observation".to_string(),
                     id: "vfr_x".to_string(),
@@ -2425,7 +2425,7 @@ mod tests {
         let event = StateEvent {
             schema: crate::events::EVENT_SCHEMA.to_string(),
             id: "vev_test".to_string(),
-            kind: "evidence_atom.locator_repaired".to_string(),
+            kind: "evidence_atom.locator_repaired".into(),
             target: StateTarget {
                 r#type: "evidence_atom".to_string(),
                 id: "vea_test_atom".to_string(),
@@ -2459,7 +2459,7 @@ mod tests {
         let event = StateEvent {
             schema: crate::events::EVENT_SCHEMA.to_string(),
             id: "vev_test".to_string(),
-            kind: "evidence_atom.locator_repaired".to_string(),
+            kind: "evidence_atom.locator_repaired".into(),
             target: StateTarget {
                 r#type: "evidence_atom".to_string(),
                 id: "vea_test_atom".to_string(),
@@ -2493,7 +2493,7 @@ mod tests {
         let event = StateEvent {
             schema: crate::events::EVENT_SCHEMA.to_string(),
             id: "vev_test".to_string(),
-            kind: "evidence_atom.locator_repaired".to_string(),
+            kind: "evidence_atom.locator_repaired".into(),
             target: StateTarget {
                 r#type: "evidence_atom".to_string(),
                 id: "vea_test_atom".to_string(),
@@ -2532,7 +2532,7 @@ mod tests {
         let event = StateEvent {
             schema: crate::events::EVENT_SCHEMA.to_string(),
             id: "vev_test".to_string(),
-            kind: "evidence_atom.locator_repaired".to_string(),
+            kind: "evidence_atom.locator_repaired".into(),
             target: StateTarget {
                 r#type: "evidence_atom".to_string(),
                 id: "vea_test_atom".to_string(),
@@ -2573,7 +2573,7 @@ mod tests {
         let att = Attempt::build(
             AttemptDraft {
                 problem: 309,
-                kind: "lower_bound".to_string(),
+                kind: "lower_bound".into(),
                 claim: "a(8) >= 33".to_string(),
                 ..Default::default()
             },
@@ -2642,7 +2642,7 @@ mod tests {
         let att = Attempt::build(
             AttemptDraft {
                 problem: 1,
-                kind: "k".to_string(),
+                kind: "k".into(),
                 claim: "c".to_string(),
                 ..Default::default()
             },

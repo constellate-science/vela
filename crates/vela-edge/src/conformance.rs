@@ -1027,7 +1027,7 @@ fn run_proposal_idempotency(
     let mut proposal_a = StateProposal {
         schema: input["schema"].as_str().unwrap_or("").to_string(),
         id: String::new(),
-        kind: input["kind"].as_str().unwrap_or("").to_string(),
+        kind: input["kind"].as_str().unwrap_or("").into(),
         target: serde_json::from_value(input["target"].clone())
             .map_err(|e| format!("parse target: {e}"))?,
         actor: serde_json::from_value(input["actor"].clone())

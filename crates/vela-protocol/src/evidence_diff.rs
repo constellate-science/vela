@@ -504,7 +504,7 @@ mod tests {
         StateEvent {
             schema: crate::events::EVENT_SCHEMA.to_string(),
             id: format!("vev_synthetic_{idx:04}"),
-            kind: kind.to_string(),
+            kind: kind.into(),
             target: StateTarget {
                 r#type: "finding".to_string(),
                 id: target.to_string(),

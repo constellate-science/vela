@@ -137,7 +137,7 @@ mod tests {
         append(
             &path,
             QueuedAction {
-                kind: "accept_proposal".to_string(),
+                kind: "accept_proposal".into(),
                 frontier: PathBuf::from("/tmp/x.json"),
                 args: json!({"proposal_id": "vpr_x", "reviewer_id": "r:test", "reason": "ok"}),
                 queued_at: "2026-04-25T00:00:00Z".to_string(),
@@ -157,7 +157,7 @@ mod tests {
             append(
                 &path,
                 QueuedAction {
-                    kind: "propose_review".to_string(),
+                    kind: "propose_review".into(),
                     frontier: PathBuf::from("/tmp/x.json"),
                     args: json!({"i": i}),
                     queued_at: "2026-04-25T00:00:00Z".to_string(),

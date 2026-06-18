@@ -303,7 +303,7 @@ pub fn record_locator_failure(
     let synced_event = StateEvent {
         schema: EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "frontier.synced_with_peer".to_string(),
+        kind: "frontier.synced_with_peer".into(),
         target: StateTarget {
             r#type: "frontier_observation".to_string(),
             id: frontier_id.clone(),
@@ -332,7 +332,7 @@ pub fn record_locator_failure(
     let conflict_ev = StateEvent {
         schema: EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "frontier.conflict_detected".to_string(),
+        kind: "frontier.conflict_detected".into(),
         target: StateTarget {
             r#type: "frontier_observation".to_string(),
             id: frontier_id.clone(),
@@ -392,7 +392,7 @@ pub fn record_unverified_entry(
     let mut sync_ev = StateEvent {
         schema: EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "frontier.synced_with_peer".to_string(),
+        kind: "frontier.synced_with_peer".into(),
         target: StateTarget {
             r#type: "frontier_observation".to_string(),
             id: frontier_id.clone(),
@@ -420,7 +420,7 @@ pub fn record_unverified_entry(
     let mut conflict_ev = StateEvent {
         schema: EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "frontier.conflict_detected".to_string(),
+        kind: "frontier.conflict_detected".into(),
         target: StateTarget {
             r#type: "frontier_observation".to_string(),
             id: frontier_id.clone(),
@@ -552,7 +552,7 @@ pub fn sync_with_peer(project: &mut Project, peer_id: &str, peer: &Project) -> S
     let mut synced_event = StateEvent {
         schema: EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "frontier.synced_with_peer".to_string(),
+        kind: "frontier.synced_with_peer".into(),
         target: StateTarget {
             r#type: "frontier_observation".to_string(),
             id: frontier_id.clone(),
@@ -583,7 +583,7 @@ pub fn sync_with_peer(project: &mut Project, peer_id: &str, peer: &Project) -> S
         let mut ev = StateEvent {
             schema: EVENT_SCHEMA.to_string(),
             id: String::new(),
-            kind: "frontier.conflict_detected".to_string(),
+            kind: "frontier.conflict_detected".into(),
             target: StateTarget {
                 r#type: "frontier_observation".to_string(),
                 id: frontier_id.clone(),
@@ -1104,7 +1104,7 @@ mod tests {
         StateEvent {
             schema: EVENT_SCHEMA.to_string(),
             id: id.to_string(),
-            kind: "test.event".to_string(),
+            kind: "test.event".into(),
             target: StateTarget {
                 r#type: "frontier_observation".to_string(),
                 id: "vfr_test".to_string(),
@@ -1159,7 +1159,7 @@ mod tests {
         let our_events = vec![StateEvent {
             schema: EVENT_SCHEMA.to_string(),
             id: "e1".to_string(),
-            kind: "test.event".to_string(),
+            kind: "test.event".into(),
             target: StateTarget {
                 r#type: "frontier_observation".to_string(),
                 id: "vfr_test".to_string(),

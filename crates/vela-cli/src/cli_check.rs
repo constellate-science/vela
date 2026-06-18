@@ -154,7 +154,7 @@ pub(crate) fn cmd_check(
             .filter(|e| {
                 e.signature.is_none()
                     && keyed_reviewers.contains(e.actor.id.as_str())
-                    && (e.kind.ends_with(".reviewed") || e.kind == "finding.asserted")
+                    && (e.kind.as_str().ends_with(".reviewed") || e.kind == "finding.asserted")
             })
             .count();
         // Prior-art collision lint: exact normalized-statement duplicates

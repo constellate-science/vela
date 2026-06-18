@@ -159,7 +159,7 @@ pub fn append_batch(dir: &Path, batch: &[AppendRecord]) -> Result<AppendReport, 
     for record in batch {
         let event = record.event();
         if let Err(reason) =
-            vela_protocol::events::validate_event_payload(&event.kind, &event.payload)
+            vela_protocol::events::validate_event_payload(event.kind.as_str(), &event.payload)
         {
             return Err(AppendError::InvalidEvent {
                 event_id: event.id.clone(),

@@ -506,7 +506,7 @@ fn register_canonical_witnesses(
         );
         let artifact = bundle::Artifact {
             id,
-            kind: "dataset".to_string(),
+            kind: "dataset".into(),
             name,
             content_hash,
             size_bytes: Some(bytes.len() as u64),

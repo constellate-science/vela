@@ -187,7 +187,7 @@ pub fn analyze(frontier_path: &Path) -> Result<FrontierHealthReport, String> {
         + project
             .events
             .iter()
-            .filter(|event| event.kind.contains("retract"))
+            .filter(|event| event.kind.as_str().contains("retract"))
             .count();
 
     let metrics = FrontierHealthMetrics {

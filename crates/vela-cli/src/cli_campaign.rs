@@ -174,7 +174,7 @@ fn cmd_run(
     let envelope = ActivityEnvelope::new(ActivityDraft {
         actor_id: "agent:vela-campaign".to_string(),
         actor_type: "agent".to_string(),
-        kind: "search.candidate".to_string(),
+        kind: "search.candidate".into(),
         base_root: target_descriptor(kind, n, h),
         input_roots: Vec::new(),
         output_roots: vec![witness_digest.clone()],

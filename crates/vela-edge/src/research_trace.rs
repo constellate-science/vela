@@ -588,7 +588,7 @@ mod tests {
             trace_id: "vrt_test".to_string(),
             created_at: "2026-05-25T00:00:00Z".to_string(),
             producer: TraceProducer {
-                kind: "agent".to_string(),
+                kind: "agent".into(),
                 id: "agent:test".to_string(),
                 name: "Test agent".to_string(),
             },
@@ -596,7 +596,7 @@ mod tests {
             scope: json!({"frontier": "test"}),
             source_inputs: vec![TraceSourceInput {
                 id: "source_a".to_string(),
-                kind: "paper".to_string(),
+                kind: "paper".into(),
                 locator: "https://example.org/a".to_string(),
                 content_hash: format!("sha256:{}", "1".repeat(64)),
             }],
@@ -612,7 +612,7 @@ mod tests {
             },
             verifier_attachments: vec![TraceVerifierAttachment {
                 id: "audit_a".to_string(),
-                kind: "source_locator_audit".to_string(),
+                kind: "source_locator_audit".into(),
                 locator: "local:audit.json".to_string(),
                 content_hash: format!("sha256:{}", "2".repeat(64)),
                 verifies: "source locator exists".to_string(),

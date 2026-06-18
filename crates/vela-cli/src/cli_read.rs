@@ -266,7 +266,7 @@ pub(crate) fn cmd_log(path: &Path, limit: usize, kind_filter: Option<&str>, json
         .events
         .iter()
         .filter(|e| match kind_filter {
-            Some(k) => e.kind.contains(k),
+            Some(k) => e.kind.as_str().contains(k),
             None => true,
         })
         .collect();

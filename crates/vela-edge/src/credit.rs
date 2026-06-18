@@ -176,7 +176,7 @@ pub fn build_ledger(project: &Project, now: &str) -> CreditLedger {
         if actor_id.is_empty() {
             continue;
         }
-        let roles = roles_for_event_kind(&event.kind);
+        let roles = roles_for_event_kind(event.kind.as_str());
         let entry = by_actor.entry(actor_id).or_insert_with(|| ActorAccum {
             roles: BTreeSet::new(),
             counts: BTreeMap::new(),

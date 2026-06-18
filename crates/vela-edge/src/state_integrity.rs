@@ -105,7 +105,7 @@ pub fn analyze(frontier: &Project) -> StateIntegrityReport {
     }
 
     for event in &frontier.events {
-        if is_accepted_state_event(&event.kind)
+        if is_accepted_state_event(event.kind.as_str())
             && event
                 .payload
                 .get("proposal_id")

@@ -374,7 +374,7 @@ fn build_genesis_event(name: &str, compiled_at: &str, creator: &str) -> crate::e
     let mut event = StateEvent {
         schema: EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "frontier.created".to_string(),
+        kind: "frontier.created".into(),
         target: StateTarget {
             r#type: "frontier".to_string(),
             id: name.to_string(),

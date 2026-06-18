@@ -11,7 +11,7 @@ fn roundtrip(kind: &str, target_type: &str, target_id: &str, payload: serde_json
     let event = StateEvent {
         schema: vela_protocol::events::EVENT_SCHEMA.to_string(),
         id: "vev_test".to_string(),
-        kind: kind.to_string(),
+        kind: kind.into(),
         target: StateTarget {
             r#type: target_type.to_string(),
             id: target_id.to_string(),

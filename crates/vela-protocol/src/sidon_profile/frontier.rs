@@ -85,7 +85,7 @@ impl Obligation {
             obligation_id: content_id("vobl_", &core)?,
             adapter_id: adapter_id.to_string(),
             target_cell: target_cell.to_string(),
-            kind: kind.to_string(),
+            kind: kind.into(),
             context,
             discharge_evaluator_id: discharge_evaluator_id.to_string(),
             verifier_profile_id: verifier_profile_id.to_string(),

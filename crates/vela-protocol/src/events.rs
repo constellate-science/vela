@@ -357,12 +357,153 @@ pub fn actor_kind(id: &str) -> &'static str {
     }
 }
 
+/// The kind of a canonical state event: a typed enum over the wire strings.
+///
+/// It serializes to, and deserializes from, the exact `"domain.verb"` string the
+/// log has always used, so canonical bytes and event ids are unchanged. The
+/// difference is upstream: the reducer dispatches on this enum, so a removed or
+/// mistyped handler is a compile error rather than a silent fall-through (the old
+/// `match event.kind.as_str()` over bare string literals could drop a typo'd kind
+/// into the default arm). `Other` round-trips any kind a future build does not
+/// know, keeping the log forward-compatible. Single source of truth: the
+/// `event_kinds!` table below generates `as_str` and `From<&str>` together, so
+/// they cannot drift.
+macro_rules! event_kinds {
+    ($($variant:ident => $wire:literal),+ $(,)?) => {
+        #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        pub enum EventKind {
+            $($variant,)+
+            /// A kind not known to this build; holds its original wire string.
+            Other(String),
+        }
+
+        impl EventKind {
+            /// The canonical wire string (what serializes into the log).
+            pub fn as_str(&self) -> &str {
+                match self {
+                    $(EventKind::$variant => $wire,)+
+                    EventKind::Other(s) => s.as_str(),
+                }
+            }
+        }
+
+        impl From<&str> for EventKind {
+            fn from(s: &str) -> Self {
+                match s {
+                    $($wire => EventKind::$variant,)+
+                    other => EventKind::Other(other.to_string()),
+                }
+            }
+        }
+    };
+}
+
+event_kinds! {
+    FrontierCreated => "frontier.created",
+    FindingAsserted => "finding.asserted",
+    FindingReviewed => "finding.reviewed",
+    FindingNoted => "finding.noted",
+    FindingCaveated => "finding.caveated",
+    SourceTextReviewed => "source_text.reviewed",
+    FindingConfidenceRevised => "finding.confidence_revised",
+    FindingRejected => "finding.rejected",
+    FindingRetracted => "finding.retracted",
+    FindingDependencyInvalidated => "finding.dependency_invalidated",
+    NegativeResultAsserted => "negative_result.asserted",
+    NegativeResultReviewed => "negative_result.reviewed",
+    NegativeResultRetracted => "negative_result.retracted",
+    TrajectoryCreated => "trajectory.created",
+    TrajectoryStepAppended => "trajectory.step_appended",
+    TrajectoryReviewed => "trajectory.reviewed",
+    TrajectoryRetracted => "trajectory.retracted",
+    ArtifactAsserted => "artifact.asserted",
+    VerifierAttachmentAdded => "verifier_attachment.added",
+    ArtifactReviewed => "artifact.reviewed",
+    ArtifactRetracted => "artifact.retracted",
+    TierSet => "tier.set",
+    EvidenceAtomLocatorRepaired => "evidence_atom.locator_repaired",
+    FindingSpanRepaired => "finding.span_repaired",
+    FindingEntityResolved => "finding.entity_resolved",
+    FindingEntityAdded => "finding.entity_added",
+    AttestationRecorded => "attestation.recorded",
+    FrontierSyncedWithPeer => "frontier.synced_with_peer",
+    FrontierConflictDetected => "frontier.conflict_detected",
+    FrontierConflictResolved => "frontier.conflict_resolved",
+    FrontierForkedFrom => "frontier.forked_from",
+    BridgeReviewed => "bridge.reviewed",
+    ReplicationDeposited => "replication.deposited",
+    PredictionDeposited => "prediction.deposited",
+    DiffPackReleased => "diff_pack.released",
+    DiffPackReviewed => "diff_pack.reviewed",
+    VerdictConflictResolved => "verdict_conflict.resolved",
+    ContradictionResolved => "contradiction.resolved",
+    AttemptDeposited => "attempt.deposited",
+    TransferDeposited => "transfer.deposited",
+    EndorsementDeposited => "endorsement.deposited",
+    AttemptResolved => "attempt.resolved",
+    StatementAttested => "statement.attested",
+    AnchorAttached => "anchor.attached",
+    AnchorRetracted => "anchor.retracted",
+    AttemptClaimed => "attempt.claimed",
+    StatementRegistered => "statement.registered",
+    FindingSuperseded => "finding.superseded",
+    AssertionReinterpretedCausal => "assertion.reinterpreted_causal",
+    ProposalRecommended => "proposal.recommended",
+    PredictionExpiredUnresolved => "prediction.expired_unresolved",
+    FrontierObservationReviewed => "frontier.observation_reviewed",
+    CorrectionReturnReview => "correction_return.review",
+    ResearchTraceReview => "research_trace.review",
+    KeyRevoke => "key.revoke",
+    ReviewAccepted => "review.accepted",
+    ReviewRejected => "review.rejected",
+    ReviewRevisionRequested => "review.revision_requested",
+}
+
+impl From<String> for EventKind {
+    fn from(s: String) -> Self {
+        EventKind::from(s.as_str())
+    }
+}
+
+impl std::fmt::Display for EventKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+// Ergonomic comparisons so the many `event.kind == "domain.verb"` and
+// `event.kind == EVENT_KIND_X` (a `&str`) call sites keep compiling unchanged.
+impl PartialEq<str> for EventKind {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str() == other
+    }
+}
+impl PartialEq<&str> for EventKind {
+    fn eq(&self, other: &&str) -> bool {
+        self.as_str() == *other
+    }
+}
+
+// Wire form is the bare string: `"kind":"finding.asserted"`, byte-identical to
+// the pre-migration `String` field, so event ids and canonical hashes are stable.
+impl Serialize for EventKind {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(self.as_str())
+    }
+}
+impl<'de> Deserialize<'de> for EventKind {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Ok(EventKind::from(s.as_str()))
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StateEvent {
     #[serde(default = "default_schema")]
     pub schema: String,
     pub id: String,
-    pub kind: String,
+    pub kind: EventKind,
     pub target: StateTarget,
     pub actor: StateActor,
     pub timestamp: String,
@@ -439,7 +580,7 @@ pub fn new_finding_event(input: FindingEventInput<'_>) -> StateEvent {
     let mut event = StateEvent {
         schema: EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: input.kind.to_string(),
+        kind: input.kind.into(),
         target: StateTarget {
             r#type: "finding".to_string(),
             id: input.finding_id.to_string(),
@@ -508,7 +649,7 @@ pub fn new_revocation_event(
     let mut event = StateEvent {
         schema: EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: EVENT_KIND_KEY_REVOKE.to_string(),
+        kind: EVENT_KIND_KEY_REVOKE.into(),
         target: StateTarget {
             r#type: "actor".to_string(),
             id: actor_id.to_string(),
@@ -599,7 +740,7 @@ pub fn new_review_decision_event(
     let mut event = StateEvent {
         schema: EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: kind.to_string(),
+        kind: kind.into(),
         target: StateTarget {
             r#type: "proposal".to_string(),
             id: proposal_id.to_string(),
@@ -640,7 +781,7 @@ pub fn new_evidence_atom_locator_repair_event(
     let mut event = StateEvent {
         schema: EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: EVENT_KIND_EVIDENCE_ATOM_LOCATOR_REPAIRED.to_string(),
+        kind: EVENT_KIND_EVIDENCE_ATOM_LOCATOR_REPAIRED.into(),
         target: StateTarget {
             r#type: "evidence_atom".to_string(),
             id: atom_id.to_string(),
@@ -678,7 +819,7 @@ pub fn new_frontier_conflict_resolved_event(
     let mut event = StateEvent {
         schema: EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: EVENT_KIND_FRONTIER_CONFLICT_RESOLVED.to_string(),
+        kind: EVENT_KIND_FRONTIER_CONFLICT_RESOLVED.into(),
         target: StateTarget {
             r#type: "frontier_observation".to_string(),
             id: frontier_id.to_string(),
@@ -715,7 +856,7 @@ pub fn new_bridge_reviewed_event(
     let mut event = StateEvent {
         schema: EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: EVENT_KIND_BRIDGE_REVIEWED.to_string(),
+        kind: EVENT_KIND_BRIDGE_REVIEWED.into(),
         target: StateTarget {
             r#type: "bridge".to_string(),
             id: bridge_id.to_string(),
@@ -753,7 +894,7 @@ pub fn new_contradiction_resolved_event(
     let mut event = StateEvent {
         schema: EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: EVENT_KIND_CONTRADICTION_RESOLVED.to_string(),
+        kind: EVENT_KIND_CONTRADICTION_RESOLVED.into(),
         target: StateTarget {
             r#type: "contradiction".to_string(),
             id: contradiction_id.to_string(),
@@ -790,7 +931,7 @@ fn new_attempt_event(
     let mut event = StateEvent {
         schema: EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: kind.to_string(),
+        kind: kind.into(),
         target: StateTarget {
             r#type: "attempt".to_string(),
             id: attempt_id.to_string(),
@@ -848,7 +989,7 @@ pub fn new_transfer_deposited_event(
     let mut event = StateEvent {
         schema: EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: EVENT_KIND_TRANSFER_DEPOSITED.to_string(),
+        kind: EVENT_KIND_TRANSFER_DEPOSITED.into(),
         target: StateTarget {
             r#type: "transfer".to_string(),
             id: transfer_id.to_string(),
@@ -884,7 +1025,7 @@ pub fn new_endorsement_deposited_event(
     let mut event = StateEvent {
         schema: EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: EVENT_KIND_ENDORSEMENT_DEPOSITED.to_string(),
+        kind: EVENT_KIND_ENDORSEMENT_DEPOSITED.into(),
         target: StateTarget {
             r#type: "endorsement".to_string(),
             id: endorsement_id.to_string(),
@@ -1040,7 +1181,7 @@ pub fn replay_report(frontier: &Project) -> ReplayReport {
         // a normative payload shape documented in `docs/PROTOCOL.md` §6;
         // payloads that don't match are conformance failures, not just
         // "weird optional content."
-        if let Err(err) = validate_event_payload(&event.kind, &event.payload) {
+        if let Err(err) = validate_event_payload(event.kind.as_str(), &event.payload) {
             conflicts.push(format!("event {} payload invalid: {err}", event.id));
         }
         // Side-table events (statement.registered, attempt.deposited, …)
@@ -1119,7 +1260,7 @@ pub fn summarize(frontier: &Project) -> EventLogSummary {
     let mut timestamps = Vec::<String>::new();
 
     for event in &frontier.events {
-        *kinds.entry(event.kind.clone()).or_default() += 1;
+        *kinds.entry(event.kind.to_string()).or_default() += 1;
         if !seen.insert(event.id.clone()) {
             duplicate_ids.insert(event.id.clone());
         }

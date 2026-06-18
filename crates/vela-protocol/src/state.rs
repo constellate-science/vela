@@ -507,7 +507,7 @@ pub fn record_scoped_attestation(
     let mut event = events::StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "attestation.recorded".to_string(),
+        kind: "attestation.recorded".into(),
         target: events::StateTarget {
             r#type: "event".to_string(),
             id: target_event_id.to_string(),
@@ -839,7 +839,7 @@ pub fn deposit_replication(
     let mut event = events::StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "replication.deposited".to_string(),
+        kind: "replication.deposited".into(),
         target: events::StateTarget {
             r#type: "finding".to_string(),
             id: rep.target_finding.clone(),
@@ -887,7 +887,7 @@ pub fn deposit_prediction(
     let mut event = events::StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: "prediction.deposited".to_string(),
+        kind: "prediction.deposited".into(),
         target: events::StateTarget {
             r#type: "finding".to_string(),
             id: pred.target_findings.first().cloned().unwrap_or_default(),
@@ -1122,7 +1122,7 @@ pub fn add_negative_result(
     let mut event = StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: events::EVENT_KIND_NEGATIVE_RESULT_ASSERTED.to_string(),
+        kind: events::EVENT_KIND_NEGATIVE_RESULT_ASSERTED.into(),
         target: StateTarget {
             r#type: "negative_result".to_string(),
             id: nr_id.clone(),
@@ -1148,7 +1148,7 @@ pub fn add_negative_result(
 
     // Validate before mutating state — a malformed event must not
     // poison the on-disk frontier.
-    events::validate_event_payload(&event.kind, &event.payload)?;
+    events::validate_event_payload(event.kind.as_str(), &event.payload)?;
     reducer::apply_event(&mut frontier, &event)?;
     frontier.events.push(event);
 
@@ -1206,7 +1206,7 @@ pub fn add_artifact(
     let mut event = StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: events::EVENT_KIND_ARTIFACT_ASSERTED.to_string(),
+        kind: events::EVENT_KIND_ARTIFACT_ASSERTED.into(),
         target: StateTarget {
             r#type: "artifact".to_string(),
             id: artifact_id.clone(),
@@ -1241,7 +1241,7 @@ pub fn add_artifact(
     event.id = events::compute_event_id(&event);
     let event_id = event.id.clone();
 
-    events::validate_event_payload(&event.kind, &event.payload)?;
+    events::validate_event_payload(event.kind.as_str(), &event.payload)?;
     reducer::apply_event(&mut frontier, &event)?;
     frontier.events.push(event);
 
@@ -1306,7 +1306,7 @@ pub fn create_trajectory(
     let mut event = StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: events::EVENT_KIND_TRAJECTORY_CREATED.to_string(),
+        kind: events::EVENT_KIND_TRAJECTORY_CREATED.into(),
         target: StateTarget {
             r#type: "trajectory".to_string(),
             id: traj_id.clone(),
@@ -1330,7 +1330,7 @@ pub fn create_trajectory(
     event.id = events::compute_event_id(&event);
     let event_id = event.id.clone();
 
-    events::validate_event_payload(&event.kind, &event.payload)?;
+    events::validate_event_payload(event.kind.as_str(), &event.payload)?;
     reducer::apply_event(&mut frontier, &event)?;
     frontier.events.push(event);
 
@@ -1393,7 +1393,7 @@ pub fn append_trajectory_step(
     let mut event = StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: events::EVENT_KIND_TRAJECTORY_STEP_APPENDED.to_string(),
+        kind: events::EVENT_KIND_TRAJECTORY_STEP_APPENDED.into(),
         target: StateTarget {
             r#type: "trajectory".to_string(),
             id: trajectory_id.to_string(),
@@ -1418,7 +1418,7 @@ pub fn append_trajectory_step(
     event.id = events::compute_event_id(&event);
     let event_id = event.id.clone();
 
-    events::validate_event_payload(&event.kind, &event.payload)?;
+    events::validate_event_payload(event.kind.as_str(), &event.payload)?;
     reducer::apply_event(&mut frontier, &event)?;
     frontier.events.push(event);
 
@@ -1522,7 +1522,7 @@ pub fn set_tier(
     let mut event = StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: events::EVENT_KIND_TIER_SET.to_string(),
+        kind: events::EVENT_KIND_TIER_SET.into(),
         target: StateTarget {
             r#type: object_type.to_string(),
             id: object_id.to_string(),
@@ -1549,7 +1549,7 @@ pub fn set_tier(
     event.id = events::compute_event_id(&event);
     let event_id = event.id.clone();
 
-    events::validate_event_payload(&event.kind, &event.payload)?;
+    events::validate_event_payload(event.kind.as_str(), &event.payload)?;
     reducer::apply_event(&mut frontier, &event)?;
     frontier.events.push(event);
 

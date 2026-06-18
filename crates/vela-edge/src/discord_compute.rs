@@ -241,7 +241,7 @@ mod tests {
         StateEvent {
             schema: "vela.event.v0.1".into(),
             id: id.to_string(),
-            kind: kind.to_string(),
+            kind: kind.into(),
             target: StateTarget {
                 r#type: "finding".into(),
                 id: finding_id.to_string(),

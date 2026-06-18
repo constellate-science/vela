@@ -162,7 +162,7 @@ pub fn execute_task(
         schema: artifact_to_state::ARTIFACT_PACKET_SCHEMA.to_string(),
         packet_id: format!("cap_repro_{task_id}"),
         producer: PacketProducer {
-            kind: "agent".to_string(),
+            kind: "agent".into(),
             id: actor_id.to_string(),
             name: "Code-reproduction executor".to_string(),
         },
@@ -170,7 +170,7 @@ pub fn execute_task(
         created_at: now,
         artifacts: vec![PacketArtifact {
             id: artifact_id.clone(),
-            kind: "model_output".to_string(),
+            kind: "model_output".into(),
             title: format!("Reproduction output ({outcome})"),
             locator: format!("file://{}", log_path.display()),
             content_hash,

@@ -89,7 +89,7 @@ pub fn search(
 ) -> Result<Option<Found>, String> {
     search_target(
         &Target {
-            kind: kind.to_string(),
+            kind: kind.into(),
             n,
             h,
             ..Default::default()

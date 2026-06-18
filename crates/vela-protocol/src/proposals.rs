@@ -769,7 +769,7 @@ pub fn preview_in_frontier(
                 .events
                 .iter()
                 .find(|event| event.id == applied_event_id)
-                .map(|event| vec![event.kind.clone()])
+                .map(|event| vec![event.kind.to_string()])
                 .unwrap_or_default(),
             target: proposal.target,
             reviewer: reviewer.to_string(),
@@ -836,7 +836,10 @@ pub fn preview_in_frontier(
         changed_finding_details,
         changed_artifacts: changed_artifact_ids(&preview_state, &artifact_ids_before, &new_events),
         new_event_ids: new_events.iter().map(|event| event.id.clone()).collect(),
-        event_kinds: new_events.iter().map(|event| event.kind.clone()).collect(),
+        event_kinds: new_events
+            .iter()
+            .map(|event| event.kind.to_string())
+            .collect(),
         findings_before,
         findings_after,
         findings_delta: findings_after as isize - findings_before as isize,
@@ -3425,7 +3428,7 @@ fn apply_frontier_observation_review(
     let mut event = StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: events::EVENT_KIND_FRONTIER_OBSERVATION_REVIEWED.to_string(),
+        kind: events::EVENT_KIND_FRONTIER_OBSERVATION_REVIEWED.into(),
         target: proposal.target.clone(),
         actor: StateActor {
             id: reviewer.to_string(),
@@ -3447,7 +3450,7 @@ fn apply_frontier_observation_review(
         signature: None,
         schema_artifact_id: None,
     };
-    events::validate_event_payload(&event.kind, &event.payload)?;
+    events::validate_event_payload(event.kind.as_str(), &event.payload)?;
     event.id = events::compute_event_id(&event);
     Ok(event)
 }
@@ -3653,7 +3656,7 @@ fn apply_artifact_assert(
     let mut event = StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: events::EVENT_KIND_ARTIFACT_ASSERTED.to_string(),
+        kind: events::EVENT_KIND_ARTIFACT_ASSERTED.into(),
         target: StateTarget {
             r#type: "artifact".to_string(),
             id: artifact_id,
@@ -3679,7 +3682,7 @@ fn apply_artifact_assert(
         signature: None,
         schema_artifact_id: None,
     };
-    events::validate_event_payload(&event.kind, &event.payload)?;
+    events::validate_event_payload(event.kind.as_str(), &event.payload)?;
     event.id = events::compute_event_id(&event);
     Ok(event)
 }
@@ -4577,7 +4580,7 @@ fn apply_negative_result_assert(
     let mut event = StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: events::EVENT_KIND_NEGATIVE_RESULT_ASSERTED.to_string(),
+        kind: events::EVENT_KIND_NEGATIVE_RESULT_ASSERTED.into(),
         target: StateTarget {
             r#type: "negative_result".to_string(),
             id: nr_id,
@@ -4631,7 +4634,7 @@ fn apply_trajectory_create(
     let mut event = StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: events::EVENT_KIND_TRAJECTORY_CREATED.to_string(),
+        kind: events::EVENT_KIND_TRAJECTORY_CREATED.into(),
         target: StateTarget {
             r#type: "trajectory".to_string(),
             id: traj_id,
@@ -4694,7 +4697,7 @@ fn apply_trajectory_step_append(
     let mut event = StateEvent {
         schema: events::EVENT_SCHEMA.to_string(),
         id: String::new(),
-        kind: events::EVENT_KIND_TRAJECTORY_STEP_APPENDED.to_string(),
+        kind: events::EVENT_KIND_TRAJECTORY_STEP_APPENDED.into(),
         target: StateTarget {
             r#type: "trajectory".to_string(),
             id: parent_id.clone(),
@@ -6646,7 +6649,7 @@ mod tests {
             .filter(|e| {
                 e.target.r#type == "proposal"
                     && e.target.id == proposal_id
-                    && e.kind.starts_with("review.")
+                    && e.kind.as_str().starts_with("review.")
             })
             .collect()
     }

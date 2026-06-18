@@ -174,7 +174,7 @@ pub fn propagate_correction(
                 let mut state_event = StateEvent {
                     schema: EVENT_SCHEMA.to_string(),
                     id: String::new(),
-                    kind: "finding.confidence_revised".to_string(),
+                    kind: "finding.confidence_revised".into(),
                     target: StateTarget {
                         r#type: "finding".to_string(),
                         id: finding_id.to_string(),

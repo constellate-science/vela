@@ -1026,7 +1026,7 @@ mod tests {
         let mut event = StateEvent {
             schema: EVENT_SCHEMA.to_string(),
             id: String::new(),
-            kind: "finding.reviewed".to_string(),
+            kind: "finding.reviewed".into(),
             target: StateTarget {
                 r#type: "finding".to_string(),
                 id: "vf_test".to_string(),

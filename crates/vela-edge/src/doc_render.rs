@@ -249,7 +249,7 @@ fn render_finding_detail(
         events_rows.push_str(&format!(
             "<tr><td><code>{id}</code></td><td>{kind}</td><td>{actor}</td><td>{ts}</td><td>{reason}</td></tr>",
             id = esc(&e.id),
-            kind = esc(&e.kind),
+            kind = esc(e.kind.as_str()),
             actor = esc(&e.actor.id),
             ts = esc(&e.timestamp),
             reason = esc(&truncate(&e.reason, 120)),
@@ -361,7 +361,7 @@ fn render_events(project: &Project) -> String {
         rows.push_str(&format!(
             "<tr><td><code>{id}</code></td><td>{kind}</td><td>{actor}</td><td>{target_kind}/{target_id}</td><td>{ts}</td></tr>",
             id = esc(&e.id),
-            kind = esc(&e.kind),
+            kind = esc(e.kind.as_str()),
             actor = esc(&e.actor.id),
             target_kind = esc(&e.target.r#type),
             target_id = esc(&e.target.id),

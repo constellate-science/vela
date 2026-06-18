@@ -1263,7 +1263,7 @@ mod tests {
         let asserted = |idx: usize, target: &str| StateEvent {
             schema: EVENT_SCHEMA.to_string(),
             id: format!("vev_g_{idx:04}"),
-            kind: "finding.asserted".to_string(),
+            kind: "finding.asserted".into(),
             target: StateTarget {
                 r#type: "finding".to_string(),
                 id: target.to_string(),

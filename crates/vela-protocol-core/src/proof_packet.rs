@@ -420,7 +420,7 @@ mod tests {
                 reviewed_at: Some("2026-04-10T00:00:00Z".to_string()),
             }],
             standard_candles: vec![StandardCandleRef {
-                kind: "person".to_string(),
+                kind: "person".into(),
                 candle_ref: "prs_alice-allen".to_string(),
                 outcome: "hired".to_string(),
                 notes: String::new(),
