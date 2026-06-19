@@ -120,9 +120,11 @@ pub fn search_target(tg: &Target, restarts: u64, seed: u64) -> Result<Option<Fou
         }
         "golomb" => search_golomb(n, restarts, &mut rng),
         "costas" => search_costas(n, restarts, &mut rng),
+        // DTS(I, J): n = rows (I), k = within-row order (J), J+1 marks per row.
+        "diff_triangle" => search_diff_triangle(n, tg.k, restarts, &mut rng),
         other => {
             return Err(format!(
-                "kind `{other}` is not searchable by the engine yet (searchable: gf2_sidon, union_free, rook_directions, cap, constant_weight, covering, sidon, bh, golomb, costas)"
+                "kind `{other}` is not searchable by the engine yet (searchable: gf2_sidon, union_free, rook_directions, cap, constant_weight, covering, sidon, bh, golomb, costas, diff_triangle)"
             ));
         }
     };
@@ -752,6 +754,84 @@ fn search_golomb(order: usize, restarts: u64, rng: &mut Rng) -> Option<Found> {
     best.map(|marks| Found {
         score: marks.len(),
         witness: Witness::Golomb { marks },
+        iterations,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Difference triangle set DTS(I, J): I rows of J+1 strictly-increasing marks
+// from 0, every within-row pairwise difference GLOBALLY distinct. Objective:
+// minimize the scope (largest mark). Randomized-greedy over restarts, keep the
+// lowest-scope complete set. This is a baseline producer — it yields VALID
+// constructions, not necessarily record-beating ones (the record is the open
+// problem); the frozen verifier and the value-to-beat are what make a real
+// improvement provable when a stronger solver finds one.
+// ---------------------------------------------------------------------------
+fn search_diff_triangle(rows: usize, j: usize, restarts: u64, rng: &mut Rng) -> Option<Found> {
+    let marks_per_row = j + 1;
+    if rows == 0 || marks_per_row < 2 || rows > 64 || marks_per_row > 64 {
+        return None;
+    }
+    // generous scope cap: a greedy DTS scope sits well above the optimum.
+    let cap = (rows * marks_per_row * marks_per_row * 4).max(32) as i64;
+    let iterations = restarts.max(1);
+    let mut best: Option<(Vec<Vec<i64>>, i64)> = None;
+    for _ in 0..iterations {
+        let mut all_diffs: HashSet<i64> = HashSet::new();
+        let mut grid: Vec<Vec<i64>> = Vec::with_capacity(rows);
+        let mut scope: i64 = 0;
+        let mut complete = true;
+        for _r in 0..rows {
+            let mut marks: Vec<i64> = vec![0];
+            while marks.len() < marks_per_row {
+                let cur_max = *marks.last().unwrap();
+                let mut cands: Vec<i64> = ((cur_max + 1)..=cap).collect();
+                rng.shuffle(&mut cands);
+                let mut placed = false;
+                for &c in &cands {
+                    let mut nd = Vec::with_capacity(marks.len());
+                    let mut good = true;
+                    for &m in &marks {
+                        let d = c - m;
+                        if all_diffs.contains(&d) || nd.contains(&d) {
+                            good = false;
+                            break;
+                        }
+                        nd.push(d);
+                    }
+                    if good {
+                        for d in nd {
+                            all_diffs.insert(d);
+                        }
+                        marks.push(c);
+                        placed = true;
+                        break;
+                    }
+                }
+                if !placed {
+                    complete = false;
+                    break;
+                }
+            }
+            if !complete {
+                break;
+            }
+            scope = scope.max(*marks.last().unwrap());
+            grid.push(marks);
+        }
+        if complete && grid.len() == rows && best.as_ref().map(|(_, s)| scope < *s).unwrap_or(true)
+        {
+            best = Some((grid, scope));
+        }
+    }
+    best.map(|(grid, scope)| Found {
+        // For DTS the objective is the SCOPE (lower is better), so report it as
+        // the score; it is also pinned in the witness as claimed_scope.
+        score: scope as usize,
+        witness: Witness::DiffTriangle {
+            rows: grid,
+            claimed_scope: Some(scope as usize),
+        },
         iterations,
     })
 }

@@ -303,6 +303,9 @@ fn assertion_for(kind: &str, n: usize, h: usize, score: usize) -> String {
         "costas" => {
             format!("a Costas array of order {n}. Frozen-verified by vela-verify (costas kind).")
         }
+        "diff_triangle" => format!(
+            "a difference triangle set with {n} rows of scope <= {score} (every within-row pairwise difference globally distinct). Frozen-verified by vela-verify (diff_triangle kind)."
+        ),
         _ => format!("{kind} witness, score {score}. Frozen-verified by vela-verify."),
     }
 }
