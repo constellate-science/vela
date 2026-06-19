@@ -38,11 +38,7 @@ import { argv, exit, stdout, stderr } from "node:process";
 
 type Json = string | number | boolean | null | Json[] | { [k: string]: Json };
 type Finding = { [k: string]: Json } & { id?: string };
-type NegativeResult = { [k: string]: Json } & { id?: string };
-type Trajectory = { [k: string]: Json } & { id?: string };
 type Artifact = { [k: string]: Json } & { id?: string };
-type Replication = { [k: string]: Json } & { id?: string };
-type Prediction = { [k: string]: Json } & { id?: string };
 type Event = {
   id?: string;
   kind?: string;
@@ -55,16 +51,12 @@ type Event = {
 };
 
 // Full reducer state. The TS reducer used to track findings only; it
-// now includes current non-finding collections so `tier.set`,
-// `negative_result.*`, `trajectory.*`, and `artifact.*` events
-// participate in the cross-impl byte-equivalence promise.
+// now includes current non-finding collections so `tier.set` and
+// `artifact.*` events participate in the cross-impl byte-equivalence
+// promise.
 interface ReducerState {
   findings: Finding[];
-  negative_results: NegativeResult[];
-  trajectories: Trajectory[];
   artifacts: Artifact[];
-  replications: Replication[];
-  predictions: Prediction[];
 }
 
 // ── Per-kind reducer rules ─────────────────────────────────────────
@@ -294,117 +286,6 @@ function applyFindingDependencyInvalidated(
 // v0.49+v0.50+v0.51 mirror functions: each mutates the appropriate
 // sub-collection in ReducerState. Idempotent on duplicate ids.
 
-function applyNegativeResultAsserted(
-  state: NegativeResult[],
-  event: Event,
-): void {
-  const payload = event.payload ?? {};
-  const nr = payload.negative_result as NegativeResult | undefined;
-  if (!nr) return;
-  if (state.some((n) => n.id === nr.id)) return;
-  state.push(_deepClone(nr));
-}
-
-function applyNegativeResultReviewed(
-  state: NegativeResult[],
-  event: Event,
-): void {
-  const payload = event.payload ?? {};
-  const status = payload.status;
-  if (typeof status !== "string") {
-    throw new Error("negative_result.reviewed missing payload.status");
-  }
-  const id = event.target?.id ?? "";
-  const nr = state.find((n) => n.id === id);
-  if (!nr) {
-    throw new Error(`negative_result.reviewed targets unknown id ${id}`);
-  }
-  if (status === "accepted" || status === "approved") {
-    nr.review_state = "accepted";
-  } else if (
-    status === "contested" ||
-    status === "needs_revision" ||
-    status === "rejected"
-  ) {
-    nr.review_state = status;
-  } else {
-    throw new Error(`unsupported review status ${JSON.stringify(status)}`);
-  }
-}
-
-function applyNegativeResultRetracted(
-  state: NegativeResult[],
-  event: Event,
-): void {
-  const id = event.target?.id ?? "";
-  const nr = state.find((n) => n.id === id);
-  if (!nr) {
-    throw new Error(`negative_result.retracted targets unknown id ${id}`);
-  }
-  nr.retracted = true;
-}
-
-function applyTrajectoryCreated(state: Trajectory[], event: Event): void {
-  const payload = event.payload ?? {};
-  const traj = payload.trajectory as Trajectory | undefined;
-  if (!traj) return;
-  if (state.some((t) => t.id === traj.id)) return;
-  state.push(_deepClone(traj));
-}
-
-function applyTrajectoryStepAppended(state: Trajectory[], event: Event): void {
-  const payload = event.payload ?? {};
-  const parentId = payload.parent_trajectory_id;
-  if (typeof parentId !== "string") {
-    throw new Error("trajectory.step_appended missing parent_trajectory_id");
-  }
-  const traj = state.find((t) => t.id === parentId);
-  if (!traj) {
-    throw new Error(`trajectory.step_appended targets unknown ${parentId}`);
-  }
-  const step = payload.step as { id?: string } | undefined;
-  if (!step || typeof step.id !== "string") {
-    throw new Error("trajectory.step_appended missing payload.step.id");
-  }
-  if (!Array.isArray(traj.steps)) traj.steps = [];
-  const steps = traj.steps as { id?: string }[];
-  if (steps.some((s) => s.id === step.id)) return;
-  steps.push(_deepClone(step) as { id?: string });
-}
-
-function applyTrajectoryReviewed(state: Trajectory[], event: Event): void {
-  const payload = event.payload ?? {};
-  const status = payload.status;
-  if (typeof status !== "string") {
-    throw new Error("trajectory.reviewed missing payload.status");
-  }
-  const id = event.target?.id ?? "";
-  const traj = state.find((t) => t.id === id);
-  if (!traj) {
-    throw new Error(`trajectory.reviewed targets unknown id ${id}`);
-  }
-  if (status === "accepted" || status === "approved") {
-    traj.review_state = "accepted";
-  } else if (
-    status === "contested" ||
-    status === "needs_revision" ||
-    status === "rejected"
-  ) {
-    traj.review_state = status;
-  } else {
-    throw new Error(`unsupported review status ${JSON.stringify(status)}`);
-  }
-}
-
-function applyTrajectoryRetracted(state: Trajectory[], event: Event): void {
-  const id = event.target?.id ?? "";
-  const traj = state.find((t) => t.id === id);
-  if (!traj) {
-    throw new Error(`trajectory.retracted targets unknown id ${id}`);
-  }
-  traj.retracted = true;
-}
-
 function applyArtifactAsserted(state: Artifact[], event: Event): void {
   const payload = event.payload ?? {};
   const artifact = payload.artifact as Artifact | undefined;
@@ -542,38 +423,6 @@ function applyFindingEntityResolved(findings: Finding[], event: Event): void {
   entity.needs_review = false;
 }
 
-function applyReplicationDeposited(state: Replication[], event: Event): void {
-  const payload = event.payload ?? {};
-  const rep = payload.replication as Replication | undefined;
-  if (!rep || typeof rep !== "object" || Array.isArray(rep)) {
-    throw new Error("replication.deposited event missing payload.replication");
-  }
-  const repId = rep.id ?? "";
-  if (!repId.startsWith("vrep_")) {
-    throw new Error(
-      "replication.deposited payload.replication.id must start with 'vrep_'",
-    );
-  }
-  if (state.some((r) => r.id === repId)) return;
-  state.push(_deepClone(rep));
-}
-
-function applyPredictionDeposited(state: Prediction[], event: Event): void {
-  const payload = event.payload ?? {};
-  const pred = payload.prediction as Prediction | undefined;
-  if (!pred || typeof pred !== "object" || Array.isArray(pred)) {
-    throw new Error("prediction.deposited event missing payload.prediction");
-  }
-  const predId = pred.id ?? "";
-  if (!predId.startsWith("vpred_")) {
-    throw new Error(
-      "prediction.deposited payload.prediction.id must start with 'vpred_'",
-    );
-  }
-  if (state.some((p) => p.id === predId)) return;
-  state.push(_deepClone(pred));
-}
-
 // v0.51: tier.set mutates access_tier on the matched object. The
 // payload carries object_type so the dispatcher knows which
 // collection to mutate; we re-check inside this function for
@@ -597,8 +446,6 @@ function applyTierSet(state: ReducerState, event: Event): void {
   }
   let collection: { id?: string; access_tier?: Json }[];
   if (objType === "finding") collection = state.findings;
-  else if (objType === "negative_result") collection = state.negative_results;
-  else if (objType === "trajectory") collection = state.trajectories;
   else if (objType === "artifact") collection = state.artifacts;
   else throw new Error(`tier.set unsupported object_type ${objType}`);
   const obj = collection.find((o) => o.id === objId);
@@ -625,20 +472,6 @@ function applyEvent(state: ReducerState, event: Event): void {
     applyFindingRetracted(state.findings, event);
   else if (kind === "finding.dependency_invalidated")
     applyFindingDependencyInvalidated(state.findings, event);
-  else if (kind === "negative_result.asserted")
-    applyNegativeResultAsserted(state.negative_results, event);
-  else if (kind === "negative_result.reviewed")
-    applyNegativeResultReviewed(state.negative_results, event);
-  else if (kind === "negative_result.retracted")
-    applyNegativeResultRetracted(state.negative_results, event);
-  else if (kind === "trajectory.created")
-    applyTrajectoryCreated(state.trajectories, event);
-  else if (kind === "trajectory.step_appended")
-    applyTrajectoryStepAppended(state.trajectories, event);
-  else if (kind === "trajectory.reviewed")
-    applyTrajectoryReviewed(state.trajectories, event);
-  else if (kind === "trajectory.retracted")
-    applyTrajectoryRetracted(state.trajectories, event);
   else if (kind === "artifact.asserted")
     applyArtifactAsserted(state.artifacts, event);
   else if (kind === "artifact.reviewed")
@@ -654,26 +487,19 @@ function applyEvent(state: ReducerState, event: Event): void {
   // following events do not touch any field the TS effect-digest
   // captures (id, retracted, contested, review_state,
   // confidence_score, annotation_ids, access_tier on findings; the
-  // analogous projections on negative results / trajectories /
-  // artifacts). The Rust reducer is canonical and recomputes derived
-  // structures from the event log directly
-  // (bridges, attestations, finding.entities). Treating them as
-  // no-ops here keeps the third-implementation reducer-effects
-  // digest byte-identical with Rust + Python.
-  else if (kind === "bridge.reviewed") return; // audit-only
+  // analogous projections on artifacts). The Rust reducer is canonical
+  // and recomputes derived structures from the event log directly
+  // (attestations, finding.entities). Treating them as no-ops here
+  // keeps the third-implementation reducer-effects digest
+  // byte-identical with Rust + Python.
   else if (kind === "attestation.recorded") return; // audit-only
   else if (kind === "finding.entity_added") return; // entity list outside digest
-  else if (kind === "replication.deposited")
-    applyReplicationDeposited(state.replications, event);
-  else if (kind === "prediction.deposited")
-    applyPredictionDeposited(state.predictions, event);
   // Side-table / federation arms. Each mutates a collection the Rust +
-  // Python reducers keep outside the seven digested collections
+  // Python reducers keep outside the digested collections
   // (released_diff_packs, verdict_conflicts, contradictions,
   // evidence_atoms, and the frontier-observation log). The cross-impl
-  // effect-digest covers findings / negative_results / trajectories /
-  // artifacts / replications / predictions only, so these are no-ops
-  // here. Mirrors reducer.rs::apply_diff_pack_released /
+  // effect-digest covers findings / artifacts only, so these are
+  // no-ops here. Mirrors reducer.rs::apply_diff_pack_released /
   // apply_diff_pack_reviewed / apply_verdict_conflict_resolved /
   // apply_contradiction_resolved and the v0.39+ federation no-ops.
   else if (kind === "diff_pack.released") return;
@@ -709,7 +535,6 @@ function applyEvent(state: ReducerState, event: Event): void {
   // Audit-only / writerless kinds: validated at emit, no projected
   // state on replay (explicit no-op arms in the Rust reducer).
   else if (
-    kind === "prediction.expired_unresolved" ||
     kind === "frontier.observation_reviewed" ||
     kind === "correction_return.review" ||
     kind === "research_trace.review" ||
@@ -737,39 +562,12 @@ interface FindingEffectRow {
   access_tier: string;
 }
 
-interface NegativeResultEffectRow {
-  id: string;
-  retracted: boolean;
-  review_state: string;
-  access_tier: string;
-}
-
-interface TrajectoryEffectRow {
-  id: string;
-  retracted: boolean;
-  review_state: string;
-  access_tier: string;
-  step_ids: string[];
-}
-
 interface ArtifactEffectRow {
   id: string;
   kind: string;
   retracted: boolean;
   review_state: string;
   access_tier: string;
-}
-
-interface ReplicationEffectRow {
-  id: string;
-  target_finding: string;
-  outcome: string;
-}
-
-interface PredictionEffectRow {
-  id: string;
-  made_by: string;
-  expired_unresolved: boolean;
 }
 
 function findingEffects(findings: Finding[]): FindingEffectRow[] {
@@ -798,37 +596,6 @@ function findingEffects(findings: Finding[]): FindingEffectRow[] {
   });
 }
 
-function negativeResultEffects(
-  nrs: NegativeResult[],
-): NegativeResultEffectRow[] {
-  const sorted = [...nrs].sort((a, b) =>
-    (a.id ?? "").localeCompare(b.id ?? ""),
-  );
-  return sorted.map((n) => ({
-    id: n.id ?? "",
-    retracted: Boolean(n.retracted ?? false),
-    review_state: (n.review_state as string | undefined) ?? "none",
-    access_tier: (n.access_tier as string | undefined) ?? "public",
-  }));
-}
-
-function trajectoryEffects(trajs: Trajectory[]): TrajectoryEffectRow[] {
-  const sorted = [...trajs].sort((a, b) =>
-    (a.id ?? "").localeCompare(b.id ?? ""),
-  );
-  return sorted.map((t) => {
-    const steps = (t.steps as { id?: string }[] | undefined) ?? [];
-    const stepIds = steps.map((s) => s.id ?? "");
-    return {
-      id: t.id ?? "",
-      retracted: Boolean(t.retracted ?? false),
-      review_state: (t.review_state as string | undefined) ?? "none",
-      access_tier: (t.access_tier as string | undefined) ?? "public",
-      step_ids: stepIds,
-    };
-  });
-}
-
 function artifactEffects(artifacts: Artifact[]): ArtifactEffectRow[] {
   const sorted = [...artifacts].sort((a, b) =>
     (a.id ?? "").localeCompare(b.id ?? ""),
@@ -842,41 +609,13 @@ function artifactEffects(artifacts: Artifact[]): ArtifactEffectRow[] {
   }));
 }
 
-function replicationEffects(
-  replications: Replication[],
-): ReplicationEffectRow[] {
-  const sorted = [...replications].sort((a, b) =>
-    (a.id ?? "").localeCompare(b.id ?? ""),
-  );
-  return sorted.map((r) => ({
-    id: r.id ?? "",
-    target_finding: (r.target_finding as string | undefined) ?? "",
-    outcome: (r.outcome as string | undefined) ?? "",
-  }));
-}
-
-function predictionEffects(predictions: Prediction[]): PredictionEffectRow[] {
-  const sorted = [...predictions].sort((a, b) =>
-    (a.id ?? "").localeCompare(b.id ?? ""),
-  );
-  return sorted.map((p) => ({
-    id: p.id ?? "",
-    made_by: (p.made_by as string | undefined) ?? "",
-    expired_unresolved: Boolean(p.expired_unresolved ?? false),
-  }));
-}
-
 // ── Fixture verification ───────────────────────────────────────────
 
 interface FixtureResult {
   path: string;
   frontierIdx: number;
   findings: number;
-  negativeResults: number;
-  trajectories: number;
   artifacts: number;
-  replications: number;
-  predictions: number;
   events: number;
   cascadeDepth: number;
   matched: number;
@@ -898,11 +637,7 @@ function verifyFixture(path: string): FixtureResult {
     path,
     frontierIdx: -1,
     findings: 0,
-    negativeResults: 0,
-    trajectories: 0,
     artifacts: 0,
-    replications: 0,
-    predictions: 0,
     events: 0,
     cascadeDepth: 0,
     matched: 0,
@@ -919,45 +654,30 @@ function verifyFixture(path: string): FixtureResult {
   }
   const fxVersion = String(fx.fixture_version ?? "");
   if (
+    fxVersion !== "5" &&
     fxVersion !== "4" &&
     fxVersion !== "3" &&
     fxVersion !== "2" &&
     fxVersion !== "1"
   ) {
-    result.error = `unsupported fixture_version ${JSON.stringify(fx.fixture_version)}; expected '1', '2', '3', or '4'`;
+    result.error = `unsupported fixture_version ${JSON.stringify(fx.fixture_version)}; expected '1', '2', '3', '4', or '5'`;
     return result;
   }
   result.frontierIdx = Number(fx.frontier_idx ?? -1);
   const stats = (fx.stats ?? {}) as { [k: string]: Json };
   result.findings = Number(stats.findings ?? 0);
-  result.negativeResults = Number(stats.negative_results ?? 0);
-  result.trajectories = Number(stats.trajectories ?? 0);
   result.artifacts = Number(stats.artifacts ?? 0);
-  result.replications = Number(stats.replications ?? 0);
-  result.predictions = Number(stats.predictions ?? 0);
   result.events = Number(stats.events ?? 0);
   result.cascadeDepth = Number(stats.cascade_depth ?? 0);
 
   const state: ReducerState = {
     findings: _deepClone((fx.genesis_findings as Finding[]) ?? []),
-    negative_results: [],
-    trajectories: [],
     artifacts: [],
-    replications: [],
-    predictions: [],
   };
   const eventLog = (fx.event_log as Event[]) ?? [];
   const expectedFindings = (fx.expected_states as FindingEffectRow[]) ?? [];
-  const expectedNRs =
-    (fx.expected_negative_results as NegativeResultEffectRow[]) ?? [];
-  const expectedTrajs =
-    (fx.expected_trajectories as TrajectoryEffectRow[]) ?? [];
   const expectedArtifacts =
     (fx.expected_artifacts as ArtifactEffectRow[]) ?? [];
-  const expectedReplications =
-    (fx.expected_replications as ReplicationEffectRow[]) ?? [];
-  const expectedPredictions =
-    (fx.expected_predictions as PredictionEffectRow[]) ?? [];
 
   for (const event of eventLog) {
     try {
@@ -987,33 +707,16 @@ function verifyFixture(path: string): FixtureResult {
         } as unknown as FindingEffectRow)
       : r,
   );
-  const actualNR = negativeResultEffects(state.negative_results);
-  const actualT = trajectoryEffects(state.trajectories);
   const actualA = artifactEffects(state.artifacts);
-  const actualR = replicationEffects(state.replications);
-  const actualP = predictionEffects(state.predictions);
 
   diffCollection("findings", actualF, expectedFindings, result);
-  if (fxVersion === "2" || fxVersion === "3" || fxVersion === "4") {
-    diffCollection("negative_results", actualNR, expectedNRs, result);
-    diffCollection("trajectories", actualT, expectedTrajs, result);
-  }
-  if (fxVersion === "3" || fxVersion === "4") {
+  if (fxVersion === "3" || fxVersion === "4" || fxVersion === "5") {
     diffCollection("artifacts", actualA, expectedArtifacts, result);
-  }
-  if (fxVersion === "4") {
-    diffCollection("replications", actualR, expectedReplications, result);
-    diffCollection("predictions", actualP, expectedPredictions, result);
   }
 
   let totalExpected = expectedFindings.length;
-  if (fxVersion === "2" || fxVersion === "3" || fxVersion === "4") {
-    totalExpected += expectedNRs.length + expectedTrajs.length;
-  }
-  if (fxVersion === "3" || fxVersion === "4")
+  if (fxVersion === "3" || fxVersion === "4" || fxVersion === "5")
     totalExpected += expectedArtifacts.length;
-  if (fxVersion === "4")
-    totalExpected += expectedReplications.length + expectedPredictions.length;
   result.ok = result.diffs.length === 0 && result.matched === totalExpected;
   return result;
 }
@@ -1065,16 +768,10 @@ function renderText(results: FixtureResult[]): string {
   lines.push("vela reducer (typescript · stdlib · third implementation)");
   for (const r of results) {
     const status = r.ok ? "ok" : "FAIL";
-    const totalExpected =
-      r.findings +
-      r.negativeResults +
-      r.trajectories +
-      r.artifacts +
-      r.replications +
-      r.predictions;
+    const totalExpected = r.findings + r.artifacts;
     lines.push(
       `  ${status.padEnd(4)} · frontier ${String(r.frontierIdx).padStart(2, "0")} · ` +
-        `${r.matched}/${totalExpected} (${r.findings}f/${r.negativeResults}n/${r.trajectories}t/${r.artifacts}a/${r.replications}r/${r.predictions}p) · ` +
+        `${r.matched}/${totalExpected} (${r.findings}f/${r.artifacts}a) · ` +
         `${r.events} events · cascade depth ${r.cascadeDepth}`,
     );
     if (r.error) lines.push(`          error: ${r.error}`);
@@ -1173,11 +870,7 @@ function main(args: string[]): number {
             frontier_idx: r.frontierIdx,
             ok: r.ok,
             findings: r.findings,
-            negative_results: r.negativeResults,
-            trajectories: r.trajectories,
             artifacts: r.artifacts,
-            replications: r.replications,
-            predictions: r.predictions,
             events: r.events,
             cascade_depth: r.cascadeDepth,
             matched: r.matched,

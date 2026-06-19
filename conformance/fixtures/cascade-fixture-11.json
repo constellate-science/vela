@@ -1,5 +1,5 @@
 {
-  "doctrine": "every reducer implementation must agree on per-kind mutation rules across findings, negative_results, trajectories, artifacts, replications, and predictions",
+  "doctrine": "every reducer implementation must agree on per-kind mutation rules across findings and artifacts",
   "event_log": [
     {
       "actor": {
@@ -27,9 +27,6 @@
     }
   ],
   "expected_artifacts": [],
-  "expected_negative_results": [],
-  "expected_predictions": [],
-  "expected_replications": [],
   "expected_states": [
     {
       "access_tier": "public",
@@ -104,8 +101,7 @@
       "review_state": "none"
     }
   ],
-  "expected_trajectories": [],
-  "fixture_version": "4",
+  "fixture_version": "5",
   "frontier_idx": 11,
   "genesis_findings": [
     {
@@ -894,7 +890,7 @@
     }
   ],
   "scenario": "entity_added",
-  "schema_url": "https://vela.science/schema/cross-impl-reducer-fixture/v4",
+  "schema_url": "https://vela.science/schema/cross-impl-reducer-fixture/v5",
   "stats": {
     "artifacts": 0,
     "cascade_depth": 0,
@@ -902,10 +898,6 @@
     "findings": 8,
     "kinds_seen": {
       "finding.entity_added": 1
-    },
-    "negative_results": 0,
-    "predictions": 0,
-    "replications": 0,
-    "trajectories": 0
+    }
   }
 }

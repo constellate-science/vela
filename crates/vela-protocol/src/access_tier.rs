@@ -116,24 +116,6 @@ pub fn redact_for_actor(
     let visible_finding_ids: std::collections::BTreeSet<&str> =
         findings.iter().map(|f| f.id.as_str()).collect();
 
-    let negative_results: Vec<_> = project
-        .negative_results
-        .iter()
-        .filter(|n| actor_may_read(n.access_tier, clearance))
-        .cloned()
-        .collect();
-    let visible_nr_ids: std::collections::BTreeSet<&str> =
-        negative_results.iter().map(|n| n.id.as_str()).collect();
-
-    let trajectories: Vec<_> = project
-        .trajectories
-        .iter()
-        .filter(|t| actor_may_read(t.access_tier, clearance))
-        .cloned()
-        .collect();
-    let visible_traj_ids: std::collections::BTreeSet<&str> =
-        trajectories.iter().map(|t| t.id.as_str()).collect();
-
     let artifacts: Vec<_> = project
         .artifacts
         .iter()
@@ -148,8 +130,6 @@ pub fn redact_for_actor(
         .iter()
         .filter(|e| match e.target.r#type.as_str() {
             "finding" => visible_finding_ids.contains(e.target.id.as_str()),
-            "negative_result" => visible_nr_ids.contains(e.target.id.as_str()),
-            "trajectory" => visible_traj_ids.contains(e.target.id.as_str()),
             "artifact" => visible_artifact_ids.contains(e.target.id.as_str()),
             _ => true, // frontier-level events (frontier.created, etc.) stay visible
         })
@@ -158,8 +138,6 @@ pub fn redact_for_actor(
 
     crate::project::Project {
         findings,
-        negative_results,
-        trajectories,
         artifacts,
         events,
         // Everything else passes through. Sources, evidence atoms,
@@ -200,14 +178,9 @@ fn clone_project_metadata(p: &crate::project::Project) -> crate::project::Projec
         proof_state: p.proof_state.clone(),
         signatures: p.signatures.clone(),
         actors: p.actors.clone(),
-        replications: p.replications.clone(),
         datasets: p.datasets.clone(),
         code_artifacts: p.code_artifacts.clone(),
         artifacts: Vec::new(),
-        predictions: p.predictions.clone(),
-        resolutions: p.resolutions.clone(),
-        negative_results: Vec::new(),
-        trajectories: Vec::new(),
         released_diff_packs: Vec::new(),
         verdict_conflicts: Vec::new(),
         contradictions: Vec::new(),

@@ -18,7 +18,6 @@ use ed25519_dalek::SigningKey;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
-use vela_protocol::bundle::{Trajectory, TrajectoryStep, TrajectoryStepKind};
 use vela_protocol::scientific_diff::{PackDraft, ScientificDiffPack};
 
 const AGENT_KEY_ENV: &str = "VELA_AGENT_KEY_HEX";
@@ -141,18 +140,6 @@ pub fn get_attestation(args: &Value) -> Result<String, String> {
     Ok(body)
 }
 
-/// `vela_agent_list_trajectories` — list every Trajectory on a frontier.
-pub fn list_trajectories(args: &Value) -> Result<String, String> {
-    let frontier = frontier_path_arg(args)?;
-    let trajs = list_artifacts(&frontier, "trajectories", "vtr_");
-    Ok(serde_json::to_string_pretty(&json!({
-        "ok": true,
-        "count": trajs.len(),
-        "trajectories": trajs,
-    }))
-    .unwrap_or_default())
-}
-
 /// `vela_agent_frontier_summary` — quick counts: which primitives
 /// exist on this frontier. Useful as the first call in a multi-turn
 /// agent session.
@@ -164,7 +151,6 @@ pub fn frontier_summary(args: &Value) -> Result<String, String> {
         .filter(|p| p.get("signature").is_some() && p.get("applied_event_id").is_none())
         .count();
     let attestations = list_artifacts(&frontier, "agent_attestations", "vaa_");
-    let trajectories = list_artifacts(&frontier, "trajectories", "vtr_");
     let tool_descriptors = list_artifacts(&frontier, "tool_descriptors", "vtd_");
     let evaluations = list_artifacts(&frontier, "evaluations", "ver_");
     let verdict_conflicts = list_artifacts(&frontier, "verdict_conflicts", "vdc_");
@@ -174,7 +160,6 @@ pub fn frontier_summary(args: &Value) -> Result<String, String> {
             "diff_packs": diff_packs.len(),
             "pending_packs": pending_packs,
             "attestations": attestations.len(),
-            "trajectories": trajectories.len(),
             "tool_descriptors": tool_descriptors.len(),
             "evaluations": evaluations.len(),
             "verdict_conflicts": verdict_conflicts.len(),
@@ -331,29 +316,6 @@ fn frontier_id_from_path(path: &Path) -> Result<String, String> {
 
 fn now_rfc3339() -> String {
     chrono::Utc::now().to_rfc3339()
-}
-
-fn step_kind_from_str(s: &str) -> Option<TrajectoryStepKind> {
-    match s {
-        "hypothesis" => Some(TrajectoryStepKind::Hypothesis),
-        "tried" => Some(TrajectoryStepKind::Tried),
-        "ruled_out" => Some(TrajectoryStepKind::RuledOut),
-        "observed" => Some(TrajectoryStepKind::Observed),
-        "refined" => Some(TrajectoryStepKind::Refined),
-        "question" => Some(TrajectoryStepKind::Question),
-        "context" => Some(TrajectoryStepKind::Context),
-        "data" => Some(TrajectoryStepKind::Data),
-        "tool" => Some(TrajectoryStepKind::Tool),
-        "model" => Some(TrajectoryStepKind::Model),
-        "expert" => Some(TrajectoryStepKind::Expert),
-        "decision" => Some(TrajectoryStepKind::Decision),
-        "protocol" => Some(TrajectoryStepKind::Protocol),
-        "output" => Some(TrajectoryStepKind::Output),
-        "review" => Some(TrajectoryStepKind::Review),
-        "risk" => Some(TrajectoryStepKind::Risk),
-        "outcome" => Some(TrajectoryStepKind::Outcome),
-        _ => None,
-    }
 }
 
 fn derive_proposal_id(kind: &str, payload: &Value, at: &str, actor: &str) -> String {
@@ -576,122 +538,6 @@ pub fn submit_diff_pack(args: &Value) -> Result<String, String> {
     .unwrap_or_default())
 }
 
-/// `vela_agent_open_trajectory` MCP tool. Writes a vtr_* with N
-/// steps to `.vela/trajectories/<vtr_id>.json`. Does not require a
-/// signing key (trajectories are content-addressed but unsigned —
-/// the chain of custody for who deposited them lives in the
-/// `deposited_by` actor id).
-///
-/// Arguments (JSON):
-///   {
-///     "frontier_path": String,
-///     "target_findings": [String]?,
-///     "deposited_by": String,
-///     "notes": String?,
-///     "steps": [{"kind": String, "description": String,
-///                "references": [String]?, "actor": String?}],
-///   }
-pub fn open_trajectory(args: &Value) -> Result<String, String> {
-    let frontier_path: PathBuf = args
-        .get("frontier_path")
-        .and_then(Value::as_str)
-        .ok_or("frontier_path required")?
-        .into();
-    let target_findings: Vec<String> = args
-        .get("target_findings")
-        .and_then(Value::as_array)
-        .map(|a| {
-            a.iter()
-                .filter_map(|v| v.as_str().map(String::from))
-                .collect()
-        })
-        .unwrap_or_default();
-    let deposited_by = args
-        .get("deposited_by")
-        .and_then(Value::as_str)
-        .ok_or("deposited_by required")?
-        .to_string();
-    let notes = args
-        .get("notes")
-        .and_then(Value::as_str)
-        .map(String::from)
-        .unwrap_or_default();
-    let created = now_rfc3339();
-
-    let id = Trajectory::content_address(&target_findings, &deposited_by, &created);
-
-    let steps_json = args
-        .get("steps")
-        .and_then(Value::as_array)
-        .ok_or("steps required (at least one)")?;
-    let mut steps: Vec<TrajectoryStep> = Vec::new();
-    for s in steps_json {
-        let kind_str = s
-            .get("kind")
-            .and_then(Value::as_str)
-            .ok_or("step.kind required")?;
-        let kind = step_kind_from_str(kind_str)
-            .ok_or_else(|| format!("unknown step kind `{kind_str}`"))?;
-        let description = s
-            .get("description")
-            .and_then(Value::as_str)
-            .ok_or("step.description required")?
-            .to_string();
-        let actor = s
-            .get("actor")
-            .and_then(Value::as_str)
-            .map(String::from)
-            .unwrap_or_else(|| deposited_by.clone());
-        let references: Vec<String> = s
-            .get("references")
-            .and_then(Value::as_array)
-            .map(|a| {
-                a.iter()
-                    .filter_map(|v| v.as_str().map(String::from))
-                    .collect()
-            })
-            .unwrap_or_default();
-        let step = TrajectoryStep::new(&id, kind, description, actor, None, references);
-        steps.push(step);
-    }
-
-    let traj = Trajectory {
-        id: id.clone(),
-        target_findings,
-        deposited_by,
-        created,
-        steps,
-        notes,
-        review_state: None,
-        retracted: false,
-        access_tier: Default::default(),
-    };
-
-    let vela_dir = if frontier_path.is_dir() {
-        frontier_path.join(".vela")
-    } else {
-        frontier_path
-            .parent()
-            .unwrap_or(Path::new("."))
-            .join(".vela")
-    };
-    let dir = vela_dir.join("trajectories");
-    std::fs::create_dir_all(&dir).map_err(|e| format!("create {}: {e}", dir.display()))?;
-    let path = dir.join(format!("{id}.json"));
-    let body =
-        serde_json::to_string_pretty(&traj).map_err(|e| format!("serialize trajectory: {e}"))?;
-    std::fs::write(&path, format!("{body}\n"))
-        .map_err(|e| format!("write {}: {e}", path.display()))?;
-
-    Ok(serde_json::to_string_pretty(&json!({
-        "ok": true,
-        "trajectory_id": id,
-        "steps": traj.steps.len(),
-        "wrote": path.display().to_string(),
-    }))
-    .unwrap_or_default())
-}
-
 /// `vela_agent_propose_to_hub` — an autonomous agent submits a signed
 /// StateProposal to a REMOTE hub over MCP, on its own timeline.
 ///
@@ -794,50 +640,10 @@ pub fn propose_to_hub(args: &Value) -> Result<String, String> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use tempfile::tempdir;
-
-    fn fixture_frontier() -> tempfile::TempDir {
-        let tmp = tempdir().unwrap();
-        std::fs::write(
-            tmp.path().join("frontier.json"),
-            r#"{"frontier_id":"vfr_5076e7b3ff8e6b0f"}"#,
-        )
-        .unwrap();
-        tmp
-    }
-
-    // Note: tests that mutate VELA_AGENT_KEY_HEX (the env-driven
-    // signing-key for submit_diff_pack) cannot run safely under
-    // cargo's parallel test runner because env mutation is
-    // `unsafe` in modern Rust editions. The submit_diff_pack
-    // signed-roundtrip is exercised end-to-end by the bash gate
-    // `scripts/test-mcp-server.sh` instead, which spawns the
-    // server with a controlled env.
-
-    #[test]
-    fn open_trajectory_writes_file() {
-        let tmp = fixture_frontier();
-        let args = json!({
-            "frontier_path": tmp.path().display().to_string(),
-            "deposited_by": "agent:t",
-            "notes": "test",
-            "steps": [
-                {"kind": "question", "description": "what does this do?"},
-                {"kind": "output", "description": "produces a trajectory"}
-            ],
-        });
-        let out = open_trajectory(&args).unwrap();
-        let v: Value = serde_json::from_str(&out).unwrap();
-        let tid = v["trajectory_id"].as_str().unwrap();
-        assert!(tid.starts_with("vtr_"));
-        let path = tmp
-            .path()
-            .join(".vela")
-            .join("trajectories")
-            .join(format!("{tid}.json"));
-        assert!(path.is_file());
-    }
-}
+// Note: the write-side tools here mutate VELA_AGENT_KEY_HEX (the
+// env-driven signing key for submit_diff_pack), which cannot run
+// safely under cargo's parallel test runner because env mutation is
+// `unsafe` in modern Rust editions. The submit_diff_pack signed
+// roundtrip is exercised end-to-end by the bash gate
+// `scripts/test-mcp-server.sh` instead, which spawns the server with
+// a controlled env.

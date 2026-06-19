@@ -495,29 +495,6 @@ fn load_vela_repo(dir: &Path) -> Result<Project, String> {
         ProofState::default()
     };
 
-    // v0.32: Read replications from `.vela/replications/`. Each file
-    // is a single Replication serialized as JSON, content-addressed
-    // by `vrep_<id>.json`. Same pattern as findings.
-    let replications_dir = dir.join(".vela/replications");
-    let mut replications: Vec<crate::bundle::Replication> = Vec::new();
-    if replications_dir.is_dir() {
-        let mut entries: Vec<PathBuf> = std::fs::read_dir(&replications_dir)
-            .map_err(|e| format!("Failed to read replications/: {e}"))?
-            .filter_map(|e| e.ok())
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|ext| ext == "json"))
-            .collect();
-        entries.sort();
-
-        for path in entries {
-            let data = std::fs::read_to_string(&path)
-                .map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
-            let replication: crate::bundle::Replication = serde_json::from_str(&data)
-                .map_err(|e| format!("Failed to parse {}: {e}", path.display()))?;
-            replications.push(replication);
-        }
-    }
-
     // v0.33: Read datasets from `.vela/datasets/` and code artifacts
     // from `.vela/code-artifacts/`. Same one-file-per-record pattern
     // as findings and replications. Both directories are optional,
@@ -576,48 +553,6 @@ fn load_vela_repo(dir: &Path) -> Result<Project, String> {
             let artifact: crate::bundle::Artifact = serde_json::from_str(&data)
                 .map_err(|e| format!("Failed to parse {}: {e}", path.display()))?;
             artifacts.push(artifact);
-        }
-    }
-
-    // v0.34: predictions and resolutions. One file per record at
-    // `.vela/predictions/<vpred_id>.json` and
-    // `.vela/resolutions/<vres_id>.json`. Same pattern as findings,
-    // replications, datasets, code-artifacts.
-    let predictions_dir = dir.join(".vela/predictions");
-    let mut predictions: Vec<crate::bundle::Prediction> = Vec::new();
-    if predictions_dir.is_dir() {
-        let mut entries: Vec<PathBuf> = std::fs::read_dir(&predictions_dir)
-            .map_err(|e| format!("Failed to read predictions/: {e}"))?
-            .filter_map(|e| e.ok())
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|ext| ext == "json"))
-            .collect();
-        entries.sort();
-        for path in entries {
-            let data = std::fs::read_to_string(&path)
-                .map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
-            let prediction: crate::bundle::Prediction = serde_json::from_str(&data)
-                .map_err(|e| format!("Failed to parse {}: {e}", path.display()))?;
-            predictions.push(prediction);
-        }
-    }
-
-    let resolutions_dir = dir.join(".vela/resolutions");
-    let mut resolutions: Vec<crate::bundle::Resolution> = Vec::new();
-    if resolutions_dir.is_dir() {
-        let mut entries: Vec<PathBuf> = std::fs::read_dir(&resolutions_dir)
-            .map_err(|e| format!("Failed to read resolutions/: {e}"))?
-            .filter_map(|e| e.ok())
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|ext| ext == "json"))
-            .collect();
-        entries.sort();
-        for path in entries {
-            let data = std::fs::read_to_string(&path)
-                .map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
-            let resolution: crate::bundle::Resolution = serde_json::from_str(&data)
-                .map_err(|e| format!("Failed to parse {}: {e}", path.display()))?;
-            resolutions.push(resolution);
         }
     }
 
@@ -691,12 +626,9 @@ fn load_vela_repo(dir: &Path) -> Result<Project, String> {
     c.proof_state = proof_state;
     c.actors = actors;
     c.signatures = signatures;
-    c.replications = replications;
     c.datasets = datasets;
     c.code_artifacts = code_artifacts;
     c.artifacts = artifacts;
-    c.predictions = predictions;
-    c.resolutions = resolutions;
 
     // The loader IS the reducer. Every event-derived collection is
     // grafted from one full replay of the canonical log through
@@ -716,8 +648,6 @@ fn load_vela_repo(dir: &Path) -> Result<Project, String> {
     // the failure.
     match reducer::replayed_projection(&c) {
         Ok(replayed) => {
-            c.trajectories = replayed.trajectories;
-            c.negative_results = replayed.negative_results;
             c.released_diff_packs = replayed.released_diff_packs;
             c.verdict_conflicts = replayed.verdict_conflicts;
             c.verifier_attachments = replayed.verifier_attachments;
@@ -786,16 +716,10 @@ fn save_vela_repo(dir: &Path, project: &Project) -> Result<(), String> {
     let tasks_dir = vela_dir.join("tasks");
     let workspaces_dir = vela_dir.join("workspaces");
     let source_inbox_dir = vela_dir.join("source-inbox");
-    // v0.32: structured replications live in their own directory;
-    // each `vrep_<id>.json` is a single Replication record.
-    let replications_dir = vela_dir.join("replications");
     // v0.33: datasets and code artifacts each get their own directory.
     let datasets_dir = vela_dir.join("datasets");
     let code_artifacts_dir = vela_dir.join("code-artifacts");
     let artifacts_dir = vela_dir.join("artifacts");
-    // v0.34: predictions + resolutions form the epistemic ledger.
-    let predictions_dir = vela_dir.join("predictions");
-    let resolutions_dir = vela_dir.join("resolutions");
 
     // Create directories
     for d in [
@@ -806,12 +730,9 @@ fn save_vela_repo(dir: &Path, project: &Project) -> Result<(), String> {
         &tasks_dir,
         &workspaces_dir,
         &source_inbox_dir,
-        &replications_dir,
         &datasets_dir,
         &code_artifacts_dir,
         &artifacts_dir,
-        &predictions_dir,
-        &resolutions_dir,
     ] {
         std::fs::create_dir_all(d)
             .map_err(|e| format!("Failed to create directory {}: {e}", d.display()))?;
@@ -864,15 +785,6 @@ fn save_vela_repo(dir: &Path, project: &Project) -> Result<(), String> {
     std::fs::write(vela_dir.join("proof-state.json"), proof_state_json)
         .map_err(|e| format!("Failed to write proof-state.json: {e}"))?;
 
-    // v0.32: write replications as one file per `vrep_<id>.json`.
-    for replication in &project.replications {
-        let json = serde_json::to_string_pretty(replication)
-            .map_err(|e| format!("Failed to serialize replication {}: {e}", replication.id))?;
-        let filename = format!("{}.json", replication.id);
-        std::fs::write(replications_dir.join(&filename), json)
-            .map_err(|e| format!("Failed to write replication {}: {e}", filename))?;
-    }
-
     // v0.33: datasets and code artifacts as individual `vd_<id>.json`
     // and `vc_<id>.json` files. Same persistence shape as findings.
     for dataset in &project.datasets {
@@ -896,22 +808,6 @@ fn save_vela_repo(dir: &Path, project: &Project) -> Result<(), String> {
         let filename = format!("{}.json", artifact.id);
         std::fs::write(artifacts_dir.join(&filename), json)
             .map_err(|e| format!("Failed to write artifact {}: {e}", filename))?;
-    }
-
-    // v0.34: predictions and resolutions, one file per record.
-    for prediction in &project.predictions {
-        let json = serde_json::to_string_pretty(prediction)
-            .map_err(|e| format!("Failed to serialize prediction {}: {e}", prediction.id))?;
-        let filename = format!("{}.json", prediction.id);
-        std::fs::write(predictions_dir.join(&filename), json)
-            .map_err(|e| format!("Failed to write prediction {}: {e}", filename))?;
-    }
-    for resolution in &project.resolutions {
-        let json = serde_json::to_string_pretty(resolution)
-            .map_err(|e| format!("Failed to serialize resolution {}: {e}", resolution.id))?;
-        let filename = format!("{}.json", resolution.id);
-        std::fs::write(resolutions_dir.join(&filename), json)
-            .map_err(|e| format!("Failed to write resolution {}: {e}", filename))?;
     }
 
     let actors_path = vela_dir.join("actors.json");

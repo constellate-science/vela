@@ -93,17 +93,6 @@ pub struct Project {
     /// `--strict` must carry a verifiable Ed25519 signature.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub actors: Vec<ActorRecord>,
-    /// v0.32: Replication attempts as first-class kernel objects. Each
-    /// `Replication` is content-addressed (`vrep_<hash>`) over its
-    /// target finding, attempting actor, conditions, and outcome. Replaces
-    /// the prior scalar pattern (`Evidence.replicated: bool` +
-    /// `Evidence.replication_count: u32`) which couldn't represent
-    /// independent attempts under different conditions. The legacy
-    /// scalar fields are preserved on `Evidence` for backward
-    /// compatibility; v0.32+ frontiers can derive them from this
-    /// collection.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub replications: Vec<crate::bundle::Replication>,
     /// v0.33: Datasets as first-class kernel objects. A `vd_<hash>`
     /// captures a versioned, content-addressed reference to data that
     /// anchors empirical claims. Distinct from `Provenance` (which
@@ -122,38 +111,6 @@ pub struct Project {
     /// manifests that need a durable byte or pointer commitment.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub artifacts: Vec<crate::bundle::Artifact>,
-    /// v0.34: Predictions as first-class kernel objects. A `vpred_<hash>`
-    /// is a falsifiable claim about a future observation, scoped to
-    /// existing findings and tied to a registered actor. Calibration
-    /// scoring runs over the resolved subset.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub predictions: Vec<crate::bundle::Prediction>,
-    /// v0.34: Resolutions as first-class kernel objects. A `vres_<hash>`
-    /// closes out a Prediction by recording what actually happened.
-    /// Together with `Project.predictions`, this is the kernel's
-    /// epistemic accountability ledger.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub resolutions: Vec<crate::bundle::Resolution>,
-    /// v0.50: Trajectories as first-class kernel objects. A
-    /// `vtr_<hash>` records the ordered search path that produced (or
-    /// did not produce) a finding — hypotheses considered, branches
-    /// tried, branches ruled out and why. The eighth essay primitive,
-    /// "deposited last and most thinly because labs have real
-    /// reasons not to expose dead ends," but represented structurally
-    /// so an agent that does choose to deposit can prevent the next
-    /// agent from re-deriving a ruled-out branch.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub trajectories: Vec<crate::bundle::Trajectory>,
-    /// v0.49: NegativeResults as first-class kernel objects. A `vnr_<hash>`
-    /// records an experiment or trial that did not support its
-    /// hypothesis — registered-trial with power and effect-size bounds,
-    /// or exploratory wet-lab dead end with the (reagent, condition,
-    /// observed outcome) tuple. The substrate primitive that lets
-    /// "absence of evidence" and "evidence of absence" round-trip
-    /// distinctly through downstream confidence math instead of being
-    /// flattened into a private "we tried that, it didn't work."
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub negative_results: Vec<crate::bundle::NegativeResult>,
     /// v0.213: Released Diff Pack tracking — first-class replay
     /// state for the v0.201 `diff_pack.released` and v0.205
     /// `diff_pack.reviewed` event arms. Prior cycles left these
@@ -434,14 +391,9 @@ pub fn assemble(
         proof_state: ProofState::default(),
         signatures: Vec::new(),
         actors: Vec::new(),
-        replications: Vec::new(),
         datasets: Vec::new(),
         code_artifacts: Vec::new(),
         artifacts: Vec::new(),
-        predictions: Vec::new(),
-        resolutions: Vec::new(),
-        negative_results: Vec::new(),
-        trajectories: Vec::new(),
         released_diff_packs: Vec::new(),
         verdict_conflicts: Vec::new(),
         contradictions: Vec::new(),
@@ -507,17 +459,10 @@ impl Project {
     /// frontiers.
     #[must_use]
     pub fn compute_confidence_for(&self, bundle: &FindingBundle) -> crate::bundle::Confidence {
-        let (n_repl, n_failed, n_partial) =
-            crate::bundle::count_replication_outcomes(&self.replications, &bundle.id);
-        let (n_repl, n_failed, n_partial) = if n_repl + n_failed + n_partial == 0 {
-            let legacy = if bundle.evidence.replicated {
-                bundle.evidence.replication_count.unwrap_or(1)
-            } else {
-                0
-            };
-            (legacy, 0, 0)
+        let (n_repl, n_failed, n_partial) = if bundle.evidence.replicated {
+            (bundle.evidence.replication_count.unwrap_or(1), 0, 0)
         } else {
-            (n_repl, n_failed, n_partial)
+            (0, 0, 0)
         };
         crate::bundle::compute_confidence_from_components(
             &bundle.evidence,
@@ -857,31 +802,12 @@ pub fn recompute_stats(project: &mut Project) {
             .or_default() += 1;
     }
 
-    // v0.36.2: count findings with at least one successful replication
-    // recorded in `project.replications`. The legacy
-    // `evidence.replicated` scalar is a fall-through for findings
-    // pre-v0.32 that have no `Replication` records yet — same shape as
-    // `Project::compute_confidence_for`. A finding is "replicated" if
-    // EITHER the structured collection holds a `replicated` outcome
-    // for it, OR (no records exist at all) the legacy flag is set.
-    let mut targets_with_success: HashSet<&str> = HashSet::new();
-    let mut targets_with_any_record: HashSet<&str> = HashSet::new();
-    for r in &project.replications {
-        targets_with_any_record.insert(r.target_finding.as_str());
-        if r.outcome == "replicated" {
-            targets_with_success.insert(r.target_finding.as_str());
-        }
-    }
+    // Count findings with a successful replication, read from the
+    // scalar `evidence.replicated` field.
     let replicated = project
         .findings
         .iter()
-        .filter(|b| {
-            if targets_with_any_record.contains(b.id.as_str()) {
-                targets_with_success.contains(b.id.as_str())
-            } else {
-                b.evidence.replicated
-            }
-        })
+        .filter(|b| b.evidence.replicated)
         .count();
     let avg_confidence = if project.findings.is_empty() {
         0.0

@@ -59,17 +59,6 @@ pub(crate) fn cmd_status(path: &Path, json: bool) {
     let audit = vela_edge::causal_reasoning::audit_frontier(&project);
     let audit_summary = vela_edge::causal_reasoning::summarize_audit(&audit);
 
-    // Replication health.
-    let mut targets_with_success = std::collections::HashSet::new();
-    let mut failed_replications = 0usize;
-    for r in &project.replications {
-        if r.outcome == "replicated" {
-            targets_with_success.insert(r.target_finding.clone());
-        } else if r.outcome == "failed" {
-            failed_replications += 1;
-        }
-    }
-
     if json {
         println!(
             "{}",
@@ -90,11 +79,6 @@ pub(crate) fn cmd_status(path: &Path, json: bool) {
                     "conditional": audit_summary.conditional,
                     "underidentified": audit_summary.underidentified,
                     "underdetermined": audit_summary.underdetermined,
-                },
-                "replications": {
-                    "total": project.replications.len(),
-                    "findings_with_success": targets_with_success.len(),
-                    "failed": failed_replications,
                 },
             }))
             .expect("serialize status")
@@ -187,16 +171,6 @@ pub(crate) fn cmd_status(path: &Path, json: bool) {
             style::warn("audit"),
             audit_summary.identified,
             audit_summary.underdetermined,
-        );
-    }
-    println!();
-    if !project.replications.is_empty() {
-        println!(
-            "  {}  {} records · {} findings replicated · {} failed",
-            style::ok("replications"),
-            project.replications.len(),
-            targets_with_success.len(),
-            failed_replications,
         );
     }
     println!();

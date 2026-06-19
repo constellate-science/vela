@@ -68,31 +68,13 @@ pub const REDUCER_MUTATION_KINDS: &[&str] = &[
     "finding.rejected",
     "finding.retracted",
     "finding.dependency_invalidated",
-    // v0.49: NegativeResult lifecycle. These mutate `state.negative_results`,
-    // not `state.findings`, so the cross-impl reducer fixtures whose
-    // post-replay comparison covers `findings[]` only treat them as
-    // no-ops on finding state. The Rust reducer still has explicit arms
-    // because skipping unknown kinds would silently drop the deposit
-    // from a fresh replay.
-    "negative_result.asserted",
-    "negative_result.reviewed",
-    "negative_result.retracted",
-    // v0.50: Trajectory lifecycle. Mutate `state.trajectories` and the
-    // ordered `steps` collection on each. Same finding-state-no-op
-    // story as NegativeResult: the cross-impl post-replay digest
-    // covers Finding[] only, so TS/Python reducers may treat these as
-    // no-ops; v0.50.x will tighten the digest to include trajectories.
-    "trajectory.created",
-    "trajectory.step_appended",
-    "trajectory.reviewed",
-    "trajectory.retracted",
     // Generic artifacts: protocol files, trial registry records, source
     // files, notebooks, and other byte or pointer commitments.
     "artifact.asserted",
     "artifact.reviewed",
     "artifact.retracted",
-    // v0.51: tier.set re-classifies the access_tier on a finding,
-    // negative_result, or trajectory. Mutates the matched object's
+    // v0.51: tier.set re-classifies the access_tier on a finding
+    // or artifact. Mutates the matched object's
     // access_tier field. Replay reproduces the current tier from the
     // canonical event log alone, no out-of-band classification
     // table.
@@ -199,27 +181,6 @@ pub fn apply_event_indexed(
         // annotation so a fresh reduce reproduces the post-cascade
         // state without re-running the propagator.
         EventKind::FindingDependencyInvalidated => apply_finding_dependency_invalidated(state, event, idx),
-        // v0.49: NegativeResult lifecycle. Each arm mutates
-        // `state.negative_results`. None of them touch `state.findings`
-        // — a null bears against a finding through the
-        // `target_findings` link, but does not by itself flip
-        // confidence or contestation on the finding. Downstream
-        // confidence math reads `is_informative_trial_null` and
-        // `target_findings` to decide whether to revise; that revision
-        // is a separate `finding.confidence_revised` event.
-        EventKind::NegativeResultAsserted => apply_negative_result_asserted(state, event),
-        EventKind::NegativeResultReviewed => apply_negative_result_reviewed(state, event),
-        EventKind::NegativeResultRetracted => apply_negative_result_retracted(state, event),
-        // v0.50: Trajectory lifecycle. Each arm mutates
-        // `state.trajectories` (and the ordered `steps` on a
-        // trajectory). None touch `state.findings`. Step-appended is
-        // the interesting arm — it grows an existing trajectory
-        // rather than creating a new top-level object, which makes a
-        // search visible to readers as it unfolds.
-        EventKind::TrajectoryCreated => apply_trajectory_created(state, event),
-        EventKind::TrajectoryStepAppended => apply_trajectory_step_appended(state, event),
-        EventKind::TrajectoryReviewed => apply_trajectory_reviewed(state, event),
-        EventKind::TrajectoryRetracted => apply_trajectory_retracted(state, event),
         EventKind::ArtifactAsserted => apply_artifact_asserted(state, event),
         EventKind::VerifierAttachmentAdded => apply_verifier_attachment_added(state, event),
         EventKind::ArtifactReviewed => apply_artifact_reviewed(state, event),
@@ -238,21 +199,6 @@ pub fn apply_event_indexed(
         // attestations live as append-only canonical events
         // pointing at a target event id.
         EventKind::AttestationRecorded => Ok(()),
-        // v0.67: bridge review verdict. Bridges live in `.vela/bridges/`
-        // as a side table; the reducer arm is a no-op on
-        // `Project.findings`. Consumers (Workbench, audit scripts,
-        // hub mirrors) project the verdict onto Bridge.status by
-        // reading the most recent bridge.reviewed event for that
-        // bridge_id.
-        EventKind::BridgeReviewed => Ok(()),
-        // v0.70: replication / prediction deposits. Each appends a
-        // record to `Project.replications` or `Project.predictions`
-        // if the content-addressed id is not already present
-        // (idempotent under re-application). No-op on
-        // `Project.findings`; cross-impl finding-effects digest
-        // covers findings only.
-        EventKind::ReplicationDeposited => apply_replication_deposited(state, event),
-        EventKind::PredictionDeposited => apply_prediction_deposited(state, event),
         // v0.201: a `vsd_*` Scientific Diff Pack was signed, applied,
         // and is now federated. The event is a metadata-only handle —
         // its payload references the pack id; replay does not mutate
@@ -309,7 +255,6 @@ pub fn apply_event_indexed(
         // A reviewer-tier key's recommend-accept: audit record consumed by
         // owner/maintainer keys; no projected-state mutation.
         EventKind::ProposalRecommended
-        | EventKind::PredictionExpiredUnresolved
         | EventKind::FrontierObservationReviewed
         | EventKind::CorrectionReturnReview
         | EventKind::ResearchTraceReview
@@ -367,14 +312,9 @@ pub fn replay_from_genesis(
         proof_state: crate::proposals::ProofState::default(),
         signatures: Vec::new(),
         actors: Vec::new(),
-        replications: Vec::new(),
         datasets: Vec::new(),
         code_artifacts: Vec::new(),
         artifacts: Vec::new(),
-        predictions: Vec::new(),
-        resolutions: Vec::new(),
-        negative_results: Vec::new(),
-        trajectories: Vec::new(),
         released_diff_packs: Vec::new(),
         verdict_conflicts: Vec::new(),
         contradictions: Vec::new(),
@@ -939,151 +879,6 @@ fn apply_finding_dependency_invalidated(
     Ok(())
 }
 
-/// v0.49: NegativeResult deposit. The full inline NegativeResult is
-/// carried on `payload.negative_result` so a fresh replay reconstructs
-/// state from the event log alone — same pattern as
-/// `finding.asserted`. Idempotent on duplicate ids.
-fn apply_negative_result_asserted(state: &mut Project, event: &StateEvent) -> Result<(), String> {
-    let nr_value = event
-        .payload
-        .get("negative_result")
-        .ok_or("reducer: negative_result.asserted missing payload.negative_result")?;
-    let nr: crate::bundle::NegativeResult = serde_json::from_value(nr_value.clone())
-        .map_err(|e| format!("reducer: invalid negative_result.asserted payload: {e}"))?;
-    if state.negative_results.iter().any(|n| n.id == nr.id) {
-        return Ok(());
-    }
-    state.negative_results.push(nr);
-    Ok(())
-}
-
-fn apply_negative_result_reviewed(state: &mut Project, event: &StateEvent) -> Result<(), String> {
-    let id = event.target.id.as_str();
-    let status = event
-        .payload
-        .get("status")
-        .and_then(Value::as_str)
-        .ok_or("reducer: negative_result.reviewed missing payload.status")?;
-    use crate::bundle::ReviewState;
-    let new_state = match status {
-        "accepted" | "approved" => ReviewState::Accepted,
-        "contested" => ReviewState::Contested,
-        "needs_revision" => ReviewState::NeedsRevision,
-        "rejected" => ReviewState::Rejected,
-        other => return Err(format!("reducer: unsupported review status '{other}'")),
-    };
-    let idx = state
-        .negative_results
-        .iter()
-        .position(|n| n.id == id)
-        .ok_or_else(|| {
-            format!("reducer: negative_result.reviewed targets unknown negative_result {id}")
-        })?;
-    state.negative_results[idx].review_state = Some(new_state);
-    Ok(())
-}
-
-fn apply_negative_result_retracted(state: &mut Project, event: &StateEvent) -> Result<(), String> {
-    let id = event.target.id.as_str();
-    let idx = state
-        .negative_results
-        .iter()
-        .position(|n| n.id == id)
-        .ok_or_else(|| {
-            format!("reducer: negative_result.retracted targets unknown negative_result {id}")
-        })?;
-    state.negative_results[idx].retracted = true;
-    Ok(())
-}
-
-/// v0.50: Trajectory creation. Carries the inline Trajectory (with
-/// empty `steps`) on `payload.trajectory`. Subsequent steps land via
-/// `trajectory.step_appended` events, so a fresh replay reconstructs
-/// the full search path from the genesis Trajectory + the step events
-/// without needing the materialized steps inline. Idempotent on
-/// duplicate `vtr_id`.
-fn apply_trajectory_created(state: &mut Project, event: &StateEvent) -> Result<(), String> {
-    let traj_value = event
-        .payload
-        .get("trajectory")
-        .ok_or("reducer: trajectory.created missing payload.trajectory")?;
-    let traj: crate::bundle::Trajectory = serde_json::from_value(traj_value.clone())
-        .map_err(|e| format!("reducer: invalid trajectory.created payload: {e}"))?;
-    if state.trajectories.iter().any(|t| t.id == traj.id) {
-        return Ok(());
-    }
-    state.trajectories.push(traj);
-    Ok(())
-}
-
-/// v0.50: Append one step to an existing Trajectory. Step is
-/// content-addressed; idempotent on duplicate step ids so a replay
-/// of a partially-applied event log doesn't double-append.
-fn apply_trajectory_step_appended(state: &mut Project, event: &StateEvent) -> Result<(), String> {
-    let parent_id = event
-        .payload
-        .get("parent_trajectory_id")
-        .and_then(Value::as_str)
-        .ok_or("reducer: trajectory.step_appended missing payload.parent_trajectory_id")?;
-    let step_value = event
-        .payload
-        .get("step")
-        .ok_or("reducer: trajectory.step_appended missing payload.step")?;
-    let step: crate::bundle::TrajectoryStep = serde_json::from_value(step_value.clone())
-        .map_err(|e| format!("reducer: invalid trajectory.step_appended payload.step: {e}"))?;
-    let idx = state
-        .trajectories
-        .iter()
-        .position(|t| t.id == parent_id)
-        .ok_or_else(|| {
-            format!("reducer: trajectory.step_appended targets unknown trajectory {parent_id}")
-        })?;
-    if state.trajectories[idx]
-        .steps
-        .iter()
-        .any(|s| s.id == step.id)
-    {
-        return Ok(());
-    }
-    state.trajectories[idx].steps.push(step);
-    Ok(())
-}
-
-fn apply_trajectory_reviewed(state: &mut Project, event: &StateEvent) -> Result<(), String> {
-    let id = event.target.id.as_str();
-    let status = event
-        .payload
-        .get("status")
-        .and_then(Value::as_str)
-        .ok_or("reducer: trajectory.reviewed missing payload.status")?;
-    use crate::bundle::ReviewState;
-    let new_state = match status {
-        "accepted" | "approved" => ReviewState::Accepted,
-        "contested" => ReviewState::Contested,
-        "needs_revision" => ReviewState::NeedsRevision,
-        "rejected" => ReviewState::Rejected,
-        other => return Err(format!("reducer: unsupported review status '{other}'")),
-    };
-    let idx = state
-        .trajectories
-        .iter()
-        .position(|t| t.id == id)
-        .ok_or_else(|| format!("reducer: trajectory.reviewed targets unknown trajectory {id}"))?;
-    state.trajectories[idx].review_state = Some(new_state);
-    Ok(())
-}
-
-fn apply_trajectory_retracted(state: &mut Project, event: &StateEvent) -> Result<(), String> {
-    let id = event.target.id.as_str();
-    let idx = state
-        .trajectories
-        .iter()
-        .position(|t| t.id == id)
-        .ok_or_else(|| format!("reducer: trajectory.retracted targets unknown trajectory {id}"))?;
-    state.trajectories[idx].retracted = true;
-    Ok(())
-}
-
 fn apply_artifact_asserted(state: &mut Project, event: &StateEvent) -> Result<(), String> {
     let artifact_value = event
         .payload
@@ -1151,7 +946,7 @@ fn apply_artifact_retracted(state: &mut Project, event: &StateEvent) -> Result<(
 }
 
 /// v0.51: Apply a `tier.set` event. Re-classifies the access_tier on
-/// the matched finding / negative_result / trajectory / artifact. The validator
+/// the matched finding / artifact. The validator
 /// has already checked the object_type and tier strings; here we
 /// just locate the object and mutate.
 fn apply_tier_set(state: &mut Project, event: &StateEvent) -> Result<(), String> {
@@ -1181,26 +976,6 @@ fn apply_tier_set(state: &mut Project, event: &StateEvent) -> Result<(), String>
                 .ok_or_else(|| format!("reducer: tier.set targets unknown finding {object_id}"))?;
             state.findings[idx].access_tier = new_tier;
         }
-        "negative_result" => {
-            let idx = state
-                .negative_results
-                .iter()
-                .position(|n| n.id == object_id)
-                .ok_or_else(|| {
-                    format!("reducer: tier.set targets unknown negative_result {object_id}")
-                })?;
-            state.negative_results[idx].access_tier = new_tier;
-        }
-        "trajectory" => {
-            let idx = state
-                .trajectories
-                .iter()
-                .position(|t| t.id == object_id)
-                .ok_or_else(|| {
-                    format!("reducer: tier.set targets unknown trajectory {object_id}")
-                })?;
-            state.trajectories[idx].access_tier = new_tier;
-        }
         "artifact" => {
             let idx = state
                 .artifacts
@@ -1211,7 +986,7 @@ fn apply_tier_set(state: &mut Project, event: &StateEvent) -> Result<(), String>
         }
         other => {
             return Err(format!(
-                "reducer: tier.set object_type '{other}' must be one of finding, negative_result, trajectory, artifact"
+                "reducer: tier.set object_type '{other}' must be one of finding, artifact"
             ));
         }
     }
@@ -1372,47 +1147,6 @@ fn apply_finding_entity_added(
     state.findings[f_idx].assertion.entities.push(entity);
     Ok(())
 }
-
-/// v0.70: append a Replication record to `Project.replications`
-/// if the content-addressed `vrep_*` id is not already present.
-/// Idempotent under re-application of the same event.
-fn apply_replication_deposited(state: &mut Project, event: &StateEvent) -> Result<(), String> {
-    use crate::bundle::Replication;
-
-    let rep_value = event
-        .payload
-        .get("replication")
-        .ok_or("replication.deposited event missing payload.replication")?
-        .clone();
-    let rep: Replication = serde_json::from_value(rep_value)
-        .map_err(|e| format!("replication.deposited payload parse: {e}"))?;
-    if state.replications.iter().any(|r| r.id == rep.id) {
-        return Ok(());
-    }
-    state.replications.push(rep);
-    Ok(())
-}
-
-/// v0.70: append a Prediction record to `Project.predictions`
-/// if the content-addressed `vpred_*` id is not already present.
-/// Idempotent under re-application of the same event.
-fn apply_prediction_deposited(state: &mut Project, event: &StateEvent) -> Result<(), String> {
-    use crate::bundle::Prediction;
-
-    let pred_value = event
-        .payload
-        .get("prediction")
-        .ok_or("prediction.deposited event missing payload.prediction")?
-        .clone();
-    let pred: Prediction = serde_json::from_value(pred_value)
-        .map_err(|e| format!("prediction.deposited payload parse: {e}"))?;
-    if state.predictions.iter().any(|p| p.id == pred.id) {
-        return Ok(());
-    }
-    state.predictions.push(pred);
-    Ok(())
-}
-
 /// v0.213: append a ReleasedDiffPackRecord to
 /// `state.released_diff_packs` when a `diff_pack.released` event
 /// lands on the canonical log. Idempotent on pack_id — re-applying

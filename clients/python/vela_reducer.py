@@ -240,94 +240,6 @@ def apply_finding_dependency_invalidated(state: list[dict], event: dict) -> None
 # sub-collection inside the ReducerState dict.
 
 
-def apply_negative_result_asserted(state: list[dict], event: dict) -> None:
-    payload = event.get("payload") or {}
-    nr = payload.get("negative_result")
-    if not nr:
-        return
-    if any(n.get("id") == nr.get("id") for n in state):
-        return
-    state.append(deepcopy(nr))
-
-
-def apply_negative_result_reviewed(state: list[dict], event: dict) -> None:
-    payload = event.get("payload") or {}
-    status = payload.get("status")
-    if not isinstance(status, str):
-        raise ValueError("negative_result.reviewed missing payload.status")
-    nr_id = event.get("target", {}).get("id")
-    nr = next((n for n in state if n.get("id") == nr_id), None)
-    if nr is None:
-        raise ValueError(f"negative_result.reviewed targets unknown id {nr_id}")
-    if status in ("accepted", "approved"):
-        nr["review_state"] = "accepted"
-    elif status in ("contested", "needs_revision", "rejected"):
-        nr["review_state"] = status
-    else:
-        raise ValueError(f"unsupported review status {status!r}")
-
-
-def apply_negative_result_retracted(state: list[dict], event: dict) -> None:
-    nr_id = event.get("target", {}).get("id")
-    nr = next((n for n in state if n.get("id") == nr_id), None)
-    if nr is None:
-        raise ValueError(f"negative_result.retracted targets unknown id {nr_id}")
-    nr["retracted"] = True
-
-
-def apply_trajectory_created(state: list[dict], event: dict) -> None:
-    payload = event.get("payload") or {}
-    traj = payload.get("trajectory")
-    if not traj:
-        return
-    if any(t.get("id") == traj.get("id") for t in state):
-        return
-    state.append(deepcopy(traj))
-
-
-def apply_trajectory_step_appended(state: list[dict], event: dict) -> None:
-    payload = event.get("payload") or {}
-    parent_id = payload.get("parent_trajectory_id")
-    if not isinstance(parent_id, str):
-        raise ValueError("trajectory.step_appended missing parent_trajectory_id")
-    traj = next((t for t in state if t.get("id") == parent_id), None)
-    if traj is None:
-        raise ValueError(f"trajectory.step_appended targets unknown {parent_id}")
-    step = payload.get("step")
-    if not isinstance(step, dict) or "id" not in step:
-        raise ValueError("trajectory.step_appended missing payload.step.id")
-    if "steps" not in traj or not isinstance(traj["steps"], list):
-        traj["steps"] = []
-    if any(s.get("id") == step["id"] for s in traj["steps"]):
-        return
-    traj["steps"].append(deepcopy(step))
-
-
-def apply_trajectory_reviewed(state: list[dict], event: dict) -> None:
-    payload = event.get("payload") or {}
-    status = payload.get("status")
-    if not isinstance(status, str):
-        raise ValueError("trajectory.reviewed missing payload.status")
-    traj_id = event.get("target", {}).get("id")
-    traj = next((t for t in state if t.get("id") == traj_id), None)
-    if traj is None:
-        raise ValueError(f"trajectory.reviewed targets unknown id {traj_id}")
-    if status in ("accepted", "approved"):
-        traj["review_state"] = "accepted"
-    elif status in ("contested", "needs_revision", "rejected"):
-        traj["review_state"] = status
-    else:
-        raise ValueError(f"unsupported review status {status!r}")
-
-
-def apply_trajectory_retracted(state: list[dict], event: dict) -> None:
-    traj_id = event.get("target", {}).get("id")
-    traj = next((t for t in state if t.get("id") == traj_id), None)
-    if traj is None:
-        raise ValueError(f"trajectory.retracted targets unknown id {traj_id}")
-    traj["retracted"] = True
-
-
 def apply_artifact_asserted(state: list[dict], event: dict) -> None:
     payload = event.get("payload") or {}
     artifact = payload.get("artifact")
@@ -364,10 +276,9 @@ def apply_artifact_retracted(state: list[dict], event: dict) -> None:
 
 
 def apply_tier_set(state: dict, event: dict) -> None:
-    """v0.51: tier.set re-classifies access_tier on a finding,
-    negative_result, or trajectory. The state arg here is the full
-    ReducerState dict so the dispatcher can route to the right
-    collection.
+    """v0.51: tier.set re-classifies access_tier on a finding or
+    artifact. The state arg here is the full ReducerState dict so the
+    dispatcher can route to the right collection.
     """
     payload = event.get("payload") or {}
     obj_type = payload.get("object_type")
@@ -381,10 +292,6 @@ def apply_tier_set(state: dict, event: dict) -> None:
         raise ValueError(f"tier.set invalid new_tier {new_tier!r}")
     if obj_type == "finding":
         collection = state["findings"]
-    elif obj_type == "negative_result":
-        collection = state["negative_results"]
-    elif obj_type == "trajectory":
-        collection = state["trajectories"]
     elif obj_type == "artifact":
         collection = state["artifacts"]
     else:
@@ -573,56 +480,11 @@ def apply_finding_entity_added(findings: list[dict], event: dict) -> None:
     )
 
 
-# v0.70: replication / prediction deposits. Each arm appends a
-# record to state["replications"] or state["predictions"] if the
-# content-addressed id is not already present. Mirrors
-# reducer.rs::apply_replication_deposited and
-# reducer.rs::apply_prediction_deposited. These do not mutate
-# state["findings"], so the cross-impl finding-effects digest is
-# unaffected; the deposit collections themselves are not part of
-# the cross-impl byte-equivalence promise (yet) but the Python
-# arm exists so a fresh replay does not silently drop the deposit.
-def apply_replication_deposited(state: dict, event: dict) -> None:
-    payload = event.get("payload") or {}
-    rep = payload.get("replication")
-    if not isinstance(rep, dict):
-        raise ValueError(
-            "replication.deposited event missing payload.replication"
-        )
-    rep_id = rep.get("id")
-    if not isinstance(rep_id, str) or not rep_id.startswith("vrep_"):
-        raise ValueError(
-            "replication.deposited payload.replication.id must start with 'vrep_'"
-        )
-    bucket = state.setdefault("replications", [])
-    if any(r.get("id") == rep_id for r in bucket):
-        return
-    bucket.append(deepcopy(rep))
-
-
-def apply_prediction_deposited(state: dict, event: dict) -> None:
-    payload = event.get("payload") or {}
-    pred = payload.get("prediction")
-    if not isinstance(pred, dict):
-        raise ValueError(
-            "prediction.deposited event missing payload.prediction"
-        )
-    pred_id = pred.get("id")
-    if not isinstance(pred_id, str) or not pred_id.startswith("vpred_"):
-        raise ValueError(
-            "prediction.deposited payload.prediction.id must start with 'vpred_'"
-        )
-    bucket = state.setdefault("predictions", [])
-    if any(p.get("id") == pred_id for p in bucket):
-        return
-    bucket.append(deepcopy(pred))
-
-
 def apply_event(state: dict, event: dict) -> None:
-    """state is now a dict {findings, negative_results, trajectories,
-    artifacts} so non-finding events have somewhere to land. The
-    Rust reducer's apply_event signature is `&mut Project` which
-    contains all three; this is the closest Python analogue.
+    """state is a dict {findings, artifacts, ...} so non-finding
+    events have somewhere to land. The Rust reducer's apply_event
+    signature is `&mut Project` which contains all collections; this
+    is the closest Python analogue.
     """
     kind = event.get("kind", "")
     if kind == "frontier.created":
@@ -641,20 +503,6 @@ def apply_event(state: dict, event: dict) -> None:
         apply_finding_retracted(state["findings"], event)
     elif kind == "finding.dependency_invalidated":
         apply_finding_dependency_invalidated(state["findings"], event)
-    elif kind == "negative_result.asserted":
-        apply_negative_result_asserted(state["negative_results"], event)
-    elif kind == "negative_result.reviewed":
-        apply_negative_result_reviewed(state["negative_results"], event)
-    elif kind == "negative_result.retracted":
-        apply_negative_result_retracted(state["negative_results"], event)
-    elif kind == "trajectory.created":
-        apply_trajectory_created(state["trajectories"], event)
-    elif kind == "trajectory.step_appended":
-        apply_trajectory_step_appended(state["trajectories"], event)
-    elif kind == "trajectory.reviewed":
-        apply_trajectory_reviewed(state["trajectories"], event)
-    elif kind == "trajectory.retracted":
-        apply_trajectory_retracted(state["trajectories"], event)
     elif kind == "artifact.asserted":
         apply_artifact_asserted(state["artifacts"], event)
     elif kind == "artifact.reviewed":
@@ -693,24 +541,6 @@ def apply_event(state: dict, event: dict) -> None:
     # Rust mirror is reducer.rs::apply_verifier_attachment_added.
     elif kind == "verifier_attachment.added":
         return
-    # v0.67: bridge review verdict. Bridges live in `.vela/bridges/`
-    # as a side table; the reducer arm is a no-op on
-    # state["findings"]. Consumers project the verdict onto
-    # Bridge.status by reading the most recent bridge.reviewed event
-    # for that bridge_id. The Rust mirror is reducer.rs:169.
-    elif kind == "bridge.reviewed":
-        return
-    # v0.70: replication / prediction deposits. Each appends a
-    # record to state["replications"] or state["predictions"] if
-    # the content-addressed id is not already present (idempotent
-    # under re-application). No-op on state["findings"]; the
-    # cross-impl finding-effects digest covers findings only. The
-    # Rust mirrors are reducer.rs::apply_replication_deposited and
-    # reducer.rs::apply_prediction_deposited.
-    elif kind == "replication.deposited":
-        apply_replication_deposited(state, event)
-    elif kind == "prediction.deposited":
-        apply_prediction_deposited(state, event)
     # v0.213: Released Diff Pack tracking. Both arms mutate
     # state["released_diff_packs"]. The Rust mirrors are
     # reducer.rs::apply_diff_pack_released and
@@ -760,7 +590,6 @@ def apply_event(state: dict, event: dict) -> None:
     # state on replay). Rust mirror: the explicit no-op arms in
     # reducer.rs.
     elif kind in (
-        "prediction.expired_unresolved",
         "frontier.observation_reviewed",
         "correction_return.review",
         "research_trace.review",
@@ -918,36 +747,6 @@ def finding_effects(findings: list[dict]) -> list[dict]:
     return out
 
 
-def negative_result_effects(nrs: list[dict]) -> list[dict]:
-    sorted_state = sorted(nrs, key=lambda n: n.get("id", ""))
-    return [
-        {
-            "id": n.get("id", ""),
-            "retracted": bool(n.get("retracted", False)),
-            "review_state": n.get("review_state") or "none",
-            "access_tier": n.get("access_tier", "public"),
-        }
-        for n in sorted_state
-    ]
-
-
-def trajectory_effects(trajs: list[dict]) -> list[dict]:
-    sorted_state = sorted(trajs, key=lambda t: t.get("id", ""))
-    out = []
-    for t in sorted_state:
-        steps = t.get("steps") or []
-        out.append(
-            {
-                "id": t.get("id", ""),
-                "retracted": bool(t.get("retracted", False)),
-                "review_state": t.get("review_state") or "none",
-                "access_tier": t.get("access_tier", "public"),
-                "step_ids": [s.get("id", "") for s in steps],
-            }
-        )
-    return out
-
-
 def artifact_effects(artifacts: list[dict]) -> list[dict]:
     sorted_state = sorted(artifacts, key=lambda a: a.get("id", ""))
     return [
@@ -959,36 +758,6 @@ def artifact_effects(artifacts: list[dict]) -> list[dict]:
             "access_tier": a.get("access_tier", "public"),
         }
         for a in sorted_state
-    ]
-
-
-def replication_effects(replications: list[dict]) -> list[dict]:
-    """v0.106.5: cross-impl digest per Replication. Mirrors
-    crates/vela-protocol/tests/cross_impl_reducer_fixtures.rs::replication_state.
-    """
-    sorted_state = sorted(replications, key=lambda r: r.get("id", ""))
-    return [
-        {
-            "id": r.get("id", ""),
-            "target_finding": r.get("target_finding", ""),
-            "outcome": r.get("outcome", ""),
-        }
-        for r in sorted_state
-    ]
-
-
-def prediction_effects(predictions: list[dict]) -> list[dict]:
-    """v0.106.5: cross-impl digest per Prediction. Mirrors
-    crates/vela-protocol/tests/cross_impl_reducer_fixtures.rs::prediction_state.
-    """
-    sorted_state = sorted(predictions, key=lambda p: p.get("id", ""))
-    return [
-        {
-            "id": p.get("id", ""),
-            "made_by": p.get("made_by", ""),
-            "expired_unresolved": bool(p.get("expired_unresolved", False)),
-        }
-        for p in sorted_state
     ]
 
 
@@ -1005,11 +774,7 @@ class FixtureResult:
     path: str
     frontier_idx: int
     findings: int = 0
-    negative_results: int = 0
-    trajectories: int = 0
     artifacts: int = 0
-    replications: int = 0
-    predictions: int = 0
     events: int = 0
     cascade_depth: int = 0
     matched: int = 0
@@ -1060,38 +825,26 @@ def verify_fixture(path: Path) -> FixtureResult:
         result.error = f"unreadable fixture: {e}"
         return result
     fx_version = str(fx.get("fixture_version") or "")
-    if fx_version not in ("1", "2", "3", "4"):
+    if fx_version not in ("1", "2", "3", "4", "5"):
         result.error = (
             f"unsupported fixture_version {fx.get('fixture_version')!r}; "
-            f"expected '1', '2', '3', or '4'"
+            f"expected '1', '2', '3', '4', or '5'"
         )
         return result
     result.frontier_idx = int(fx.get("frontier_idx", -1))
     stats = fx.get("stats") or {}
     result.findings = int(stats.get("findings", 0))
-    result.negative_results = int(stats.get("negative_results", 0))
-    result.trajectories = int(stats.get("trajectories", 0))
     result.artifacts = int(stats.get("artifacts", 0))
-    result.replications = int(stats.get("replications", 0))
-    result.predictions = int(stats.get("predictions", 0))
     result.events = int(stats.get("events", 0))
     result.cascade_depth = int(stats.get("cascade_depth", 0))
 
     state = {
         "findings": deepcopy(fx.get("genesis_findings") or []),
-        "negative_results": [],
-        "trajectories": [],
         "artifacts": [],
-        "replications": [],
-        "predictions": [],
     }
     event_log = fx.get("event_log") or []
     expected_findings = fx.get("expected_states") or []
-    expected_nrs = fx.get("expected_negative_results") or []
-    expected_trajs = fx.get("expected_trajectories") or []
     expected_artifacts = fx.get("expected_artifacts") or []
-    expected_replications = fx.get("expected_replications") or []
-    expected_predictions = fx.get("expected_predictions") or []
 
     for event in event_log:
         try:
@@ -1104,11 +857,7 @@ def verify_fixture(path: Path) -> FixtureResult:
             return result
 
     actual_findings = finding_effects(state["findings"])
-    actual_nrs = negative_result_effects(state["negative_results"])
-    actual_trajs = trajectory_effects(state["trajectories"])
     actual_artifacts = artifact_effects(state["artifacts"])
-    actual_replications = replication_effects(state.get("replications", []))
-    actual_predictions = prediction_effects(state.get("predictions", []))
 
     if fx_version == "1":
         # v1 fixtures don't carry access_tier in expected_states;
@@ -1118,22 +867,12 @@ def verify_fixture(path: Path) -> FixtureResult:
         ]
 
     _diff_collection("findings", actual_findings, expected_findings, result)
-    if fx_version in ("2", "3", "4"):
-        _diff_collection("negative_results", actual_nrs, expected_nrs, result)
-        _diff_collection("trajectories", actual_trajs, expected_trajs, result)
-    if fx_version in ("3", "4"):
+    if fx_version in ("3", "4", "5"):
         _diff_collection("artifacts", actual_artifacts, expected_artifacts, result)
-    if fx_version == "4":
-        _diff_collection("replications", actual_replications, expected_replications, result)
-        _diff_collection("predictions", actual_predictions, expected_predictions, result)
 
     total_expected = len(expected_findings)
-    if fx_version in ("2", "3", "4"):
-        total_expected += len(expected_nrs) + len(expected_trajs)
-    if fx_version in ("3", "4"):
+    if fx_version in ("3", "4", "5"):
         total_expected += len(expected_artifacts)
-    if fx_version == "4":
-        total_expected += len(expected_replications) + len(expected_predictions)
     result.ok = not result.diffs and result.matched == total_expected
     return result
 
@@ -1143,17 +882,10 @@ def render_text(results: list[FixtureResult]) -> str:
     lines.append("vela reducer (python · stdlib · second implementation)")
     for r in results:
         status = "ok" if r.ok else "FAIL"
-        total_expected = (
-            r.findings
-            + r.negative_results
-            + r.trajectories
-            + r.artifacts
-            + r.replications
-            + r.predictions
-        )
+        total_expected = r.findings + r.artifacts
         head = (
             f"  {status:<4} · frontier {r.frontier_idx:02} · "
-            f"{r.matched}/{total_expected} ({r.findings}f/{r.negative_results}n/{r.trajectories}t/{r.artifacts}a/{r.replications}r/{r.predictions}p) · "
+            f"{r.matched}/{total_expected} ({r.findings}f/{r.artifacts}a) · "
             f"{r.events} events · cascade depth {r.cascade_depth}"
         )
         lines.append(head)
@@ -1237,8 +969,6 @@ def main(argv: list[str] | None = None) -> int:
                             "frontier_idx": r.frontier_idx,
                             "ok": r.ok,
                             "findings": r.findings,
-                            "negative_results": r.negative_results,
-                            "trajectories": r.trajectories,
                             "events": r.events,
                             "cascade_depth": r.cascade_depth,
                             "matched": r.matched,

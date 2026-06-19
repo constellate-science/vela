@@ -822,8 +822,7 @@ pub(crate) fn cmd_normalize(
     let before_stats = serde_json::to_value(&frontier.stats).unwrap_or(Value::Null);
     let (entity_type_fixes, entity_name_fixes) =
         normalize::normalize_findings(&mut frontier.findings);
-    let confidence_updates =
-        bundle::recompute_all_confidence(&mut frontier.findings, &frontier.replications);
+    let confidence_updates = bundle::recompute_all_confidence(&mut frontier.findings);
     // Phase N: optionally rewrite finding.provenance from the canonical
     // SourceRecord. The source registry is the authority; provenance is
     // the denormalized cache.

@@ -77,16 +77,6 @@ pub fn all_tools() -> Vec<ToolDefinition> {
             ],
         ),
         tool(
-            "find_bridges",
-            "Find entities spanning multiple assertion categories, suggesting candidate cross-domain connections.",
-            json!({"type": "object", "properties": {
-                "min_categories": {"type": "integer"}, "limit": {"type": "integer"}
-            }}),
-            PermissionLevel::ReadOnly,
-            false,
-            vec!["Candidate bridges require review before being treated as domain knowledge."],
-        ),
-        tool(
             "check_pubmed",
             "Run a rough PubMed prior-art check for a hypothesis.",
             json!({"type": "object", "properties": {"query": {"type": "string"}}, "required": ["query"]}),
@@ -474,25 +464,6 @@ pub fn all_tools() -> Vec<ToolDefinition> {
                 "Resulting pack is reviewer-pending until a reviewer issues a verdict via the local review queue + diff-pack promoter.",
             ],
         ),
-        tool(
-            "vela_agent_open_trajectory",
-            "v0.206: write a vtr_* Trajectory with N typed steps to .vela/trajectories/. Trajectories are content-addressed but unsigned; the chain of custody lives in the `deposited_by` actor id.",
-            json!({"type": "object", "properties": {
-                "frontier_path": {"type": "string"},
-                "target_findings": {"type": "array", "items": {"type": "string"}},
-                "deposited_by": {"type": "string"},
-                "notes": {"type": "string"},
-                "steps": {"type": "array", "items": {"type": "object", "properties": {
-                    "kind": {"type": "string", "description": "One of the 17 v0.194 step kinds: hypothesis, tried, ruled_out, observed, refined, question, context, data, tool, model, expert, decision, protocol, output, review, risk, outcome."},
-                    "description": {"type": "string"},
-                    "references": {"type": "array", "items": {"type": "string"}},
-                    "actor": {"type": "string"}
-                }, "required": ["kind", "description"]}, "minItems": 1}
-            }, "required": ["frontier_path", "deposited_by", "steps"]}),
-            PermissionLevel::Write,
-            true,
-            vec!["Trajectories are unsigned — they document a search path, not a truth claim."],
-        ),
         // An autonomous agent submits a SIGNED StateProposal to a remote hub.
         // Proposes only: the hub forces pending_review and a human reviewer
         // must accept through the strict gate (an AI never signs an accept).
@@ -558,16 +529,6 @@ pub fn all_tools() -> Vec<ToolDefinition> {
                 "frontier_path": {"type": "string"},
                 "attestation_id": {"type": "string", "description": "vaa_<16hex>"}
             }, "required": ["frontier_path", "attestation_id"]}),
-            PermissionLevel::ReadOnly,
-            false,
-            vec![],
-        ),
-        tool(
-            "vela_agent_list_trajectories",
-            "v0.214: list every Trajectory on a frontier. Returns full bodies including steps.",
-            json!({"type": "object", "properties": {
-                "frontier_path": {"type": "string"}
-            }, "required": ["frontier_path"]}),
             PermissionLevel::ReadOnly,
             false,
             vec![],

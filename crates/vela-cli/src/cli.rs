@@ -2418,44 +2418,18 @@ pub(crate) fn answer(project: &vela_protocol::project::Project, q: &str, json: b
                     "findings": n,
                     "events": evs,
                     "actors": actors,
-                    "replications": project.replications.len(),
-                    "predictions": project.predictions.len(),
+                    "datasets": project.datasets.len(),
+                    "code_artifacts": project.code_artifacts.len(),
                 }))
                 .unwrap()
             );
         } else {
             println!("  {n} findings · {evs} events · {actors} actors.");
             println!(
-                "  {} replications · {} predictions · {} datasets · {} code artifacts.",
-                project.replications.len(),
-                project.predictions.len(),
+                "  {} datasets · {} code artifacts.",
                 project.datasets.len(),
                 project.code_artifacts.len(),
             );
-        }
-        return;
-    }
-
-    // Pattern: calibration.
-    if lower.contains("calibration") || lower.contains("brier") || lower.contains("predict") {
-        let records =
-            vela_edge::calibration::calibration_records(&project.predictions, &project.resolutions);
-        if json {
-            println!("{}", serde_json::to_string_pretty(&records).unwrap());
-        } else if records.is_empty() {
-            println!("  No predictions yet. The calibration ledger is empty.");
-        } else {
-            println!("  Calibration over {} actor(s):", records.len());
-            for r in &records {
-                let brier = r
-                    .brier_score
-                    .map(|b| format!("{:.3}", b))
-                    .unwrap_or_else(|| "—".into());
-                println!(
-                    "    · {:<28}  predictions {} · resolved {} · expired {} · Brier {}",
-                    r.actor, r.n_predictions, r.n_resolved, r.n_expired, brier
-                );
-            }
         }
         return;
     }
@@ -2467,13 +2441,13 @@ pub(crate) fn answer(project: &vela_protocol::project::Project, q: &str, json: b
             serde_json::to_string_pretty(&json!({
                 "answer": "unknown_question",
                 "question": q,
-                "hint": "Try: pending, audit, recent, how many, calibration."
+                "hint": "Try: pending, audit, recent, how many."
             }))
             .unwrap()
         );
     } else {
         println!("  Don't know how to route that question yet.");
-        println!("  Try: pending · audit · recent · how many · calibration");
+        println!("  Try: pending · audit · recent · how many");
     }
 }
 
@@ -5595,41 +5569,6 @@ pub(crate) fn print_session_dashboard(project: &vela_protocol::project::Project,
     let audit = audit_frontier(project);
     let audit_summary = summarize_audit(&audit);
 
-    let bridges_dir = repo_path.join(".vela/bridges");
-    let mut bridge_total = 0usize;
-    let mut bridge_confirmed = 0usize;
-    let mut bridge_derived = 0usize;
-    if bridges_dir.is_dir()
-        && let Ok(entries) = std::fs::read_dir(&bridges_dir)
-    {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.extension().and_then(|s| s.to_str()) != Some("json") {
-                continue;
-            }
-            bridge_total += 1;
-            if let Ok(data) = std::fs::read_to_string(&path)
-                && let Ok(b) = serde_json::from_str::<vela_edge::bridge::Bridge>(&data)
-            {
-                match b.status {
-                    vela_edge::bridge::BridgeStatus::Confirmed => bridge_confirmed += 1,
-                    vela_edge::bridge::BridgeStatus::Derived => bridge_derived += 1,
-                    _ => {}
-                }
-            }
-        }
-    }
-
-    let mut targets_with_success = std::collections::HashSet::new();
-    let mut failed_replications = 0usize;
-    for r in &project.replications {
-        if r.outcome == "replicated" {
-            targets_with_success.insert(r.target_finding.clone());
-        } else if r.outcome == "failed" {
-            failed_replications += 1;
-        }
-    }
-
     println!();
     let version = vela_protocol::project::VELA_COMPILER_VERSION
         .strip_prefix("vela/")
@@ -5669,25 +5608,6 @@ pub(crate) fn print_session_dashboard(project: &vela_protocol::project::Project,
             audit_summary.conditional,
         );
     }
-    if bridge_total > 0 {
-        println!(
-            "  {}   · {} total · {} confirmed · {} awaiting review",
-            style::ok("bridges"),
-            bridge_total,
-            bridge_confirmed,
-            bridge_derived
-        );
-    }
-    if !project.replications.is_empty() {
-        println!(
-            "  {} · {} records · {} findings replicated · {} failed",
-            style::ok("replications"),
-            project.replications.len(),
-            targets_with_success.len(),
-            failed_replications,
-        );
-    }
-
     println!();
     println!("  type a verb or ask anything:");
     println!("    i  inbox (pending)    l  log (recent)        s  refresh status");

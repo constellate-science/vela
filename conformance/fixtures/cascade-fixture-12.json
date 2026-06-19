@@ -1,5 +1,5 @@
 {
-  "doctrine": "every reducer implementation must agree on per-kind mutation rules across findings, negative_results, trajectories, artifacts, replications, and predictions",
+  "doctrine": "every reducer implementation must agree on per-kind mutation rules across findings and artifacts",
   "event_log": [
     {
       "actor": {
@@ -121,84 +121,9 @@
         "type": "contradiction"
       },
       "timestamp": "2026-05-02T12:00:03Z"
-    },
-    {
-      "actor": {
-        "id": "federation",
-        "type": "system"
-      },
-      "after_hash": "sha256:null",
-      "before_hash": "sha256:null",
-      "caveats": [],
-      "id": "vev_cabf6deb9ffff642",
-      "kind": "frontier.synced_with_peer",
-      "payload": {
-        "divergence_count": 1,
-        "our_snapshot_hash": "fixture_our_snapshot",
-        "peer_id": "peer:fixture-east-12",
-        "peer_snapshot_hash": "fixture_peer_snapshot"
-      },
-      "reason": "Fixture sync pass",
-      "schema": "vela.event.v0.1",
-      "target": {
-        "id": "vfr_fixture_0000000c",
-        "type": "frontier_observation"
-      },
-      "timestamp": "2026-05-02T12:00:04Z"
-    },
-    {
-      "actor": {
-        "id": "federation",
-        "type": "system"
-      },
-      "after_hash": "sha256:null",
-      "before_hash": "sha256:null",
-      "caveats": [],
-      "id": "vev_00c0c881acf2e8c1",
-      "kind": "frontier.conflict_detected",
-      "payload": {
-        "detail": "Fixture peer disagrees on review_state",
-        "finding_id": "vf_fixture_12",
-        "kind": "verdict_disagreement",
-        "peer_id": "peer:fixture-east-12"
-      },
-      "reason": "Fixture conflict",
-      "schema": "vela.event.v0.1",
-      "target": {
-        "id": "vfr_fixture_0000000c",
-        "type": "frontier_observation"
-      },
-      "timestamp": "2026-05-02T12:00:05Z"
-    },
-    {
-      "actor": {
-        "id": "reviewer:fixture-12",
-        "type": "human"
-      },
-      "after_hash": "sha256:null",
-      "before_hash": "sha256:null",
-      "caveats": [],
-      "id": "vev_e598a562afcfa339",
-      "kind": "frontier.conflict_resolved",
-      "payload": {
-        "conflict_event_id": "vev_00c0c881acf2e8c1",
-        "proposal_id": "vpr_fixture_resolve_12",
-        "resolution_note": "Reviewer accepts our view",
-        "resolved_by": "reviewer:fixture-12"
-      },
-      "reason": "Fixture resolution",
-      "schema": "vela.event.v0.1",
-      "target": {
-        "id": "vfr_fixture_0000000c",
-        "type": "frontier_observation"
-      },
-      "timestamp": "2026-05-02T12:00:06Z"
     }
   ],
   "expected_artifacts": [],
-  "expected_negative_results": [],
-  "expected_predictions": [],
-  "expected_replications": [],
   "expected_states": [
     {
       "access_tier": "public",
@@ -273,8 +198,7 @@
       "review_state": "none"
     }
   ],
-  "expected_trajectories": [],
-  "fixture_version": "4",
+  "fixture_version": "5",
   "frontier_idx": 12,
   "genesis_findings": [
     {
@@ -1063,24 +987,17 @@
     }
   ],
   "scenario": "side_table_events",
-  "schema_url": "https://vela.science/schema/cross-impl-reducer-fixture/v4",
+  "schema_url": "https://vela.science/schema/cross-impl-reducer-fixture/v5",
   "stats": {
     "artifacts": 0,
     "cascade_depth": 0,
-    "events": 7,
+    "events": 4,
     "findings": 8,
     "kinds_seen": {
       "contradiction.resolved": 1,
       "diff_pack.released": 1,
       "diff_pack.reviewed": 1,
-      "frontier.conflict_detected": 1,
-      "frontier.conflict_resolved": 1,
-      "frontier.synced_with_peer": 1,
       "verdict_conflict.resolved": 1
-    },
-    "negative_results": 0,
-    "predictions": 0,
-    "replications": 0,
-    "trajectories": 0
+    }
   }
 }

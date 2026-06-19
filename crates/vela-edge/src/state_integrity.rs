@@ -392,13 +392,6 @@ fn is_accepted_state_event(kind: &str) -> bool {
             | "artifact.asserted"
             | "artifact.reviewed"
             | "artifact.retracted"
-            | "negative_result.asserted"
-            | "negative_result.reviewed"
-            | "negative_result.retracted"
-            | "trajectory.created"
-            | "trajectory.step_appended"
-            | "trajectory.reviewed"
-            | "trajectory.retracted"
     )
 }
 

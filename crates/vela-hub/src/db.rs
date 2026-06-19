@@ -340,7 +340,6 @@ impl HubDb {
             "evidence_atoms": g("evidence_atom"),
             "links": g("link"),
             "proposals": g("proposal"),
-            "negative_results": g("negative_result"),
             "events": events,
             "contested": contested,
             "human_reviewed": human_reviewed,
@@ -1881,8 +1880,7 @@ impl HubDb {
         let new_objects = collect_frontier_objects(&json!({
             "findings": new_findings_value,
             "sources": [], "evidence_atoms": [], "condition_records": [],
-            "actors": [], "artifacts": [], "negative_results": [],
-            "trajectories": [], "proposals": [],
+            "actors": [], "artifacts": [], "proposals": [],
         }));
 
         let findings_count = project.findings.len() as i64;
@@ -3179,8 +3177,6 @@ fn frontier_skeleton(snapshot: &Value) -> Value {
             "condition_records",
             "actors",
             "artifacts",
-            "negative_results",
-            "trajectories",
             "proposals",
         ] {
             map.insert(array_key.to_string(), Value::Array(Vec::new()));
@@ -3197,8 +3193,6 @@ fn projection_array_key(object_type: &str) -> Option<&'static str> {
         "condition_record" => Some("condition_records"),
         "actor" => Some("actors"),
         "artifact" => Some("artifacts"),
-        "negative_result" => Some("negative_results"),
-        "trajectory" => Some("trajectories"),
         "proposal" => Some("proposals"),
         _ => None,
     }
@@ -3215,8 +3209,6 @@ fn merge_projected_objects(snapshot: &mut Value, objects: Vec<(String, i64, Valu
         "condition_records",
         "actors",
         "artifacts",
-        "negative_results",
-        "trajectories",
         "proposals",
     ] {
         map.insert(array_key.to_string(), Value::Array(Vec::new()));
@@ -3239,8 +3231,6 @@ fn collect_frontier_objects(snapshot: &Value) -> Vec<FrontierObjectRow> {
     collect_array_objects(snapshot, "condition_records", "condition_record", &mut out);
     collect_array_objects(snapshot, "actors", "actor", &mut out);
     collect_array_objects(snapshot, "artifacts", "artifact", &mut out);
-    collect_array_objects(snapshot, "negative_results", "negative_result", &mut out);
-    collect_array_objects(snapshot, "trajectories", "trajectory", &mut out);
     collect_array_objects(snapshot, "proposals", "proposal", &mut out);
 
     if let Some(findings) = snapshot.get("findings").and_then(Value::as_array) {

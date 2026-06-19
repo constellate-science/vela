@@ -1,5 +1,5 @@
 {
-  "doctrine": "every reducer implementation must agree on per-kind mutation rules across findings, negative_results, trajectories, artifacts, replications, and predictions",
+  "doctrine": "every reducer implementation must agree on per-kind mutation rules across findings and artifacts",
   "event_log": [
     {
       "actor": {
@@ -171,113 +171,13 @@
     },
     {
       "actor": {
-        "id": "reviewer:tier-7",
-        "type": "human"
-      },
-      "after_hash": "sha256:null",
-      "before_hash": "sha256:null",
-      "caveats": [],
-      "id": "vev_446348f4e071325b",
-      "kind": "negative_result.asserted",
-      "payload": {
-        "negative_result": {
-          "conditions": {
-            "age_group": null,
-            "cell_type": null,
-            "clinical_trial": false,
-            "concentration_range": null,
-            "duration": null,
-            "human_data": false,
-            "in_vitro": true,
-            "in_vivo": false,
-            "species_unverified": [],
-            "species_verified": [],
-            "text": "in vitro fixture"
-          },
-          "created": "2026-05-02T07:30:00Z",
-          "deposited_by": "lab:tier-fixture-7",
-          "id": "vnr_46f12457af232b15",
-          "kind": {
-            "attempts": 2,
-            "kind": "exploratory",
-            "observation": "no detectable activity at any tested concentration",
-            "reagent": "ReagentX-7"
-          },
-          "notes": "Fixture exploratory null for tier.set coverage.",
-          "provenance": {
-            "authors": [],
-            "citation_count": 0,
-            "doi": null,
-            "extraction": {
-              "extracted_at": "",
-              "extractor_version": "",
-              "method": "",
-              "model": null,
-              "model_version": null
-            },
-            "journal": null,
-            "openalex_id": null,
-            "pmc": null,
-            "pmid": null,
-            "review": null,
-            "source_type": "lab_notebook",
-            "title": "Tier fixture lab note 7",
-            "year": 2026
-          },
-          "target_findings": [
-            "vf_381af9381ec96fea"
-          ]
-        },
-        "proposal_id": "vpr_tier_7_nr"
-      },
-      "reason": "deposit null for tier-set fixture",
-      "schema": "vela.event.v0.1",
-      "target": {
-        "id": "vnr_46f12457af232b15",
-        "type": "negative_result"
-      },
-      "timestamp": "2026-05-02T07:00:08Z"
-    },
-    {
-      "actor": {
-        "id": "reviewer:tier-7",
-        "type": "human"
-      },
-      "after_hash": "sha256:null",
-      "before_hash": "sha256:null",
-      "caveats": [],
-      "id": "vev_49ceda4f4c5d2baf",
-      "kind": "trajectory.created",
-      "payload": {
-        "proposal_id": "vpr_tier_7_traj",
-        "trajectory": {
-          "created": "2026-05-02T07:30:01Z",
-          "deposited_by": "agent:tier-fixture-7",
-          "id": "vtr_d6603d4520b34fba",
-          "notes": "Fixture trajectory for tier.set coverage.",
-          "steps": [],
-          "target_findings": [
-            "vf_381af9381ec96fea"
-          ]
-        }
-      },
-      "reason": "open trajectory for tier-set fixture",
-      "schema": "vela.event.v0.1",
-      "target": {
-        "id": "vtr_d6603d4520b34fba",
-        "type": "trajectory"
-      },
-      "timestamp": "2026-05-02T07:00:09Z"
-    },
-    {
-      "actor": {
         "id": "reviewer:ibc-7",
         "type": "human"
       },
       "after_hash": "sha256:null",
       "before_hash": "sha256:null",
       "caveats": [],
-      "id": "vev_458151953378f1e0",
+      "id": "vev_e6dc5f88021a3e3c",
       "kind": "tier.set",
       "payload": {
         "new_tier": "restricted",
@@ -292,7 +192,7 @@
         "id": "vf_381af9381ec96fea",
         "type": "finding"
       },
-      "timestamp": "2026-05-02T07:00:10Z"
+      "timestamp": "2026-05-02T07:00:08Z"
     },
     {
       "actor": {
@@ -302,60 +202,25 @@
       "after_hash": "sha256:null",
       "before_hash": "sha256:null",
       "caveats": [],
-      "id": "vev_e060f8dd5f3e4ddd",
-      "kind": "tier.set",
-      "payload": {
-        "new_tier": "restricted",
-        "object_id": "vnr_46f12457af232b15",
-        "object_type": "negative_result",
-        "previous_tier": "public",
-        "proposal_id": "vpr_tier_set_7_1"
-      },
-      "reason": "Null reclassified — readout includes capability-relevant detail.",
-      "schema": "vela.event.v0.1",
-      "target": {
-        "id": "vnr_46f12457af232b15",
-        "type": "negative_result"
-      },
-      "timestamp": "2026-05-02T07:00:11Z"
-    },
-    {
-      "actor": {
-        "id": "reviewer:ibc-7",
-        "type": "human"
-      },
-      "after_hash": "sha256:null",
-      "before_hash": "sha256:null",
-      "caveats": [],
-      "id": "vev_36ec5b8a964b7e08",
+      "id": "vev_2fef2fc9b25969b1",
       "kind": "tier.set",
       "payload": {
         "new_tier": "classified",
-        "object_id": "vtr_d6603d4520b34fba",
-        "object_type": "trajectory",
+        "object_id": "vf_b572d498b50b4278",
+        "object_type": "finding",
         "previous_tier": "public",
-        "proposal_id": "vpr_tier_set_7_2"
+        "proposal_id": "vpr_tier_set_7_1"
       },
-      "reason": "Trajectory reclassified — search path documents synthesis steps above DURC threshold.",
+      "reason": "Finding reclassified — readout includes capability-relevant detail above DURC threshold.",
       "schema": "vela.event.v0.1",
       "target": {
-        "id": "vtr_d6603d4520b34fba",
-        "type": "trajectory"
+        "id": "vf_b572d498b50b4278",
+        "type": "finding"
       },
-      "timestamp": "2026-05-02T07:00:12Z"
+      "timestamp": "2026-05-02T07:00:09Z"
     }
   ],
   "expected_artifacts": [],
-  "expected_negative_results": [
-    {
-      "access_tier": "restricted",
-      "id": "vnr_46f12457af232b15",
-      "retracted": false,
-      "review_state": "none"
-    }
-  ],
-  "expected_predictions": [],
-  "expected_replications": [],
   "expected_states": [
     {
       "access_tier": "restricted",
@@ -412,7 +277,7 @@
       "review_state": "none"
     },
     {
-      "access_tier": "public",
+      "access_tier": "classified",
       "annotation_ids": [],
       "confidence_score": "0.700000",
       "contested": false,
@@ -430,16 +295,7 @@
       "review_state": "none"
     }
   ],
-  "expected_trajectories": [
-    {
-      "access_tier": "classified",
-      "id": "vtr_d6603d4520b34fba",
-      "retracted": false,
-      "review_state": "none",
-      "step_ids": []
-    }
-  ],
-  "fixture_version": "4",
+  "fixture_version": "5",
   "frontier_idx": 7,
   "genesis_findings": [
     {
@@ -1228,21 +1084,15 @@
     }
   ],
   "scenario": "tier_set",
-  "schema_url": "https://vela.science/schema/cross-impl-reducer-fixture/v4",
+  "schema_url": "https://vela.science/schema/cross-impl-reducer-fixture/v5",
   "stats": {
     "artifacts": 0,
     "cascade_depth": 0,
-    "events": 13,
+    "events": 10,
     "findings": 8,
     "kinds_seen": {
       "finding.asserted": 8,
-      "negative_result.asserted": 1,
-      "tier.set": 3,
-      "trajectory.created": 1
-    },
-    "negative_results": 1,
-    "predictions": 0,
-    "replications": 0,
-    "trajectories": 1
+      "tier.set": 2
+    }
   }
 }

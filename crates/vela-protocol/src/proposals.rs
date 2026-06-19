@@ -1813,15 +1813,10 @@ fn validate_proposal_shape(frontier: &Project, proposal: &StateProposal) -> Resu
     // enforces that target.type matches the kind family.
     if !matches!(
         proposal.target.r#type.as_str(),
-        "finding"
-            | "artifact"
-            | "negative_result"
-            | "trajectory"
-            | "evidence_atom"
-            | "frontier_observation"
+        "finding" | "artifact" | "evidence_atom" | "frontier_observation"
     ) {
         return Err(format!(
-            "Unsupported proposal target type '{}'; valid: finding, artifact, negative_result, trajectory, evidence_atom, frontier_observation",
+            "Unsupported proposal target type '{}'; valid: finding, artifact, evidence_atom, frontier_observation",
             proposal.target.r#type
         ));
     }
@@ -1999,70 +1994,6 @@ fn validate_proposal_shape(frontier: &Project, proposal: &StateProposal) -> Resu
                 return Err(format!(
                     "verifier.attach attachment.target {} does not match proposal target {}",
                     att.target, proposal.target.id
-                ));
-            }
-        }
-        // v0.52: NegativeResult deposit through the proposals
-        // pipeline. Mirrors finding.add: payload.negative_result
-        // carries the inline NegativeResult struct; target.id is the
-        // resulting vnr_*. Validators here are the proposal-side
-        // shape check; the canonical event validator in events.rs
-        // re-checks at event-emit time.
-        "negative_result.assert" => {
-            if proposal.target.r#type != "negative_result" {
-                return Err(format!(
-                    "negative_result.assert proposal target.type must be 'negative_result', got '{}'",
-                    proposal.target.r#type
-                ));
-            }
-            let nr_value = proposal
-                .payload
-                .get("negative_result")
-                .ok_or("negative_result.assert proposal missing payload.negative_result")?
-                .clone();
-            let nr: crate::bundle::NegativeResult = serde_json::from_value(nr_value)
-                .map_err(|e| format!("Invalid negative_result.assert payload: {e}"))?;
-            if nr.id != proposal.target.id {
-                return Err(format!(
-                    "negative_result.assert target {} does not match payload id {}",
-                    proposal.target.id, nr.id
-                ));
-            }
-            if frontier.negative_results.iter().any(|n| n.id == nr.id) {
-                return Err(format!(
-                    "Refusing to add duplicate negative_result with existing id {}",
-                    nr.id
-                ));
-            }
-        }
-        // v0.52: Trajectory deposit through the proposals pipeline.
-        // payload.trajectory carries the inline Trajectory (with
-        // empty steps); steps land later via separate
-        // `trajectory.step_append` proposals.
-        "trajectory.create" => {
-            if proposal.target.r#type != "trajectory" {
-                return Err(format!(
-                    "trajectory.create proposal target.type must be 'trajectory', got '{}'",
-                    proposal.target.r#type
-                ));
-            }
-            let traj_value = proposal
-                .payload
-                .get("trajectory")
-                .ok_or("trajectory.create proposal missing payload.trajectory")?
-                .clone();
-            let traj: crate::bundle::Trajectory = serde_json::from_value(traj_value)
-                .map_err(|e| format!("Invalid trajectory.create payload: {e}"))?;
-            if traj.id != proposal.target.id {
-                return Err(format!(
-                    "trajectory.create target {} does not match payload id {}",
-                    proposal.target.id, traj.id
-                ));
-            }
-            if frontier.trajectories.iter().any(|t| t.id == traj.id) {
-                return Err(format!(
-                    "Refusing to add duplicate trajectory with existing id {}",
-                    traj.id
                 ));
             }
         }
@@ -2275,42 +2206,6 @@ fn validate_proposal_shape(frontier: &Project, proposal: &StateProposal) -> Resu
             {
                 return Err(format!(
                     "evidence_atom {atom_id} already carries locator '{existing}'; refusing to overwrite with '{locator}'"
-                ));
-            }
-        }
-        // v0.52: Append a step to an existing Trajectory through the
-        // proposals pipeline. target.id is the parent vtr_*; payload
-        // carries the inline TrajectoryStep.
-        "trajectory.step_append" => {
-            if proposal.target.r#type != "trajectory" {
-                return Err(format!(
-                    "trajectory.step_append proposal target.type must be 'trajectory', got '{}'",
-                    proposal.target.r#type
-                ));
-            }
-            let parent_id = proposal.target.id.as_str();
-            let parent_idx = frontier
-                .trajectories
-                .iter()
-                .position(|t| t.id == parent_id)
-                .ok_or_else(|| {
-                    format!("trajectory.step_append targets unknown trajectory {parent_id}")
-                })?;
-            let step_value = proposal
-                .payload
-                .get("step")
-                .ok_or("trajectory.step_append proposal missing payload.step")?
-                .clone();
-            let step: crate::bundle::TrajectoryStep = serde_json::from_value(step_value)
-                .map_err(|e| format!("Invalid trajectory.step_append payload.step: {e}"))?;
-            if frontier.trajectories[parent_idx]
-                .steps
-                .iter()
-                .any(|s| s.id == step.id)
-            {
-                return Err(format!(
-                    "Refusing to add duplicate step with existing id {} on trajectory {}",
-                    step.id, parent_id
                 ));
             }
         }
@@ -2807,20 +2702,14 @@ const TRUSTED_REPLICATOR_KINDS: &[&str] = &["finding.add", "finding.review"];
 /// rather than by a privileged actor.
 const TRUSTED_REPAIR_KINDS: &[&str] = &["finding.span_repair", "evidence_atom.locator_repair"];
 
-/// Non-truth-bearing process/provenance kinds any agent may self-apply:
-/// its own reasoning trace (trajectories) and content-addressed artifact
-/// registration. These document *process* and *store content* — they
+/// Non-truth-bearing provenance kinds any agent may self-apply:
+/// content-addressed artifact registration. These *store content* — they
 /// assert no scientific claim about the world, and a content-addressed
 /// artifact cannot misrepresent (its id is the hash of its bytes). They
 /// fall outside the human-gated truth boundary, so a fleet need not block
-/// on a human to record what it did. A `negative_result` is deliberately
-/// NOT here: a null is a truth-bearing claim and stays gated.
-const AGENT_SELF_APPLIABLE_PROCESS_KINDS: &[&str] = &[
-    "trajectory.create",
-    "trajectory.step_append",
-    "artifact.assert",
-    "artifact.add",
-];
+/// on a human to store what it produced. Anything truth-bearing (a claim
+/// about the world, including a null result) stays gated.
+const AGENT_SELF_APPLIABLE_PROCESS_KINDS: &[&str] = &["artifact.assert", "artifact.add"];
 
 /// Pure, deterministic check over a proposal payload's
 /// `replication_attestation` object. Returns true only when the recorded
@@ -2881,8 +2770,8 @@ fn enforce_trusted_agent_accept_policy(
     }
     let kind = proposal.kind.as_str();
     // The bounded low-risk set any agent may self-apply: non-truth-bearing
-    // process/provenance (a trajectory or content-addressed artifact records
-    // what the agent did, not a claim about the world) and mechanical,
+    // provenance (a content-addressed artifact stores what the agent
+    // produced, not a claim about the world) and mechanical,
     // truth-preserving repairs (a span/locator repair attaches provenance
     // without changing what the finding asserts). Repairs are gated by KIND,
     // not by a privileged actor — the named `agent:repair` role is one
@@ -3260,17 +3149,6 @@ pub(crate) fn apply_proposal(
         "finding.supersede" => apply_supersede(frontier, proposal, reviewer, decision_reason)?,
         "artifact.assert" => apply_artifact_assert(frontier, proposal, reviewer, decision_reason)?,
         "verifier.attach" => apply_verifier_attach(frontier, proposal, reviewer, decision_reason)?,
-        // v0.52: agent-inbox-deposited nulls and trajectories follow
-        // the same review-gated path as findings.
-        "negative_result.assert" => {
-            apply_negative_result_assert(frontier, proposal, reviewer, decision_reason)?
-        }
-        "trajectory.create" => {
-            apply_trajectory_create(frontier, proposal, reviewer, decision_reason)?
-        }
-        "trajectory.step_append" => {
-            apply_trajectory_step_append(frontier, proposal, reviewer, decision_reason)?
-        }
         // v0.56: mechanical evidence-atom locator repair.
         "evidence_atom.locator_repair" => {
             apply_evidence_atom_locator_repair(frontier, proposal, reviewer, decision_reason)?
@@ -4356,180 +4234,6 @@ fn find_finding_index(frontier: &Project, finding_id: &str) -> Result<usize, Str
         .iter()
         .position(|finding| finding.id == finding_id)
         .ok_or_else(|| format!("Finding not found: {finding_id}"))
-}
-
-/// v0.52: Apply a `negative_result.assert` proposal — push the
-/// inline NegativeResult to state and emit a canonical
-/// `negative_result.asserted` event. The event payload re-includes
-/// the full NegativeResult so a fresh replay reconstructs
-/// `state.negative_results` from the event log alone (matching the
-/// direct `state::add_negative_result` path).
-fn apply_negative_result_assert(
-    frontier: &mut Project,
-    proposal: &StateProposal,
-    reviewer: &str,
-    _decision_reason: &str,
-) -> Result<StateEvent, String> {
-    let nr_value = proposal
-        .payload
-        .get("negative_result")
-        .ok_or("negative_result.assert proposal missing payload.negative_result")?
-        .clone();
-    let nr: crate::bundle::NegativeResult = serde_json::from_value(nr_value.clone())
-        .map_err(|e| format!("Invalid negative_result.assert payload: {e}"))?;
-    if frontier.negative_results.iter().any(|n| n.id == nr.id) {
-        return Err(format!(
-            "Refusing to add duplicate negative_result with existing id {}",
-            nr.id
-        ));
-    }
-    let nr_id = nr.id.clone();
-    frontier.negative_results.push(nr);
-
-    let mut event = StateEvent {
-        schema: events::EVENT_SCHEMA.to_string(),
-        id: String::new(),
-        kind: events::EVENT_KIND_NEGATIVE_RESULT_ASSERTED.into(),
-        target: StateTarget {
-            r#type: "negative_result".to_string(),
-            id: nr_id,
-        },
-        actor: StateActor {
-            id: reviewer.to_string(),
-            r#type: "human".to_string(),
-        },
-        timestamp: Utc::now().to_rfc3339(),
-        reason: proposal.reason.clone(),
-        before_hash: NULL_HASH.to_string(),
-        after_hash: NULL_HASH.to_string(),
-        payload: json!({
-            "proposal_id": proposal.id,
-            "negative_result": nr_value,
-        }),
-        caveats: proposal.caveats.clone(),
-        signature: None,
-        schema_artifact_id: None,
-    };
-    event.id = events::compute_event_id(&event);
-    Ok(event)
-}
-
-/// v0.52: Apply a `trajectory.create` proposal — push the inline
-/// Trajectory to state and emit a canonical `trajectory.created`
-/// event. Steps land later via separate `trajectory.step_append`
-/// proposals.
-fn apply_trajectory_create(
-    frontier: &mut Project,
-    proposal: &StateProposal,
-    reviewer: &str,
-    _decision_reason: &str,
-) -> Result<StateEvent, String> {
-    let traj_value = proposal
-        .payload
-        .get("trajectory")
-        .ok_or("trajectory.create proposal missing payload.trajectory")?
-        .clone();
-    let traj: crate::bundle::Trajectory = serde_json::from_value(traj_value.clone())
-        .map_err(|e| format!("Invalid trajectory.create payload: {e}"))?;
-    if frontier.trajectories.iter().any(|t| t.id == traj.id) {
-        return Err(format!(
-            "Refusing to add duplicate trajectory with existing id {}",
-            traj.id
-        ));
-    }
-    let traj_id = traj.id.clone();
-    frontier.trajectories.push(traj);
-
-    let mut event = StateEvent {
-        schema: events::EVENT_SCHEMA.to_string(),
-        id: String::new(),
-        kind: events::EVENT_KIND_TRAJECTORY_CREATED.into(),
-        target: StateTarget {
-            r#type: "trajectory".to_string(),
-            id: traj_id,
-        },
-        actor: StateActor {
-            id: reviewer.to_string(),
-            r#type: "human".to_string(),
-        },
-        timestamp: Utc::now().to_rfc3339(),
-        reason: proposal.reason.clone(),
-        before_hash: NULL_HASH.to_string(),
-        after_hash: NULL_HASH.to_string(),
-        payload: json!({
-            "proposal_id": proposal.id,
-            "trajectory": traj_value,
-        }),
-        caveats: proposal.caveats.clone(),
-        signature: None,
-        schema_artifact_id: None,
-    };
-    event.id = events::compute_event_id(&event);
-    Ok(event)
-}
-
-/// v0.52: Apply a `trajectory.step_append` proposal — append the
-/// inline TrajectoryStep to the parent trajectory's `steps` and emit
-/// a canonical `trajectory.step_appended` event. Idempotent on
-/// duplicate step content-addresses.
-fn apply_trajectory_step_append(
-    frontier: &mut Project,
-    proposal: &StateProposal,
-    reviewer: &str,
-    _decision_reason: &str,
-) -> Result<StateEvent, String> {
-    let parent_id = proposal.target.id.clone();
-    let parent_idx = frontier
-        .trajectories
-        .iter()
-        .position(|t| t.id == parent_id)
-        .ok_or_else(|| format!("trajectory.step_append targets unknown trajectory {parent_id}"))?;
-    let step_value = proposal
-        .payload
-        .get("step")
-        .ok_or("trajectory.step_append proposal missing payload.step")?
-        .clone();
-    let step: crate::bundle::TrajectoryStep = serde_json::from_value(step_value.clone())
-        .map_err(|e| format!("Invalid trajectory.step_append payload.step: {e}"))?;
-    if frontier.trajectories[parent_idx]
-        .steps
-        .iter()
-        .any(|s| s.id == step.id)
-    {
-        return Err(format!(
-            "Refusing to add duplicate step with existing id {} on trajectory {}",
-            step.id, parent_id
-        ));
-    }
-    frontier.trajectories[parent_idx].steps.push(step);
-
-    let mut event = StateEvent {
-        schema: events::EVENT_SCHEMA.to_string(),
-        id: String::new(),
-        kind: events::EVENT_KIND_TRAJECTORY_STEP_APPENDED.into(),
-        target: StateTarget {
-            r#type: "trajectory".to_string(),
-            id: parent_id.clone(),
-        },
-        actor: StateActor {
-            id: reviewer.to_string(),
-            r#type: "human".to_string(),
-        },
-        timestamp: Utc::now().to_rfc3339(),
-        reason: proposal.reason.clone(),
-        before_hash: NULL_HASH.to_string(),
-        after_hash: NULL_HASH.to_string(),
-        payload: json!({
-            "proposal_id": proposal.id,
-            "parent_trajectory_id": parent_id,
-            "step": step_value,
-        }),
-        caveats: proposal.caveats.clone(),
-        signature: None,
-        schema_artifact_id: None,
-    };
-    event.id = events::compute_event_id(&event);
-    Ok(event)
 }
 
 fn annotation_id(finding_id: &str, text: &str, author: &str, timestamp: &str) -> String {

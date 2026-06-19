@@ -1,5 +1,5 @@
 {
-  "doctrine": "every reducer implementation must agree on per-kind mutation rules across findings, negative_results, trajectories, artifacts, replications, and predictions",
+  "doctrine": "every reducer implementation must agree on per-kind mutation rules across findings and artifacts",
   "event_log": [
     {
       "actor": {
@@ -357,161 +357,6 @@
         "type": "artifact"
       },
       "timestamp": "2026-05-02T08:00:12Z"
-    },
-    {
-      "actor": {
-        "id": "reviewer:bridge-fixture-8",
-        "type": "human"
-      },
-      "after_hash": "sha256:null",
-      "before_hash": "sha256:null",
-      "caveats": [],
-      "id": "vev_6b24b71883258a17",
-      "kind": "bridge.reviewed",
-      "payload": {
-        "bridge_id": "vbr_fixture_00000008",
-        "note": "Fixture verdict for cross-impl coverage",
-        "status": "confirmed"
-      },
-      "reason": "Fixture bridge review verdict",
-      "schema": "vela.event.v0.1",
-      "target": {
-        "id": "vbr_fixture_00000008",
-        "type": "bridge"
-      },
-      "timestamp": "2026-05-02T08:00:13Z"
-    },
-    {
-      "actor": {
-        "id": "lab:fixture-replication-8",
-        "type": "human"
-      },
-      "after_hash": "sha256:null",
-      "before_hash": "sha256:null",
-      "caveats": [],
-      "id": "vev_5334b97f466efcbf",
-      "kind": "replication.deposited",
-      "payload": {
-        "proposal_id": "vpr_replication_deposit_8",
-        "replication": {
-          "attempted_by": "lab:fixture-replication-8",
-          "conditions": {
-            "age_group": null,
-            "cell_type": "microglia",
-            "clinical_trial": false,
-            "concentration_range": null,
-            "duration": null,
-            "human_data": false,
-            "in_vitro": true,
-            "in_vivo": false,
-            "species_unverified": [],
-            "species_verified": [
-              "Mus musculus"
-            ],
-            "text": "Fixture replication conditions 8"
-          },
-          "created": "2026-05-02T08:30:00Z",
-          "evidence": {
-            "effect_size": null,
-            "evidence_spans": [],
-            "method": "Independent replication, Western blot",
-            "model_system": "mouse",
-            "p_value": "p<0.05",
-            "replicated": true,
-            "replication_count": 1,
-            "sample_size": "n=24",
-            "species": "Mus musculus",
-            "type": "experimental"
-          },
-          "id": "vrep_a9b4f4d5513ddbc7",
-          "notes": "Fixture replication note",
-          "outcome": "replicated",
-          "provenance": {
-            "authors": [
-              {
-                "name": "Cross-Impl Replicator",
-                "orcid": null
-              }
-            ],
-            "citation_count": 0,
-            "doi": "10.0000/crossimpl.replication.frontier0008",
-            "extraction": {
-              "extracted_at": "",
-              "extractor_version": "",
-              "method": "",
-              "model": null,
-              "model_version": null
-            },
-            "journal": "Cross Replications",
-            "openalex_id": null,
-            "pmc": null,
-            "pmid": null,
-            "review": null,
-            "source_type": "preprint",
-            "title": "Fixture replication report 8",
-            "year": 2026
-          },
-          "target_finding": "vf_3625aa4a55549133"
-        }
-      },
-      "reason": "Fixture replication deposit",
-      "schema": "vela.event.v0.1",
-      "target": {
-        "id": "vf_3625aa4a55549133",
-        "type": "finding"
-      },
-      "timestamp": "2026-05-02T08:00:14Z"
-    },
-    {
-      "actor": {
-        "id": "forecaster:fixture-prediction-8",
-        "type": "human"
-      },
-      "after_hash": "sha256:null",
-      "before_hash": "sha256:null",
-      "caveats": [],
-      "id": "vev_5d878ab24c55d044",
-      "kind": "prediction.deposited",
-      "payload": {
-        "prediction": {
-          "claim_text": "Fixture prediction 8: replication will confirm at p<0.05.",
-          "conditions": {
-            "age_group": null,
-            "cell_type": "microglia",
-            "clinical_trial": false,
-            "concentration_range": null,
-            "duration": null,
-            "human_data": false,
-            "in_vitro": true,
-            "in_vivo": false,
-            "species_unverified": [],
-            "species_verified": [
-              "Mus musculus"
-            ],
-            "text": "Fixture prediction conditions 8"
-          },
-          "confidence": 0.6,
-          "expected_outcome": {
-            "kind": "affirmed"
-          },
-          "id": "vpred_e24a7c2c43723993",
-          "made_by": "forecaster:fixture-prediction-8",
-          "predicted_at": "2026-05-02T08:30:00Z",
-          "resolution_criterion": "An independent lab posts a replication with the same outcome.",
-          "resolves_by": "2027-05-02T00:00:00Z",
-          "target_findings": [
-            "vf_3625aa4a55549133"
-          ]
-        },
-        "proposal_id": "vpr_prediction_deposit_8"
-      },
-      "reason": "Fixture prediction deposit",
-      "schema": "vela.event.v0.1",
-      "target": {
-        "id": "vf_3625aa4a55549133",
-        "type": "finding"
-      },
-      "timestamp": "2026-05-02T08:00:15Z"
     }
   ],
   "expected_artifacts": [
@@ -528,21 +373,6 @@
       "kind": "lab_file",
       "retracted": true,
       "review_state": "none"
-    }
-  ],
-  "expected_negative_results": [],
-  "expected_predictions": [
-    {
-      "expired_unresolved": false,
-      "id": "vpred_e24a7c2c43723993",
-      "made_by": "forecaster:fixture-prediction-8"
-    }
-  ],
-  "expected_replications": [
-    {
-      "id": "vrep_a9b4f4d5513ddbc7",
-      "outcome": "replicated",
-      "target_finding": "vf_3625aa4a55549133"
     }
   ],
   "expected_states": [
@@ -619,8 +449,7 @@
       "review_state": "none"
     }
   ],
-  "expected_trajectories": [],
-  "fixture_version": "4",
+  "fixture_version": "5",
   "frontier_idx": 8,
   "genesis_findings": [
     {
@@ -1409,25 +1238,18 @@
     }
   ],
   "scenario": "artifacts",
-  "schema_url": "https://vela.science/schema/cross-impl-reducer-fixture/v4",
+  "schema_url": "https://vela.science/schema/cross-impl-reducer-fixture/v5",
   "stats": {
     "artifacts": 2,
     "cascade_depth": 0,
-    "events": 16,
+    "events": 13,
     "findings": 8,
     "kinds_seen": {
       "artifact.asserted": 2,
       "artifact.retracted": 1,
       "artifact.reviewed": 1,
-      "bridge.reviewed": 1,
       "finding.asserted": 8,
-      "prediction.deposited": 1,
-      "replication.deposited": 1,
       "tier.set": 1
-    },
-    "negative_results": 0,
-    "predictions": 1,
-    "replications": 1,
-    "trajectories": 0
+    }
   }
 }

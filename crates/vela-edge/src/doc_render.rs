@@ -163,8 +163,6 @@ fn render_index(project: &Project) -> String {
 <tr><th>sources</th><td>{n_sources}</td></tr>
 <tr><th>actors</th><td>{n_actors}</td></tr>
 <tr><th>signatures</th><td>{n_signatures}</td></tr>
-<tr><th>replications</th><td>{n_replications}</td></tr>
-<tr><th>predictions</th><td>{n_predictions}</td></tr>
 </table>
 </section>
 
@@ -184,8 +182,6 @@ fn render_index(project: &Project) -> String {
         n_sources = project.sources.len(),
         n_actors = project.actors.len(),
         n_signatures = project.signatures.len(),
-        n_replications = project.replications.len(),
-        n_predictions = project.predictions.len(),
     );
     page_shell(&title, &body, "<a href=\"index.html\">home</a>")
 }

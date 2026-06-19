@@ -3408,7 +3408,7 @@ fn parse_sig_headers(headers: &HeaderMap) -> Result<(String, String), (StatusCod
 
 /// Detect a body that is smuggling frontier-snapshot / substrate content
 /// inline through a proposal. A proposal payload may carry one
-/// finding/artifact/negative_result/trajectory bundle, but it MUST NOT
+/// finding or artifact bundle, but it MUST NOT
 /// carry a `substrate` key anywhere, nor a Project-shaped object (the
 /// telltale being the kernel collections `findings[]` / `events[]` /
 /// `signatures[]` / `proposals[]`). Bulk content goes to object storage
@@ -5537,37 +5537,13 @@ fn render_entry_html(
 /// design system carries: replicated, supported, contested, gap,
 /// retracted. Order of precedence matches the substrate's own
 /// derivation: explicit retraction > gap > review verdict > replication
-/// status > default supported.
-/// v0.36.2: derive whether a finding counts as "replicated" using the
-/// v0.32 `Project.replications` collection as the source of truth.
-/// Falls back to the legacy `evidence.replicated` scalar only when the
-/// finding has no `Replication` records yet — same fall-through shape
-/// as `Project::compute_confidence_for`.
-fn is_replicated(
-    b: &vela_protocol::bundle::FindingBundle,
-    replications: &[vela_protocol::bundle::Replication],
-) -> bool {
-    let mut has_record = false;
-    let mut has_success = false;
-    for r in replications {
-        if r.target_finding == b.id {
-            has_record = true;
-            if r.outcome == "replicated" {
-                has_success = true;
-            }
-        }
-    }
-    if has_record {
-        has_success
-    } else {
-        b.evidence.replicated
-    }
+/// status > default supported. Replication status reads the core
+/// `evidence.replicated` finding field.
+fn is_replicated(b: &vela_protocol::bundle::FindingBundle) -> bool {
+    b.evidence.replicated
 }
 
-fn finding_state(
-    b: &vela_protocol::bundle::FindingBundle,
-    replications: &[vela_protocol::bundle::Replication],
-) -> (&'static str, &'static str) {
+fn finding_state(b: &vela_protocol::bundle::FindingBundle) -> (&'static str, &'static str) {
     use vela_protocol::bundle::ReviewState;
     if b.flags.retracted {
         return ("retracted", "lost");
@@ -5581,7 +5557,7 @@ fn finding_state(
             ReviewState::NeedsRevision => return ("contested", "warn"),
             ReviewState::Rejected => return ("retracted", "lost"),
             ReviewState::Accepted => {
-                if is_replicated(b, replications) {
+                if is_replicated(b) {
                     return ("replicated", "ok");
                 }
                 return ("supported", "ok");
@@ -5591,7 +5567,7 @@ fn finding_state(
     if b.flags.contested {
         return ("contested", "warn");
     }
-    if is_replicated(b, replications) {
+    if is_replicated(b) {
         return ("replicated", "ok");
     }
     ("supported", "ok")
@@ -5698,7 +5674,7 @@ fn render_findings_constellation(vfr_id: &str, frontier: Option<&Project>) -> St
     let mut nodes = String::new();
     for b in &p.findings {
         let (x, y) = pos[b.id.as_str()];
-        let (label, state_class) = finding_state(b, &p.replications);
+        let (label, state_class) = finding_state(b);
         let r = 4.0 + b.confidence.score.clamp(0.0, 1.0) * 5.0;
         let live_class = if label == "replicated" {
             " vc-node--live"
@@ -5880,7 +5856,7 @@ fn render_findings_section(vfr_id: &str, frontier: Option<&Project>) -> String {
         p.findings
             .iter()
             .fold(std::collections::BTreeMap::new(), |mut acc, b| {
-                *acc.entry(finding_state(b, &p.replications).0).or_default() += 1;
+                *acc.entry(finding_state(b).0).or_default() += 1;
                 acc
             });
     let counts = by_state
@@ -5891,7 +5867,7 @@ fn render_findings_section(vfr_id: &str, frontier: Option<&Project>) -> String {
 
     let mut rows = String::new();
     for b in &p.findings {
-        let (label, state_class) = finding_state(b, &p.replications);
+        let (label, state_class) = finding_state(b);
         let live_class = if label == "replicated" {
             " wb-chip--live"
         } else {
@@ -6046,7 +6022,7 @@ fn render_finding_html(
     let vf_safe = escape_html(&bundle.id);
     let claim_html = escape_html(&bundle.assertion.text);
     let assertion_type = escape_html(&bundle.assertion.assertion_type);
-    let (state_label, state_class) = finding_state(bundle, &project.replications);
+    let (state_label, state_class) = finding_state(bundle);
 
     // Conditions row — surface only the fields that have content,
     // and present the structured ones as small chips alongside the
@@ -6541,7 +6517,6 @@ fn render_proof_packet_html(
   <div class="fd-cond"><dt>evidence atoms</dt><dd>{}</dd></div>
   <div class="fd-cond"><dt>condition records</dt><dd>{}</dd></div>
   <div class="fd-cond"><dt>sources</dt><dd>{}</dd></div>
-  <div class="fd-cond"><dt>bridge entities</dt><dd>{}</dd></div>
   <div class="fd-cond"><dt>proposals</dt><dd>{}</dd></div>
   <div class="fd-cond"><dt>review events</dt><dd>{}</dd></div>
 </dl>"#,
@@ -6552,7 +6527,6 @@ fn render_proof_packet_html(
         stat("evidence_atoms"),
         stat("condition_records"),
         stat("sources"),
-        stat("bridge_entities"),
         stat("proposals"),
         stat("review_events"),
     );

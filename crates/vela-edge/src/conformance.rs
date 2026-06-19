@@ -605,86 +605,11 @@ fn run_retraction_propagation(
 
     let mut corr = project::assemble("test", bundles, 1, 0, "test");
 
-    // v0.36.2: ingest optional `replications` array so the harness can
-    // exercise the `ReplicationOutcome` cascade. Each entry produces a
-    // canonical `Replication` whose target field aligns with a finding
-    // id from the case input.
-    if let Some(reps) = input["replications"].as_array() {
-        for r in reps {
-            let target = r["target_finding"].as_str().unwrap_or("").to_string();
-            let outcome = r["outcome"].as_str().unwrap_or("").to_string();
-            let attempted_by = r["attempted_by"].as_str().unwrap_or("test:lab").to_string();
-            corr.replications.push(vela_protocol::bundle::Replication {
-                id: format!("vrep_test_{}_{}", target.replace("vf_", ""), outcome),
-                target_finding: target,
-                attempted_by,
-                outcome,
-                evidence: Evidence {
-                    evidence_type: "experimental".into(),
-                    model_system: String::new(),
-                    species: None,
-                    method: "replication_attempt".into(),
-                    sample_size: None,
-                    effect_size: None,
-                    p_value: None,
-                    replicated: false,
-                    replication_count: None,
-                    evidence_spans: vec![],
-                },
-                conditions: Conditions {
-                    text: String::new(),
-                    species_verified: vec![],
-                    species_unverified: vec![],
-                    in_vitro: false,
-                    in_vivo: false,
-                    human_data: false,
-                    clinical_trial: false,
-                    concentration_range: None,
-                    duration: None,
-                    age_group: None,
-                    cell_type: None,
-                },
-                provenance: Provenance {
-                    source_type: "published_paper".into(),
-                    doi: None,
-                    pmid: None,
-                    pmc: None,
-                    openalex_id: None,
-                    url: None,
-                    title: "test".into(),
-                    authors: vec![],
-                    year: None,
-                    journal: None,
-                    license: None,
-                    publisher: None,
-                    funders: vec![],
-                    extraction: Extraction::default(),
-                    review: None,
-                    citation_count: None,
-                },
-                notes: String::new(),
-                created: String::new(),
-                previous_attempt: None,
-            });
-        }
-    }
-
     let action = match action_type {
         "retracted" => PropagationAction::Retracted,
         "confidence_reduced" => {
             let new_score = action_val["new_score"].as_f64().unwrap_or(0.5);
             PropagationAction::ConfidenceReduced { new_score }
-        }
-        "replication_outcome" => {
-            let outcome = action_val["outcome"]
-                .as_str()
-                .unwrap_or("replicated")
-                .to_string();
-            let vrep_id = action_val["vrep_id"]
-                .as_str()
-                .unwrap_or("vrep_testxxxx")
-                .to_string();
-            PropagationAction::ReplicationOutcome { outcome, vrep_id }
         }
         _ => return Err(format!("unknown action type: {action_type}")),
     };
@@ -877,7 +802,7 @@ fn run_observer_policies(
     let policy = observer::policy_by_name(policy_name)
         .ok_or_else(|| format!("unknown policy: {policy_name}"))?;
 
-    let view = observer::observe(&bundles, &[], &policy);
+    let view = observer::observe(&bundles, &policy);
 
     if let Some(count) = expected["hidden_count"].as_u64()
         && view.hidden != count as usize

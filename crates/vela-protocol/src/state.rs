@@ -12,8 +12,7 @@ use sha2::{Digest, Sha256};
 
 use crate::bundle::{
     Artifact, Assertion, Author, Conditions, Confidence, ConfidenceKind, ConfidenceMethod, Entity,
-    Evidence, Extraction, FindingBundle, Flags, NegativeResult, NegativeResultKind, Provenance,
-    ResolutionMethod, Review, Trajectory, TrajectoryStep, TrajectoryStepKind,
+    Evidence, Extraction, FindingBundle, Flags, Provenance, ResolutionMethod, Review,
 };
 use crate::events::{self, NULL_HASH, StateActor, StateEvent, StateTarget};
 use crate::project::{self, Project};
@@ -759,106 +758,6 @@ pub fn repair_evidence_atom_locator(
     })
 }
 
-/// v0.70: deposit a Replication record onto the frontier as a
-/// signed canonical `replication.deposited` event. Idempotent under
-/// re-application: if the `vrep_*` id already exists on the
-/// frontier, the helper refuses with a clear error rather than
-/// silently no-op'ing. The event is appended to the canonical event
-/// log; the reducer arm projects it onto `Project.replications` on
-/// subsequent loads.
-pub fn deposit_replication(
-    path: &Path,
-    rep: crate::bundle::Replication,
-    actor_id: &str,
-    reason: &str,
-) -> Result<events::StateEvent, String> {
-    let mut project = repo::load_from_path(path)?;
-    if project.replications.iter().any(|r| r.id == rep.id) {
-        return Err(format!(
-            "Replication {} already exists on this frontier; refusing duplicate deposit",
-            rep.id
-        ));
-    }
-    let rep_value =
-        serde_json::to_value(&rep).map_err(|e| format!("serialize replication: {e}"))?;
-    let payload = json!({ "replication": rep_value });
-    let timestamp = Utc::now().to_rfc3339();
-    let mut event = events::StateEvent {
-        schema: events::EVENT_SCHEMA.to_string(),
-        id: String::new(),
-        kind: "replication.deposited".into(),
-        target: events::StateTarget {
-            r#type: "finding".to_string(),
-            id: rep.target_finding.clone(),
-        },
-        actor: events::StateActor {
-            id: actor_id.to_string(),
-            r#type: "human".to_string(),
-        },
-        timestamp,
-        reason: reason.to_string(),
-        before_hash: NULL_HASH.to_string(),
-        after_hash: NULL_HASH.to_string(),
-        payload,
-        caveats: Vec::new(),
-        signature: None,
-        schema_artifact_id: None,
-    };
-    event.id = events::compute_event_id(&event);
-    project.replications.push(rep);
-    project.events.push(event.clone());
-    repo::save_to_path(path, &project)?;
-    Ok(event)
-}
-
-/// v0.70: deposit a Prediction record onto the frontier as a
-/// signed canonical `prediction.deposited` event. Mirror of
-/// `deposit_replication` for the Prediction primitive.
-pub fn deposit_prediction(
-    path: &Path,
-    pred: crate::bundle::Prediction,
-    actor_id: &str,
-    reason: &str,
-) -> Result<events::StateEvent, String> {
-    let mut project = repo::load_from_path(path)?;
-    if project.predictions.iter().any(|p| p.id == pred.id) {
-        return Err(format!(
-            "Prediction {} already exists on this frontier; refusing duplicate deposit",
-            pred.id
-        ));
-    }
-    let pred_value =
-        serde_json::to_value(&pred).map_err(|e| format!("serialize prediction: {e}"))?;
-    let payload = json!({ "prediction": pred_value });
-    let timestamp = Utc::now().to_rfc3339();
-    let mut event = events::StateEvent {
-        schema: events::EVENT_SCHEMA.to_string(),
-        id: String::new(),
-        kind: "prediction.deposited".into(),
-        target: events::StateTarget {
-            r#type: "finding".to_string(),
-            id: pred.target_findings.first().cloned().unwrap_or_default(),
-        },
-        actor: events::StateActor {
-            id: actor_id.to_string(),
-            r#type: "human".to_string(),
-        },
-        timestamp,
-        reason: reason.to_string(),
-        before_hash: NULL_HASH.to_string(),
-        after_hash: NULL_HASH.to_string(),
-        payload,
-        caveats: Vec::new(),
-        signature: None,
-        schema_artifact_id: None,
-    };
-    event.id = events::compute_event_id(&event);
-    project.predictions.push(pred);
-    project.events.push(event.clone());
-    repo::save_to_path(path, &project)?;
-    Ok(event)
-}
-
 pub fn retract_finding(
     path: &Path,
     finding_id: &str,
@@ -1002,118 +901,6 @@ pub fn set_causal(
     })
 }
 
-/// v0.49: Add a NegativeResult to the frontier, emitting a
-/// `negative_result.asserted` canonical event.
-///
-/// Bypasses the proposal flow because (a) NegativeResult is parallel
-/// to FindingBundle, not a mutation of one — the proposal-first
-/// pipeline is finding-shaped and would force a duplicate target
-/// type; (b) the v0.49 deposit path mirrors how `Replication`,
-/// `Dataset`, and `Prediction` are added today (direct, with
-/// emission). v0.50 will route these through proposals once the
-/// agent inbox needs review-gated null deposits.
-///
-/// The full inline NegativeResult is carried on
-/// `payload.negative_result` so a fresh `replay_from_genesis`
-/// reconstructs `state.negative_results` from the event log alone.
-/// `target_findings` are NOT cross-checked against existing findings
-/// here; an exploratory deposit may legitimately reference no
-/// finding, and a registered-trial deposit may bear against a finding
-/// in a sibling frontier reachable through `vfr_*` cross-frontier
-/// links. The depositor is responsible for the link's truthfulness.
-pub fn add_negative_result(
-    path: &Path,
-    kind: NegativeResultKind,
-    target_findings: Vec<String>,
-    deposited_by: &str,
-    conditions: Conditions,
-    provenance: Provenance,
-    notes: &str,
-    reason: &str,
-) -> Result<StateCommandReport, String> {
-    if deposited_by.trim().is_empty() {
-        return Err("deposited_by must be a non-empty actor id".to_string());
-    }
-    if reason.trim().is_empty() {
-        return Err("reason must be non-empty".to_string());
-    }
-
-    let mut frontier: Project = repo::load_from_path(path)?;
-
-    let nr = NegativeResult::new(
-        kind,
-        target_findings,
-        deposited_by,
-        conditions,
-        provenance,
-        notes,
-    );
-    let nr_id = nr.id.clone();
-
-    if frontier.negative_results.iter().any(|n| n.id == nr_id) {
-        return Err(format!(
-            "Refusing to add duplicate negative_result with existing id {nr_id}"
-        ));
-    }
-
-    let proposal_id = format!(
-        "vpr_{}",
-        &hex::encode(Sha256::digest(
-            format!("{nr_id}|{deposited_by}|{}", Utc::now().to_rfc3339()).as_bytes()
-        ))[..16]
-    );
-
-    let nr_value = serde_json::to_value(&nr)
-        .map_err(|e| format!("failed to serialize negative_result: {e}"))?;
-
-    let mut event = StateEvent {
-        schema: events::EVENT_SCHEMA.to_string(),
-        id: String::new(),
-        kind: events::EVENT_KIND_NEGATIVE_RESULT_ASSERTED.into(),
-        target: StateTarget {
-            r#type: "negative_result".to_string(),
-            id: nr_id.clone(),
-        },
-        actor: StateActor {
-            id: deposited_by.to_string(),
-            r#type: "human".to_string(),
-        },
-        timestamp: Utc::now().to_rfc3339(),
-        reason: reason.to_string(),
-        before_hash: NULL_HASH.to_string(),
-        after_hash: NULL_HASH.to_string(),
-        payload: json!({
-            "proposal_id": proposal_id,
-            "negative_result": nr_value,
-        }),
-        caveats: Vec::new(),
-        signature: None,
-        schema_artifact_id: None,
-    };
-    event.id = events::compute_event_id(&event);
-    let event_id = event.id.clone();
-
-    // Validate before mutating state — a malformed event must not
-    // poison the on-disk frontier.
-    events::validate_event_payload(event.kind.as_str(), &event.payload)?;
-    reducer::apply_event(&mut frontier, &event)?;
-    frontier.events.push(event);
-
-    repo::save_to_path(path, &frontier)?;
-
-    Ok(StateCommandReport {
-        ok: true,
-        command: "negative_result.add".to_string(),
-        frontier: frontier.project.name,
-        finding_id: nr_id,
-        proposal_id,
-        proposal_status: "applied".to_string(),
-        applied_event_id: Some(event_id),
-        wrote_to: path.display().to_string(),
-        message: "NegativeResult deposited".to_string(),
-    })
-}
-
 /// Deposit a generic content-addressed artifact and emit an
 /// `artifact.asserted` canonical event. The full artifact is carried
 /// inline on the event payload so a future replay reconstructs the
@@ -1207,189 +994,12 @@ pub fn add_artifact(
     })
 }
 
-/// v0.50: Open a new Trajectory and emit a `trajectory.created`
-/// canonical event. Returns the new `vtr_*` id in the report's
-/// `finding_id` field (the StateCommandReport schema reuses that
-/// field for the primary mutated object id).
-///
-/// Steps are appended via `append_trajectory_step` rather than
-/// supplied at creation — that keeps the search visible to readers as
-/// it unfolds rather than only after the fact.
-pub fn create_trajectory(
-    path: &Path,
-    target_findings: Vec<String>,
-    deposited_by: &str,
-    notes: &str,
-    reason: &str,
-) -> Result<StateCommandReport, String> {
-    if deposited_by.trim().is_empty() {
-        return Err("deposited_by must be a non-empty actor id".to_string());
-    }
-    if reason.trim().is_empty() {
-        return Err("reason must be non-empty".to_string());
-    }
-
-    let mut frontier: Project = repo::load_from_path(path)?;
-
-    let traj = Trajectory::new(target_findings, deposited_by, notes);
-    let traj_id = traj.id.clone();
-
-    if frontier.trajectories.iter().any(|t| t.id == traj_id) {
-        return Err(format!(
-            "Refusing to create duplicate trajectory with existing id {traj_id}"
-        ));
-    }
-
-    let proposal_id = format!(
-        "vpr_{}",
-        &hex::encode(Sha256::digest(
-            format!("{traj_id}|{deposited_by}|{}", Utc::now().to_rfc3339()).as_bytes()
-        ))[..16]
-    );
-
-    let traj_value =
-        serde_json::to_value(&traj).map_err(|e| format!("failed to serialize trajectory: {e}"))?;
-
-    let mut event = StateEvent {
-        schema: events::EVENT_SCHEMA.to_string(),
-        id: String::new(),
-        kind: events::EVENT_KIND_TRAJECTORY_CREATED.into(),
-        target: StateTarget {
-            r#type: "trajectory".to_string(),
-            id: traj_id.clone(),
-        },
-        actor: StateActor {
-            id: deposited_by.to_string(),
-            r#type: "human".to_string(),
-        },
-        timestamp: Utc::now().to_rfc3339(),
-        reason: reason.to_string(),
-        before_hash: NULL_HASH.to_string(),
-        after_hash: NULL_HASH.to_string(),
-        payload: json!({
-            "proposal_id": proposal_id,
-            "trajectory": traj_value,
-        }),
-        caveats: Vec::new(),
-        signature: None,
-        schema_artifact_id: None,
-    };
-    event.id = events::compute_event_id(&event);
-    let event_id = event.id.clone();
-
-    events::validate_event_payload(event.kind.as_str(), &event.payload)?;
-    reducer::apply_event(&mut frontier, &event)?;
-    frontier.events.push(event);
-
-    repo::save_to_path(path, &frontier)?;
-
-    Ok(StateCommandReport {
-        ok: true,
-        command: "trajectory.create".to_string(),
-        frontier: frontier.project.name,
-        finding_id: traj_id,
-        proposal_id,
-        proposal_status: "applied".to_string(),
-        applied_event_id: Some(event_id),
-        wrote_to: path.display().to_string(),
-        message: "Trajectory opened".to_string(),
-    })
-}
-
-/// v0.50: Append a step to an existing Trajectory. Step kind one of
-/// `hypothesis | tried | ruled_out | observed | refined`. Idempotent
-/// on duplicate step content-addresses (so an agent that re-runs an
-/// append after a crash doesn't double-append).
-pub fn append_trajectory_step(
-    path: &Path,
-    trajectory_id: &str,
-    kind: TrajectoryStepKind,
-    description: &str,
-    actor: &str,
-    references: Vec<String>,
-    reason: &str,
-) -> Result<StateCommandReport, String> {
-    if actor.trim().is_empty() {
-        return Err("actor must be a non-empty id".to_string());
-    }
-    if description.trim().is_empty() {
-        return Err("description must be non-empty".to_string());
-    }
-    if reason.trim().is_empty() {
-        return Err("reason must be non-empty".to_string());
-    }
-
-    let mut frontier: Project = repo::load_from_path(path)?;
-    if !frontier.trajectories.iter().any(|t| t.id == trajectory_id) {
-        return Err(format!("Trajectory not found: {trajectory_id}"));
-    }
-
-    let step = TrajectoryStep::new(trajectory_id, kind, description, actor, None, references);
-    let step_id = step.id.clone();
-
-    let proposal_id = format!(
-        "vpr_{}",
-        &hex::encode(Sha256::digest(
-            format!("{trajectory_id}|{step_id}|{actor}").as_bytes()
-        ))[..16]
-    );
-
-    let step_value = serde_json::to_value(&step)
-        .map_err(|e| format!("failed to serialize trajectory step: {e}"))?;
-
-    let mut event = StateEvent {
-        schema: events::EVENT_SCHEMA.to_string(),
-        id: String::new(),
-        kind: events::EVENT_KIND_TRAJECTORY_STEP_APPENDED.into(),
-        target: StateTarget {
-            r#type: "trajectory".to_string(),
-            id: trajectory_id.to_string(),
-        },
-        actor: StateActor {
-            id: actor.to_string(),
-            r#type: "human".to_string(),
-        },
-        timestamp: Utc::now().to_rfc3339(),
-        reason: reason.to_string(),
-        before_hash: NULL_HASH.to_string(),
-        after_hash: NULL_HASH.to_string(),
-        payload: json!({
-            "proposal_id": proposal_id,
-            "parent_trajectory_id": trajectory_id,
-            "step": step_value,
-        }),
-        caveats: Vec::new(),
-        signature: None,
-        schema_artifact_id: None,
-    };
-    event.id = events::compute_event_id(&event);
-    let event_id = event.id.clone();
-
-    events::validate_event_payload(event.kind.as_str(), &event.payload)?;
-    reducer::apply_event(&mut frontier, &event)?;
-    frontier.events.push(event);
-
-    repo::save_to_path(path, &frontier)?;
-
-    Ok(StateCommandReport {
-        ok: true,
-        command: "trajectory.step_append".to_string(),
-        frontier: frontier.project.name,
-        finding_id: step_id,
-        proposal_id,
-        proposal_status: "applied".to_string(),
-        applied_event_id: Some(event_id),
-        wrote_to: path.display().to_string(),
-        message: "Trajectory step appended".to_string(),
-    })
-}
-
-/// v0.51: Re-classify the access tier of a finding / negative_result
-/// / trajectory / artifact. Emits a `tier.set` canonical event so the
+/// v0.51: Re-classify the access tier of a finding / artifact.
+/// Emits a `tier.set` canonical event so the
 /// reclassification is replay-deterministic and auditable.
 ///
-/// `object_type` must be one of `finding`, `negative_result`,
-/// `trajectory`, or `artifact`. The function captures the object's previous tier
+/// `object_type` must be one of `finding` or `artifact`. The function
+/// captures the object's previous tier
 /// for the event payload so a downstream auditor reading the event
 /// log can reconstruct the full classification history without
 /// re-deriving it from prior state.
@@ -1407,12 +1017,9 @@ pub fn set_tier(
     if reason.trim().is_empty() {
         return Err("reason must be non-empty".to_string());
     }
-    if !matches!(
-        object_type,
-        "finding" | "negative_result" | "trajectory" | "artifact"
-    ) {
+    if !matches!(object_type, "finding" | "artifact") {
         return Err(format!(
-            "object_type '{object_type}' must be one of finding, negative_result, trajectory, artifact"
+            "object_type '{object_type}' must be one of finding, artifact"
         ));
     }
 
@@ -1425,22 +1032,6 @@ pub fn set_tier(
                 .iter()
                 .find(|f| f.id == object_id)
                 .ok_or_else(|| format!("Finding not found: {object_id}"))?
-                .access_tier
-        }
-        "negative_result" => {
-            frontier
-                .negative_results
-                .iter()
-                .find(|n| n.id == object_id)
-                .ok_or_else(|| format!("NegativeResult not found: {object_id}"))?
-                .access_tier
-        }
-        "trajectory" => {
-            frontier
-                .trajectories
-                .iter()
-                .find(|t| t.id == object_id)
-                .ok_or_else(|| format!("Trajectory not found: {object_id}"))?
                 .access_tier
         }
         "artifact" => {

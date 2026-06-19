@@ -32,27 +32,6 @@ pub const NULL_HASH: &str = "sha256:null";
 /// revoked key, lets readers decide.
 pub const EVENT_KIND_KEY_REVOKE: &str = "key.revoke";
 
-/// v0.49: NegativeResult lifecycle event kinds. Pair with the
-/// `NegativeResult` first-class object in `bundle.rs`. The substrate
-/// records nulls through the same proposal -> canonical event ->
-/// reducer pipeline as findings, so an underpowered Phase III readout
-/// and a confirmatory replication-failure both leave the same kind of
-/// auditable trace.
-pub const EVENT_KIND_NEGATIVE_RESULT_ASSERTED: &str = "negative_result.asserted";
-pub const EVENT_KIND_NEGATIVE_RESULT_REVIEWED: &str = "negative_result.reviewed";
-pub const EVENT_KIND_NEGATIVE_RESULT_RETRACTED: &str = "negative_result.retracted";
-
-/// v0.50: Trajectory lifecycle event kinds. Pair with the
-/// `Trajectory` first-class object in `bundle.rs`. The substrate
-/// records search paths through the same proposal -> canonical event
-/// -> reducer pipeline as findings, so an agent that explored five
-/// branches before arriving at a finding leaves a step-by-step audit
-/// the next agent can read instead of re-deriving.
-pub const EVENT_KIND_TRAJECTORY_CREATED: &str = "trajectory.created";
-pub const EVENT_KIND_TRAJECTORY_STEP_APPENDED: &str = "trajectory.step_appended";
-pub const EVENT_KIND_TRAJECTORY_REVIEWED: &str = "trajectory.reviewed";
-pub const EVENT_KIND_TRAJECTORY_RETRACTED: &str = "trajectory.retracted";
-
 /// Generic artifact lifecycle. Carries the full `Artifact` inline on
 /// `payload.artifact` so protocol snapshots can be replayed without
 /// resolving a sidecar file first.
@@ -65,7 +44,7 @@ pub const EVENT_KIND_ARTIFACT_RETRACTED: &str = "artifact.retracted";
 /// verifier_attachments collection. Per-finding trust status is derived on read.
 pub const EVENT_KIND_VERIFIER_ATTACHMENT_ADDED: &str = "verifier_attachment.added";
 
-/// v0.51: Re-classify a finding/negative_result/trajectory's read-side
+/// v0.51: Re-classify a finding or artifact's read-side
 /// access tier. Audit-trail event for the dual-use channel: the
 /// fact that an object's tier changed (and who changed it, when, with
 /// what reason) is itself part of the substrate's accountability
@@ -141,33 +120,6 @@ pub const EVENT_KIND_ATTESTATION_RECORDED: &str = "attestation.recorded";
 /// `(finding_id, entity_name)`: re-applying with the same name + type
 /// is a no-op, so federation re-sync stays clean.
 pub const EVENT_KIND_FINDING_ENTITY_ADDED: &str = "finding.entity_added";
-
-/// v0.70: Replication deposit. The substrate has had `Replication`
-/// as a first-class kernel object since v0.32 + `vela replicate`
-/// CLI, but the side-table mutation happened via direct file write.
-/// v0.70 makes the deposit event-driven so federation sync can
-/// propagate it. Reducer arm appends to `Project.replications` if
-/// the `vrep_*` id is not already present (idempotent under
-/// re-application). The CLI + Workbench paths emit this event;
-/// raw `vrep_<id>` entries on `Project.replications` from
-/// pre-v0.70 frontiers continue to load without an event.
-/// Required payload: `{replication}` (the full Replication record).
-pub const EVENT_KIND_REPLICATION_DEPOSITED: &str = "replication.deposited";
-
-/// v0.70: Prediction deposit. Same shape as `replication.deposited`
-/// for `Project.predictions`. Deposits a `Prediction` record onto
-/// the frontier; reducer arm appends if `vpred_*` id is new.
-/// Required payload: `{prediction}` (the full Prediction record).
-pub const EVENT_KIND_PREDICTION_DEPOSITED: &str = "prediction.deposited";
-
-/// v0.67: Bridge review verdict. A reviewer confirms or refutes a
-/// `vbr_*` cross-frontier bridge by emitting this canonical event,
-/// which the reducer applies by setting the bridge's status field.
-/// Pre-v0.67 bridge status was mutated by file write only; v0.67
-/// makes the verdict an immutable canonical event so federation
-/// sync propagates it. Required payload: `{bridge_id, status,
-/// note}`. `status` must be one of `confirmed` or `refuted`.
-pub const EVENT_KIND_BRIDGE_REVIEWED: &str = "bridge.reviewed";
 
 /// Review verdict over non-mutating frontier observation material,
 /// such as research traces and correction returns. This records what
@@ -263,13 +215,6 @@ pub const KNOWN_EVENT_KINDS: &[&str] = &[
     "finding.entity_added",
     "assertion.reinterpreted_causal",
     "source_text.reviewed",
-    "negative_result.asserted",
-    "negative_result.reviewed",
-    "negative_result.retracted",
-    "trajectory.created",
-    "trajectory.step_appended",
-    "trajectory.reviewed",
-    "trajectory.retracted",
     "artifact.asserted",
     "artifact.reviewed",
     "artifact.retracted",
@@ -278,10 +223,6 @@ pub const KNOWN_EVENT_KINDS: &[&str] = &[
     "evidence_atom.locator_repaired",
     "attestation.recorded",
     "frontier.observation_reviewed",
-    "bridge.reviewed",
-    "replication.deposited",
-    "prediction.deposited",
-    "prediction.expired_unresolved",
     "diff_pack.released",
     "diff_pack.reviewed",
     "verdict_conflict.resolved",
@@ -387,13 +328,6 @@ event_kinds! {
     FindingRejected => "finding.rejected",
     FindingRetracted => "finding.retracted",
     FindingDependencyInvalidated => "finding.dependency_invalidated",
-    NegativeResultAsserted => "negative_result.asserted",
-    NegativeResultReviewed => "negative_result.reviewed",
-    NegativeResultRetracted => "negative_result.retracted",
-    TrajectoryCreated => "trajectory.created",
-    TrajectoryStepAppended => "trajectory.step_appended",
-    TrajectoryReviewed => "trajectory.reviewed",
-    TrajectoryRetracted => "trajectory.retracted",
     ArtifactAsserted => "artifact.asserted",
     VerifierAttachmentAdded => "verifier_attachment.added",
     ArtifactReviewed => "artifact.reviewed",
@@ -404,9 +338,6 @@ event_kinds! {
     FindingEntityResolved => "finding.entity_resolved",
     FindingEntityAdded => "finding.entity_added",
     AttestationRecorded => "attestation.recorded",
-    BridgeReviewed => "bridge.reviewed",
-    ReplicationDeposited => "replication.deposited",
-    PredictionDeposited => "prediction.deposited",
     DiffPackReleased => "diff_pack.released",
     DiffPackReviewed => "diff_pack.reviewed",
     VerdictConflictResolved => "verdict_conflict.resolved",
@@ -423,7 +354,6 @@ event_kinds! {
     FindingSuperseded => "finding.superseded",
     AssertionReinterpretedCausal => "assertion.reinterpreted_causal",
     ProposalRecommended => "proposal.recommended",
-    PredictionExpiredUnresolved => "prediction.expired_unresolved",
     FrontierObservationReviewed => "frontier.observation_reviewed",
     CorrectionReturnReview => "correction_return.review",
     ResearchTraceReview => "research_trace.review",
@@ -768,43 +698,6 @@ pub fn new_evidence_atom_locator_repair_event(
         reason: reason.to_string(),
         before_hash: before_hash.to_string(),
         after_hash: after_hash.to_string(),
-        payload,
-        caveats,
-        signature: None,
-        schema_artifact_id: None,
-    };
-    event.id = event_id(&event);
-    event
-}
-
-/// v0.67: build a `bridge.reviewed` event. Target is the bridge's
-/// content-addressed id (`vbr_*`). Reducer arm projects the verdict
-/// onto the bridge's status field on read.
-pub fn new_bridge_reviewed_event(
-    bridge_id: &str,
-    actor_id: &str,
-    actor_type: &str,
-    reason: &str,
-    payload: Value,
-    caveats: Vec<String>,
-) -> StateEvent {
-    let timestamp = Utc::now().to_rfc3339();
-    let mut event = StateEvent {
-        schema: EVENT_SCHEMA.to_string(),
-        id: String::new(),
-        kind: EVENT_KIND_BRIDGE_REVIEWED.into(),
-        target: StateTarget {
-            r#type: "bridge".to_string(),
-            id: bridge_id.to_string(),
-        },
-        actor: StateActor {
-            id: actor_id.to_string(),
-            r#type: actor_type.to_string(),
-        },
-        timestamp,
-        reason: reason.to_string(),
-        before_hash: NULL_HASH.to_string(),
-        after_hash: NULL_HASH.to_string(),
         payload,
         caveats,
         signature: None,
@@ -1434,84 +1327,6 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
             require_str("name")?;
             require_str("creator")?;
         }
-        // v0.40.1: prediction expired without resolution. Emitted by
-        // `calibration::expire_overdue_predictions` when a prediction's
-        // `resolves_by` is in the past and no Resolution targets it.
-        // Closing the prediction this way does not generate a
-        // synthesized Resolution — the predictor failed to commit
-        // either way, and calibration tracks it as a separate count.
-        "prediction.expired_unresolved" => {
-            require_str("prediction_id")?;
-            require_str("resolves_by")?;
-            require_str("expired_at")?;
-        }
-        // v0.70: Replication deposit. Required payload field
-        // `replication` is the full Replication record (object).
-        // The reducer + apply layer enforce content-addressing
-        // and idempotency.
-        "replication.deposited" => {
-            let rep = object
-                .get("replication")
-                .ok_or("payload.replication is required")?;
-            if !rep.is_object() {
-                return Err("payload.replication must be an object".to_string());
-            }
-            let id = rep
-                .get("id")
-                .and_then(Value::as_str)
-                .ok_or("payload.replication.id is required (vrep_<hex>)")?;
-            if !id.starts_with("vrep_") {
-                return Err(format!(
-                    "payload.replication.id must start with 'vrep_', got '{id}'"
-                ));
-            }
-        }
-        // v0.70: Prediction deposit. Same pattern as
-        // replication.deposited; payload field `prediction`.
-        "prediction.deposited" => {
-            let pred = object
-                .get("prediction")
-                .ok_or("payload.prediction is required")?;
-            if !pred.is_object() {
-                return Err("payload.prediction must be an object".to_string());
-            }
-            let id = pred
-                .get("id")
-                .and_then(Value::as_str)
-                .ok_or("payload.prediction.id is required (vpred_<hex>)")?;
-            if !id.starts_with("vpred_") {
-                return Err(format!(
-                    "payload.prediction.id must start with 'vpred_', got '{id}'"
-                ));
-            }
-        }
-        // v0.67: Bridge review verdict. Confirms or refutes a
-        // cross-frontier bridge identified by `vbr_*`. Reducer arm
-        // sets `Bridge.status` to the named status. Status must be
-        // one of "confirmed" or "refuted"; "derived" is the genesis
-        // state and can not be re-asserted via this event (use
-        // bridges derive instead). Note is optional but encouraged.
-        "bridge.reviewed" => {
-            let bridge_id = require_str("bridge_id")?;
-            if !bridge_id.starts_with("vbr_") {
-                return Err(format!(
-                    "payload.bridge_id must start with 'vbr_', got '{bridge_id}'"
-                ));
-            }
-            let status = require_str("status")?;
-            if !matches!(status, "confirmed" | "refuted") {
-                return Err(format!(
-                    "payload.status must be 'confirmed' or 'refuted', got '{status}'"
-                ));
-            }
-            // note is optional; if present, must be a string.
-            if let Some(value) = object.get("note")
-                && !value.is_null()
-                && !value.is_string()
-            {
-                return Err("payload.note must be a string when present".to_string());
-            }
-        }
         "frontier.observation_reviewed" => {
             require_str("proposal_id")?;
             let proposal_kind = require_str("proposal_kind")?;
@@ -1660,204 +1475,6 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
                 }
             }
         }
-        // v0.49: NegativeResult deposit. Carries the full inline
-        // negative_result object on payload.negative_result so a fresh
-        // replay reconstructs state from the event log alone. Validation
-        // here is the boundary check: kind-specific required fields,
-        // power on [0,1], n_enrolled non-negative. The full deserialize
-        // is reducer-side (apply_negative_result_asserted) so a malformed
-        // shape fails replay loudly rather than silently dropping the
-        // deposit.
-        EVENT_KIND_NEGATIVE_RESULT_ASSERTED => {
-            require_str("proposal_id")?;
-            let nr = object
-                .get("negative_result")
-                .and_then(Value::as_object)
-                .ok_or("payload.negative_result must be a JSON object")?;
-            let nr_kind = nr
-                .get("kind")
-                .and_then(|k| k.as_object())
-                .and_then(|k| k.get("kind"))
-                .and_then(Value::as_str)
-                .ok_or(
-                    "payload.negative_result.kind.kind must be 'registered_trial' or 'exploratory'",
-                )?;
-            match nr_kind {
-                "registered_trial" => {
-                    let kind_obj = nr
-                        .get("kind")
-                        .and_then(Value::as_object)
-                        .expect("checked above");
-                    for k in ["endpoint", "intervention", "comparator", "population"] {
-                        let v = kind_obj
-                            .get(k)
-                            .and_then(Value::as_str)
-                            .ok_or_else(|| format!("registered_trial.{k} must be a string"))?;
-                        if v.trim().is_empty() {
-                            return Err(format!("registered_trial.{k} must be non-empty"));
-                        }
-                    }
-                    let _ = kind_obj
-                        .get("n_enrolled")
-                        .and_then(Value::as_u64)
-                        .ok_or("registered_trial.n_enrolled must be a non-negative integer")?;
-                    let power = kind_obj
-                        .get("power")
-                        .and_then(Value::as_f64)
-                        .ok_or("registered_trial.power must be a number on [0, 1]")?;
-                    if !(0.0..=1.0).contains(&power) {
-                        return Err(format!("registered_trial.power {power} out of [0.0, 1.0]"));
-                    }
-                    let ci = kind_obj
-                        .get("effect_size_ci")
-                        .and_then(Value::as_array)
-                        .ok_or("registered_trial.effect_size_ci must be a 2-element array [lower, upper]")?;
-                    if ci.len() != 2 {
-                        return Err(format!(
-                            "registered_trial.effect_size_ci must have length 2, got {}",
-                            ci.len()
-                        ));
-                    }
-                    let lower = ci[0]
-                        .as_f64()
-                        .ok_or("registered_trial.effect_size_ci[0] must be a number")?;
-                    let upper = ci[1]
-                        .as_f64()
-                        .ok_or("registered_trial.effect_size_ci[1] must be a number")?;
-                    if upper < lower {
-                        return Err(format!(
-                            "registered_trial.effect_size_ci upper {upper} below lower {lower}"
-                        ));
-                    }
-                }
-                "exploratory" => {
-                    let kind_obj = nr
-                        .get("kind")
-                        .and_then(Value::as_object)
-                        .expect("checked above");
-                    for k in ["reagent", "observation"] {
-                        let v = kind_obj
-                            .get(k)
-                            .and_then(Value::as_str)
-                            .ok_or_else(|| format!("exploratory.{k} must be a string"))?;
-                        if v.trim().is_empty() {
-                            return Err(format!("exploratory.{k} must be non-empty"));
-                        }
-                    }
-                    let attempts = kind_obj
-                        .get("attempts")
-                        .and_then(Value::as_u64)
-                        .ok_or("exploratory.attempts must be a positive integer")?;
-                    if attempts == 0 {
-                        return Err("exploratory.attempts must be >= 1".to_string());
-                    }
-                }
-                other => {
-                    return Err(format!(
-                        "negative_result.kind.kind '{other}' must be 'registered_trial' or 'exploratory'"
-                    ));
-                }
-            }
-            let depositor = nr
-                .get("deposited_by")
-                .and_then(Value::as_str)
-                .ok_or("payload.negative_result.deposited_by must be a non-empty string")?;
-            if depositor.trim().is_empty() {
-                return Err("payload.negative_result.deposited_by must be non-empty".to_string());
-            }
-        }
-        EVENT_KIND_NEGATIVE_RESULT_REVIEWED => {
-            require_str("proposal_id")?;
-            let status = require_str("status")?;
-            if !matches!(
-                status,
-                "accepted" | "approved" | "contested" | "needs_revision" | "rejected"
-            ) {
-                return Err(format!("invalid review status '{status}'"));
-            }
-        }
-        EVENT_KIND_NEGATIVE_RESULT_RETRACTED => {
-            require_str("proposal_id")?;
-        }
-        // v0.50: Trajectory lifecycle. trajectory.created carries the
-        // initial Trajectory inline on payload.trajectory (with empty
-        // steps). trajectory.step_appended carries the new step on
-        // payload.step plus parent_trajectory_id. trajectory.reviewed
-        // and trajectory.retracted target an existing vtr_*.
-        EVENT_KIND_TRAJECTORY_CREATED => {
-            require_str("proposal_id")?;
-            let traj = object
-                .get("trajectory")
-                .and_then(Value::as_object)
-                .ok_or("payload.trajectory must be a JSON object")?;
-            let depositor = traj
-                .get("deposited_by")
-                .and_then(Value::as_str)
-                .ok_or("payload.trajectory.deposited_by must be a non-empty string")?;
-            if depositor.trim().is_empty() {
-                return Err("payload.trajectory.deposited_by must be non-empty".to_string());
-            }
-            let id = traj
-                .get("id")
-                .and_then(Value::as_str)
-                .ok_or("payload.trajectory.id must be a vtr_<hex>")?;
-            if !id.starts_with("vtr_") {
-                return Err(format!(
-                    "payload.trajectory.id must start with 'vtr_', got '{id}'"
-                ));
-            }
-        }
-        EVENT_KIND_TRAJECTORY_STEP_APPENDED => {
-            require_str("proposal_id")?;
-            let parent = require_str("parent_trajectory_id")?;
-            if !parent.starts_with("vtr_") {
-                return Err(format!(
-                    "parent_trajectory_id must start with 'vtr_', got '{parent}'"
-                ));
-            }
-            let step = object
-                .get("step")
-                .and_then(Value::as_object)
-                .ok_or("payload.step must be a JSON object")?;
-            let kind_str = step.get("kind").and_then(Value::as_str).ok_or(
-                "payload.step.kind must be one of hypothesis|tried|ruled_out|observed|refined",
-            )?;
-            if !matches!(
-                kind_str,
-                "hypothesis" | "tried" | "ruled_out" | "observed" | "refined"
-            ) {
-                return Err(format!(
-                    "payload.step.kind '{kind_str}' must be one of hypothesis|tried|ruled_out|observed|refined"
-                ));
-            }
-            let description = step
-                .get("description")
-                .and_then(Value::as_str)
-                .ok_or("payload.step.description must be a non-empty string")?;
-            if description.trim().is_empty() {
-                return Err("payload.step.description must be non-empty".to_string());
-            }
-            let actor = step
-                .get("actor")
-                .and_then(Value::as_str)
-                .ok_or("payload.step.actor must be a non-empty string")?;
-            if actor.trim().is_empty() {
-                return Err("payload.step.actor must be non-empty".to_string());
-            }
-        }
-        EVENT_KIND_TRAJECTORY_REVIEWED => {
-            require_str("proposal_id")?;
-            let status = require_str("status")?;
-            if !matches!(
-                status,
-                "accepted" | "approved" | "contested" | "needs_revision" | "rejected"
-            ) {
-                return Err(format!("invalid review status '{status}'"));
-            }
-        }
-        EVENT_KIND_TRAJECTORY_RETRACTED => {
-            require_str("proposal_id")?;
-        }
         EVENT_KIND_ARTIFACT_ASSERTED => {
             require_str("proposal_id")?;
             let artifact = object
@@ -1914,18 +1531,15 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
         }
         // v0.51: Re-classify an object's read-side access tier.
         // Validates target.r#type up front so a `tier.set` event for
-        // a non-tiered kernel object (replication, dataset, etc.)
+        // a non-tiered kernel object (dataset, source, etc.)
         // fails at the validator boundary rather than silently
         // succeeding under the reducer's match-or-noop.
         EVENT_KIND_TIER_SET => {
             require_str("proposal_id")?;
             let object_type = require_str("object_type")?;
-            if !matches!(
-                object_type,
-                "finding" | "negative_result" | "trajectory" | "artifact"
-            ) {
+            if !matches!(object_type, "finding" | "artifact") {
                 return Err(format!(
-                    "tier.set object_type '{object_type}' must be one of finding, negative_result, trajectory, artifact"
+                    "tier.set object_type '{object_type}' must be one of finding, artifact"
                 ));
             }
             require_str("object_id")?;
@@ -2207,42 +1821,6 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
         "correction_return.review" | "research_trace.review" => {}
 
         other => return Err(format!("unknown event kind '{other}'")),
-    }
-    Ok(())
-}
-
-/// v0.73: state-aware tightening of the `bridge.reviewed` validator.
-///
-/// `validate_event_payload` is signature-pure; it rejects bad payload
-/// shapes but cannot verify that the target bridge actually exists in
-/// the frontier's bridge table. This second pass closes that gap. It
-/// takes the payload and a slice of `vbr_*` ids known to the local
-/// frontier, and rejects events whose `payload.bridge_id` is not
-/// present.
-///
-/// Call sites:
-/// - CLI `vela bridges confirm` / `bridges refute` before emission.
-/// - Federation intake paths that ingest `bridge.reviewed` events from
-///   peers.
-///
-/// The function is intentionally separate from `validate_event_payload`
-/// so the shape-only validator stays project-agnostic and can be
-/// reused by tooling that does not have a frontier in hand.
-pub fn validate_bridge_reviewed_against_state(
-    payload: &Value,
-    known_bridge_ids: &[String],
-) -> Result<(), String> {
-    let object = payload
-        .as_object()
-        .ok_or_else(|| "payload must be a JSON object".to_string())?;
-    let bridge_id = object
-        .get("bridge_id")
-        .and_then(Value::as_str)
-        .ok_or_else(|| "missing required string field 'bridge_id'".to_string())?;
-    if !known_bridge_ids.iter().any(|id| id == bridge_id) {
-        return Err(format!(
-            "bridge_id '{bridge_id}' not present on this frontier (no matching .vela/bridges/<id>.json)"
-        ));
     }
     Ok(())
 }
@@ -2920,66 +2498,5 @@ mod tests {
             "reason": "x"
         });
         assert!(validate_event_payload(EVENT_KIND_FINDING_ENTITY_ADDED, &empty_name).is_err());
-    }
-
-    /// v0.73: state-aware bridge.reviewed tightening. The
-    /// signature-pure validator only checks payload shape; this
-    /// second-pass function rejects events whose bridge_id is not
-    /// present on the local frontier.
-    #[test]
-    fn bridge_reviewed_state_aware_rejects_unknown_id() {
-        let known: Vec<String> = vec!["vbr_aaaaaaaaaaaaaaaa".to_string()];
-
-        // PASS: bridge_id matches a known bridge.
-        assert!(
-            validate_bridge_reviewed_against_state(
-                &json!({
-                    "bridge_id": "vbr_aaaaaaaaaaaaaaaa",
-                    "status": "confirmed",
-                }),
-                &known,
-            )
-            .is_ok()
-        );
-
-        // FAIL: bridge_id is well-formed but absent from the frontier.
-        let err = validate_bridge_reviewed_against_state(
-            &json!({
-                "bridge_id": "vbr_bbbbbbbbbbbbbbbb",
-                "status": "confirmed",
-            }),
-            &known,
-        )
-        .expect_err("expected unknown bridge_id to be rejected");
-        assert!(
-            err.contains("not present on this frontier"),
-            "error should explain the gap: {err}"
-        );
-
-        // FAIL: missing bridge_id (defensive; signature-pure layer
-        // catches this too, but the state-aware layer must not panic
-        // on malformed input).
-        assert!(
-            validate_bridge_reviewed_against_state(
-                &json!({
-                    "status": "confirmed",
-                }),
-                &known,
-            )
-            .is_err()
-        );
-
-        // FAIL: empty known list. Real frontiers may have zero
-        // bridges; an event referencing any id must be rejected.
-        assert!(
-            validate_bridge_reviewed_against_state(
-                &json!({
-                    "bridge_id": "vbr_aaaaaaaaaaaaaaaa",
-                    "status": "confirmed",
-                }),
-                &[],
-            )
-            .is_err()
-        );
     }
 }

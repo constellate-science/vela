@@ -2,7 +2,7 @@
 
 #![allow(clippy::too_many_lines)]
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -19,7 +19,6 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
 
-use vela_edge::bridge;
 use vela_edge::observer;
 use vela_edge::signals;
 use vela_edge::tool_registry;
@@ -142,16 +141,11 @@ fn merge_projects(frontiers: Vec<(String, Project)>) -> Project {
     let mut papers_processed = 0usize;
     let mut errors = 0usize;
     // v0.36.2: preserve v0.32+ kernel objects across the merge.
-    // Pre-v0.36.2, `replications`, `datasets`, `code_artifacts`,
-    // `artifacts`, `predictions`, and `resolutions` were dropped during merge,
-    // leaving the merged stats reading the legacy `evidence.replicated`
-    // scalar instead of the structured collection.
-    let mut replications = Vec::new();
+    // Pre-v0.36.2, `datasets`, `code_artifacts`, and `artifacts` were dropped
+    // during merge, leaving the merged stats incomplete.
     let mut datasets = Vec::new();
     let mut code_artifacts = Vec::new();
     let mut artifacts = Vec::new();
-    let mut predictions = Vec::new();
-    let mut resolutions = Vec::new();
 
     for (name, frontier) in frontiers {
         names.push(name);
@@ -164,12 +158,9 @@ fn merge_projects(frontiers: Vec<(String, Project)>) -> Project {
             *link_types.entry(link_type).or_default() += count;
         }
         findings.extend(frontier.findings);
-        replications.extend(frontier.replications);
         datasets.extend(frontier.datasets);
         code_artifacts.extend(frontier.code_artifacts);
         artifacts.extend(frontier.artifacts);
-        predictions.extend(frontier.predictions);
-        resolutions.extend(frontier.resolutions);
     }
 
     let mut deduped = Vec::<FindingBundle>::new();
@@ -186,26 +177,9 @@ fn merge_projects(frontiers: Vec<(String, Project)>) -> Project {
     }
 
     let links = deduped.iter().map(|finding| finding.links.len()).sum();
-    // v0.36.2: count from the merged `replications` collection, with
-    // legacy `evidence.replicated` as fall-through for findings without
-    // structured records.
-    let mut targets_with_success: HashSet<&str> = HashSet::new();
-    let mut targets_with_any_record: HashSet<&str> = HashSet::new();
-    for r in &replications {
-        targets_with_any_record.insert(r.target_finding.as_str());
-        if r.outcome == "replicated" {
-            targets_with_success.insert(r.target_finding.as_str());
-        }
-    }
     let replicated = deduped
         .iter()
-        .filter(|finding| {
-            if targets_with_any_record.contains(finding.id.as_str()) {
-                targets_with_success.contains(finding.id.as_str())
-            } else {
-                finding.evidence.replicated
-            }
-        })
+        .filter(|finding| finding.evidence.replicated)
         .count();
     let avg_confidence = if deduped.is_empty() {
         0.0
@@ -312,14 +286,9 @@ fn merge_projects(frontiers: Vec<(String, Project)>) -> Project {
         proof_state: Default::default(),
         signatures: Vec::new(),
         actors: Vec::new(),
-        replications,
         datasets,
         code_artifacts,
         artifacts,
-        predictions,
-        resolutions,
-        negative_results: Vec::new(),
-        trajectories: Vec::new(),
         released_diff_packs: Vec::new(),
         verdict_conflicts: Vec::new(),
         contradictions: Vec::new(),
@@ -446,7 +415,6 @@ pub async fn run_http(
         .route("/api/proof", get(http_proof))
         .route("/api/observer/{policy}", get(http_observer))
         .route("/api/propagate/{id}", get(http_propagate))
-        .route("/api/hypotheses", get(http_bridges))
         .route("/api/stats", get(http_stats))
         .route("/api/frontiers", get(http_frontiers))
         .route("/api/pubmed", get(http_pubmed))
@@ -503,7 +471,6 @@ pub async fn run_http(
     eprintln!("    artifacts:  GET  /api/artifacts     /api/artifact-audit");
     eprintln!("    proof:      GET  /api/proof");
     eprintln!("    discord:    GET  /api/contradictions /api/tensions     /api/gaps");
-    eprintln!("                     /api/hypotheses (cross-frontier bridges)");
     eprintln!("                     /api/discord (frontier-wide discord report)");
     eprintln!(
         "    projections:GET  /api/decision-brief /api/trials       /api/source-verification"
@@ -559,11 +526,6 @@ pub fn check_tools(source: ProjectSource, adoption: bool) -> Result<Value, Strin
         check_tool_result(
             "frontier_compare",
             tool_frontier_compare(&json!({"limit": 10}), &frontier),
-            started,
-        ),
-        check_tool_result(
-            "find_bridges",
-            tool_find_bridges(&json!({"limit": 5, "min_categories": 2}), &frontier),
             started,
         ),
         check_tool_result(
@@ -905,13 +867,6 @@ async fn execute_tool(
             let project = frontier.lock().await;
             (tool_frontier_stats(&project), Some(clone_project(&project)))
         }
-        "find_bridges" => {
-            let project = frontier.lock().await;
-            (
-                tool_find_bridges(args, &project),
-                Some(clone_project(&project)),
-            )
-        }
         "propagate_retraction" => {
             let project = frontier.lock().await;
             (
@@ -1121,14 +1076,10 @@ async fn execute_tool(
         // and only invokes Vela when ready to submit.
         "vela_agent_submit_diff_pack" => (vela_edge::vela_agent_mcp::submit_diff_pack(args), None),
         "vela_agent_propose_to_hub" => (vela_edge::vela_agent_mcp::propose_to_hub(args), None),
-        "vela_agent_open_trajectory" => (vela_edge::vela_agent_mcp::open_trajectory(args), None),
         // v0.214: read-side tools. None require VELA_AGENT_KEY_HEX.
         "vela_agent_get_pack" => (vela_edge::vela_agent_mcp::get_pack(args), None),
         "vela_agent_list_packs" => (vela_edge::vela_agent_mcp::list_packs(args), None),
         "vela_agent_get_attestation" => (vela_edge::vela_agent_mcp::get_attestation(args), None),
-        "vela_agent_list_trajectories" => {
-            (vela_edge::vela_agent_mcp::list_trajectories(args), None)
-        }
         "vela_agent_frontier_summary" => (vela_edge::vela_agent_mcp::frontier_summary(args), None),
         // v0.220: parity read tools.
         "vela_agent_get_tool_descriptor" => {
@@ -2138,21 +2089,6 @@ async fn http_propagate(
     }
 }
 
-async fn http_bridges(
-    State(state): State<AppState>,
-    axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
-) -> Json<Value> {
-    let project = state.project.lock().await;
-    let args = json!({
-        "min_categories": params.get("min_categories").and_then(|v| v.parse::<u64>().ok()).unwrap_or(2),
-        "limit": params.get("limit").and_then(|v| v.parse::<u64>().ok()).unwrap_or(15),
-    });
-    match tool_find_bridges(&args, &project) {
-        Ok(text) => Json(serde_json::from_str(&text).unwrap_or_else(|_| json!({"result": text}))),
-        Err(error) => Json(json!({"error": error})),
-    }
-}
-
 async fn http_stats(State(state): State<AppState>) -> Json<Value> {
     let project = state.project.lock().await;
     Json(json!({
@@ -2467,46 +2403,6 @@ fn tool_frontier_stats(frontier: &Project) -> Result<String, String> {
         "signals": signals::analyze(frontier, &[]).signals,
     }))
     .map_err(|e| format!("Serialization error: {e}"))
-}
-
-fn tool_find_bridges(args: &Value, frontier: &Project) -> Result<String, String> {
-    let min_categories = args["min_categories"].as_u64().unwrap_or(2) as usize;
-    let limit = args["limit"].as_u64().unwrap_or(15) as usize;
-    let mut entity_categories = HashMap::<String, HashSet<String>>::new();
-    let mut entity_counts = HashMap::<String, usize>::new();
-    for finding in &frontier.findings {
-        for entity in &finding.assertion.entities {
-            let key = entity.name.to_lowercase();
-            entity_categories
-                .entry(key.clone())
-                .or_default()
-                .insert(finding.assertion.assertion_type.clone());
-            *entity_counts.entry(key).or_default() += 1;
-        }
-    }
-    let mut bridges = entity_categories
-        .iter()
-        .filter(|(name, categories)| {
-            categories.len() >= min_categories && !bridge::is_obvious(name)
-        })
-        .map(|(name, categories)| {
-            json!({
-                "entity": name,
-                "categories": categories.iter().cloned().collect::<Vec<_>>(),
-                "category_count": categories.len(),
-                "finding_count": entity_counts.get(name).copied().unwrap_or(0),
-            })
-        })
-        .collect::<Vec<_>>();
-    bridges.sort_by(|a, b| {
-        b["category_count"]
-            .as_u64()
-            .unwrap_or(0)
-            .cmp(&a["category_count"].as_u64().unwrap_or(0))
-    });
-    bridges.truncate(limit);
-    serde_json::to_string_pretty(&json!({"count": bridges.len(), "bridges": bridges}))
-        .map_err(|e| format!("Serialization error: {e}"))
 }
 
 fn tool_propagate_retraction(args: &Value, frontier: &Project) -> Result<String, String> {
@@ -3399,7 +3295,7 @@ fn tool_apply_observer(args: &Value, frontier: &Project) -> Result<String, Strin
     let policy_name = args["policy"].as_str().ok_or("Missing 'policy' argument")?;
     let limit = args["limit"].as_u64().unwrap_or(15) as usize;
     let policy = observer::policy_by_name(policy_name).unwrap_or_else(observer::academic);
-    let view = observer::observe(&frontier.findings, &frontier.replications, &policy);
+    let view = observer::observe(&frontier.findings, &policy);
     let top = view
         .findings
         .iter()
@@ -3430,7 +3326,7 @@ fn tool_apply_observer(args: &Value, frontier: &Project) -> Result<String, Strin
 
 async fn tool_check_pubmed(args: &Value, client: &Client) -> Result<String, String> {
     let query = args["query"].as_str().ok_or("Missing 'query' argument")?;
-    let count = bridge::check_novelty(client, query).await?;
+    let count = pubmed_result_count(client, query).await?;
     serde_json::to_string_pretty(&json!({
         "query": query,
         "pubmed_results": count,
@@ -3438,6 +3334,32 @@ async fn tool_check_pubmed(args: &Value, client: &Client) -> Result<String, Stri
         "caveat": "PubMed counts are rough prior-art signals, not proof of novelty.",
     }))
     .map_err(|e| format!("Serialization error: {e}"))
+}
+
+/// Rough PubMed prior-art count via the NCBI esearch endpoint. A single
+/// best-effort request: the result is a coarse novelty signal, not proof.
+async fn pubmed_result_count(client: &Client, query: &str) -> Result<u64, String> {
+    let url = format!(
+        "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term={}&rettype=json&retmode=json&tool=vela&email=vela@borrowedlight.org",
+        urlencoding::encode(query)
+    );
+    let resp = client
+        .get(&url)
+        .timeout(std::time::Duration::from_secs(10))
+        .send()
+        .await
+        .map_err(|e| format!("PubMed: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("PubMed {}", resp.status()));
+    }
+    let json: Value = resp
+        .json()
+        .await
+        .map_err(|e| format!("PubMed parse: {e}"))?;
+    Ok(json["esearchresult"]["count"]
+        .as_str()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0))
 }
 
 fn frontier_index_json(project_infos: &[ProjectInfo]) -> Result<String, String> {
