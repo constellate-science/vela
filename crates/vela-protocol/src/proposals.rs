@@ -2539,6 +2539,124 @@ fn replication_attestation_passes(payload: &Value) -> bool {
         && min_effect >= MIN_REPLICATION_EFFECT
 }
 
+/// Proposal-level guards for exact-lane auto-admission (Phase 1A, the
+/// de-human-gate). Returns `(admit, reasons)`; `reasons` is non-empty exactly
+/// when refused. Pure and deterministic, so two implementations agree.
+///
+/// IMPORTANT — this is NOT the whole gate. The un-forgeable floor (a fresh
+/// `vela reproduce` over the witness AND `vela_verify::claim_witness_faithful`
+/// binding the parsed assertion to the witness structure) is applied by the
+/// CLI command BEFORE this is called, because it needs the `vela-verify`
+/// binary and the witness file, which the protocol crate does not see. This
+/// function adds the protocol-level guards a human reviewer applies and then
+/// delegates to the attachment corroboration predicate
+/// [`crate::verifier_attachment::exact_lane_attachment_admit`]. See
+/// `docs/EXACT_LANE_GATE.md` for why the corroboration predicate alone is
+/// insufficient (a `VerifierAttachment` is unsigned self-asserted data the
+/// producing agent can author).
+///
+/// Fail-closed guard order:
+///   1. kind allowlist: `finding.add` only.
+///   2. target binding: target is this finding.
+///   3. content-address drift-pin: the loaded finding body must content-address
+///      to its own id (closes assertion-text edits after the id was minted).
+///   4. lifecycle: the finding is neither retracted nor superseded.
+///   5. synthetic: no `synthetic_source_requires_review` signal (caller-derived).
+///   6. contradiction: no live open contradiction names this finding
+///      (caller-derived, including freshly derived candidates).
+///   7. producer != verifier: the proposing actor differs from every matched
+///      attachment's `verifier_actor` (the producer cannot be its own
+///      corroborator at the actor level).
+///   8. delegate to the attachment predicate over the matched attachments.
+pub fn exact_lane_auto_admit(
+    proposal: &StateProposal,
+    finding: &crate::bundle::FindingBundle,
+    attachments: &[crate::verifier_attachment::VerifierAttachment],
+    open_contradiction_finding_ids: &BTreeSet<String>,
+    synthetic_unreviewed_finding_ids: &BTreeSet<String>,
+) -> (bool, Vec<String>) {
+    let mut reasons = Vec::new();
+
+    // 1. kind allowlist.
+    if proposal.kind != "finding.add" {
+        reasons.push(format!(
+            "exact-lane: proposal kind '{}' is not 'finding.add'",
+            proposal.kind
+        ));
+        return (false, reasons);
+    }
+
+    // 2. target binding.
+    if proposal.target.r#type != "finding" || proposal.target.id != finding.id {
+        reasons.push(
+            "exact-lane: proposal target does not bind to this finding".to_string(),
+        );
+        return (false, reasons);
+    }
+
+    // 3. content-address drift-pin: the body must hash to its own id.
+    let recomputed =
+        crate::bundle::FindingBundle::content_address(&finding.assertion, &finding.provenance);
+    if recomputed != finding.id {
+        reasons.push(format!(
+            "exact-lane: finding body does not content-address to its id (drift): {} != {}",
+            recomputed, finding.id
+        ));
+        return (false, reasons);
+    }
+
+    // 4. lifecycle.
+    if finding.flags.retracted || finding.flags.superseded {
+        reasons.push("exact-lane: finding is retracted or superseded".to_string());
+        return (false, reasons);
+    }
+
+    // 5. synthetic-source signal.
+    if synthetic_unreviewed_finding_ids.contains(&finding.id) {
+        reasons.push(
+            "exact-lane: finding carries a synthetic_source_requires_review signal".to_string(),
+        );
+        return (false, reasons);
+    }
+
+    // 6. live open contradiction.
+    if open_contradiction_finding_ids.contains(&finding.id) {
+        reasons.push("exact-lane: a live open contradiction names this finding".to_string());
+        return (false, reasons);
+    }
+
+    // The matched attachments (those bound to this finding).
+    let matched: Vec<crate::verifier_attachment::VerifierAttachment> = attachments
+        .iter()
+        .filter(|a| a.target == finding.id)
+        .cloned()
+        .collect();
+
+    // 7. producer != verifier: the proposing actor cannot also be a corroborator.
+    let producer = proposal.actor.id.trim();
+    if !producer.is_empty()
+        && let Some(bad) = matched.iter().find(|a| a.verifier_actor.trim() == producer)
+    {
+        reasons.push(format!(
+            "exact-lane: the proposing actor '{}' is also a verifier_actor on attachment '{}' \
+             (producer cannot corroborate itself)",
+            producer, bad.id
+        ));
+        return (false, reasons);
+    }
+
+    // 8. delegate to the attachment corroboration predicate.
+    let digest = crate::verifier_attachment::claim_digest(&finding.assertion.text);
+    let (admit, att_reasons) =
+        crate::verifier_attachment::exact_lane_attachment_admit(&digest, &matched);
+    if !admit {
+        reasons.extend(att_reasons);
+        return (false, reasons);
+    }
+
+    (true, reasons)
+}
+
 /// The bounded trusted-reviewer-agent gate. A no-op for non-agent
 /// reviewers; for agent reviewers it permits the kind-gated low-risk set
 /// (process/provenance + mechanical repairs) and replication-verified
@@ -4766,6 +4884,159 @@ mod tests {
             outcome.is_verified(),
             "two independent matched surviving-probe attachments must derive Verified"
         );
+    }
+
+    // ---- exact-lane proposal-level wrapper (Phase 1A) ----
+
+    fn admit_ready_fixture() -> (
+        StateProposal,
+        crate::bundle::FindingBundle,
+        Vec<crate::verifier_attachment::VerifierAttachment>,
+    ) {
+        use crate::verifier_attachment::{
+            AdversarialProbe, AttachmentDraft, AttachmentOutcome, MatchToClaim, MethodIntegrity,
+            ProbeKind, ProbeResult, VerifierAttachment, VerifierMethod,
+        };
+        // A finding whose id is its real content-address (the drift-pin passes).
+        let mut finding = crate::test_support::make_finding("vf_placeholder", 1.0, "measurement");
+        finding.id =
+            crate::bundle::FindingBundle::content_address(&finding.assertion, &finding.provenance);
+        let cd = crate::verifier_attachment::claim_digest(&finding.assertion.text);
+        let mk = |method: VerifierMethod, solver: &str, impl_id: &str| {
+            let mut a = VerifierAttachment::build(AttachmentDraft {
+                target: finding.id.clone(),
+                claim_digest: cd.clone(),
+                verifier_method: method,
+                solver_id: solver.to_string(),
+                independent_of: vec![],
+                match_to_claim: MatchToClaim {
+                    matches: true,
+                    checker_actor: "checker".to_string(),
+                },
+                adversarial_probes: vec![AdversarialProbe {
+                    kind: ProbeKind::FormalismFidelity,
+                    result: ProbeResult::Survived,
+                    note: String::new(),
+                }],
+                outcome: AttachmentOutcome::Passed,
+                verifier_actor: "verifier:vela-verify".to_string(),
+                note: String::new(),
+            })
+            .unwrap();
+            a.method_integrity = MethodIntegrity::Sound;
+            a.implementation_id = impl_id.to_string();
+            a
+        };
+        let mut a1 = mk(VerifierMethod::ComputationalSearch, "cp-sat", "impl-a");
+        let mut a2 = mk(VerifierMethod::ExactArithmeticRecompute, "pari", "impl-b");
+        a1.independent_of = vec![a2.id.clone()];
+        a2.independent_of = vec![a1.id.clone()];
+        let proposal = new_proposal(
+            "finding.add",
+            StateTarget {
+                r#type: "finding".to_string(),
+                id: finding.id.clone(),
+            },
+            "producer:campaign", // != every verifier_actor
+            "agent",
+            "campaign finding",
+            json!({ "finding": finding.clone() }),
+            Vec::new(),
+            Vec::new(),
+        );
+        (proposal, finding, vec![a1, a2])
+    }
+
+    #[test]
+    fn exact_lane_wrapper_happy_path() {
+        let (p, f, atts) = admit_ready_fixture();
+        let (admit, reasons) =
+            exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &BTreeSet::new());
+        assert!(admit, "should admit, refused for: {reasons:?}");
+    }
+
+    #[test]
+    fn exact_lane_wrapper_rejects_wrong_kind() {
+        let (mut p, f, atts) = admit_ready_fixture();
+        p.kind = "verifier.attach".to_string();
+        let (admit, reasons) =
+            exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &BTreeSet::new());
+        assert!(!admit);
+        assert!(reasons.iter().any(|r| r.contains("finding.add")));
+    }
+
+    #[test]
+    fn exact_lane_wrapper_rejects_target_mismatch() {
+        let (mut p, f, atts) = admit_ready_fixture();
+        p.target.id = "vf_other".to_string();
+        let (admit, _r) = exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &BTreeSet::new());
+        assert!(!admit);
+    }
+
+    // ATTACK: the assertion text is edited after the id was minted.
+    #[test]
+    fn exact_lane_wrapper_rejects_content_address_drift() {
+        let (p, mut f, atts) = admit_ready_fixture();
+        f.assertion.text = "a tampered, inflated claim".to_string();
+        let (admit, reasons) =
+            exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &BTreeSet::new());
+        assert!(!admit);
+        assert!(reasons.iter().any(|r| r.contains("drift")));
+    }
+
+    #[test]
+    fn exact_lane_wrapper_rejects_retracted_or_superseded() {
+        let (p, mut f, atts) = admit_ready_fixture();
+        f.flags.retracted = true;
+        let (admit, _r) =
+            exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &BTreeSet::new());
+        assert!(!admit);
+        let (p2, mut f2, atts2) = admit_ready_fixture();
+        f2.flags.superseded = true;
+        let (admit2, _r2) =
+            exact_lane_auto_admit(&p2, &f2, &atts2, &BTreeSet::new(), &BTreeSet::new());
+        assert!(!admit2);
+    }
+
+    #[test]
+    fn exact_lane_wrapper_rejects_synthetic_signal() {
+        let (p, f, atts) = admit_ready_fixture();
+        let synthetic = BTreeSet::from([f.id.clone()]);
+        let (admit, reasons) =
+            exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &synthetic);
+        assert!(!admit);
+        assert!(reasons.iter().any(|r| r.contains("synthetic")));
+    }
+
+    #[test]
+    fn exact_lane_wrapper_rejects_open_contradiction() {
+        let (p, f, atts) = admit_ready_fixture();
+        let contradictions = BTreeSet::from([f.id.clone()]);
+        let (admit, reasons) =
+            exact_lane_auto_admit(&p, &f, &atts, &contradictions, &BTreeSet::new());
+        assert!(!admit);
+        assert!(reasons.iter().any(|r| r.contains("contradiction")));
+    }
+
+    // ATTACK: the producer is also a corroborator (same actor).
+    #[test]
+    fn exact_lane_wrapper_rejects_producer_equals_verifier() {
+        let (p, f, mut atts) = admit_ready_fixture();
+        atts[0].verifier_actor = "producer:campaign".to_string(); // == proposal.actor.id
+        let (admit, reasons) =
+            exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &BTreeSet::new());
+        assert!(!admit);
+        assert!(reasons.iter().any(|r| r.contains("corroborate itself")));
+    }
+
+    // The attachment predicate still gates: a single attachment fails.
+    #[test]
+    fn exact_lane_wrapper_delegates_to_attachment_predicate() {
+        let (p, f, atts) = admit_ready_fixture();
+        let single = vec![atts[0].clone()];
+        let (admit, _r) =
+            exact_lane_auto_admit(&p, &f, &single, &BTreeSet::new(), &BTreeSet::new());
+        assert!(!admit);
     }
 
     #[test]
