@@ -1354,6 +1354,34 @@ pub(crate) enum FoundryAction {
         #[arg(long)]
         json: bool,
     },
+    /// The continuous-ablation heartbeat (the plan's hard gate): does inherited
+    /// frontier state make the next solver go farther per unit compute? At a
+    /// FIXED budget, treatment concentrates it on the boundary (skip-known-work,
+    /// enabled by inheriting the frontier's solved targets); control spreads the
+    /// same budget across the range it must rediscover. Reports treatment vs
+    /// control boundary-success over N seeds; exits 1 if inheritance does not
+    /// beat control (so a foundry run can gate on it).
+    Ablate {
+        /// Frontier directory (its solved targets are the inherited state).
+        frontier: PathBuf,
+        /// Witness kind to ablate (`sidon`, `golomb`, …).
+        #[arg(long)]
+        kind: String,
+        /// The boundary target `n` (the frontier edge being attacked).
+        #[arg(long)]
+        n: usize,
+        /// For `bh`: order `h`.
+        #[arg(long, default_value_t = 2)]
+        h: usize,
+        /// The fixed total search budget (restarts) each arm gets.
+        #[arg(long, default_value_t = 200)]
+        budget: u64,
+        /// Number of seeds to average over.
+        #[arg(long, default_value_t = 5)]
+        seeds: u64,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 /// `vela campaign` — the discovery engine over verifier-gated constructions.

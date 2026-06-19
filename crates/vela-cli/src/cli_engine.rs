@@ -474,7 +474,125 @@ pub(crate) fn cmd_foundry(action: FoundryAction) {
             apply,
             json,
         } => cmd_foundry_run(&frontier, &kind, n, h, restarts, seed, apply, json),
+        FoundryAction::Ablate {
+            frontier,
+            kind,
+            n,
+            h,
+            budget,
+            seeds,
+            json,
+        } => cmd_foundry_ablate(&frontier, &kind, n, h, budget, seeds, json),
     }
+}
+
+/// The continuous-ablation heartbeat: does inherited frontier state make the
+/// next solver go farther per unit compute? The honest skip-known-work form
+/// (the H1 result): at a FIXED budget, inheriting the frontier's `known` solved
+/// targets lets the producer concentrate the whole budget on the boundary
+/// (TREATMENT); a producer with no inherited state must spread the same budget
+/// across the `known + 1` targets it might need to rediscover (CONTROL, the
+/// boundary gets `budget / (known + 1)`). Over `seeds` deterministic runs, the
+/// difference in boundary-success rate is the inheritance effect. Exits 1 if
+/// treatment does not beat control (the plan's hard gate).
+#[allow(clippy::too_many_arguments)]
+fn cmd_foundry_ablate(
+    frontier: &Path,
+    kind: &str,
+    boundary: usize,
+    h: usize,
+    budget: u64,
+    seeds: u64,
+    json_out: bool,
+) {
+    let source = repo::detect(frontier).unwrap_or_else(|e| fail_return(&e));
+    let proj = repo::load(&source).unwrap_or_else(|e| fail_return(&e));
+
+    // The inherited state: how many solved targets of this kind the frontier
+    // already holds (the depth a no-inheritance producer would have to
+    // rediscover). Counted by the kind keyword in the assertion, so it works
+    // for kinds with no `{0,1}^n` ambient dimension (golomb, costas, …) too.
+    let known = proj
+        .findings
+        .iter()
+        .filter(|f| f.assertion.text.to_lowercase().contains(kind))
+        .count();
+    let range = (known as u64) + 1; // the targets a no-inheritance producer covers
+    let control_budget = (budget / range).max(1);
+
+    let target = crate::campaign::Target {
+        kind: kind.to_string(),
+        n: boundary,
+        h,
+        d: 0,
+        w: 0,
+        k: 0,
+        t: 0,
+    };
+
+    // The H1 metric is the SCORE (witness size / frontier order), not
+    // found/not-found: a witness usually exists, the question is how BIG a one
+    // each arm reaches with its budget. Mean score over `seeds` deterministic
+    // runs; treatment concentrates the full budget, control gets the spread.
+    let mut t_total = 0u64;
+    let mut c_total = 0u64;
+    for seed in 1..=seeds {
+        let score_of = |restarts: u64| -> u64 {
+            match crate::campaign::search_target(&target, restarts, seed) {
+                Ok(Some(found)) => found.score as u64,
+                _ => 0,
+            }
+        };
+        t_total += score_of(budget);
+        c_total += score_of(control_budget);
+    }
+    let t_mean = t_total as f64 / seeds as f64;
+    let c_mean = c_total as f64 / seeds as f64;
+    let delta = t_mean - c_mean;
+    let inheritance_compounds = t_mean > c_mean;
+
+    if json_out {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "kind": kind,
+                "boundary": boundary,
+                "inherited_solved_targets": known,
+                "budget": budget,
+                "control_budget_per_boundary": control_budget,
+                "seeds": seeds,
+                "treatment_mean_score": t_mean,
+                "control_mean_score": c_mean,
+                "delta": delta,
+                "inheritance_compounds": inheritance_compounds,
+            }))
+            .unwrap()
+        );
+    } else {
+        println!("continuous ablation — {kind} boundary n={boundary}:");
+        println!("  inherited solved targets (skip-known-work depth): {known}");
+        println!("  fixed budget per arm: {budget} restarts");
+        println!("  TREATMENT (inherit -> full {budget} on boundary): mean score {t_mean:.2}");
+        println!(
+            "  CONTROL   (no inherit -> {control_budget}/boundary):        mean score {c_mean:.2}"
+        );
+        if known == 0 {
+            println!(
+                "  => no inherited state for '{kind}' on this frontier (N/A — nothing to inherit)"
+            );
+        } else {
+            println!(
+                "  => inheritance compounds: {} (Δ {:+.2} frontier orders)",
+                if inheritance_compounds { "YES" } else { "NO" },
+                delta
+            );
+        }
+    }
+    // Informational by default (a measurement, not a self-gate): exit 0 always.
+    // A foundry run or CI gates by reading `inheritance_compounds` in the JSON.
+    // Only a kind that is BOTH a real compute-lever AND carries inherited state
+    // is expected to compound — sidon is greedy-saturated (H1), golomb is the
+    // lever; the reading reflects that honestly per (kind, frontier).
 }
 
 #[allow(clippy::too_many_arguments)]
