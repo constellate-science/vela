@@ -1,9 +1,23 @@
 # The exact-lane gate (machine_verified): de-human-gating the rote admit
 
-> Status: **lane DISABLED.** Stages 1, 2, and the faithfulness floor are built
-> and gate-green; the lane does not auto-admit anything until the acceptance
-> checklist (§7) is met. This is the design + safety record, not a claim that
-> machine admission is live.
+> Status: **command shipped + functional; no unattended firing.** The full
+> trust path (floor + proposal guards + attachment corroboration + the
+> idempotent emit + the tier projection + surfaces) is built and gate-green.
+> `vela gate auto-admit <frontier> --finding <vf>` previews read-only;
+> `--apply` records the unsigned, idempotent `policy.auto_admitted` ONLY on a
+> YES verdict, in the narrow enabled scope (§8). It never auto-fires — an
+> unattended producer/foundry driving it is Phase 2. Of the §7 checklist:
+> **done** = 1 (reproduce-binding, the command re-runs the frozen verifier),
+> 2 (faithfulness), 3 (attachment provenance: human-vouched `verifier.attach`),
+> 6 (producer != verifier), 7 (lifecycle), 9 (idempotent emit), 10 (payload
+> validation), 11 (tier honesty), 12 (surface separation, terminal + the
+> `finding_context` data layer serve reads); **deferred with rationale** = 4
+> (toolchain_hash distinctness — needs the attachment-creation path to populate
+> real build hashes first; enforcing it now blocks the lane with no data to
+> satisfy it), 5 (a frozen re-runnable FormalismFidelity probe — superseded for
+> the exact lane by the floor's `claim_witness_faithful`, which IS the frozen
+> faithfulness re-check); **remaining** = the web (`apps/web`) render half of
+> #12. This is the design + safety record.
 
 ## 1. The problem
 

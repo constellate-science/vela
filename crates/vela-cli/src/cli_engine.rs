@@ -252,8 +252,15 @@ fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, apply: bool, json_outp
         &synthetic,
     );
 
+    // Guard #3 (attachment provenance): each matched attachment must have
+    // landed via an ACCEPTED `verifier.attach` proposal by a NON-AGENT
+    // reviewer. The trust anchor the lane otherwise only assumes — the gate
+    // verifies it here so a single non-human-vouched write into the attachment
+    // set cannot manufacture machine_verified.
+    let (vouched_ok, vouch_reason) = attachments_human_vouched(&proj, &matched);
+
     let floor_ok = witness_ok && faithful.as_ref().map(|f| f.faithful).unwrap_or(false);
-    let would_admit = floor_ok && wrapper_ok;
+    let would_admit = floor_ok && wrapper_ok && vouched_ok;
 
     // Apply (opt-in): record the unsigned, idempotent policy.auto_admitted audit
     // event when, AND ONLY WHEN, the finding would auto-admit. Never signs,
@@ -288,6 +295,8 @@ fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, apply: bool, json_outp
             },
             "proposal_guards_ok": wrapper_ok,
             "proposal_guard_reasons": wrapper_reasons,
+            "attachment_provenance_ok": vouched_ok,
+            "attachment_provenance_reason": if vouch_reason.is_empty() { serde_json::Value::Null } else { json!(vouch_reason) },
             "matched_attachments": matched.len(),
             "applied": apply,
             "event_id": emitted.as_ref().map(|(id, _)| id.clone()),
@@ -326,6 +335,15 @@ fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, apply: bool, json_outp
                 String::new()
             } else {
                 format!(" — {}", wrapper_reasons.join("; "))
+            }
+        );
+        println!(
+            "  attachment provenance (human-vouched): {}{}",
+            if vouched_ok { "PASS" } else { "FAIL" },
+            if vouch_reason.is_empty() {
+                String::new()
+            } else {
+                format!(" — {vouch_reason}")
             }
         );
         println!(
@@ -392,6 +410,40 @@ fn resolve_finding_and_proposal(
 fn is_synthetic_source(source_type: &str) -> bool {
     let s = source_type.trim().to_ascii_lowercase();
     s == "synthetic_report" || s == "agent_trace"
+}
+
+/// Guard #3 (attachment provenance): every matched attachment must have landed
+/// via an ACCEPTED `verifier.attach` proposal whose reviewer is NOT an agent.
+/// `verifier.attach` is excluded from every agent self-apply set, so this holds
+/// today — the lane VERIFIES it rather than assuming it, closing the path where
+/// a single non-human-vouched write into the attachment set manufactures
+/// machine_verified. Returns (ok, reason).
+fn attachments_human_vouched(
+    proj: &vela_protocol::project::Project,
+    matched: &[vela_protocol::verifier_attachment::VerifierAttachment],
+) -> (bool, String) {
+    for att in matched {
+        let vouched = proj.proposals.iter().any(|p| {
+            p.kind == "verifier.attach"
+                && p.applied_event_id.is_some()
+                && !p.actor.id.trim().to_ascii_lowercase().starts_with("agent:")
+                && p.payload
+                    .get("attachment")
+                    .and_then(|a| a.get("id"))
+                    .and_then(|i| i.as_str())
+                    == Some(att.id.as_str())
+        });
+        if !vouched {
+            return (
+                false,
+                format!(
+                    "attachment {} was not added by an accepted verifier.attach from a non-agent reviewer",
+                    att.id
+                ),
+            );
+        }
+    }
+    (true, String::new())
 }
 
 /// Re-run the frozen verifier over the finding's witness artifact (the
