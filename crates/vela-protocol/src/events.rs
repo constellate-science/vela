@@ -1742,9 +1742,30 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
         "correction_return.review" | "research_trace.review" => {}
 
         // policy.auto_admitted (Phase 1A): deterministic machine-verified admission
-        // audit record. Binds the proposal it admitted; the attachments define trust.
+        // audit record. The audit record is the only accountability artifact for
+        // a human-free admit, so every binding field is mandatory and well-formed
+        // (checklist #10): the proposal it admitted, the claim digest the gate
+        // matched, a non-empty list of the corroborating attachments, the frozen
+        // policy version, and the frozen verifier-env hash.
         "policy.auto_admitted" => {
             require_str("proposal_id")?;
+            require_str("claim_digest")?;
+            require_str("policy_version")?;
+            require_str("verifier_env_hash")?;
+            match payload.get("attachment_ids") {
+                Some(serde_json::Value::Array(ids)) if !ids.is_empty() => {
+                    if !ids.iter().all(|v| v.is_string()) {
+                        return Err(
+                            "policy.auto_admitted: attachment_ids must be strings".to_string()
+                        );
+                    }
+                }
+                _ => {
+                    return Err(
+                        "policy.auto_admitted: attachment_ids must be a non-empty array".to_string(),
+                    );
+                }
+            }
         }
 
         other => return Err(format!("unknown event kind '{other}'")),
@@ -2326,6 +2347,33 @@ mod tests {
             "scope_note": "Independent re-verification of the Stupp protocol finding."
         });
         assert!(validate_event_payload(EVENT_KIND_ATTESTATION_RECORDED, &good).is_ok());
+    }
+
+    #[test]
+    fn validates_policy_auto_admitted_payload() {
+        // PASS: all binding fields present + well-formed.
+        let good = json!({
+            "proposal_id": "vpr_abc",
+            "claim_digest": "deadbeefdeadbeef",
+            "attachment_ids": ["vva_a", "vva_b"],
+            "policy_version": "exact-lane.v1",
+            "verifier_env_hash": "sha256:cafe"
+        });
+        assert!(validate_event_payload(EVENT_KIND_POLICY_AUTO_ADMITTED, &good).is_ok());
+
+        // FAIL: the pre-hardening minimal payload (proposal_id only) is now rejected.
+        let minimal = json!({ "proposal_id": "vpr_abc" });
+        assert!(validate_event_payload(EVENT_KIND_POLICY_AUTO_ADMITTED, &minimal).is_err());
+
+        // FAIL: empty attachment_ids (an admit with no corroboration).
+        let no_atts = json!({
+            "proposal_id": "vpr_abc",
+            "claim_digest": "deadbeef",
+            "attachment_ids": [],
+            "policy_version": "exact-lane.v1",
+            "verifier_env_hash": "sha256:cafe"
+        });
+        assert!(validate_event_payload(EVENT_KIND_POLICY_AUTO_ADMITTED, &no_atts).is_err());
 
         // PASS: with optional signature + proof_id.
         let with_proof = json!({

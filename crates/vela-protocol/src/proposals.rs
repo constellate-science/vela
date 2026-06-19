@@ -2657,6 +2657,100 @@ pub fn exact_lane_auto_admit(
     (true, reasons)
 }
 
+/// The verification trust tier of a finding (Phase 1A). An ordered ladder;
+/// the machine advances the lower rungs, a human key-custody accept is the
+/// only path to `Accepted`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TrustTier {
+    Candidate,
+    SchemaChecked,
+    MachineVerified,
+    Accepted,
+}
+
+impl TrustTier {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            TrustTier::Candidate => "candidate",
+            TrustTier::SchemaChecked => "schema_checked",
+            TrustTier::MachineVerified => "machine_verified",
+            TrustTier::Accepted => "accepted",
+        }
+    }
+}
+
+/// Project a finding's verification trust tier from canonical state + the
+/// immutable log + live attachments (Phase 1A). A read-only projection, never
+/// a stored field: recomputed fresh so a forged `policy.auto_admitted` event
+/// cannot by itself raise the tier, and a later-weakened attachment set
+/// silently lowers it.
+///
+/// - `Accepted`: the finding is landed in canonical state (`frontier.findings`)
+///   and not retracted/superseded. Landing runs only through the key-custody
+///   accept ceremony, so canonical membership IS the human-accept signal (no
+///   reliance on which event kind the ceremony emitted). Strictly highest; the
+///   machine never reaches it.
+/// - `MachineVerified`: the finding is a PENDING `finding.add` proposal carrying
+///   a `policy.auto_admitted` marker whose gate, recomputed LIVE from the
+///   proposal's finding text + the current matched attachments, is `Verified`.
+///   Machine-verified state is a separate queryable layer over pending
+///   proposals; it is NEVER landed in `frontier.findings` (that is the human
+///   tier), which preserves the charter boundary.
+/// - `SchemaChecked`: at least one passing matched attachment, not yet Verified.
+/// - `Candidate`: everything else, including retracted/superseded.
+pub fn derive_trust_tier(frontier: &Project, finding_id: &str) -> TrustTier {
+    use crate::verifier_attachment::{AttachmentOutcome, GateStatus, derive_gate_status};
+
+    // Landed in canonical accepted state?
+    if let Some(f) = frontier.findings.iter().find(|f| f.id == finding_id) {
+        if f.flags.retracted || f.flags.superseded {
+            return TrustTier::Candidate;
+        }
+        return TrustTier::Accepted;
+    }
+
+    let matched: Vec<crate::verifier_attachment::VerifierAttachment> = frontier
+        .verifier_attachments
+        .iter()
+        .filter(|a| a.target == finding_id)
+        .cloned()
+        .collect();
+
+    // A pending finding.add proposal for this finding, carrying an auto-admit.
+    let pending = frontier.proposals.iter().find(|p| {
+        p.kind == "finding.add"
+            && p.applied_event_id.is_none()
+            && (p.target.id == finding_id
+                || p.payload
+                    .get("finding")
+                    .and_then(|f| f.get("id"))
+                    .and_then(|i| i.as_str())
+                    == Some(finding_id))
+    });
+    if let Some(p) = pending {
+        let admitted = frontier.events.iter().any(|e| {
+            e.kind.as_str() == "policy.auto_admitted"
+                && e.payload.get("proposal_id").and_then(|v| v.as_str()) == Some(p.id.as_str())
+        });
+        if admitted
+            && let Some(finding_val) = p.payload.get("finding")
+            && let Ok(fb) =
+                serde_json::from_value::<crate::bundle::FindingBundle>(finding_val.clone())
+        {
+            let digest = crate::verifier_attachment::claim_digest(&fb.assertion.text);
+            if derive_gate_status(&digest, &matched).status == GateStatus::Verified {
+                return TrustTier::MachineVerified;
+            }
+        }
+    }
+
+    if matched.iter().any(|a| a.outcome == AttachmentOutcome::Passed) {
+        return TrustTier::SchemaChecked;
+    }
+    TrustTier::Candidate
+}
+
 /// The bounded trusted-reviewer-agent gate. A no-op for non-agent
 /// reviewers; for agent reviewers it permits the kind-gated low-risk set
 /// (process/provenance + mechanical repairs) and replication-verified
@@ -5037,6 +5131,80 @@ mod tests {
         let (admit, _r) =
             exact_lane_auto_admit(&p, &f, &single, &BTreeSet::new(), &BTreeSet::new());
         assert!(!admit);
+    }
+
+    // ---- derive_trust_tier projection ----
+
+    fn policy_admit_event(proposal_id: &str) -> StateEvent {
+        StateEvent {
+            schema: events::EVENT_SCHEMA.to_string(),
+            id: "vev_test_admit".to_string(),
+            kind: events::EVENT_KIND_POLICY_AUTO_ADMITTED.into(),
+            target: StateTarget {
+                r#type: "proposal".to_string(),
+                id: proposal_id.to_string(),
+            },
+            actor: StateActor {
+                id: "policy:exact-lane".to_string(),
+                r#type: "agent".to_string(),
+            },
+            timestamp: "2026-06-19T00:00:00Z".to_string(),
+            reason: "exact-lane auto-admit".to_string(),
+            before_hash: NULL_HASH.to_string(),
+            after_hash: NULL_HASH.to_string(),
+            payload: json!({ "proposal_id": proposal_id }),
+            caveats: vec![],
+            signature: None,
+            schema_artifact_id: None,
+        }
+    }
+
+    #[test]
+    fn trust_tier_accepted_when_landed() {
+        let (_p, f, _a) = admit_ready_fixture();
+        let frontier = project::assemble("t", vec![f.clone()], 0, 0, "t");
+        assert_eq!(derive_trust_tier(&frontier, &f.id), TrustTier::Accepted);
+    }
+
+    #[test]
+    fn trust_tier_candidate_when_retracted() {
+        let (_p, mut f, _a) = admit_ready_fixture();
+        f.flags.retracted = true;
+        let frontier = project::assemble("t", vec![f.clone()], 0, 0, "t");
+        assert_eq!(derive_trust_tier(&frontier, &f.id), TrustTier::Candidate);
+    }
+
+    #[test]
+    fn trust_tier_machine_verified_for_pending_auto_admitted() {
+        let (p, f, atts) = admit_ready_fixture();
+        let mut frontier = project::assemble("t", vec![], 0, 0, "t");
+        frontier.verifier_attachments = atts;
+        frontier.events.push(policy_admit_event(&p.id));
+        frontier.proposals.push(p);
+        assert_eq!(
+            derive_trust_tier(&frontier, &f.id),
+            TrustTier::MachineVerified
+        );
+    }
+
+    // A pending finding with passing attachments but no auto-admit marker is
+    // only schema_checked — never machine_verified.
+    #[test]
+    fn trust_tier_schema_checked_without_admit_marker() {
+        let (p, f, atts) = admit_ready_fixture();
+        let mut frontier = project::assemble("t", vec![], 0, 0, "t");
+        frontier.verifier_attachments = atts;
+        frontier.proposals.push(p); // pending, NO policy.auto_admitted event
+        assert_eq!(derive_trust_tier(&frontier, &f.id), TrustTier::SchemaChecked);
+    }
+
+    #[test]
+    fn trust_tier_candidate_when_unknown() {
+        let frontier = project::assemble("t", vec![], 0, 0, "t");
+        assert_eq!(
+            derive_trust_tier(&frontier, "vf_nothing"),
+            TrustTier::Candidate
+        );
     }
 
     #[test]
