@@ -227,14 +227,89 @@ pub fn read_oeis(input: &Path, _rev: &str) -> Result<Vec<SourceRecord>, String> 
     Ok(out)
 }
 
+/// HorizonMath adapter: read a `HorizonMathCatalog` (a JSON document with a
+/// `problems` array of verifier-attackable open problems, each
+/// `{id, domain, level, statement, verifier_kind, incumbent{value,direction,basis}, status}`,
+/// e.g. `data/horizonmath/catalog.json`) and yield one record per problem. Each
+/// problem carries its frozen-verifier kind, its incumbent (value-to-beat), and
+/// its declared status in the assertion text, so the ingested finding is a
+/// faithful target for the foundry to attack. Deterministic (sorted by id); reads
+/// a local catalogue file, so the result is reproducible (no network).
+pub fn read_horizonmath(input: &Path, _rev: &str) -> Result<Vec<SourceRecord>, String> {
+    let raw =
+        std::fs::read_to_string(input).map_err(|e| format!("read {}: {e}", input.display()))?;
+    let doc: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", input.display()))?;
+    let problems = doc
+        .get("problems")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| format!("{}: missing `problems` array", input.display()))?;
+    let mut out: Vec<SourceRecord> = Vec::new();
+    for p in problems {
+        let id = p.get("id").and_then(|v| v.as_str()).unwrap_or("").trim();
+        let statement = p
+            .get("statement")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
+        if id.is_empty() || statement.is_empty() {
+            continue;
+        }
+        let domain = p.get("domain").and_then(|v| v.as_str()).unwrap_or("");
+        let level = p.get("level").and_then(|v| v.as_str()).unwrap_or("");
+        let verifier = p
+            .get("verifier_kind")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let status = p.get("status").and_then(|v| v.as_str()).unwrap_or("open");
+        // Incumbent: the value-to-beat. A scalar `value` when one exists, else the
+        // descriptive `basis` (per-parameter families have no single value).
+        let inc = p.get("incumbent");
+        let direction = inc
+            .and_then(|i| i.get("direction"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let value = inc.and_then(|i| i.get("value")).and_then(|v| {
+            if v.is_null() {
+                None
+            } else {
+                Some(v.to_string())
+            }
+        });
+        let basis = inc
+            .and_then(|i| i.get("basis"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let incumbent_str = match &value {
+            Some(v) => format!("incumbent {v} (direction {direction}; {basis})"),
+            None => format!("incumbent per-parameter (direction {direction}; {basis})"),
+        };
+        out.push(SourceRecord {
+            external_id: id.to_string(),
+            assertion_text: format!(
+                "HorizonMath/{id} [{domain}, level {level}]: {statement} \
+                 Verifier: {verifier}. {incumbent_str}. Status: {status}."
+            ),
+            assertion_type: "horizonmath-problem".into(),
+            implies: Vec::new(),
+        });
+    }
+    out.sort_by(|a, b| a.external_id.cmp(&b.external_id));
+    if out.is_empty() {
+        return Err(format!("{}: no usable problems", input.display()));
+    }
+    Ok(out)
+}
+
 /// Dispatch an adapter by name.
 pub fn read_adapter(adapter: &str, input: &Path, rev: &str) -> Result<Vec<SourceRecord>, String> {
     match adapter {
         "formal" => read_formal(input, rev),
         "alphaproof" => read_alphaproof(input, rev),
         "oeis" => read_oeis(input, rev),
+        "horizonmath" => read_horizonmath(input, rev),
         other => Err(format!(
-            "unknown adapter '{other}' (supported: formal | alphaproof | oeis; tao stays scripts/atlas/ingest_tao.py)"
+            "unknown adapter '{other}' (supported: formal | alphaproof | oeis | horizonmath; tao stays scripts/atlas/ingest_tao.py)"
         )),
     }
 }
@@ -287,6 +362,49 @@ mod tests {
         assert!(recs[1].assertion_text.contains("The prime numbers."));
         // a finding built from it is content-addressed like any other adapter record.
         assert!(build_finding(&recs[0], "oeis").id.starts_with("vf_"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn read_horizonmath_parses_problems_deterministically() {
+        let dir = std::env::temp_dir().join(format!("vela_hm_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("catalog.json");
+        std::fs::write(
+            &f,
+            r#"{"object":"HorizonMathCatalog","problems":[
+                {"id":"hm-cap-8","domain":"finite_geometry","level":"challenging",
+                 "statement":"Cap set in F_3^8.","verifier_kind":"cap","status":"open",
+                 "incumbent":{"value":512,"direction":"max","basis":"FunSearch 2023"}},
+                {"id":"hm-diff-triangle-7-5","domain":"combinatorial_design","level":"likely_solvable",
+                 "statement":"DTS(7,5): minimize scope.","verifier_kind":"diff_triangle","status":"open",
+                 "incumbent":{"value":112,"direction":"min","basis":"memo"}},
+                {"id":"hm-sidon-range","domain":"additive_combinatorics","level":"challenging",
+                 "statement":"Sidon set, maximize size.","verifier_kind":"sidon","status":"open",
+                 "incumbent":{"value":null,"direction":"max","basis":"OEIS A309370"}},
+                {"id":"","statement":"","verifier_kind":"x"}
+            ]}"#,
+        )
+        .unwrap();
+        let recs = read_horizonmath(&f, "test").unwrap();
+        assert_eq!(recs.len(), 3, "empty-id/statement problem dropped");
+        assert_eq!(recs[0].external_id, "hm-cap-8", "sorted by id");
+        assert_eq!(recs[1].external_id, "hm-diff-triangle-7-5");
+        assert_eq!(recs[0].assertion_type, "horizonmath-problem");
+        // scalar incumbent is carried; per-parameter (null value) reads as such.
+        assert!(
+            recs[0]
+                .assertion_text
+                .contains("incumbent 512 (direction max")
+        );
+        assert!(
+            recs[2]
+                .assertion_text
+                .contains("incumbent per-parameter (direction max")
+        );
+        assert!(recs[1].assertion_text.contains("Verifier: diff_triangle"));
+        // a finding built from it is content-addressed like any other adapter record.
+        assert!(build_finding(&recs[0], "horizonmath").id.starts_with("vf_"));
         std::fs::remove_dir_all(&dir).ok();
     }
 

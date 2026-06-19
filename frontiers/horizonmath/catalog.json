@@ -1,0 +1,187 @@
+{
+  "object": "HorizonMathCatalog",
+  "schema": "vela.horizonmath.catalog.v1",
+  "title": "HorizonMath — verifier-attackable target subset (staged offline)",
+  "note": "HorizonMath is a benchmark of auto-verifiable open/research mathematics problems. This file stages the VERIFIER-ATTACKABLE subset: the problems that map to a frozen Vela verifier (a `vela campaign` kind) and carry a real incumbent (value-to-beat). It is NOT the full 101-problem corpus; the difference-triangle flagship is documented from the Constellate ingestion memo, the construction families from the live Open Constructions board (apps/web/app/constructions/page.tsx). Provenance is recorded per problem in `source`. Deterministic, offline: the adapter reads this file, mints content-addressed findings, attaches signed anchors.",
+  "corpus": {
+    "facts_source": "Constellate ingestion memo (GPT-Pro, 2026-06-19), §4–§5",
+    "total_problems": 101,
+    "unsolved": 91,
+    "domains": 8,
+    "levels": {
+      "calibration": 10,
+      "likely_solvable": 23,
+      "challenging": 60,
+      "unsolvable": 8
+    },
+    "staged_here": "the verifier-attackable subset (problems with a Vela verifier_kind + a frozen checker); the remainder is deferred, not fabricated"
+  },
+  "problems": [
+    {
+      "id": "hm-diff-triangle-7-5",
+      "domain": "combinatorial_design",
+      "level": "likely_solvable",
+      "statement": "Difference Triangle Set DTS(7,5): 7 rows, each a strictly increasing sequence of 6 marks starting at 0 (order 5), with every within-row pairwise difference globally distinct across all rows. Minimize the scope (the largest mark used).",
+      "verifier_kind": "diff_triangle",
+      "params": { "rows": 7, "order": 5 },
+      "incumbent": {
+        "value": 112,
+        "direction": "min",
+        "basis": "HorizonMath value-to-beat for DTS(7,5) (Constellate memo §5.4); beating it needs a diverse solver portfolio (SAT/CP-SAT/MILP/local-search)"
+      },
+      "source": "horizonmath",
+      "status": "open",
+      "flagship": true
+    },
+    {
+      "id": "hm-cap-8",
+      "domain": "finite_geometry",
+      "level": "challenging",
+      "statement": "Cap set in F_3^8: maximize a subset of the affine space over GF(3) with no three points on a line (no three summing to zero).",
+      "verifier_kind": "cap",
+      "params": { "n": 8 },
+      "incumbent": {
+        "value": 512,
+        "direction": "max",
+        "basis": "DeepMind FunSearch (2023); the engine's greedy is far below this"
+      },
+      "source": "constructions_board",
+      "status": "open"
+    },
+    {
+      "id": "hm-sidon-range",
+      "domain": "additive_combinatorics",
+      "level": "challenging",
+      "statement": "Sidon set: a set of integers with all pairwise sums distinct; maximize the size within a given range (OEIS A309370).",
+      "verifier_kind": "sidon",
+      "params": {},
+      "incumbent": {
+        "value": null,
+        "direction": "max",
+        "basis": "OEIS A309370, Vela-improved lower bounds a(8..24); larger n open"
+      },
+      "source": "oeis",
+      "status": "open"
+    },
+    {
+      "id": "hm-gf2-sidon",
+      "domain": "additive_combinatorics",
+      "level": "challenging",
+      "statement": "Sidon set in GF(2)^n: a set of binary vectors with all pairwise XORs distinct; maximize the size (OEIS A394031).",
+      "verifier_kind": "gf2_sidon",
+      "params": {},
+      "incumbent": {
+        "value": null,
+        "direction": "max",
+        "basis": "OEIS A394031, listed through a(10)=34; the engine matches through a(9), falls short at a(10) (31 vs 34)"
+      },
+      "source": "oeis",
+      "status": "open"
+    },
+    {
+      "id": "hm-covering",
+      "domain": "combinatorial_design",
+      "level": "challenging",
+      "statement": "Covering design C(v,k,t): a family of k-blocks of [v] so every t-subset lies in at least one block; minimize the number of blocks.",
+      "verifier_kind": "covering",
+      "params": {},
+      "incumbent": {
+        "value": null,
+        "direction": "min",
+        "basis": "La Jolla covering repository; many (v,k,t) entries open between best lower and upper bound"
+      },
+      "source": "constructions_board",
+      "status": "open"
+    },
+    {
+      "id": "hm-constant-weight",
+      "domain": "coding_theory",
+      "level": "challenging",
+      "statement": "Constant-weight binary code A(n,d,w): binary codewords of length n, weight w, pairwise Hamming distance >= d; maximize the count.",
+      "verifier_kind": "constant_weight",
+      "params": {},
+      "incumbent": {
+        "value": null,
+        "direction": "max",
+        "basis": "Brouwer's tables; hundreds of A(n,d,w) entries have a lower/upper-bound gap"
+      },
+      "source": "constructions_board",
+      "status": "open"
+    },
+    {
+      "id": "hm-costas",
+      "domain": "combinatorial_design",
+      "level": "challenging",
+      "statement": "Costas array: a permutation matrix whose displacement vectors are all distinct; decide existence at every order.",
+      "verifier_kind": "costas",
+      "params": {},
+      "incumbent": {
+        "value": null,
+        "direction": "exists",
+        "basis": "known to exist at orders 1..29; orders 32 and 33 are open (no published array)"
+      },
+      "source": "constructions_board",
+      "status": "open"
+    },
+    {
+      "id": "hm-union-free",
+      "domain": "extremal_set_theory",
+      "level": "challenging",
+      "statement": "Union-free family: subsets of {1..n} where no member is the union of two others; maximize the count (OEIS A347025).",
+      "verifier_kind": "union_free",
+      "params": {},
+      "incumbent": {
+        "value": null,
+        "direction": "max",
+        "basis": "OEIS A347025, listed through a(7)=44; the engine misses a(6) by one (23 vs 24), then runs as a lower bound"
+      },
+      "source": "oeis",
+      "status": "open"
+    },
+    {
+      "id": "hm-rook-directions",
+      "domain": "combinatorial_geometry",
+      "level": "challenging",
+      "statement": "Rook directions: place n non-attacking rooks to maximize the number of distinct pairwise directions (OEIS A321531).",
+      "verifier_kind": "rook_directions",
+      "params": {},
+      "incumbent": {
+        "value": null,
+        "direction": "max",
+        "basis": "OEIS A321531, exact maxima through a(10)=23; the engine reproduces every listed term, then extends as verified lower bounds a(11..20)"
+      },
+      "source": "oeis",
+      "status": "open"
+    },
+    {
+      "id": "hm-b3-set",
+      "domain": "additive_combinatorics",
+      "level": "challenging",
+      "statement": "B_3 set in {0,1}^n: binary vectors with all 3-fold sums distinct (a Sidon-order-3 set); maximize the size.",
+      "verifier_kind": "bh",
+      "params": { "h": 3 },
+      "incumbent": {
+        "value": null,
+        "direction": "max",
+        "basis": "exact maxima known for small n only; the engine holds verified lower bounds n=0..12 (best 46 at n=12)"
+      },
+      "source": "constructions_board",
+      "status": "open"
+    },
+    {
+      "id": "hm-golomb",
+      "domain": "additive_combinatorics",
+      "level": "calibration",
+      "statement": "Golomb ruler: integer marks with all pairwise differences distinct; find the shortest ruler of each order.",
+      "verifier_kind": "golomb",
+      "params": {},
+      "incumbent": {
+        "value": null,
+        "direction": "min",
+        "basis": "optimal lengths proven through order 28 (OGR project); a verified showcase, not an open frontier"
+      },
+      "source": "constructions_board",
+      "status": "verified_showcase"
+    }
+  ]
+}
