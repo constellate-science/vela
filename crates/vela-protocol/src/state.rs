@@ -1094,6 +1094,12 @@ pub fn finding_context(frontier: &Project, finding_id: &str) -> Result<Value, St
         "proposals": proposals::proposals_for_finding(frontier, finding_id),
         "events": events::events_for_finding(frontier, finding_id),
         "proof_state": frontier.proof_state,
+        // Phase 1A: the verification trust tier (candidate / schema_checked /
+        // machine_verified / accepted). A read-only projection; machine_verified
+        // is the deterministic exact-lane admission and is DISTINCT from a human
+        // `accepted` (canonical-state landing via key custody). Every surface
+        // that renders this must keep the two visually + semantically separate.
+        "trust_tier": proposals::derive_trust_tier(frontier, finding_id).as_str(),
     }))
 }
 

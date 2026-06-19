@@ -56,6 +56,20 @@ pub(crate) fn cmd_finding_show(frontier: &Path, finding_id: &str, json_out: bool
     if cs >= 0.7 && !rv {
         println!("  note: confidence >=0.70 on an unreviewed basis — not adjudicated evidence");
     }
+    // Phase 1A: the verification trust tier, rendered DISTINCT from human accept.
+    let tier = ctx
+        .get("trust_tier")
+        .and_then(Value::as_str)
+        .unwrap_or("candidate");
+    let tier_line = match tier {
+        "accepted" => "trust tier: accepted (human, key-custody)".green(),
+        "machine_verified" => {
+            "trust tier: machine_verified (deterministic exact-lane; not human-accepted)".cyan()
+        }
+        "schema_checked" => "trust tier: schema_checked".yellow(),
+        _ => "trust tier: candidate".dimmed(),
+    };
+    println!("  {tier_line}");
     if let Some(atoms) = ctx.get("evidence_atoms").and_then(Value::as_array) {
         println!("  evidence atoms: {}", atoms.len());
         for a in atoms.iter().take(12) {
