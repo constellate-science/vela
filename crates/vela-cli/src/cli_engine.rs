@@ -474,6 +474,12 @@ pub(crate) fn cmd_foundry(action: FoundryAction) {
             apply,
             json,
         } => cmd_foundry_run(&frontier, &kind, n, h, restarts, seed, apply, json),
+        FoundryAction::Targets {
+            catalog,
+            records,
+            attackable_only,
+            json,
+        } => cmd_foundry_targets(&catalog, &records, attackable_only, json),
         FoundryAction::Ablate {
             frontier,
             kind,
@@ -783,6 +789,189 @@ fn upsert_witness_target(frontier: &Path, witness_file: &str, finding_id: &str) 
     let body = serde_json::to_string_pretty(&map).unwrap_or_else(|e| fail_return(&e.to_string()));
     std::fs::write(&path, body + "\n")
         .unwrap_or_else(|e| fail_return(&format!("write {}: {e}", path.display())));
+}
+
+/// The `vela campaign` engine kinds — the verifier families the foundry can
+/// actually attack (every one has a `search_*` in `campaign.rs`).
+const FOUNDRY_ENGINE_KINDS: &[&str] = &[
+    "gf2_sidon",
+    "union_free",
+    "rook_directions",
+    "cap",
+    "constant_weight",
+    "covering",
+    "sidon",
+    "bh",
+    "golomb",
+    "costas",
+    "diff_triangle",
+];
+
+/// The current Vela-accepted extent from a `bounds.json`-shaped records file
+/// (count of accepted records + the deepest `n` reached and its bound), or None
+/// if the file is absent/empty. The honest "what Vela already holds" against
+/// which a value-to-beat reads as a gap.
+fn read_records_best(path: &Path) -> Option<Value> {
+    let raw = std::fs::read_to_string(path).ok()?;
+    let doc: Value = serde_json::from_str(&raw).ok()?;
+    let bounds = doc.get("bounds")?.as_array()?;
+    let mut count = 0i64;
+    let mut max_n = -1i64;
+    let mut bound_at_max = 0i64;
+    for b in bounds {
+        if !b.get("accepted").and_then(|v| v.as_bool()).unwrap_or(false) {
+            continue;
+        }
+        count += 1;
+        let n = b.get("n").and_then(|x| x.as_i64()).unwrap_or(0);
+        if n > max_n {
+            max_n = n;
+            bound_at_max = b
+                .get("best_lower_bound")
+                .and_then(|x| x.as_i64())
+                .unwrap_or(0);
+        }
+    }
+    (count > 0).then(
+        || json!({ "accepted_records": count, "max_n": max_n, "bound_at_max_n": bound_at_max }),
+    )
+}
+
+/// `vela foundry targets`: the foundry's substrate-native work-list. Read the
+/// target catalog, cross-reference the live per-family records, and print the
+/// attackable portfolio with each value-to-beat (and the current accepted best
+/// where Vela holds records). This replaces the web/script JSON as the foundry's
+/// portfolio source; `foundry run` selects a cell from it.
+fn cmd_foundry_targets(catalog: &Path, records: &Path, attackable_only: bool, json_out: bool) {
+    let raw = std::fs::read_to_string(catalog)
+        .unwrap_or_else(|e| fail_return(&format!("read {}: {e}", catalog.display())));
+    let doc: Value = serde_json::from_str(&raw)
+        .unwrap_or_else(|e| fail_return(&format!("parse {}: {e}", catalog.display())));
+    let problems = doc
+        .get("problems")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    // Live accepted extent, where a records file exists. Today only sidon has
+    // one (`frontiers/sidon-sets/bounds.json`); other families draw their
+    // value-to-beat from the catalog's stated basis (no Vela-accepted record yet).
+    let sidon_best = read_records_best(&records.join("sidon-sets/bounds.json"));
+
+    let mut rows: Vec<Value> = Vec::new();
+    for p in &problems {
+        let id = p.get("id").and_then(|v| v.as_str()).unwrap_or("");
+        let kind = p
+            .get("verifier_kind")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if id.is_empty() {
+            continue;
+        }
+        let attackable = FOUNDRY_ENGINE_KINDS.contains(&kind);
+        if attackable_only && !attackable {
+            continue;
+        }
+        let status = p.get("status").and_then(|v| v.as_str()).unwrap_or("open");
+        let inc = p.get("incumbent");
+        let value = inc
+            .and_then(|i| i.get("value"))
+            .filter(|v| !v.is_null())
+            .cloned();
+        let direction = inc
+            .and_then(|i| i.get("direction"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let basis = inc
+            .and_then(|i| i.get("basis"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let (accepted_best, records_source) = match kind {
+            "sidon" => (sidon_best.clone(), Some("frontiers/sidon-sets/bounds.json")),
+            _ => (None, None),
+        };
+        rows.push(json!({
+            "id": id,
+            "domain": p.get("domain"),
+            "level": p.get("level"),
+            "verifier_kind": kind,
+            "attackable": attackable,
+            "params": p.get("params"),
+            "value_to_beat": value,
+            "direction": direction,
+            "basis": basis,
+            "status": status,
+            "source": p.get("source"),
+            "accepted_best": accepted_best,
+            "records_source": records_source,
+        }));
+    }
+
+    // Sort: attackable+open first; non-engine kinds and showcases last.
+    rows.sort_by(|a, b| {
+        let key = |r: &Value| -> (u8, u8, String) {
+            let att = if r["attackable"].as_bool().unwrap_or(false) {
+                0
+            } else {
+                1
+            };
+            let st = match r["status"].as_str().unwrap_or("") {
+                "open" => 0,
+                "verified_showcase" => 2,
+                _ => 1,
+            };
+            (att, st, r["id"].as_str().unwrap_or("").to_string())
+        };
+        key(a).cmp(&key(b))
+    });
+
+    if json_out {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "catalog": catalog.display().to_string(),
+                "targets": rows.len(),
+                "portfolio": rows,
+            }))
+            .unwrap()
+        );
+        return;
+    }
+
+    println!(
+        "foundry targets — {} cells ({}):",
+        rows.len(),
+        catalog.display()
+    );
+    for r in &rows {
+        let id = r["id"].as_str().unwrap_or("");
+        let kind = r["verifier_kind"].as_str().unwrap_or("");
+        let dir = r["direction"].as_str().unwrap_or("");
+        let vtb = match &r["value_to_beat"] {
+            Value::Null => "per-parameter".to_string(),
+            v => v.to_string(),
+        };
+        let best = match &r["accepted_best"] {
+            Value::Object(m) => format!(
+                "{} records (n<={})",
+                m.get("accepted_records")
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(0),
+                m.get("max_n").and_then(|v| v.as_i64()).unwrap_or(0)
+            ),
+            _ => "none".to_string(),
+        };
+        let status = r["status"].as_str().unwrap_or("");
+        let flag = if r["attackable"].as_bool().unwrap_or(false) {
+            ""
+        } else {
+            " (no engine kind)"
+        };
+        println!("  {id:<24} {kind:<16} beat {vtb} ({dir})  accepted {best}  [{status}]{flag}");
+    }
+    println!(
+        "\nattack one with: vela foundry run --frontier <dir> --kind <verifier_kind> --n <param>"
+    );
 }
 
 /// Re-run the frozen verifier over the finding's witness artifact (the
@@ -1734,6 +1923,59 @@ pub(crate) fn cmd_carina(action: CarinaAction) {
             if fail > 0 {
                 std::process::exit(1);
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod foundry_targets_tests {
+    use super::*;
+
+    #[test]
+    fn read_records_best_reports_deepest_accepted() {
+        let dir = std::env::temp_dir().join(format!("vela_rec_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("bounds.json");
+        std::fs::write(
+            &f,
+            r#"{"bounds":[
+                {"n":7,"best_lower_bound":24,"accepted":true},
+                {"n":24,"best_lower_bound":7179,"accepted":true},
+                {"n":25,"best_lower_bound":9999,"accepted":false}
+            ]}"#,
+        )
+        .unwrap();
+        let best = read_records_best(&f).expect("some accepted records");
+        assert_eq!(
+            best["accepted_records"].as_i64(),
+            Some(2),
+            "unaccepted skipped"
+        );
+        assert_eq!(best["max_n"].as_i64(), Some(24), "deepest accepted n");
+        assert_eq!(best["bound_at_max_n"].as_i64(), Some(7179));
+        // absent / no-accepted -> None
+        assert!(read_records_best(&dir.join("missing.json")).is_none());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn engine_kinds_cover_the_catalog_families() {
+        // Every verifier_kind the HorizonMath catalog uses must be a real engine
+        // kind (else `foundry targets` would mislabel it unattackable).
+        for k in [
+            "diff_triangle",
+            "cap",
+            "sidon",
+            "gf2_sidon",
+            "covering",
+            "constant_weight",
+            "costas",
+            "union_free",
+            "rook_directions",
+            "bh",
+            "golomb",
+        ] {
+            assert!(FOUNDRY_ENGINE_KINDS.contains(&k), "{k} must be attackable");
         }
     }
 }

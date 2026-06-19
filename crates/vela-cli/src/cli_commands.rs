@@ -1369,6 +1369,29 @@ pub(crate) enum FoundryAction {
         #[arg(long)]
         json: bool,
     },
+    /// The foundry's work-list: the attackable target portfolio with its
+    /// value-to-beat, read from a substrate-native catalog (the HorizonMath
+    /// verifier-attackable subset by default) and cross-referenced against the
+    /// live per-family records (e.g. `frontiers/sidon-sets/bounds.json`) so the
+    /// gap between the current accepted best and the value-to-beat is legible.
+    /// This is what `foundry run` selects from; replaces the web/script JSON
+    /// (cohort.json, erdos-wedge.json) as the foundry's portfolio source.
+    Targets {
+        /// Target catalog (a `HorizonMathCatalog`-shaped JSON with a `problems`
+        /// array of `{id, verifier_kind, params, incumbent, status}`).
+        #[arg(long, default_value = "frontiers/horizonmath/catalog.json")]
+        catalog: PathBuf,
+        /// Directory holding live per-family records files (the accepted-best
+        /// model, `bounds.json` template). Read to show the current accepted
+        /// best against each value-to-beat.
+        #[arg(long, default_value = "frontiers")]
+        records: PathBuf,
+        /// Only show targets a `vela campaign` kind can attack (an engine kind).
+        #[arg(long)]
+        attackable_only: bool,
+        #[arg(long)]
+        json: bool,
+    },
     /// The continuous-ablation heartbeat (the plan's hard gate): does inherited
     /// frontier state make the next solver go farther per unit compute? At a
     /// FIXED budget, treatment concentrates it on the boundary (skip-known-work,
