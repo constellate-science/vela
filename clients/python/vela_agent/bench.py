@@ -3,7 +3,7 @@
 A BenchSession wraps a benchmark run against a tool descriptor
 (`vtd_*`) and produces a signed Evaluation Record (`ver_*`) targeting
 either the descriptor (for tool-level benchmarks) or a substrate
-object (`vsd_*`, `vtr_*`, `vf_*`, `vpf_*`, `vaa_*`).
+object (`vsd_*`, `vf_*`, `vpf_*`, `vaa_*`).
 
 Substrate-honest framing: this module does not run benchmarks. It is
 a Python helper for capturing a benchmark run's (input, output,

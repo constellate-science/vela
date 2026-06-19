@@ -20,11 +20,10 @@ from pathlib import Path
 
 from nacl.signing import SigningKey
 
-from vela_agent import VelaAgent, open_trajectory
-from vela_agent.primitives import TrajectoryStepKind
+from vela_agent import VelaAgent
 
 
-def run(frontier_path: Path, frontier_id: str, signing_key: SigningKey) -> tuple[str, str, str]:
+def run(frontier_path: Path, frontier_id: str, signing_key: SigningKey) -> tuple[str, str]:
     agent = VelaAgent(
         model_name="claude-opus-4.7",
         model_version="claude-opus-4.7-20260411",
@@ -55,7 +54,7 @@ def run(frontier_path: Path, frontier_id: str, signing_key: SigningKey) -> tuple
     )
 
     # Propose a finding.
-    vpr = agent.add_proposal(
+    agent.add_proposal(
         kind="finding.add",
         payload={
             "assertion": {
@@ -76,36 +75,7 @@ def run(frontier_path: Path, frontier_id: str, signing_key: SigningKey) -> tuple
         aggregate_kind="finding.add",
     )
 
-    # Also open a small trajectory showing the search path.
-    traj = open_trajectory(
-        target_findings=[],
-        deposited_by="agent:literature_scout",
-        notes="Search path for the lecanemab apoE4 subset finding.",
-    )
-    traj.append(
-        kind=TrajectoryStepKind.QUESTION,
-        description="Does lecanemab efficacy differ by apoE4 genotype in 2024 data?",
-    )
-    traj.append(
-        kind=TrajectoryStepKind.TOOL,
-        description="search_arxiv for `anti-amyloid lecanemab subset 2024`",
-    )
-    traj.append(
-        kind=TrajectoryStepKind.DATA,
-        description="fetched abstract of arXiv:2410.12345",
-    )
-    traj.append(
-        kind=TrajectoryStepKind.MODEL,
-        description="claude-opus-4.7 drafted the finding text under vaa_*",
-        references=[vaa],
-    )
-    traj.append(
-        kind=TrajectoryStepKind.OUTPUT,
-        description=f"proposed finding under {vpr}; bundled in {vsd}",
-        references=[vsd, vpr],
-    )
-    traj.save_to_frontier(frontier_path)
-    return vaa, vsd, traj.id
+    return vaa, vsd
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -114,10 +84,9 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--frontier-id", required=True)
     args = p.parse_args(argv)
     key = SigningKey.generate()
-    vaa, vsd, vtr = run(args.frontier, args.frontier_id, key)
+    vaa, vsd = run(args.frontier, args.frontier_id, key)
     print(f"vaa_id: {vaa}")
     print(f"vsd_id: {vsd}")
-    print(f"vtr_id: {vtr}")
     return 0
 
 

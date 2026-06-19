@@ -14,12 +14,11 @@ from pathlib import Path
 import pytest
 from nacl.signing import SigningKey
 
-from vela_agent import VelaAgent, open_trajectory
+from vela_agent import VelaAgent
 from vela_agent.primitives import (
     AgentAttestation,
     ScientificDiffPack,
     ToolCall,
-    TrajectoryStepKind,
 )
 
 
@@ -151,31 +150,6 @@ def test_submit_without_open_raises(tmp_path: Path) -> None:
     )
     with pytest.raises(RuntimeError):
         agent.submit_diff_pack(summary="x", aggregate_kind="y")
-
-
-def test_trajectory_cites_vaa_and_vsd(tmp_path: Path) -> None:
-    fr = _fresh_frontier(tmp_path)
-    key = SigningKey.generate()
-    agent = VelaAgent(
-        model_name="m",
-        model_version="v",
-        frontier_path=fr,
-        signing_key=key,
-        actor="agent:t",
-    )
-    agent.open_run()
-    agent.add_proposal(kind="finding.add", payload={"x": 1})
-    vaa, vsd = agent.submit_diff_pack(summary="test", aggregate_kind="finding.add")
-
-    traj = open_trajectory(target_findings=[], deposited_by="agent:t")
-    traj.append(kind=TrajectoryStepKind.MODEL, description="model run", references=[vaa])
-    traj.append(kind=TrajectoryStepKind.OUTPUT, description="output", references=[vsd])
-    saved = traj.save_to_frontier(fr)
-    assert saved.is_file()
-    blob = json.loads(saved.read_text())
-    refs = {r for step in blob["steps"] for r in step["references"]}
-    assert vaa in refs
-    assert vsd in refs
 
 
 def test_frontier_id_inferred_from_frontier_json(tmp_path: Path) -> None:

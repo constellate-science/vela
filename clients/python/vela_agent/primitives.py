@@ -1,13 +1,10 @@
-"""Python mirrors of the v0.193 (vsd_*), v0.195 (vaa_*), and v0.194
-trajectory (vtr_* / vts_*) primitives.
+"""Python mirrors of the v0.193 (vsd_*) and v0.195 (vaa_*) primitives.
 
 Every canonical-bytes layout in this module is a verbatim translation
 of the Rust substrate's `preimage_bytes` methods:
 
   ScientificDiffPack -> crates/vela-protocol/src/scientific_diff.rs::preimage_bytes
   AgentAttestation   -> crates/vela-protocol/src/agent_attestation.rs::preimage_bytes
-  TrajectoryStep     -> crates/vela-protocol/src/bundle.rs::TrajectoryStep::content_address
-  Trajectory         -> crates/vela-protocol/src/bundle.rs::Trajectory::content_address
 
 If a layout drifts here, the Python-produced ids will diverge from
 the Rust-produced ids byte-for-byte. The accompanying tests round
@@ -20,7 +17,6 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass, field, asdict
-from enum import Enum
 from typing import Any, Iterable
 
 try:  # pragma: no cover - import guard
@@ -47,9 +43,9 @@ def normalize_text(s: str) -> str:
     """Mirror of `FindingBundle::normalize_text` in Rust.
 
     Lowercase, collapse whitespace runs into single spaces, strip
-    trailing `.`, `;`, `:`, `!`, `?`. The TrajectoryStep id derivation
-    runs description through this so two semantically-identical steps
-    do not collide on whitespace alone.
+    trailing `.`, `;`, `:`, `!`, `?`. Content-address derivations run
+    free text through this so two semantically-identical inputs do not
+    collide on whitespace alone.
     """
     lower = s.lower()
     collapsed = " ".join(lower.split())
@@ -386,100 +382,6 @@ def _validate_attestation_inputs(
         raise ValueError(
             f"parent_attestation must start with `vaa_`, got `{parent_attestation}`"
         )
-
-
-# ---------------------------------------------------------------------------
-# vtr_* / vts_* — Trajectory + TrajectoryStep
-# ---------------------------------------------------------------------------
-
-
-class TrajectoryStepKind(str, Enum):
-    """v0.194 step taxonomy. Five legacy kinds plus the twelve
-    vision-taxonomy kinds. Strings match the Rust `canonical()`
-    output so JSON round-trips byte-identically with the substrate.
-    """
-
-    # Legacy (v0.50)
-    HYPOTHESIS = "hypothesis"
-    TRIED = "tried"
-    RULED_OUT = "ruled_out"
-    OBSERVED = "observed"
-    REFINED = "refined"
-
-    # v0.194 vision-taxonomy
-    QUESTION = "question"
-    CONTEXT = "context"
-    DATA = "data"
-    TOOL = "tool"
-    MODEL = "model"
-    EXPERT = "expert"
-    DECISION = "decision"
-    PROTOCOL = "protocol"
-    OUTPUT = "output"
-    REVIEW = "review"
-    RISK = "risk"
-    OUTCOME = "outcome"
-
-
-@dataclass
-class TrajectoryStep:
-    id: str
-    kind: TrajectoryStepKind
-    description: str
-    at: str
-    actor: str
-    references: list[str] = field(default_factory=list)
-
-    @staticmethod
-    def content_address(
-        trajectory_id: str,
-        kind: TrajectoryStepKind,
-        description: str,
-        at: str,
-        actor: str,
-    ) -> str:
-        preimage = (
-            f"{trajectory_id}|{kind.value}|{normalize_text(description)}|{at}|{actor}"
-        )
-        return "vts_" + sha256_hex(preimage)[:16]
-
-    @staticmethod
-    def make(
-        trajectory_id: str,
-        kind: TrajectoryStepKind,
-        description: str,
-        at: str,
-        actor: str,
-        references: list[str] | None = None,
-    ) -> "TrajectoryStep":
-        sid = TrajectoryStep.content_address(trajectory_id, kind, description, at, actor)
-        return TrajectoryStep(
-            id=sid,
-            kind=kind,
-            description=description,
-            at=at,
-            actor=actor,
-            references=list(references or []),
-        )
-
-    def to_json(self) -> dict[str, Any]:
-        return {
-            "id": self.id,
-            "kind": self.kind.value,
-            "description": self.description,
-            "at": self.at,
-            "actor": self.actor,
-            "references": self.references,
-        }
-
-
-def trajectory_content_address(
-    target_findings: list[str], deposited_by: str, created: str
-) -> str:
-    sorted_targets = sorted(target_findings)
-    preimage = f"{','.join(sorted_targets)}|{deposited_by}|{created}"
-    return "vtr_" + sha256_hex(preimage)[:16]
-
 
 # ---------------------------------------------------------------------------
 # vpr_* — Proposal id derivation (SDK convenience)

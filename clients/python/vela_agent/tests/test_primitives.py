@@ -16,12 +16,9 @@ from vela_agent.primitives import (
     AgentAttestation,
     ScientificDiffPack,
     ToolCall,
-    TrajectoryStep,
-    TrajectoryStepKind,
     derive_proposal_id,
     normalize_text,
     sha256_hex,
-    trajectory_content_address,
 )
 
 
@@ -183,54 +180,6 @@ def test_attestation_json_round_trip() -> None:
     parsed = json.loads(blob)
     assert parsed["attestation_id"] == att.attestation_id
     assert parsed["signer_pubkey_hex"] == att.signer_pubkey_hex
-
-
-# ---- Trajectory id + step id -----------------------------------------------
-
-
-def test_trajectory_id_is_sorted_and_deterministic() -> None:
-    a = trajectory_content_address(["vf_b", "vf_a"], "agent:x", "2026-05-11T00:00:00Z")
-    b = trajectory_content_address(["vf_a", "vf_b"], "agent:x", "2026-05-11T00:00:00Z")
-    assert a == b
-    assert a.startswith("vtr_")
-
-
-def test_step_id_is_deterministic() -> None:
-    tid = "vtr_aaaaaaaaaaaaaaaa"
-    s1 = TrajectoryStep.content_address(
-        tid, TrajectoryStepKind.QUESTION, "Hello world.", "2026-05-11T00:00:00Z", "agent:x"
-    )
-    s2 = TrajectoryStep.content_address(
-        tid, TrajectoryStepKind.QUESTION, "  HELLO   WORLD  ", "2026-05-11T00:00:00Z", "agent:x"
-    )
-    assert s1 == s2  # normalization should collapse the two descriptions
-    assert s1.startswith("vts_")
-
-
-def test_step_kind_strings_match_substrate_canonical() -> None:
-    # These strings are the canonical() output of the Rust enum and
-    # must not drift; any rename breaks JSON round-tripping with the
-    # substrate.
-    expected = {
-        "hypothesis",
-        "tried",
-        "ruled_out",
-        "observed",
-        "refined",
-        "question",
-        "context",
-        "data",
-        "tool",
-        "model",
-        "expert",
-        "decision",
-        "protocol",
-        "output",
-        "review",
-        "risk",
-        "outcome",
-    }
-    assert {k.value for k in TrajectoryStepKind} == expected
 
 
 # ---- proposal id ----------------------------------------------------------

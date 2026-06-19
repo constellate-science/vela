@@ -2,11 +2,11 @@
 frontier without going through the Rust binary.
 
 The v0.196 SDK gives an agent a write surface (`VelaAgent`,
-`BenchSession`, `open_trajectory`). The v0.214 reader gives the same
-agent a complementary read surface — pull existing Diff Packs,
-Attestations, Trajectories, Tool Descriptors, and Evaluations from a
-frontier's `.vela/` tree so a multi-turn LLM session can reason
-about prior context before submitting.
+`BenchSession`). The v0.214 reader gives the same agent a
+complementary read surface: pull existing Diff Packs, Attestations,
+Tool Descriptors, and Evaluations from a frontier's `.vela/` tree so a
+multi-turn LLM session can reason about prior context before
+submitting.
 
 Substrate-honest framing: this is a pure read helper. It does not
 mutate anything, does not verify signatures (callers can re-run
@@ -111,16 +111,6 @@ class VelaReader:
     def list_attestations_by_actor(self, agent_actor: str) -> list[dict[str, Any]]:
         """List attestations whose `agent_actor` matches exactly."""
         return [a for a in self.list_attestations() if a.get("agent_actor") == agent_actor]
-
-    # ---- Trajectories ----------------------------------------------------
-
-    def get_trajectory(self, vtr_id: str) -> Optional[dict[str, Any]]:
-        if not vtr_id.startswith("vtr_"):
-            raise ValueError(f"vtr_id must start with `vtr_`, got `{vtr_id}`")
-        return _read_json(_vela_dir(self.frontier_path) / "trajectories" / f"{vtr_id}.json")
-
-    def list_trajectories(self) -> list[dict[str, Any]]:
-        return _list_dir(_vela_dir(self.frontier_path) / "trajectories", "vtr_")
 
     # ---- Tool Descriptors ------------------------------------------------
 
