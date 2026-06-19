@@ -209,11 +209,17 @@ pub struct Evidence {
     pub evidence_type: String,
     #[serde(default)]
     pub model_system: String,
+    // v0.700 empirical-measurement slots: unpopulated in the math wedge,
+    // skip-guarded so math findings carry no empirical keys (see Conditions).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub species: Option<String>,
     #[serde(default)]
     pub method: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sample_size: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effect_size: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub p_value: Option<String>,
     #[serde(default)]
     pub replicated: bool,
@@ -583,21 +589,30 @@ fn normalize_sha256(value: String) -> Result<String, String> {
 pub struct Conditions {
     #[serde(default)]
     pub text: String,
-    #[serde(default)]
+    // v0.700 empirical-context fields: domain-general schema slots that the
+    // cheap-verifier math wedge never populates. Skip-guarded so a math
+    // finding serialises with no empirical keys (byte-identical to having
+    // dropped them); `#[serde(default)]` keeps reads of pre-v0.700 frontiers
+    // backward-compatible. The struct fields stay so an empirical producer can
+    // still fill them; hard-removing the slots later is a byte-free code edit.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub species_verified: Vec<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub species_unverified: Vec<String>,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub in_vitro: bool,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub in_vivo: bool,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub human_data: bool,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub clinical_trial: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub concentration_range: Option<String>,
     pub duration: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub age_group: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cell_type: Option<String>,
 }
 
@@ -955,8 +970,15 @@ pub struct Provenance {
     #[serde(default = "default_source_type")]
     pub source_type: String,
     pub doi: Option<String>,
+    // v0.700 bibliometric slots: the math wedge cites by DOI/title, never
+    // PubMed/OpenAlex, so these stay None and are skip-guarded out of the
+    // serialised finding (see Conditions). `pmid` is still read by
+    // `content_address` as a fallback id source, so the field is retained.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pmid: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub pmc: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub openalex_id: Option<String>,
     /// v0.11: generic source URL when none of the structured identifiers
     /// fit (preprint server URL, dataset landing page, talk recording, etc.).
@@ -968,6 +990,7 @@ pub struct Provenance {
     #[serde(default)]
     pub authors: Vec<Author>,
     pub year: Option<i32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub journal: Option<String>,
     /// License URL (e.g., Creative Commons), typically from Crossref.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -981,8 +1004,9 @@ pub struct Provenance {
     #[serde(default)]
     pub extraction: Extraction,
     pub review: Option<Review>,
-    /// Citation count of the source paper (from OpenAlex).
-    #[serde(default)]
+    /// Citation count of the source paper (from OpenAlex). v0.700: skip-guarded
+    /// (the math wedge has no OpenAlex provenance), see the bibliometric note above.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub citation_count: Option<u64>,
 }
 
@@ -1123,7 +1147,11 @@ pub struct Assertion {
     pub text: String,
     #[serde(rename = "type")]
     pub assertion_type: String,
-    #[serde(default)]
+    // v0.700: typed entities are an empirical-domain affordance (gene/protein/
+    // dataset mentions). The math wedge encodes its objects in the assertion
+    // text and OEIS/Lean anchors, never here, so the array stays empty and is
+    // skip-guarded out of the serialised finding (see Conditions).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub entities: Vec<Entity>,
     pub relation: Option<String>,
     pub direction: Option<String>,
