@@ -41,12 +41,7 @@ pub const VALID_ENTITY_TYPES: &[&str] = &[
 /// finding is a numerical value or an exclusion limit at a confidence level.
 pub const VALID_ASSERTION_TYPES: &[&str] = &[
     "mechanism",
-    "therapeutic",
-    "diagnostic",
-    "epidemiological",
     "observational",
-    "review",
-    "methodological",
     "computational",
     "theoretical",
     "negative",
@@ -99,9 +94,6 @@ pub const VALID_EVIDENCE_TYPES: &[&str] = &[
     "observational",
     "computational",
     "theoretical",
-    "meta_analysis",
-    "systematic_review",
-    "case_report",
     // v0.30: Notes Compiler — the evidence span lives in the researcher's
     // zettelkasten note rather than a primary literature passage.
     // Treated as an `expert_assertion`-shaped evidence kind.
@@ -117,8 +109,6 @@ pub const VALID_EVIDENCE_TYPES: &[&str] = &[
 pub const VALID_PROVENANCE_SOURCE_TYPES: &[&str] = &[
     "published_paper",
     "preprint",
-    "clinical_trial",
-    "lab_notebook",
     "model_output",
     "expert_assertion",
     "database_record",
@@ -850,12 +840,9 @@ pub fn compute_confidence_from_components(
     causal_evidence_grade: Option<CausalEvidenceGrade>,
 ) -> Confidence {
     let evidence_strength = match evidence.evidence_type.as_str() {
-        "meta_analysis" => 0.95,
-        "systematic_review" => 0.90,
         "experimental" => 0.80,
         "observational" => 0.65,
         "computational" => 0.55,
-        "case_report" => 0.40,
         "theoretical" => 0.30,
         _ => 0.50,
     };
@@ -2399,13 +2386,13 @@ mod tests {
     // ── compute_confidence tests ────────────────────────────────────
 
     #[test]
-    fn compute_confidence_meta_analysis_human() {
+    fn compute_confidence_experimental_replicated() {
         let evidence = Evidence {
-            evidence_type: "meta_analysis".into(),
-            model_system: "human cohorts".into(),
-            species: Some("Homo sapiens".into()),
-            method: "meta-analysis".into(),
-            sample_size: Some("n=5000".into()),
+            evidence_type: "experimental".into(),
+            model_system: String::new(),
+            species: None,
+            method: "construction".into(),
+            sample_size: None,
             effect_size: None,
             p_value: None,
             replicated: true,
@@ -2430,15 +2417,15 @@ mod tests {
         assert_eq!(conf.kind, ConfidenceKind::FrontierEpistemic);
         assert!(conf.components.is_some());
         let c = conf.components.unwrap();
-        assert!((c.evidence_strength - 0.95).abs() < 0.001);
+        assert!((c.evidence_strength - 0.80).abs() < 0.001); // experimental
         assert!((c.replication_strength - 1.0).abs() < 0.001); // 0.7 + 0.1*5 = 1.2 -> clamped to 1.0
         // v0.701: sample/model collapsed to the domain-neutral constants.
         assert!((c.sample_strength - 0.6).abs() < 0.001);
         assert!((c.model_relevance - 0.5).abs() < 0.001);
         assert!((c.review_penalty - 0.0).abs() < 0.001);
         assert!((c.calibration_adjustment - 0.0).abs() < 0.001);
-        // 0.95 * 1.0 * 0.5 * 0.6 - 0.0 = 0.285
-        assert!((conf.score - 0.285).abs() < 0.001);
+        // 0.80 * 1.0 * 0.5 * 0.6 - 0.0 = 0.24
+        assert!((conf.score - 0.24).abs() < 0.001);
     }
 
     #[test]
