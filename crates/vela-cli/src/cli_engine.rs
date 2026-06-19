@@ -167,7 +167,234 @@ pub(crate) fn cmd_gate(action: GateAction) {
             dry_run,
             json,
         } => cmd_gate_backfill(&frontier, &reviewer, dry_run, json),
+        GateAction::AutoAdmit {
+            frontier,
+            finding,
+            json,
+        } => cmd_gate_auto_admit(&frontier, &finding, json),
     }
+}
+
+/// Preview the exact-lane auto-admission decision for one finding (Phase 1A).
+/// READ-ONLY: runs the full un-forgeable trust path over real data and prints
+/// whether the finding WOULD auto-admit to `machine_verified`. Never writes.
+///
+/// The floor (un-forgeable, agent cannot fake): (1) a fresh `vela-verify`
+/// re-check of the finding's witness, computed here, not trusted from a field;
+/// (2) the frozen `claim_witness_faithful` binding the parsed assertion to the
+/// witness structure. Then the proposal-level guards + the attachment
+/// corroboration predicate. The `policy.auto_admitted` emit is held off pending
+/// the acceptance checklist (docs/EXACT_LANE_GATE.md).
+fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, json_output: bool) {
+    use std::collections::BTreeSet;
+
+    let source = repo::detect(frontier).unwrap_or_else(|e| fail_return(&e));
+    let proj = repo::load(&source).unwrap_or_else(|e| fail_return(&e));
+
+    // Resolve the finding: a landed canonical finding, or a pending finding.add
+    // proposal's payload. Both carry the assertion text + provenance the floor
+    // and guards read.
+    let (finding, proposal) = resolve_finding_and_proposal(&proj, finding_id);
+    let finding = finding.unwrap_or_else(|| {
+        fail_return(&format!(
+            "no finding '{finding_id}' (landed or in a pending finding.add proposal)"
+        ))
+    });
+    let proposal = proposal.unwrap_or_else(|| {
+        fail_return(&format!(
+            "no finding.add proposal targets '{finding_id}'; the exact lane admits a proposal, \
+             not an already-landed finding"
+        ))
+    });
+
+    // FLOOR step 1: a fresh frozen re-check of the finding's witness.
+    let (witness_ok, witness_msg, witness) = reproduce_finding_witness(&proj, frontier, finding_id);
+    // FLOOR step 2: frozen claim<->witness faithfulness.
+    let faithful = witness
+        .as_ref()
+        .map(|w| vela_verify::claim_witness_faithful(&finding.assertion.text, w));
+
+    // Proposal-level guard inputs, derived live (never trusted from a field).
+    let synthetic: BTreeSet<String> = proj
+        .findings
+        .iter()
+        .filter(|f| is_synthetic_source(&f.provenance.source_type))
+        .map(|f| f.id.clone())
+        .collect();
+    let mut synthetic = synthetic;
+    if is_synthetic_source(&finding.provenance.source_type) {
+        synthetic.insert(finding.id.clone());
+    }
+    let graph = vela_protocol::frontier_graph::FrontierGraph::from_project(&proj);
+    let open_contradictions: BTreeSet<String> = vela_protocol::contradiction::derive_candidates(
+        &graph,
+        proj.frontier_id.as_deref().unwrap_or_default(),
+    )
+    .into_iter()
+    .filter(|c| c.is_open())
+    .flat_map(|c| [c.finding_a.clone(), c.finding_b.clone()])
+    .collect();
+    let matched: Vec<_> = proj
+        .verifier_attachments
+        .iter()
+        .filter(|a| a.target == finding.id)
+        .cloned()
+        .collect();
+
+    // The proposal-level wrapper (kind, target, drift-pin, lifecycle, synthetic,
+    // contradiction, producer != verifier, then the attachment predicate).
+    let (wrapper_ok, wrapper_reasons) = vela_protocol::proposals::exact_lane_auto_admit(
+        &proposal,
+        &finding,
+        &matched,
+        &open_contradictions,
+        &synthetic,
+    );
+
+    let floor_ok = witness_ok && faithful.as_ref().map(|f| f.faithful).unwrap_or(false);
+    let would_admit = floor_ok && wrapper_ok;
+
+    if json_output {
+        let out = json!({
+            "finding": finding.id,
+            "would_auto_admit": would_admit,
+            "floor": {
+                "witness_reproduces": witness_ok,
+                "witness_detail": witness_msg,
+                "claim_witness_faithful": faithful.as_ref().map(|f| f.faithful),
+                "faithful_reasons": faithful.as_ref().map(|f| f.reasons.clone()),
+            },
+            "proposal_guards_ok": wrapper_ok,
+            "proposal_guard_reasons": wrapper_reasons,
+            "matched_attachments": matched.len(),
+            "note": "READ-ONLY preview; the policy.auto_admitted emit is held off pending the acceptance checklist (docs/EXACT_LANE_GATE.md).",
+        });
+        println!("{}", serde_json::to_string_pretty(&out).unwrap());
+    } else {
+        println!("exact-lane auto-admit preview for {}", finding.id);
+        println!(
+            "  floor 1 (witness reproduces, frozen): {} {}",
+            if witness_ok { "PASS" } else { "FAIL" },
+            witness_msg
+        );
+        match &faithful {
+            Some(f) => println!(
+                "  floor 2 (claim<->witness faithful, frozen): {}{}",
+                if f.faithful { "PASS" } else { "FAIL" },
+                if f.reasons.is_empty() {
+                    String::new()
+                } else {
+                    format!(" — {}", f.reasons.join("; "))
+                }
+            ),
+            None => println!("  floor 2 (claim<->witness faithful): SKIP (no witness)"),
+        }
+        println!(
+            "  proposal guards + corroboration: {}{}",
+            if wrapper_ok { "PASS" } else { "FAIL" },
+            if wrapper_reasons.is_empty() {
+                String::new()
+            } else {
+                format!(" — {}", wrapper_reasons.join("; "))
+            }
+        );
+        println!(
+            "  => WOULD auto-admit to machine_verified: {}",
+            if would_admit { "YES" } else { "NO" }
+        );
+        println!(
+            "  (read-only preview; the policy.auto_admitted emit is held off pending the \
+             acceptance checklist — docs/EXACT_LANE_GATE.md)"
+        );
+    }
+    if !would_admit {
+        std::process::exit(1);
+    }
+}
+
+/// Resolve a finding by id from canonical state or a pending finding.add
+/// proposal payload, returning the finding and the finding.add proposal that
+/// carries it (the exact lane admits a proposal, so the proposal is required).
+fn resolve_finding_and_proposal(
+    proj: &vela_protocol::project::Project,
+    finding_id: &str,
+) -> (
+    Option<vela_protocol::bundle::FindingBundle>,
+    Option<vela_protocol::proposals::StateProposal>,
+) {
+    let proposal = proj
+        .proposals
+        .iter()
+        .find(|p| {
+            p.kind == "finding.add"
+                && (p.target.id == finding_id
+                    || p.payload
+                        .get("finding")
+                        .and_then(|f| f.get("id"))
+                        .and_then(|i| i.as_str())
+                        == Some(finding_id))
+        })
+        .cloned();
+    // Prefer the proposal's own finding body (what the lane admits); fall back
+    // to the landed finding.
+    let finding = proposal
+        .as_ref()
+        .and_then(|p| p.payload.get("finding").cloned())
+        .and_then(|v| serde_json::from_value::<vela_protocol::bundle::FindingBundle>(v).ok())
+        .or_else(|| proj.findings.iter().find(|f| f.id == finding_id).cloned());
+    (finding, proposal)
+}
+
+/// True if a provenance source_type denotes a synthetic NARRATIVE source that
+/// needs human review (mirrors the `synthetic_source_requires_review` signal,
+/// signals.rs). Deliberately NOT `model_output`: a campaign produces a finding
+/// whose trust is its frozen WITNESS (the floor re-checks it), so the producer
+/// being a model is exactly what the floor handles — the positive provenance is
+/// the reproduce-clean witness, not the prose source. Only a synthetic report /
+/// agent trace with no frozen witness is the thing this guard catches.
+fn is_synthetic_source(source_type: &str) -> bool {
+    let s = source_type.trim().to_ascii_lowercase();
+    s == "synthetic_report" || s == "agent_trace"
+}
+
+/// Re-run the frozen verifier over the finding's witness artifact (the
+/// reproduce-binding the exact lane computes itself, never trusting a field).
+/// Returns (ok, human-detail, the parsed witness).
+fn reproduce_finding_witness(
+    proj: &vela_protocol::project::Project,
+    frontier: &Path,
+    finding_id: &str,
+) -> (bool, String, Option<vela_verify::Witness>) {
+    for art in &proj.artifacts {
+        let is_json = art.media_type.as_deref() == Some("application/json");
+        if !(is_json && art.metadata.contains_key("verifier")) {
+            continue;
+        }
+        if !art.target_findings.iter().any(|t| t == finding_id) {
+            continue;
+        }
+        let content = match (art.storage_mode.as_str(), &art.locator) {
+            ("local_blob" | "local_file", Some(loc)) => {
+                match std::fs::read_to_string(frontier.join(loc.as_str())) {
+                    Ok(c) => c,
+                    Err(e) => return (false, format!("witness unreadable: {e}"), None),
+                }
+            }
+            _ => continue,
+        };
+        match parse_witness(&content) {
+            Ok(w) => {
+                let r = vela_verify::verify_witness(&w);
+                return (r.ok, r.message, Some(w));
+            }
+            Err(e) => return (false, format!("witness parse failed: {e}"), None),
+        }
+    }
+    (
+        false,
+        "no local frozen-verifier witness artifact targets this finding".to_string(),
+        None,
+    )
 }
 
 /// Backfill frozen-verifier attachments over a frontier's witness artifacts.

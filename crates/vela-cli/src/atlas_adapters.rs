@@ -193,8 +193,8 @@ pub fn read_alphaproof(dir: &Path, rev: &str) -> Result<Vec<SourceRecord>, Strin
 /// `scripts/atlas/ingest_tao.py`; deterministic (sorted by id). Fetching is out
 /// of scope: this reads a local catalogue file, so the result is reproducible.
 pub fn read_oeis(input: &Path, _rev: &str) -> Result<Vec<SourceRecord>, String> {
-    let raw = std::fs::read_to_string(input)
-        .map_err(|e| format!("read {}: {e}", input.display()))?;
+    let raw =
+        std::fs::read_to_string(input).map_err(|e| format!("read {}: {e}", input.display()))?;
     let doc: serde_json::Value =
         serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", input.display()))?;
     let seqs = doc

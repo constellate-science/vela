@@ -1480,6 +1480,24 @@ pub(crate) enum GateAction {
         #[arg(long)]
         json: bool,
     },
+    /// Preview the exact-lane auto-admission decision for a finding (Phase 1A,
+    /// the de-human-gate). READ-ONLY: it runs the full un-forgeable trust path
+    /// over real data — a fresh `vela-verify` re-check of the finding's witness
+    /// (reproduce-binding), the frozen `claim_witness_faithful` claim<->witness
+    /// binding, and the proposal-level guards + attachment corroboration
+    /// predicate — and prints whether the finding WOULD auto-admit to
+    /// `machine_verified`, with every guard's verdict. It never writes; the
+    /// `policy.auto_admitted` emit is held off pending the acceptance checklist
+    /// (see docs/EXACT_LANE_GATE.md).
+    AutoAdmit {
+        /// Frontier directory (e.g. `examples/sidon-sets`).
+        frontier: PathBuf,
+        /// The finding id (`vf_…`) to preview.
+        #[arg(long)]
+        finding: String,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]
