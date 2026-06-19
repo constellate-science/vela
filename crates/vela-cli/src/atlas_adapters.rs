@@ -230,7 +230,7 @@ pub fn read_oeis(input: &Path, _rev: &str) -> Result<Vec<SourceRecord>, String> 
 /// HorizonMath adapter: read a `HorizonMathCatalog` (a JSON document with a
 /// `problems` array of verifier-attackable open problems, each
 /// `{id, domain, level, statement, verifier_kind, incumbent{value,direction,basis}, status}`,
-/// e.g. `data/horizonmath/catalog.json`) and yield one record per problem. Each
+/// e.g. `frontiers/horizonmath/catalog.json`) and yield one record per problem. Each
 /// problem carries its frozen-verifier kind, its incumbent (value-to-beat), and
 /// its declared status in the assertion text, so the ingested finding is a
 /// faithful target for the foundry to attack. Deterministic (sorted by id); reads
@@ -308,6 +308,14 @@ pub fn read_horizonmath(input: &Path, _rev: &str) -> Result<Vec<SourceRecord>, S
 /// of `read_formal` (which reads only the numbered `ErdosProblems/N.lean`
 /// files). Erdős-tagged files carry the Erdős number in the assertion text (the
 /// HardIdentity join into the `erdos` namespace happens at compile/join time).
+///
+/// GRANULARITY: one finding per FILE (a file ≈ one problem), NOT per
+/// declaration. A file mixing open and solved declarations rolls up to one
+/// problem-level status under open-wins, so the resulting open/solved counts are
+/// a file-level (problem-level) projection, not a per-declaration tally. About a
+/// third of the statement-bearing files carry both an open and a solved
+/// annotation and are recorded as `open`.
+///
 /// Deterministic (sorted by path); offline (reads the local Lean tree).
 pub fn read_formal_corpus(dir: &Path, rev: &str) -> Result<Vec<SourceRecord>, String> {
     let index_path = dir.join("nodes.json");

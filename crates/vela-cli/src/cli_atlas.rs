@@ -521,8 +521,13 @@ fn anchor_findings(
 /// the synthetic-id Python prototypes. Reads a catalogue via a `SourceAdapter`,
 /// mints real content-addressed finding bundles (genesis remnants), attaches
 /// signed `anchor.attached` events, and writes the repo — then gates on
-/// `verify_replay` (the loader-is-reducer round-trip). Deterministic: same
-/// source in → same repo out.
+/// `verify_replay` (the loader-is-reducer round-trip). Content-deterministic:
+/// the same source yields the same content-addressed findings/anchors (stable
+/// `vf_` ids). The project wrapper (`compiled_at`, the derived `frontier_id`)
+/// and the `anchor.attached` event timestamps are stamped at build time, so the
+/// repo bytes are not identical run-to-run; these source-ingest views are
+/// regenerable, not byte-pinned (the byte-pinned trust is the canonical witness
+/// frontiers under `vela reproduce`).
 fn run_ingest_source(args: &[String]) {
     use vela_protocol::anchor::{Anchor, AnchorKind, JoinPolicy};
 
