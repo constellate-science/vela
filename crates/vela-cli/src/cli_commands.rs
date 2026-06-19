@@ -1405,7 +1405,8 @@ pub(crate) enum CampaignAction {
     /// Run the engine and report the best verified construction found. Writes
     /// nothing. `--kind` is a verifier kind: gf2_sidon, union_free,
     /// rook_directions, cap, constant_weight (with `--d`/`--w`), covering (with
-    /// `--k`/`--t`), sidon, bh (with `--h`), golomb, costas.
+    /// `--k`/`--t`), sidon, bh (with `--h`), golomb, costas, diff_triangle
+    /// (with `--k` as the within-row order J; HorizonMath DTS(I,J) targets).
     Search {
         /// Verifier kind to search.
         kind: String,

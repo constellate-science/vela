@@ -785,10 +785,15 @@ fn search_diff_triangle(rows: usize, j: usize, restarts: u64, rng: &mut Rng) -> 
             let mut marks: Vec<i64> = vec![0];
             while marks.len() < marks_per_row {
                 let cur_max = *marks.last().unwrap();
-                let mut cands: Vec<i64> = ((cur_max + 1)..=cap).collect();
-                rng.shuffle(&mut cands);
-                let mut placed = false;
-                for &c in &cands {
+                // Greedy-SMALLEST with a small randomized window: scan ascending
+                // and collect up to W valid next-marks, then pick one at random.
+                // Placing each mark as small as possible directly minimizes the
+                // scope (vs the old full-shuffle, which scattered marks high);
+                // the window keeps restart-to-restart variety so the engine can
+                // escape a greedy dead-end and find a lower-scope set.
+                const W: usize = 4;
+                let mut valid: Vec<(i64, Vec<i64>)> = Vec::with_capacity(W);
+                for c in (cur_max + 1)..=cap {
                     let mut nd = Vec::with_capacity(marks.len());
                     let mut good = true;
                     for &m in &marks {
@@ -800,13 +805,20 @@ fn search_diff_triangle(rows: usize, j: usize, restarts: u64, rng: &mut Rng) -> 
                         nd.push(d);
                     }
                     if good {
-                        for d in nd {
-                            all_diffs.insert(d);
+                        valid.push((c, nd));
+                        if valid.len() >= W {
+                            break;
                         }
-                        marks.push(c);
-                        placed = true;
-                        break;
                     }
+                }
+                let placed = !valid.is_empty();
+                if placed {
+                    let pick = rng.below(valid.len());
+                    let (c, nd) = valid.swap_remove(pick);
+                    for d in nd {
+                        all_diffs.insert(d);
+                    }
+                    marks.push(c);
                 }
                 if !placed {
                     complete = false;
