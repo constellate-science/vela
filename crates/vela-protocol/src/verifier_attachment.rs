@@ -579,6 +579,148 @@ pub fn derive_gate_status(
     GateOutcome { status, reasons }
 }
 
+/// The deterministic attachment-level decision for **exact-lane
+/// auto-admission** (Phase 1A, the de-human-gate). This is the trust
+/// predicate the `policy.auto_admitted` event materializes: it is frozen
+/// audited Rust, never a model, so "no AI in the trust path" stays literally
+/// true while the human is removed from the rote kernel-clean admit.
+///
+/// It is **strictly stronger** than [`derive_gate_status`] reaching
+/// `Verified` — it never admits anything the gate would not, and it adds the
+/// guards a human reviewer would otherwise apply. Each guard closes a concrete
+/// red-team attack the bare `Verified` check leaves open:
+///
+///   1. the gate must already be [`GateStatus::Verified`] (inherits G1-G5:
+///      >=2 matched independent attachments, claim-bound, no compromised
+///      method, no refuted probe).
+///   2. **every matched attachment is [`MethodIntegrity::Sound`]** — reject
+///      the legacy `Unattested` default the gate otherwise tolerates (the gate
+///      only *excludes* `Compromised`). Closes the smuggled-axiom /
+///      unaudited-legacy attack.
+///   3. **a [`ProbeKind::FormalismFidelity`] probe is PRESENT and Survived**
+///      on the matched set, and none is Refuted. The gate's G3 accepts *any*
+///      surviving probe, so a vacuous or misformalized statement with only a
+///      `CounterexampleSearch` probe passes it. Auto-admit demands the
+///      faithfulness probe explicitly (absent != safe).
+///   4. **mutual independence**: at least one pair of matched attachments each
+///      declares `independent_of` the other (the gate's G1 accepts a single
+///      one-directional declaration). Closes the collusion / one-voice attack.
+///   5. **not an implementation monoculture**: the matched set carries >=2
+///      distinct non-empty `implementation_id`s. N runs of one binary are
+///      replication, not independent verification; the gate only *warns*.
+///
+/// Proposal-level guards (synthetic-source signal, live frontier
+/// contradiction, proposal kind) are applied by the caller in `proposals.rs`,
+/// which has the `StateProposal`/`Project` context this primitive does not.
+/// Returns `(admit, reasons)`; `reasons` is non-empty exactly when refused.
+pub fn exact_lane_attachment_admit(
+    current_claim_digest: &str,
+    attachments: &[VerifierAttachment],
+) -> (bool, Vec<String>) {
+    let mut reasons = Vec::new();
+
+    // Guard 1: the existing frozen gate must reach Verified.
+    let gate = derive_gate_status(current_claim_digest, attachments);
+    if gate.status != GateStatus::Verified {
+        reasons.push(format!(
+            "exact-lane: gate not Verified ({:?}): {}",
+            gate.status,
+            gate.reasons.join("; ")
+        ));
+        return (false, reasons);
+    }
+
+    // The matched set is exactly the gate's notion of "counts toward Verified".
+    let matched: Vec<&VerifierAttachment> = attachments
+        .iter()
+        .filter(|a| a.is_passing_match(current_claim_digest))
+        .collect();
+    // Verified implies matched.len() >= 2, but never assume it.
+    if matched.len() < 2 {
+        reasons.push("exact-lane: fewer than 2 matched attachments".to_string());
+        return (false, reasons);
+    }
+
+    // Guard 2: reject the Unattested legacy default; require Sound on all.
+    if let Some(bad) = matched
+        .iter()
+        .find(|a| a.method_integrity != MethodIntegrity::Sound)
+    {
+        reasons.push(format!(
+            "exact-lane: attachment `{}` is not MethodIntegrity::Sound ({:?}); auto-admit requires Sound (a human must clear Unattested)",
+            bad.id, bad.method_integrity
+        ));
+        return (false, reasons);
+    }
+
+    // Guard 3: a FormalismFidelity probe must be PRESENT and Survived, and
+    // none may be Refuted (a Refuted one already forces the gate to Refuted,
+    // but assert it independently of gate internals).
+    let mut ff_survived = false;
+    for a in &matched {
+        for p in &a.adversarial_probes {
+            if p.kind == ProbeKind::FormalismFidelity {
+                match p.result {
+                    ProbeResult::Survived => ff_survived = true,
+                    ProbeResult::Refuted => {
+                        reasons.push(
+                            "exact-lane: a FormalismFidelity probe is Refuted".to_string(),
+                        );
+                        return (false, reasons);
+                    }
+                }
+            }
+        }
+    }
+    if !ff_survived {
+        reasons.push(
+            "exact-lane: no present-and-Survived FormalismFidelity probe (faithfulness unproven; \
+             absent does not count as safe)"
+                .to_string(),
+        );
+        return (false, reasons);
+    }
+
+    // Guard 4: mutual independence — some pair each names the other in
+    // `independent_of` (not a single one-directional declaration).
+    let ids: std::collections::BTreeSet<&str> = matched.iter().map(|a| a.id.as_str()).collect();
+    let mutual = matched.iter().any(|a| {
+        a.independent_of.iter().any(|other| {
+            other != &a.id
+                && ids.contains(other.as_str())
+                && matched
+                    .iter()
+                    .find(|b| b.id == *other)
+                    .is_some_and(|b| b.independent_of.iter().any(|back| back == &a.id))
+        })
+    });
+    if !mutual {
+        reasons.push(
+            "exact-lane: no mutually-declared-independent pair (one-directional independence is \
+             insufficient for auto-admit)"
+                .to_string(),
+        );
+        return (false, reasons);
+    }
+
+    // Guard 5: not an implementation monoculture.
+    let impls: std::collections::BTreeSet<&str> = matched
+        .iter()
+        .map(|a| a.implementation_id.as_str())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if impls.len() < 2 {
+        reasons.push(
+            "exact-lane: implementation monoculture (need >=2 distinct implementation_id; N runs \
+             of one binary are replication, not independent verification)"
+                .to_string(),
+        );
+        return (false, reasons);
+    }
+
+    (true, reasons)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -618,6 +760,174 @@ mod tests {
             note: String::new(),
         })
         .unwrap()
+    }
+
+    fn ff_survived() -> AdversarialProbe {
+        AdversarialProbe {
+            kind: ProbeKind::FormalismFidelity,
+            result: ProbeResult::Survived,
+            note: String::new(),
+        }
+    }
+
+    /// A pair of attachments that SHOULD pass exact-lane auto-admit: two
+    /// matched, mutually-independent, `Sound`, distinct-implementation runs,
+    /// each carrying a Survived FormalismFidelity probe. Each red-team test
+    /// below degrades exactly one of these properties and asserts the
+    /// predicate refuses while the bare gate often still says Verified.
+    fn admit_pair(digest: &str) -> (VerifierAttachment, VerifierAttachment) {
+        let mut a1 = attach(
+            digest,
+            VerifierMethod::ComputationalSearch,
+            "cp-sat",
+            vec![],
+            vec![ff_survived()],
+        );
+        let mut a2 = attach(
+            digest,
+            VerifierMethod::ExactArithmeticRecompute,
+            "pari-gp",
+            vec![],
+            vec![ff_survived()],
+        );
+        a1.independent_of = vec![a2.id.clone()];
+        a2.independent_of = vec![a1.id.clone()];
+        a1.method_integrity = MethodIntegrity::Sound;
+        a2.method_integrity = MethodIntegrity::Sound;
+        a1.implementation_id = "impl-cp-sat".to_string();
+        a2.implementation_id = "impl-pari".to_string();
+        (a1, a2)
+    }
+
+    #[test]
+    fn exact_lane_happy_path_admits() {
+        let digest = claim_digest("claim X");
+        let (a1, a2) = admit_pair(&digest);
+        assert_eq!(
+            derive_gate_status(&digest, &[a1.clone(), a2.clone()]).status,
+            GateStatus::Verified
+        );
+        let (admit, reasons) = exact_lane_attachment_admit(&digest, &[a1, a2]);
+        assert!(admit, "should auto-admit, refused for: {reasons:?}");
+        assert!(reasons.is_empty());
+    }
+
+    // Attack 1: a vacuous / misformalized statement whose only probe is a
+    // CounterexampleSearch. The gate's G3 accepts any survived probe, so it
+    // says Verified; auto-admit demands the FormalismFidelity probe.
+    #[test]
+    fn exact_lane_refuses_without_formalism_fidelity_probe() {
+        let digest = claim_digest("claim X");
+        let (mut a1, mut a2) = admit_pair(&digest);
+        a1.adversarial_probes = vec![surviving_probe()];
+        a2.adversarial_probes = vec![surviving_probe()];
+        assert_eq!(
+            derive_gate_status(&digest, &[a1.clone(), a2.clone()]).status,
+            GateStatus::Verified,
+            "the bare gate tolerates a missing fidelity probe"
+        );
+        let (admit, reasons) = exact_lane_attachment_admit(&digest, &[a1, a2]);
+        assert!(!admit);
+        assert!(reasons.iter().any(|r| r.contains("FormalismFidelity")));
+    }
+
+    // Attack 2: a Refuted fidelity probe must never auto-admit.
+    #[test]
+    fn exact_lane_refuses_refuted_formalism_fidelity() {
+        let digest = claim_digest("claim X");
+        let (mut a1, a2) = admit_pair(&digest);
+        a1.adversarial_probes = vec![AdversarialProbe {
+            kind: ProbeKind::FormalismFidelity,
+            result: ProbeResult::Refuted,
+            note: String::new(),
+        }];
+        let (admit, reasons) = exact_lane_attachment_admit(&digest, &[a1, a2]);
+        assert!(!admit);
+        assert!(reasons
+            .iter()
+            .any(|r| r.contains("Refuted") || r.contains("not Verified")));
+    }
+
+    // Attack 3: the legacy Unattested integrity default. The gate's G5 only
+    // excludes Compromised, so Unattested still drives Verified.
+    #[test]
+    fn exact_lane_refuses_unattested_integrity() {
+        let digest = claim_digest("claim X");
+        let (mut a1, a2) = admit_pair(&digest);
+        a1.method_integrity = MethodIntegrity::Unattested;
+        assert_eq!(
+            derive_gate_status(&digest, &[a1.clone(), a2.clone()]).status,
+            GateStatus::Verified,
+            "the bare gate tolerates Unattested integrity"
+        );
+        let (admit, reasons) = exact_lane_attachment_admit(&digest, &[a1, a2]);
+        assert!(!admit);
+        assert!(reasons.iter().any(|r| r.contains("Sound")));
+    }
+
+    // Attack 4: a Compromised method (gate excludes it, dropping below 2).
+    #[test]
+    fn exact_lane_refuses_compromised_method() {
+        let digest = claim_digest("claim X");
+        let (mut a1, a2) = admit_pair(&digest);
+        a1.method_integrity = MethodIntegrity::Compromised;
+        let (admit, _r) = exact_lane_attachment_admit(&digest, &[a1, a2]);
+        assert!(!admit);
+    }
+
+    // Attack 5: one-directional independence. G1 accepts a single declaration;
+    // auto-admit requires a mutually-declared-independent pair.
+    #[test]
+    fn exact_lane_refuses_one_directional_independence() {
+        let digest = claim_digest("claim X");
+        let (mut a1, mut a2) = admit_pair(&digest);
+        a1.independent_of = vec![a2.id.clone()];
+        a2.independent_of = vec![];
+        assert_eq!(
+            derive_gate_status(&digest, &[a1.clone(), a2.clone()]).status,
+            GateStatus::Verified,
+            "the bare gate accepts one-directional independence"
+        );
+        let (admit, reasons) = exact_lane_attachment_admit(&digest, &[a1, a2]);
+        assert!(!admit);
+        assert!(reasons.iter().any(|r| r.contains("independ")));
+    }
+
+    // Attack 6: implementation monoculture (N runs of one binary). The gate
+    // only warns; auto-admit requires >=2 distinct implementation_ids.
+    #[test]
+    fn exact_lane_refuses_implementation_monoculture() {
+        let digest = claim_digest("claim X");
+        let (mut a1, mut a2) = admit_pair(&digest);
+        a1.implementation_id = "same-binary".to_string();
+        a2.implementation_id = "same-binary".to_string();
+        // The gate's monoculture observation lands in `reasons`, so today it
+        // already demotes (its "never demotes in v1" comment is stale).
+        // Guard 5 keeps auto-admit's monoculture rejection independent of that
+        // mutable observational policy regardless.
+        let (admit, reasons) = exact_lane_attachment_admit(&digest, &[a1, a2]);
+        assert!(!admit);
+        assert!(reasons.iter().any(|r| r.contains("monoculture")));
+    }
+
+    // Attack 7: a lone attachment (no independence at all).
+    #[test]
+    fn exact_lane_refuses_single_attachment() {
+        let digest = claim_digest("claim X");
+        let (a1, _a2) = admit_pair(&digest);
+        let (admit, _r) = exact_lane_attachment_admit(&digest, &[a1]);
+        assert!(!admit);
+    }
+
+    // Attack 8: claim-digest drift. Attachments bound to a superseded claim
+    // must not auto-admit a revised statement.
+    #[test]
+    fn exact_lane_refuses_on_claim_digest_drift() {
+        let digest = claim_digest("claim X");
+        let (a1, a2) = admit_pair(&digest);
+        let revised = claim_digest("claim X, revised");
+        let (admit, _r) = exact_lane_attachment_admit(&revised, &[a1, a2]);
+        assert!(!admit, "attachments bound to the old digest must not admit the revised claim");
     }
 
     #[test]
