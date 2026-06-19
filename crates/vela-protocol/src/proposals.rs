@@ -2574,6 +2574,7 @@ pub fn exact_lane_auto_admit(
     attachments: &[crate::verifier_attachment::VerifierAttachment],
     open_contradiction_finding_ids: &BTreeSet<String>,
     synthetic_unreviewed_finding_ids: &BTreeSet<String>,
+    floor_sufficient: bool,
 ) -> (bool, Vec<String>) {
     let mut reasons = Vec::new();
 
@@ -2643,13 +2644,21 @@ pub fn exact_lane_auto_admit(
         return (false, reasons);
     }
 
-    // 8. delegate to the attachment corroboration predicate.
-    let digest = crate::verifier_attachment::claim_digest(&finding.assertion.text);
-    let (admit, att_reasons) =
-        crate::verifier_attachment::exact_lane_attachment_admit(&digest, &matched);
-    if !admit {
-        reasons.extend(att_reasons);
-        return (false, reasons);
+    // 8. corroboration. When `floor_sufficient` (the caller established the
+    // un-forgeable floor: a fresh frozen `vela reproduce` over the witness AND
+    // `claim_witness_faithful` binding the parsed assertion to it), the FLOOR is
+    // itself the proof of an exact lower-bound / size claim, so the
+    // >=2-independent-attachment requirement (the GENERAL gate's bar, for claims
+    // with no single frozen verifier) is waived — attachments become optional
+    // corroboration. Otherwise the attachment predicate must derive Verified.
+    if !floor_sufficient {
+        let digest = crate::verifier_attachment::claim_digest(&finding.assertion.text);
+        let (admit, att_reasons) =
+            crate::verifier_attachment::exact_lane_attachment_admit(&digest, &matched);
+        if !admit {
+            reasons.extend(att_reasons);
+            return (false, reasons);
+        }
     }
 
     (true, reasons)
@@ -5111,7 +5120,7 @@ mod tests {
     fn exact_lane_wrapper_happy_path() {
         let (p, f, atts) = admit_ready_fixture();
         let (admit, reasons) =
-            exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &BTreeSet::new());
+            exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &BTreeSet::new(), false);
         assert!(admit, "should admit, refused for: {reasons:?}");
     }
 
@@ -5120,7 +5129,7 @@ mod tests {
         let (mut p, f, atts) = admit_ready_fixture();
         p.kind = "verifier.attach".to_string();
         let (admit, reasons) =
-            exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &BTreeSet::new());
+            exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &BTreeSet::new(), false);
         assert!(!admit);
         assert!(reasons.iter().any(|r| r.contains("finding.add")));
     }
@@ -5129,7 +5138,8 @@ mod tests {
     fn exact_lane_wrapper_rejects_target_mismatch() {
         let (mut p, f, atts) = admit_ready_fixture();
         p.target.id = "vf_other".to_string();
-        let (admit, _r) = exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &BTreeSet::new());
+        let (admit, _r) =
+            exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &BTreeSet::new(), false);
         assert!(!admit);
     }
 
@@ -5139,7 +5149,7 @@ mod tests {
         let (p, mut f, atts) = admit_ready_fixture();
         f.assertion.text = "a tampered, inflated claim".to_string();
         let (admit, reasons) =
-            exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &BTreeSet::new());
+            exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &BTreeSet::new(), false);
         assert!(!admit);
         assert!(reasons.iter().any(|r| r.contains("drift")));
     }
@@ -5148,12 +5158,13 @@ mod tests {
     fn exact_lane_wrapper_rejects_retracted_or_superseded() {
         let (p, mut f, atts) = admit_ready_fixture();
         f.flags.retracted = true;
-        let (admit, _r) = exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &BTreeSet::new());
+        let (admit, _r) =
+            exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &BTreeSet::new(), false);
         assert!(!admit);
         let (p2, mut f2, atts2) = admit_ready_fixture();
         f2.flags.superseded = true;
         let (admit2, _r2) =
-            exact_lane_auto_admit(&p2, &f2, &atts2, &BTreeSet::new(), &BTreeSet::new());
+            exact_lane_auto_admit(&p2, &f2, &atts2, &BTreeSet::new(), &BTreeSet::new(), false);
         assert!(!admit2);
     }
 
@@ -5161,7 +5172,8 @@ mod tests {
     fn exact_lane_wrapper_rejects_synthetic_signal() {
         let (p, f, atts) = admit_ready_fixture();
         let synthetic = BTreeSet::from([f.id.clone()]);
-        let (admit, reasons) = exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &synthetic);
+        let (admit, reasons) =
+            exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &synthetic, false);
         assert!(!admit);
         assert!(reasons.iter().any(|r| r.contains("synthetic")));
     }
@@ -5171,7 +5183,7 @@ mod tests {
         let (p, f, atts) = admit_ready_fixture();
         let contradictions = BTreeSet::from([f.id.clone()]);
         let (admit, reasons) =
-            exact_lane_auto_admit(&p, &f, &atts, &contradictions, &BTreeSet::new());
+            exact_lane_auto_admit(&p, &f, &atts, &contradictions, &BTreeSet::new(), false);
         assert!(!admit);
         assert!(reasons.iter().any(|r| r.contains("contradiction")));
     }
@@ -5182,7 +5194,7 @@ mod tests {
         let (p, f, mut atts) = admit_ready_fixture();
         atts[0].verifier_actor = "producer:campaign".to_string(); // == proposal.actor.id
         let (admit, reasons) =
-            exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &BTreeSet::new());
+            exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &BTreeSet::new(), false);
         assert!(!admit);
         assert!(reasons.iter().any(|r| r.contains("corroborate itself")));
     }
@@ -5193,8 +5205,43 @@ mod tests {
         let (p, f, atts) = admit_ready_fixture();
         let single = vec![atts[0].clone()];
         let (admit, _r) =
-            exact_lane_auto_admit(&p, &f, &single, &BTreeSet::new(), &BTreeSet::new());
+            exact_lane_auto_admit(&p, &f, &single, &BTreeSet::new(), &BTreeSet::new(), false);
         assert!(!admit);
+    }
+
+    // floor_sufficient: the exact-lane FLOOR is the proof, so the lane admits
+    // on the floor alone (NO attachments) — the >=2-attachment bar is waived.
+    #[test]
+    fn exact_lane_wrapper_floor_sufficient_admits_without_attachments() {
+        let (p, f, _atts) = admit_ready_fixture();
+        let (admit, reasons) =
+            exact_lane_auto_admit(&p, &f, &[], &BTreeSet::new(), &BTreeSet::new(), true);
+        assert!(
+            admit,
+            "floor-sufficient should admit with no attachments: {reasons:?}"
+        );
+    }
+
+    // ...but floor_sufficient never bypasses the proposal-level guards.
+    #[test]
+    fn exact_lane_wrapper_floor_sufficient_still_honors_guards() {
+        let (p, mut f, _atts) = admit_ready_fixture();
+        f.flags.retracted = true;
+        let (admit, _r) =
+            exact_lane_auto_admit(&p, &f, &[], &BTreeSet::new(), &BTreeSet::new(), true);
+        assert!(
+            !admit,
+            "retracted finding refuses even when floor-sufficient"
+        );
+
+        let (p2, f2, _) = admit_ready_fixture();
+        let synthetic = BTreeSet::from([f2.id.clone()]);
+        let (admit2, _r2) =
+            exact_lane_auto_admit(&p2, &f2, &[], &BTreeSet::new(), &synthetic, true);
+        assert!(
+            !admit2,
+            "synthetic source refuses even when floor-sufficient"
+        );
     }
 
     // ---- derive_trust_tier projection ----

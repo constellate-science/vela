@@ -243,13 +243,21 @@ fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, apply: bool, json_outp
         .collect();
 
     // The proposal-level wrapper (kind, target, drift-pin, lifecycle, synthetic,
-    // contradiction, producer != verifier, then the attachment predicate).
+    // contradiction, producer != verifier, then the attachment predicate UNLESS
+    // floor-sufficient). For the exact lane, the FLOOR (a fresh frozen reproduce
+    // + claim_witness_faithful binding) IS the proof: when faithfulness binds,
+    // the >=2-independent-attachment bar (the general gate's, for claims with no
+    // single frozen verifier) is waived. The witness genuinely reproducing +
+    // structurally establishing the parsed claim is a complete, un-forgeable
+    // proof of an exact lower-bound/size claim.
+    let floor_ok = witness_ok && faithful.as_ref().map(|f| f.faithful).unwrap_or(false);
     let (wrapper_ok, wrapper_reasons) = vela_protocol::proposals::exact_lane_auto_admit(
         &proposal,
         &finding,
         &matched,
         &open_contradictions,
         &synthetic,
+        floor_ok,
     );
 
     // Guard #3 (attachment provenance): each matched attachment must have
@@ -259,7 +267,6 @@ fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, apply: bool, json_outp
     // set cannot manufacture machine_verified.
     let (vouched_ok, vouch_reason) = attachments_human_vouched(&proj, &matched);
 
-    let floor_ok = witness_ok && faithful.as_ref().map(|f| f.faithful).unwrap_or(false);
     let would_admit = floor_ok && wrapper_ok && vouched_ok;
 
     // Apply (opt-in): record the unsigned, idempotent policy.auto_admitted audit
