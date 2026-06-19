@@ -1762,7 +1762,8 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
                 }
                 _ => {
                     return Err(
-                        "policy.auto_admitted: attachment_ids must be a non-empty array".to_string(),
+                        "policy.auto_admitted: attachment_ids must be a non-empty array"
+                            .to_string(),
                     );
                 }
             }

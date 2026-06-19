@@ -22,6 +22,12 @@ use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
+/// A stable, reproducible identity for the frozen verifier build, recorded in
+/// the `policy.auto_admitted` audit record (`verifier_env_hash`) so an auditor
+/// can pin which frozen `vela-verify` produced a machine admission. Same source
+/// + same release => same string.
+pub const ENV_ID: &str = concat!("vela-verify@", env!("CARGO_PKG_VERSION"));
+
 /// The outcome of verifying one witness.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VerifyResult {
@@ -494,9 +500,10 @@ pub fn parse_claim(assertion_text: &str) -> Option<ParsedClaim> {
     };
 
     // Ambient dimension from `{0,1}^n` or `gf(2)^n`.
-    let ambient_n = ["{0,1}^", "gf(2)^"]
-        .iter()
-        .find_map(|m| text.find(m).and_then(|i| leading_usize(&text[i + m.len()..])));
+    let ambient_n = ["{0,1}^", "gf(2)^"].iter().find_map(|m| {
+        text.find(m)
+            .and_then(|i| leading_usize(&text[i + m.len()..]))
+    });
 
     // Bound: a lower bound (`>=`, `≥`, `at least`) or an equality (`exactly`).
     // If BOTH a lower bound and an equality marker appear, bail (ambiguous).
@@ -2059,8 +2066,12 @@ mod tests {
             points: small_sidon(), // 4 points
             claimed_size: None,
         };
-        assert!(claim_witness_faithful("a Sidon set in {0,1}^3 with exactly 4 elements.", &w).faithful);
-        assert!(!claim_witness_faithful("a Sidon set in {0,1}^3 with exactly 5 elements.", &w).faithful);
+        assert!(
+            claim_witness_faithful("a Sidon set in {0,1}^3 with exactly 4 elements.", &w).faithful
+        );
+        assert!(
+            !claim_witness_faithful("a Sidon set in {0,1}^3 with exactly 5 elements.", &w).faithful
+        );
     }
 
     #[test]

@@ -663,9 +663,8 @@ pub fn exact_lane_attachment_admit(
                 match p.result {
                     ProbeResult::Survived => ff_survived = true,
                     ProbeResult::Refuted => {
-                        reasons.push(
-                            "exact-lane: a FormalismFidelity probe is Refuted".to_string(),
-                        );
+                        reasons
+                            .push("exact-lane: a FormalismFidelity probe is Refuted".to_string());
                         return (false, reasons);
                     }
                 }
@@ -843,9 +842,11 @@ mod tests {
         }];
         let (admit, reasons) = exact_lane_attachment_admit(&digest, &[a1, a2]);
         assert!(!admit);
-        assert!(reasons
-            .iter()
-            .any(|r| r.contains("Refuted") || r.contains("not Verified")));
+        assert!(
+            reasons
+                .iter()
+                .any(|r| r.contains("Refuted") || r.contains("not Verified"))
+        );
     }
 
     // Attack 3: the legacy Unattested integrity default. The gate's G5 only
@@ -927,7 +928,10 @@ mod tests {
         let (a1, a2) = admit_pair(&digest);
         let revised = claim_digest("claim X, revised");
         let (admit, _r) = exact_lane_attachment_admit(&revised, &[a1, a2]);
-        assert!(!admit, "attachments bound to the old digest must not admit the revised claim");
+        assert!(
+            !admit,
+            "attachments bound to the old digest must not admit the revised claim"
+        );
     }
 
     #[test]

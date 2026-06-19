@@ -1495,6 +1495,12 @@ pub(crate) enum GateAction {
         /// The finding id (`vf_…`) to preview.
         #[arg(long)]
         finding: String,
+        /// Record the unsigned `policy.auto_admitted` audit event when (and
+        /// only when) the finding WOULD auto-admit. Idempotent: re-running is a
+        /// no-op. Never signs, never lands the finding in canonical state. Omit
+        /// for a read-only preview.
+        #[arg(long)]
+        apply: bool,
         #[arg(long)]
         json: bool,
     },

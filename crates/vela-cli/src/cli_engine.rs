@@ -170,8 +170,9 @@ pub(crate) fn cmd_gate(action: GateAction) {
         GateAction::AutoAdmit {
             frontier,
             finding,
+            apply,
             json,
-        } => cmd_gate_auto_admit(&frontier, &finding, json),
+        } => cmd_gate_auto_admit(&frontier, &finding, apply, json),
     }
 }
 
@@ -185,7 +186,7 @@ pub(crate) fn cmd_gate(action: GateAction) {
 /// witness structure. Then the proposal-level guards + the attachment
 /// corroboration predicate. The `policy.auto_admitted` emit is held off pending
 /// the acceptance checklist (docs/EXACT_LANE_GATE.md).
-fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, json_output: bool) {
+fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, apply: bool, json_output: bool) {
     use std::collections::BTreeSet;
 
     let source = repo::detect(frontier).unwrap_or_else(|e| fail_return(&e));
@@ -254,6 +255,27 @@ fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, json_output: bool) {
     let floor_ok = witness_ok && faithful.as_ref().map(|f| f.faithful).unwrap_or(false);
     let would_admit = floor_ok && wrapper_ok;
 
+    // Apply (opt-in): record the unsigned, idempotent policy.auto_admitted audit
+    // event when, AND ONLY WHEN, the finding would auto-admit. Never signs,
+    // never lands the finding in canonical state. The emit re-checks nothing it
+    // was told: the YES verdict above was computed here from the frozen floor.
+    let mut emitted: Option<(String, bool)> = None;
+    if apply && would_admit {
+        let digest = vela_protocol::verifier_attachment::claim_digest(&finding.assertion.text);
+        let attachment_ids: Vec<String> = matched.iter().map(|a| a.id.clone()).collect();
+        match proposals::emit_policy_auto_admitted(
+            frontier,
+            &proposal.id,
+            &digest,
+            &attachment_ids,
+            "exact-lane.v1",
+            vela_verify::ENV_ID,
+        ) {
+            Ok(res) => emitted = Some(res),
+            Err(e) => fail_return(&format!("emit policy.auto_admitted: {e}")),
+        }
+    }
+
     if json_output {
         let out = json!({
             "finding": finding.id,
@@ -267,11 +289,19 @@ fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, json_output: bool) {
             "proposal_guards_ok": wrapper_ok,
             "proposal_guard_reasons": wrapper_reasons,
             "matched_attachments": matched.len(),
-            "note": "READ-ONLY preview; the policy.auto_admitted emit is held off pending the acceptance checklist (docs/EXACT_LANE_GATE.md).",
+            "applied": apply,
+            "event_id": emitted.as_ref().map(|(id, _)| id.clone()),
+            "newly_emitted": emitted.as_ref().map(|(_, n)| *n),
+            "tier": emitted.as_ref().map(|_| "machine_verified"),
+            "note": if apply {
+                "policy.auto_admitted is unsigned + idempotent; machine_verified is distinct from human accepted and is NOT landed in canonical findings (docs/EXACT_LANE_GATE.md)."
+            } else {
+                "READ-ONLY preview; pass --apply to record the (idempotent, unsigned) policy.auto_admitted audit event when the verdict is YES (docs/EXACT_LANE_GATE.md)."
+            },
         });
         println!("{}", serde_json::to_string_pretty(&out).unwrap());
     } else {
-        println!("exact-lane auto-admit preview for {}", finding.id);
+        println!("exact-lane auto-admit for {}", finding.id);
         println!(
             "  floor 1 (witness reproduces, frozen): {} {}",
             if witness_ok { "PASS" } else { "FAIL" },
@@ -299,13 +329,20 @@ fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, json_output: bool) {
             }
         );
         println!(
-            "  => WOULD auto-admit to machine_verified: {}",
+            "  => auto-admit to machine_verified: {}",
             if would_admit { "YES" } else { "NO" }
         );
-        println!(
-            "  (read-only preview; the policy.auto_admitted emit is held off pending the \
-             acceptance checklist — docs/EXACT_LANE_GATE.md)"
-        );
+        match &emitted {
+            Some((id, true)) => println!("  recorded policy.auto_admitted {id} (machine_verified)"),
+            Some((id, false)) => {
+                println!("  already admitted: policy.auto_admitted {id} (idempotent no-op)")
+            }
+            None if apply => {} // would_admit false; the exit below reports it
+            None => println!(
+                "  (read-only preview; pass --apply to record the unsigned, idempotent \
+                 policy.auto_admitted event when the verdict is YES — docs/EXACT_LANE_GATE.md)"
+            ),
+        }
     }
     if !would_admit {
         std::process::exit(1);

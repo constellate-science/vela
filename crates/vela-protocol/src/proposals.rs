@@ -2588,9 +2588,7 @@ pub fn exact_lane_auto_admit(
 
     // 2. target binding.
     if proposal.target.r#type != "finding" || proposal.target.id != finding.id {
-        reasons.push(
-            "exact-lane: proposal target does not bind to this finding".to_string(),
-        );
+        reasons.push("exact-lane: proposal target does not bind to this finding".to_string());
         return (false, reasons);
     }
 
@@ -2745,10 +2743,78 @@ pub fn derive_trust_tier(frontier: &Project, finding_id: &str) -> TrustTier {
         }
     }
 
-    if matched.iter().any(|a| a.outcome == AttachmentOutcome::Passed) {
+    if matched
+        .iter()
+        .any(|a| a.outcome == AttachmentOutcome::Passed)
+    {
         return TrustTier::SchemaChecked;
     }
     TrustTier::Candidate
+}
+
+/// Emit the unsigned `policy.auto_admitted` audit event for an exact-lane
+/// machine admission (Phase 1A). IDEMPOTENT: if one already targets this
+/// proposal, returns its id with `false` and writes nothing, so re-running
+/// `--apply` yields a byte-identical log (closes the duplicate-mint hole — the
+/// event id embeds a timestamp, so the parity guarantee is replay-stable, not
+/// mint-deterministic). The event is a no-op on every finding digest
+/// (`before == after == NULL_HASH`), so reproduce/materialize stay
+/// byte-identical. UNSIGNED and mechanically un-signable: the trust is the
+/// frozen predicate + frozen verifier, never a key. The caller MUST have
+/// already established the YES verdict (the un-forgeable floor + the
+/// proposal-level guards); this only records it.
+pub fn emit_policy_auto_admitted(
+    path: &Path,
+    proposal_id: &str,
+    claim_digest: &str,
+    attachment_ids: &[String],
+    policy_version: &str,
+    verifier_env_hash: &str,
+) -> Result<(String, bool), String> {
+    let mut frontier = repo::load_from_path(path)?;
+    // Idempotency: an existing admit for this proposal is authoritative.
+    if let Some(existing) = frontier.events.iter().find(|e| {
+        e.kind.as_str() == events::EVENT_KIND_POLICY_AUTO_ADMITTED
+            && e.payload.get("proposal_id").and_then(|v| v.as_str()) == Some(proposal_id)
+    }) {
+        return Ok((existing.id.clone(), false));
+    }
+    let mut event = StateEvent {
+        schema: events::EVENT_SCHEMA.to_string(),
+        id: String::new(),
+        kind: events::EVENT_KIND_POLICY_AUTO_ADMITTED.into(),
+        target: StateTarget {
+            r#type: "proposal".to_string(),
+            id: proposal_id.to_string(),
+        },
+        actor: StateActor {
+            id: "policy:exact-lane".to_string(),
+            r#type: "agent".to_string(),
+        },
+        timestamp: Utc::now().to_rfc3339(),
+        reason: format!("exact-lane auto-admit: frozen predicate {policy_version}"),
+        before_hash: NULL_HASH.to_string(),
+        after_hash: NULL_HASH.to_string(),
+        payload: json!({
+            "proposal_id": proposal_id,
+            "claim_digest": claim_digest,
+            "attachment_ids": attachment_ids,
+            "policy_version": policy_version,
+            "verifier_env_hash": verifier_env_hash,
+        }),
+        caveats: Vec::new(),
+        signature: None,
+        schema_artifact_id: None,
+    };
+    events::validate_event_payload(event.kind.as_str(), &event.payload)?;
+    event.id = events::compute_event_id(&event);
+    let id = event.id.clone();
+    // Replay through the reducer (a verified no-op) before recording, exactly
+    // as the loader will on the next materialize.
+    crate::reducer::apply_event(&mut frontier, &event)?;
+    frontier.events.push(event);
+    repo::save_to_path(path, &frontier)?;
+    Ok((id, true))
 }
 
 /// The bounded trusted-reviewer-agent gate. A no-op for non-agent
@@ -5082,8 +5148,7 @@ mod tests {
     fn exact_lane_wrapper_rejects_retracted_or_superseded() {
         let (p, mut f, atts) = admit_ready_fixture();
         f.flags.retracted = true;
-        let (admit, _r) =
-            exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &BTreeSet::new());
+        let (admit, _r) = exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &BTreeSet::new());
         assert!(!admit);
         let (p2, mut f2, atts2) = admit_ready_fixture();
         f2.flags.superseded = true;
@@ -5096,8 +5161,7 @@ mod tests {
     fn exact_lane_wrapper_rejects_synthetic_signal() {
         let (p, f, atts) = admit_ready_fixture();
         let synthetic = BTreeSet::from([f.id.clone()]);
-        let (admit, reasons) =
-            exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &synthetic);
+        let (admit, reasons) = exact_lane_auto_admit(&p, &f, &atts, &BTreeSet::new(), &synthetic);
         assert!(!admit);
         assert!(reasons.iter().any(|r| r.contains("synthetic")));
     }
@@ -5195,7 +5259,10 @@ mod tests {
         let mut frontier = project::assemble("t", vec![], 0, 0, "t");
         frontier.verifier_attachments = atts;
         frontier.proposals.push(p); // pending, NO policy.auto_admitted event
-        assert_eq!(derive_trust_tier(&frontier, &f.id), TrustTier::SchemaChecked);
+        assert_eq!(
+            derive_trust_tier(&frontier, &f.id),
+            TrustTier::SchemaChecked
+        );
     }
 
     #[test]
@@ -5204,6 +5271,62 @@ mod tests {
         assert_eq!(
             derive_trust_tier(&frontier, "vf_nothing"),
             TrustTier::Candidate
+        );
+    }
+
+    #[test]
+    fn emit_policy_auto_admitted_is_idempotent_and_promotes_tier() {
+        let (p, f, atts) = admit_ready_fixture();
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("frontier.json");
+        let mut frontier = project::assemble("t", vec![], 0, 0, "t");
+        frontier.verifier_attachments = atts;
+        frontier.proposals.push(p.clone());
+        repo::save_to_path(&path, &frontier).unwrap();
+
+        let att_ids: Vec<String> = frontier
+            .verifier_attachments
+            .iter()
+            .map(|a| a.id.clone())
+            .collect();
+        let digest = crate::verifier_attachment::claim_digest(&f.assertion.text);
+
+        let (id1, new1) = emit_policy_auto_admitted(
+            &path,
+            &p.id,
+            &digest,
+            &att_ids,
+            "exact-lane.v1",
+            "vela-verify@test",
+        )
+        .unwrap();
+        assert!(new1, "first emit creates the event");
+
+        // Idempotent: a second emit writes nothing and returns the same id.
+        let (id2, new2) = emit_policy_auto_admitted(
+            &path,
+            &p.id,
+            &digest,
+            &att_ids,
+            "exact-lane.v1",
+            "vela-verify@test",
+        )
+        .unwrap();
+        assert_eq!(id1, id2);
+        assert!(!new2, "second emit is a no-op (idempotent)");
+
+        let reloaded = repo::load_from_path(&path).unwrap();
+        let count = reloaded
+            .events
+            .iter()
+            .filter(|e| e.kind.as_str() == events::EVENT_KIND_POLICY_AUTO_ADMITTED)
+            .count();
+        assert_eq!(count, 1, "exactly one admit event after two applies");
+
+        // The pending finding now projects to MachineVerified (live gate Verified).
+        assert_eq!(
+            derive_trust_tier(&reloaded, &f.id),
+            TrustTier::MachineVerified
         );
     }
 
