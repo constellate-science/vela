@@ -1249,7 +1249,9 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let mut f = make_valid_finding("vf_0000000000000001");
         f.assertion.entities.push(Entity {
-            name: "BBB".into(),
+            // Invalid type (coerces to anatomical_structure) + a name with
+            // surrounding whitespace (trims): two distinct safe repairs.
+            name: "  Sidon set  ".into(),
             entity_type: "biological_barrier".into(),
             identifiers: serde_json::Map::new(),
             canonical_id: None,

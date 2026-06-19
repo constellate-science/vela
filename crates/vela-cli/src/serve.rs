@@ -504,7 +504,7 @@ pub fn check_tools(source: ProjectSource, adoption: bool) -> Result<Value, Strin
         check_tool_result("frontier_stats", tool_frontier_stats(&frontier), started),
         check_tool_result(
             "search_findings",
-            tool_search_findings(&json!({"query": "amyloid", "limit": 3}), &frontier),
+            tool_search_findings(&json!({"query": "Sidon", "limit": 3}), &frontier),
             started,
         ),
         check_tool_result("list_gaps", tool_list_gaps(&frontier), started),

@@ -970,7 +970,6 @@ pub async fn run_command() {
                 json,
             } => cmd_finding_retract(source, finding_id, reason, reviewer, apply, json),
             FindingCommands::Link { action } => cmd_link(action),
-            FindingCommands::Entity { action } => cmd_entity(action),
         },
         Commands::Review {
             frontier,
@@ -2936,50 +2935,6 @@ pub(crate) fn sign_and_apply(
 /// was to hand-edit JSON; this command is the CLI on-ramp. Links go
 /// directly onto `findings[i].links` (links are not a state-changing
 /// proposal kind in v0).
-/// v0.19: bundled entity resolution. See `vela_edge::entity_resolve` for the
-/// table + algorithm. CLI surface is two subcommands: `resolve` (mutates
-/// the frontier file) and `list` (read-only inspection of the table).
-fn cmd_entity(action: EntityAction) {
-    use vela_edge::entity_resolve;
-    match action {
-        EntityAction::List { json } => {
-            let entries: Vec<serde_json::Value> = entity_resolve::iter_bundled()
-                .map(|(name, etype, source, id)| {
-                    serde_json::json!({
-                        "canonical_name": name,
-                        "entity_type": etype,
-                        "source": source,
-                        "id": id,
-                    })
-                })
-                .collect();
-            if json {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&serde_json::json!({
-                        "ok": true,
-                        "command": "entity.list",
-                        "count": entries.len(),
-                        "entries": entries,
-                    }))
-                    .expect("serialize")
-                );
-            } else {
-                println!("{} {} bundled entries", style::ok("entity"), entries.len());
-                for e in &entries {
-                    println!(
-                        "  {:32}  {:18}  {} {}",
-                        e["canonical_name"].as_str().unwrap_or("?"),
-                        e["entity_type"].as_str().unwrap_or("?"),
-                        e["source"].as_str().unwrap_or("?"),
-                        e["id"].as_str().unwrap_or("?"),
-                    );
-                }
-            }
-        }
-    }
-}
-
 fn cmd_link(action: LinkAction) {
     use vela_protocol::bundle::{Link, LinkRef};
     match action {

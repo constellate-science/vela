@@ -19,7 +19,6 @@ pub mod discord;
 pub mod discord_compute;
 pub mod doc_render;
 pub mod doctor;
-pub mod entity_resolve;
 pub mod export;
 pub mod frontier_health;
 pub mod frontier_release;

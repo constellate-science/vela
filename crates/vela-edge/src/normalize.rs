@@ -136,23 +136,12 @@ pub fn entity_type(raw: &str) -> String {
     }
 }
 
-/// Normalize entity name to canonical form.
+/// Normalize an entity name to canonical form. Domain-general: collapse
+/// surrounding whitespace only. Domain-specific alias tables (the
+/// pre-math-wedge biology vocabulary lived here) belong in a frontier's
+/// own ingest config, not hard-coded into the substrate.
 pub fn entity_name(name: &str) -> String {
-    let key = name.to_lowercase().trim().to_string();
-    let canonical = match key.as_str() {
-        "bbb" | "blood brain barrier" | "blood–brain barrier" => "blood-brain barrier",
-        "ad" | "alzheimer disease" | "alzheimer's" => "Alzheimer's disease",
-        "abeta" | "aβ" | "amyloid beta" | "a-beta" | "amyloid-β" => "amyloid-beta",
-        "apoe4" | "apoe-4" | "apolipoprotein e4" => "APOE4",
-        "pd" | "parkinson disease" => "Parkinson's disease",
-        "ros" => "reactive oxygen species",
-        "nps" | "np" => "nanoparticles",
-        "evs" => "extracellular vesicles",
-        "fus" => "focused ultrasound",
-        "tjs" | "tight junction" => "tight junctions",
-        _ => return name.to_string(),
-    };
-    canonical.to_string()
+    name.trim().to_string()
 }
 
 /// Build a deterministic, safe repair plan for a loaded frontier.
@@ -732,71 +721,32 @@ mod tests {
     // ── entity_name tests ────────────────────────────────────────────
 
     #[test]
-    fn bbb_normalizes() {
-        assert_eq!(entity_name("BBB"), "blood-brain barrier");
-        assert_eq!(entity_name("blood brain barrier"), "blood-brain barrier");
-        assert_eq!(entity_name("blood–brain barrier"), "blood-brain barrier");
-    }
-
-    #[test]
-    fn ad_normalizes() {
-        assert_eq!(entity_name("AD"), "Alzheimer's disease");
-        assert_eq!(entity_name("alzheimer's"), "Alzheimer's disease");
-        assert_eq!(entity_name("alzheimer disease"), "Alzheimer's disease");
-    }
-
-    #[test]
-    fn amyloid_beta_normalizes() {
-        assert_eq!(entity_name("Abeta"), "amyloid-beta");
-        assert_eq!(entity_name("a-beta"), "amyloid-beta");
-        assert_eq!(entity_name("amyloid beta"), "amyloid-beta");
-    }
-
-    #[test]
-    fn apoe4_normalizes() {
-        assert_eq!(entity_name("APOE4"), "APOE4");
-        assert_eq!(entity_name("apoe-4"), "APOE4");
-        assert_eq!(entity_name("apolipoprotein e4"), "APOE4");
-    }
-
-    #[test]
-    fn unknown_name_unchanged() {
+    fn entity_name_is_domain_general_trim_only() {
+        // No hard-coded alias table: names pass through, with only
+        // surrounding whitespace collapsed.
+        assert_eq!(entity_name("Sidon set"), "Sidon set");
+        assert_eq!(entity_name("  B_2[g] sequence  "), "B_2[g] sequence");
         assert_eq!(entity_name("NLRP3"), "NLRP3");
-        assert_eq!(entity_name("some random entity"), "some random entity");
-    }
-
-    #[test]
-    fn pd_normalizes() {
-        assert_eq!(entity_name("PD"), "Parkinson's disease");
-        assert_eq!(entity_name("parkinson disease"), "Parkinson's disease");
-    }
-
-    #[test]
-    fn ros_and_others() {
-        assert_eq!(entity_name("ROS"), "reactive oxygen species");
-        assert_eq!(entity_name("NPs"), "nanoparticles");
-        assert_eq!(entity_name("EVs"), "extracellular vesicles");
-        assert_eq!(entity_name("FUS"), "focused ultrasound");
-        assert_eq!(entity_name("TJs"), "tight junctions");
     }
 
     // ── normalize_findings tests ─────────────────────────────────────
 
     #[test]
     fn normalize_fixes_types_and_names() {
+        // Types coerce to the valid schema set; names are trimmed.
         let mut bundles = vec![make_finding_with_entities(vec![
-            make_entity("BBB", "biological_barrier"),
-            make_entity("AD", "condition"),
+            make_entity("  Sidon set  ", "structure"),
+            make_entity("  prime gap  ", "condition"),
         ])];
         let (type_fixes, name_fixes) = normalize_findings(&mut bundles);
         assert_eq!(type_fixes, 2);
         assert_eq!(name_fixes, 2);
-        assert_eq!(bundles[0].assertion.entities[0].name, "blood-brain barrier");
+        assert_eq!(bundles[0].assertion.entities[0].name, "Sidon set");
         assert_eq!(
             bundles[0].assertion.entities[0].entity_type,
             "anatomical_structure"
         );
-        assert_eq!(bundles[0].assertion.entities[1].name, "Alzheimer's disease");
+        assert_eq!(bundles[0].assertion.entities[1].name, "prime gap");
         assert_eq!(bundles[0].assertion.entities[1].entity_type, "disease");
     }
 
@@ -832,8 +782,8 @@ mod tests {
     #[test]
     fn plan_findings_reports_safe_entity_repairs() {
         let bundles = vec![make_finding_with_entities(vec![
-            make_entity("BBB", "biological_barrier"),
-            make_entity("blood-brain barrier", "anatomical_structure"),
+            make_entity("  prime gap  ", "structure"),
+            make_entity("prime gap", "anatomical_structure"),
         ])];
 
         let plan = plan_findings(&bundles);
@@ -860,8 +810,8 @@ mod tests {
         let frontier = vela_protocol::project::assemble(
             "test",
             vec![make_finding_with_entities(vec![make_entity(
-                "BBB",
-                "biological_barrier",
+                "  Sidon set  ",
+                "structure",
             )])],
             1,
             0,
@@ -877,7 +827,7 @@ mod tests {
         assert_eq!(report.summary.applied, 0);
         assert_eq!(
             saved.findings[0].assertion.entities[0].entity_type,
-            "biological_barrier"
+            "structure"
         );
     }
 
@@ -888,8 +838,8 @@ mod tests {
         let frontier = vela_protocol::project::assemble(
             "test",
             vec![make_finding_with_entities(vec![make_entity(
-                "BBB",
-                "biological_barrier",
+                "  Sidon set  ",
+                "structure",
             )])],
             1,
             0,
@@ -907,10 +857,7 @@ mod tests {
             saved.findings[0].assertion.entities[0].entity_type,
             "anatomical_structure"
         );
-        assert_eq!(
-            saved.findings[0].assertion.entities[0].name,
-            "blood-brain barrier"
-        );
+        assert_eq!(saved.findings[0].assertion.entities[0].name, "Sidon set");
         assert_eq!(
             saved.findings[0].id,
             FindingBundle::content_address(

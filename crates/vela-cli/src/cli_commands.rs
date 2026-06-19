@@ -3490,15 +3490,6 @@ pub(crate) enum LinkAction {
 }
 
 #[derive(Subcommand)]
-pub(crate) enum EntityAction {
-    /// List the bundled lookup table.
-    List {
-        #[arg(long)]
-        json: bool,
-    },
-}
-
-#[derive(Subcommand)]
 pub(crate) enum FindingCommands {
     /// Add a manual finding bundle with an assertion field
     Add {
@@ -3778,11 +3769,6 @@ pub(crate) enum FindingCommands {
     Link {
         #[command(subcommand)]
         action: LinkAction,
-    },
-    /// Resolve unresolved entities against the bundled table.
-    Entity {
-        #[command(subcommand)]
-        action: EntityAction,
     },
 }
 

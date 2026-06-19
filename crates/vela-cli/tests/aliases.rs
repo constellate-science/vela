@@ -144,9 +144,7 @@ fn ergonomics_verbs_are_reachable() {
 /// the retired top-level spellings (`vela note` …) must now 404.
 #[test]
 fn finding_verbs_are_nested_only() {
-    for verb in [
-        "note", "caveat", "revise", "reject", "retract", "link", "entity",
-    ] {
+    for verb in ["note", "caveat", "revise", "reject", "retract", "link"] {
         let nested = vela(&["finding", verb, "--help"]);
         assert!(
             !combined(&nested).contains("unknown or non-release command")

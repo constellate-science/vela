@@ -615,8 +615,7 @@ mod tests {
 
     #[test]
     fn truncate_for_cli_preserves_utf8_boundaries() {
-        let text =
-            "Lecanemab reduced amyloid burden with 200–1000-fold selectivity in early disease.";
+        let text = "Erdős proved that a B₂[1] Sidon set satisfies |A| ≤ √n + O(n^{1/4}) on [1, n].";
         let truncated = truncate_for_cli(text, 48);
         assert!(truncated.ends_with("..."));
         assert!(truncated.len() <= text.len());
