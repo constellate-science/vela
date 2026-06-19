@@ -171,12 +171,26 @@ fn cmd_run(
         "sha256:{}",
         hex::encode(Sha256::digest(witness_bytes.as_bytes()))
     );
+    // B1 (producer pins to consumed state): record the frontier root this search
+    // read, so the attempt is tied to the exact accepted state it built on, which
+    // is the spine of the retained-producer loop and the H1 ablation. Read-only
+    // (the committed `vela.lock`), non-fatal if absent, never re-materializes.
+    let consumed_roots = frontier
+        .as_ref()
+        .and_then(|fr| std::fs::read_to_string(fr.join("vela.lock")).ok())
+        .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+        .and_then(|v| {
+            v.get("snapshot_hash")
+                .and_then(|x| x.as_str().map(String::from))
+        })
+        .map(|root| vec![root])
+        .unwrap_or_default();
     let envelope = ActivityEnvelope::new(ActivityDraft {
         actor_id: "agent:vela-campaign".to_string(),
         actor_type: "agent".to_string(),
         kind: "search.candidate".into(),
         base_root: target_descriptor(kind, n, h),
-        input_roots: Vec::new(),
+        input_roots: consumed_roots,
         output_roots: vec![witness_digest.clone()],
         tool_digests: vec![format!("vela-verify:{kind}")],
         trace_root: Some(witness_digest),
