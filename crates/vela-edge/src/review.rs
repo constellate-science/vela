@@ -243,7 +243,7 @@ mod tests {
             finding_id: "vf_packet".into(),
             reviewer: "external-reviewer".into(),
             reviewed_at: "2026-01-01T00:00:00Z".into(),
-            scope: Some("bbb".into()),
+            scope: Some("sidon".into()),
             status: Some("accepted".into()),
             action: ReviewAction::Qualified {
                 target: "trusted_interpretation".into(),

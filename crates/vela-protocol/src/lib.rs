@@ -1,6 +1,5 @@
 pub mod access_tier;
 pub mod activity;
-pub mod ancestor_closure;
 pub mod anchor;
 pub mod atlas;
 pub mod attempt;

@@ -20,7 +20,7 @@ fn load_from_path_reads_export_packet_dir() {
     );
     original.review_events.push(ReviewEvent {
         id: "rev_pkt1".into(),
-        workspace: Some("bbb".into()),
+        workspace: Some("sidon".into()),
         finding_id: "vf_pkt1".into(),
         reviewer: "reviewer:test".into(),
         reviewed_at: "2026-01-01T00:00:00Z".into(),

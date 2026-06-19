@@ -39,7 +39,6 @@ pub mod proof_packet;
 pub mod provenance_compute;
 pub mod queue;
 pub mod research_trace;
-pub mod retry;
 pub mod review;
 pub mod reviewer_identity;
 pub mod search;

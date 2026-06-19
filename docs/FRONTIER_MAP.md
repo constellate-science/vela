@@ -43,6 +43,10 @@ The common gap vocabulary is deliberately small.
 
 Domain adapters may add subtypes. They may not redefine the core state semantics.
 
+> Note (v0.700): `translation` and `model_residual` describe gaps against the cross-domain bridge and
+> the model/prediction object families, which were retired. They remain in the vocabulary as a
+> general taxonomy but are not minted by the current math-wedge frontiers.
+
 ## 3. Coverage models
 
 A useful frontier map requires a declared coverage model. Examples include:

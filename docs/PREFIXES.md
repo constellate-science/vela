@@ -30,15 +30,15 @@ table.
 | `vla_` | Lean theorem anchor | `lean_anchors.rs` (vela-edge) |
 | `vsd_` | scientific diff pack | `released_diff_pack.rs` |
 | `vfrr_` | frontier release | `frontier_template.rs` / releases |
-| `vnr_` | negative result | `bundle.rs` |
-| `vrep_` | replication | `bundle.rs` |
-| `vpred_` | prediction | `bundle.rs` |
-| `vres_` | prediction resolution | `bundle.rs` |
+| `vnr_` | negative result | retired v0.700 (historical logs only) |
+| `vrep_` | replication | retired v0.700 (historical logs only) |
+| `vpred_` | prediction | retired v0.700 (historical logs only) |
+| `vres_` | prediction resolution | retired v0.700 (historical logs only) |
 | `va_` | content-addressed artifact | `state.rs` |
 | `vd_` | dataset artifact | `state.rs` |
 | `vc_` | code artifact | `state.rs` |
 | `vea_` | evidence atom | `sources.rs` / `reducer.rs` |
-| `vbr_` | bridge (cross-frontier hypothesis) | `bridge.rs` (vela-edge) |
+| `vbr_` | bridge (cross-frontier hypothesis) | retired v0.700 (historical logs only) |
 | `vcx_` | contradiction (T7 object) | `contradiction.rs` |
 | `vdc_` | verdict conflict | `verdict_conflict.rs` |
 | `ven_` | endorsement | `endorsement.rs` |
@@ -89,16 +89,15 @@ table.
    Carina schema set), so neither side can be renamed without breaking
    stored ids. Treat bare-`vat_` handle resolution as ambiguous.
 
-2. **`vtr_` — transfer vs. trajectory.** The authoritative protocol
-   sense is the *cross-domain transfer* (`transfer.rs`, verified by
-   `vela transfer`). The trajectory object
-   (`schema/trajectory.v0.1.0.json`, `trajectory.*` event kinds, the
-   `vela_agent_open_trajectory` MCP tool) also mints `vtr_<16hex>` ids.
-   The trajectory CLI surface was removed in v0.700 but the event kinds
-   remain normative and historical logs contain `vtr_` trajectory ids,
-   so the prefix cannot be reclaimed. Disambiguate by context: a
-   `vtr_` inside `.vela/trajectories/` or a `trajectory.*` event is a
-   trajectory; everywhere else it is a transfer.
+2. **`vtr_` — transfer vs. trajectory.** The authoritative (and now
+   only live) sense is the *cross-domain transfer* (`transfer.rs`,
+   verified by `vela transfer`). The trajectory object was fully retired
+   in v0.700 (its type, `trajectory.*` event kinds, schema, and MCP tool
+   are all gone), but historical logs still contain `vtr_` trajectory
+   ids minted before the cut, so the prefix cannot be cleanly reclaimed.
+   Any newly-minted `vtr_` is a transfer; a `vtr_` inside a legacy
+   `.vela/trajectories/` file or an old `trajectory.*` event is a
+   retired trajectory id.
 
 3. **`vsa_` vs. `vatt_` — two attestations.** Not an id collision but a
    recurring vocabulary trap: `vsa_` is the *statement* attestation
