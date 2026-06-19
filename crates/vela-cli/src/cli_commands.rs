@@ -823,10 +823,12 @@ pub(crate) enum Commands {
         /// One of: accepted | needs_revision | contested | rejected.
         #[arg(long)]
         status: String,
+        /// Decision note. Optional: defaults to "marked <status>".
         #[arg(long)]
-        reason: String,
+        reason: Option<String>,
+        /// Reviewer actor id. Optional: defaults to your configured identity.
         #[arg(long)]
-        reviewer: String,
+        reviewer: Option<String>,
         /// Apply the proposal immediately under reviewer authority
         /// (writes a signed canonical event).
         #[arg(long)]

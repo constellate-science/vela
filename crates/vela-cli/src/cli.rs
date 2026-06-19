@@ -1062,11 +1062,15 @@ pub async fn run_command() {
             json,
         } => {
             // Mirror the existing `Commands::Review` arm: emit a
-            // finding.review proposal under reviewer authority.
+            // finding.review proposal under reviewer authority. Reviewer and
+            // reason auto-resolve from managed identity / a sane default, so
+            // the happy path is just `vela propose <frontier> <vf> --status …`.
+            let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
+            let reason = reason.unwrap_or_else(|| format!("marked {status}"));
             let options = state::ReviewOptions {
                 status: status.clone(),
-                reason: reason.clone(),
-                reviewer: reviewer.clone(),
+                reason,
+                reviewer,
             };
             let report = state::review_finding(&frontier, &finding_id, options, apply)
                 .unwrap_or_else(|e| fail_return(&e));
