@@ -3498,13 +3498,13 @@ pub(crate) enum FindingCommands {
         /// Assertion text inside the finding bundle
         #[arg(long)]
         assertion: String,
-        /// Assertion type. One of: mechanism, therapeutic, diagnostic, epidemiological, observational, review, methodological, computational, theoretical, negative
+        /// Assertion type. One of: mechanism, observational, computational, theoretical, negative, measurement, exclusion, tension, open_question, hypothesis, candidate_finding
         #[arg(long, default_value = "mechanism")]
         r#type: String,
         /// Source label for the finding
         #[arg(long, default_value = "manual finding")]
         source: String,
-        /// Source type. One of: published_paper, preprint, clinical_trial, lab_notebook, model_output, expert_assertion, database_record
+        /// Source type. One of: published_paper, preprint, model_output, expert_assertion, database_record, data_release, researcher_notes
         #[arg(long, default_value = "expert_assertion")]
         source_type: String,
         /// Author/reviewer identifier
@@ -3513,10 +3513,10 @@ pub(crate) enum FindingCommands {
         /// Initial confidence score from 0.0 to 1.0
         #[arg(long, default_value = "0.3")]
         confidence: f64,
-        /// Evidence type. One of: experimental, observational, computational, theoretical, meta_analysis, systematic_review, case_report
+        /// Evidence type. One of: experimental, observational, computational, theoretical, extracted_from_notes
         #[arg(long, default_value = "theoretical")]
         evidence_type: String,
-        /// Entities as comma-separated name:type pairs. Entity types: gene, protein, compound, disease, cell_type, organism, pathway, assay, anatomical_structure, particle, instrument, dataset, quantity, other
+        /// Entities as comma-separated name:type pairs. Type is a free-form lowercase tag (e.g. sequence, set, code, theorem, dataset).
         #[arg(long, default_value = "")]
         entities: String,
         /// Mark manually supplied entities as curator-reviewed

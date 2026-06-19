@@ -392,4 +392,81 @@ mod tests {
         assert_eq!(leaks.len(), 1);
         assert_eq!(leaks[0].1, "vac_deadbeefdeadbeef");
     }
+
+    /// Build a structurally-valid attachment, then overwrite the lineage-bearing
+    /// fields the scan reads (`build` enforces a `vf_`/`vfr_` target, so the leak
+    /// has to be injected after construction).
+    fn attachment_to(
+        target: &str,
+        independent_of: Vec<String>,
+    ) -> crate::verifier_attachment::VerifierAttachment {
+        use crate::verifier_attachment::{
+            AttachmentDraft, AttachmentOutcome, MatchToClaim, VerifierAttachment, VerifierMethod,
+        };
+        let mut att = VerifierAttachment::build(AttachmentDraft {
+            target: "vf_0123456789abcdef".to_string(),
+            claim_digest: "sha256:claim".to_string(),
+            verifier_method: VerifierMethod::ComputationalSearch,
+            solver_id: "cp-sat".to_string(),
+            independent_of,
+            match_to_claim: MatchToClaim {
+                matches: true,
+                checker_actor: "checker".to_string(),
+            },
+            adversarial_probes: vec![],
+            outcome: AttachmentOutcome::Passed,
+            verifier_actor: "Opus 4.8".to_string(),
+            note: String::new(),
+        })
+        .unwrap();
+        att.target = target.to_string();
+        att
+    }
+
+    #[test]
+    fn lineage_scan_flags_attachment_target_and_independence() {
+        // an attachment pointed AT an activity envelope is a boundary break
+        let att = attachment_to("vac_deadbeefdeadbeef", vec![]);
+        let leaks = activity_ids_in_lineage(&[], std::slice::from_ref(&att));
+        assert_eq!(leaks.len(), 1);
+        assert_eq!(leaks[0].1, "vac_deadbeefdeadbeef");
+
+        // declaring independence from a retrieval receipt (vrr_) is also a break
+        let att = attachment_to(
+            "vf_0123456789abcdef",
+            vec!["vrr_cafebabecafebabe".to_string()],
+        );
+        let leaks = activity_ids_in_lineage(&[], std::slice::from_ref(&att));
+        assert_eq!(leaks.len(), 1);
+        assert_eq!(leaks[0].1, "vrr_cafebabecafebabe");
+
+        // a clean attachment trips nothing
+        let att = attachment_to("vf_0123456789abcdef", vec![]);
+        assert!(activity_ids_in_lineage(&[], std::slice::from_ref(&att)).is_empty());
+    }
+
+    #[test]
+    fn lineage_scan_skips_superseded_and_retracted_findings() {
+        let mut f = crate::test_support::make_finding("vf_a", 1.0, "computational");
+        f.links.push(crate::bundle::Link {
+            target: "vac_deadbeefdeadbeef".to_string(),
+            link_type: "depends_on".to_string(),
+            note: String::new(),
+            inferred_by: "agent:test".to_string(),
+            created_at: "2026-06-18T00:00:00Z".to_string(),
+            mechanism: None,
+        });
+        // live: the leak is in force and visible
+        assert_eq!(
+            activity_ids_in_lineage(std::slice::from_ref(&f), &[]).len(),
+            1
+        );
+        // superseded findings are out of force, so out of scope for the scan
+        f.flags.superseded = true;
+        assert!(activity_ids_in_lineage(std::slice::from_ref(&f), &[]).is_empty());
+        // retracted likewise
+        f.flags.superseded = false;
+        f.flags.retracted = true;
+        assert!(activity_ids_in_lineage(std::slice::from_ref(&f), &[]).is_empty());
+    }
 }

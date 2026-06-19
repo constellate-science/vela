@@ -572,7 +572,7 @@ mod tests {
         // surrounding whitespace collapsed.
         assert_eq!(entity_name("Sidon set"), "Sidon set");
         assert_eq!(entity_name("  B_2[g] sequence  "), "B_2[g] sequence");
-        assert_eq!(entity_name("NLRP3"), "NLRP3");
+        assert_eq!(entity_name("A309370"), "A309370");
     }
 
     // ── normalize_findings tests ─────────────────────────────────────
@@ -596,18 +596,18 @@ mod tests {
     #[test]
     fn deduplication_removes_duplicate_entities() {
         let mut bundles = vec![make_finding_with_entities(vec![
-            make_entity("NLRP3", "protein"),
-            make_entity("nlrp3", "protein"), // same name different case
-            make_entity("NLRP3", "gene"),    // same name different type = kept
+            make_entity("A309370", "sequence"),
+            make_entity("a309370", "sequence"), // same name different case
+            make_entity("A309370", "set"),      // same name different type = kept
         ])];
         let (_tf, _nf) = normalize_findings(&mut bundles);
-        assert_eq!(bundles[0].assertion.entities.len(), 2); // protein + gene
+        assert_eq!(bundles[0].assertion.entities.len(), 2); // sequence + set
     }
 
     #[test]
     fn normalize_no_changes_returns_zero() {
         let mut bundles = vec![make_finding_with_entities(vec![make_entity(
-            "NLRP3", "protein",
+            "A309370", "sequence",
         )])];
         let (type_fixes, name_fixes) = normalize_findings(&mut bundles);
         assert_eq!(type_fixes, 0);

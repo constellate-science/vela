@@ -20,8 +20,8 @@ pub fn make_finding(id: &str, score: f64, assertion_type: &str) -> FindingBundle
             text: format!("Finding {id}"),
             assertion_type: assertion_type.into(),
             entities: vec![Entity {
-                name: "TestEntity".into(),
-                entity_type: "protein".into(),
+                name: "A309370".into(),
+                entity_type: "sequence".into(),
                 identifiers: serde_json::Map::new(),
                 canonical_id: None,
                 candidates: vec![],
