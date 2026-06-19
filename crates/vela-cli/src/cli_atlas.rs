@@ -462,7 +462,7 @@ fn anchor_findings(
     anchored
 }
 
-/// `vela atlas ingest-source --adapter <formal|alphaproof> --input <dir> --out
+/// `vela atlas ingest-source --adapter <formal|alphaproof|oeis> --input <dir|file> --out
 /// <frontier.json|repo> [--namespace erdos|oeis] [--rev <prov>] [--actor <a>]
 /// [--key <agentkey>] [--dry-run]` — the native production path that replaces
 /// the synthetic-id Python prototypes. Reads a catalogue via a `SourceAdapter`,
@@ -480,7 +480,7 @@ fn run_ingest_source(args: &[String]) {
             .map(|s| s.to_string())
     };
     let adapter =
-        flag("--adapter").unwrap_or_else(|| fail("--adapter is required (formal|alphaproof)"));
+        flag("--adapter").unwrap_or_else(|| fail("--adapter is required (formal|alphaproof|oeis)"));
     let input = flag("--input").unwrap_or_else(|| fail("--input <dir> is required"));
     let out = flag("--out").unwrap_or_else(|| fail("--out <frontier.json|repo-dir> is required"));
     let ns = flag("--namespace").unwrap_or_else(|| "erdos".to_string());

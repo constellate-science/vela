@@ -186,13 +186,55 @@ pub fn read_alphaproof(dir: &Path, rev: &str) -> Result<Vec<SourceRecord>, Strin
     Ok(out)
 }
 
+/// OEIS adapter: read an `ErdosOEIS` catalogue (a JSON document with a
+/// `sequences` map of `A###### -> { id, name, terms }`, e.g.
+/// `examples/erdos-problems/sources/oeis.v1.json`) and yield one record per
+/// sequence. The native counterpart of the OEIS pass in
+/// `scripts/atlas/ingest_tao.py`; deterministic (sorted by id). Fetching is out
+/// of scope: this reads a local catalogue file, so the result is reproducible.
+pub fn read_oeis(input: &Path, _rev: &str) -> Result<Vec<SourceRecord>, String> {
+    let raw = std::fs::read_to_string(input)
+        .map_err(|e| format!("read {}: {e}", input.display()))?;
+    let doc: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", input.display()))?;
+    let seqs = doc
+        .get("sequences")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| format!("{}: missing `sequences` object", input.display()))?;
+    let mut out: Vec<SourceRecord> = Vec::new();
+    for (id, entry) in seqs {
+        let name = entry
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
+        if id.is_empty() || name.is_empty() {
+            continue;
+        }
+        out.push(SourceRecord {
+            external_id: id.clone(),
+            assertion_text: format!("OEIS {id}: {name}"),
+            assertion_type: "oeis-sequence".into(),
+            implies: vec![],
+        });
+    }
+    // BTreeMap-style determinism: serde_json object iteration is already sorted,
+    // but sort explicitly so the contract does not depend on that.
+    out.sort_by(|a, b| a.external_id.cmp(&b.external_id));
+    if out.is_empty() {
+        return Err(format!("{}: no usable sequences", input.display()));
+    }
+    Ok(out)
+}
+
 /// Dispatch an adapter by name.
 pub fn read_adapter(adapter: &str, input: &Path, rev: &str) -> Result<Vec<SourceRecord>, String> {
     match adapter {
         "formal" => read_formal(input, rev),
         "alphaproof" => read_alphaproof(input, rev),
+        "oeis" => read_oeis(input, rev),
         other => Err(format!(
-            "unknown adapter '{other}' (supported: formal | alphaproof; tao stays scripts/atlas/ingest_tao.py)"
+            "unknown adapter '{other}' (supported: formal | alphaproof | oeis; tao stays scripts/atlas/ingest_tao.py)"
         )),
     }
 }
@@ -221,6 +263,31 @@ mod tests {
         assert!(implied_problems("erdos_90 implies_erdos_90", "90").is_empty());
         // none
         assert!(implied_problems("no refs here", "5").is_empty());
+    }
+
+    #[test]
+    fn read_oeis_parses_sequences_deterministically() {
+        let dir = std::env::temp_dir().join(format!("vela_oeis_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("oeis.v1.json");
+        std::fs::write(
+            &f,
+            r#"{"object":"ErdosOEIS","sequences":{
+                "A000040":{"id":"A000040","name":"The prime numbers.","terms":"2,3,5"},
+                "A000001":{"id":"A000001","name":"Number of groups of order n.","terms":"0,1,1"},
+                "A999999":{"id":"A999999","name":"","terms":""}
+            }}"#,
+        )
+        .unwrap();
+        let recs = read_oeis(&f, "test").unwrap();
+        assert_eq!(recs.len(), 2, "empty-name sequence dropped");
+        assert_eq!(recs[0].external_id, "A000001", "sorted by id");
+        assert_eq!(recs[1].external_id, "A000040");
+        assert_eq!(recs[0].assertion_type, "oeis-sequence");
+        assert!(recs[1].assertion_text.contains("The prime numbers."));
+        // a finding built from it is content-addressed like any other adapter record.
+        assert!(build_finding(&recs[0], "oeis").id.starts_with("vf_"));
+        std::fs::remove_dir_all(&dir).ok();
     }
 
     #[test]
