@@ -149,15 +149,9 @@
         "type": "mechanism"
       },
       "conditions": {
-        "age_group": null,
         "cell_type": "microglia",
-        "clinical_trial": false,
-        "concentration_range": null,
         "duration": null,
-        "human_data": false,
         "in_vitro": true,
-        "in_vivo": false,
-        "species_unverified": [],
         "species_verified": [
           "Mus musculus"
         ],
@@ -172,7 +166,6 @@
       },
       "created": "2026-05-02T13:30:00Z",
       "evidence": {
-        "effect_size": null,
         "evidence_spans": [],
         "method": "Western blot",
         "model_system": "mouse",
@@ -219,9 +212,6 @@
           "model_version": null
         },
         "journal": "Cross Journal",
-        "openalex_id": null,
-        "pmc": null,
-        "pmid": null,
         "review": null,
         "source_type": "published_paper",
         "title": "Cross-impl paper 13-0",
@@ -248,15 +238,9 @@
         "type": "mechanism"
       },
       "conditions": {
-        "age_group": null,
         "cell_type": "microglia",
-        "clinical_trial": false,
-        "concentration_range": null,
         "duration": null,
-        "human_data": false,
         "in_vitro": true,
-        "in_vivo": false,
-        "species_unverified": [],
         "species_verified": [
           "Mus musculus"
         ],
@@ -271,7 +255,6 @@
       },
       "created": "2026-05-02T13:30:01Z",
       "evidence": {
-        "effect_size": null,
         "evidence_spans": [],
         "method": "Western blot",
         "model_system": "mouse",
@@ -318,9 +301,6 @@
           "model_version": null
         },
         "journal": "Cross Journal",
-        "openalex_id": null,
-        "pmc": null,
-        "pmid": null,
         "review": null,
         "source_type": "published_paper",
         "title": "Cross-impl paper 13-1",
@@ -347,15 +327,9 @@
         "type": "mechanism"
       },
       "conditions": {
-        "age_group": null,
         "cell_type": "microglia",
-        "clinical_trial": false,
-        "concentration_range": null,
         "duration": null,
-        "human_data": false,
         "in_vitro": true,
-        "in_vivo": false,
-        "species_unverified": [],
         "species_verified": [
           "Mus musculus"
         ],
@@ -370,7 +344,6 @@
       },
       "created": "2026-05-02T13:30:02Z",
       "evidence": {
-        "effect_size": null,
         "evidence_spans": [],
         "method": "Western blot",
         "model_system": "mouse",
@@ -417,9 +390,6 @@
           "model_version": null
         },
         "journal": "Cross Journal",
-        "openalex_id": null,
-        "pmc": null,
-        "pmid": null,
         "review": null,
         "source_type": "published_paper",
         "title": "Cross-impl paper 13-2",
@@ -446,15 +416,9 @@
         "type": "mechanism"
       },
       "conditions": {
-        "age_group": null,
         "cell_type": "microglia",
-        "clinical_trial": false,
-        "concentration_range": null,
         "duration": null,
-        "human_data": false,
         "in_vitro": true,
-        "in_vivo": false,
-        "species_unverified": [],
         "species_verified": [
           "Mus musculus"
         ],
@@ -469,7 +433,6 @@
       },
       "created": "2026-05-02T13:30:03Z",
       "evidence": {
-        "effect_size": null,
         "evidence_spans": [],
         "method": "Western blot",
         "model_system": "mouse",
@@ -516,9 +479,6 @@
           "model_version": null
         },
         "journal": "Cross Journal",
-        "openalex_id": null,
-        "pmc": null,
-        "pmid": null,
         "review": null,
         "source_type": "published_paper",
         "title": "Cross-impl paper 13-3",
@@ -545,15 +505,9 @@
         "type": "mechanism"
       },
       "conditions": {
-        "age_group": null,
         "cell_type": "microglia",
-        "clinical_trial": false,
-        "concentration_range": null,
         "duration": null,
-        "human_data": false,
         "in_vitro": true,
-        "in_vivo": false,
-        "species_unverified": [],
         "species_verified": [
           "Mus musculus"
         ],
@@ -568,7 +522,6 @@
       },
       "created": "2026-05-02T13:30:04Z",
       "evidence": {
-        "effect_size": null,
         "evidence_spans": [],
         "method": "Western blot",
         "model_system": "mouse",
@@ -615,9 +568,6 @@
           "model_version": null
         },
         "journal": "Cross Journal",
-        "openalex_id": null,
-        "pmc": null,
-        "pmid": null,
         "review": null,
         "source_type": "published_paper",
         "title": "Cross-impl paper 13-4",
@@ -644,15 +594,9 @@
         "type": "mechanism"
       },
       "conditions": {
-        "age_group": null,
         "cell_type": "microglia",
-        "clinical_trial": false,
-        "concentration_range": null,
         "duration": null,
-        "human_data": false,
         "in_vitro": true,
-        "in_vivo": false,
-        "species_unverified": [],
         "species_verified": [
           "Mus musculus"
         ],
@@ -667,7 +611,6 @@
       },
       "created": "2026-05-02T13:30:05Z",
       "evidence": {
-        "effect_size": null,
         "evidence_spans": [],
         "method": "Western blot",
         "model_system": "mouse",
@@ -714,9 +657,6 @@
           "model_version": null
         },
         "journal": "Cross Journal",
-        "openalex_id": null,
-        "pmc": null,
-        "pmid": null,
         "review": null,
         "source_type": "published_paper",
         "title": "Cross-impl paper 13-5",
@@ -743,15 +683,9 @@
         "type": "mechanism"
       },
       "conditions": {
-        "age_group": null,
         "cell_type": "microglia",
-        "clinical_trial": false,
-        "concentration_range": null,
         "duration": null,
-        "human_data": false,
         "in_vitro": true,
-        "in_vivo": false,
-        "species_unverified": [],
         "species_verified": [
           "Mus musculus"
         ],
@@ -766,7 +700,6 @@
       },
       "created": "2026-05-02T13:30:06Z",
       "evidence": {
-        "effect_size": null,
         "evidence_spans": [],
         "method": "Western blot",
         "model_system": "mouse",
@@ -813,9 +746,6 @@
           "model_version": null
         },
         "journal": "Cross Journal",
-        "openalex_id": null,
-        "pmc": null,
-        "pmid": null,
         "review": null,
         "source_type": "published_paper",
         "title": "Cross-impl paper 13-6",
@@ -842,15 +772,9 @@
         "type": "mechanism"
       },
       "conditions": {
-        "age_group": null,
         "cell_type": "microglia",
-        "clinical_trial": false,
-        "concentration_range": null,
         "duration": null,
-        "human_data": false,
         "in_vitro": true,
-        "in_vivo": false,
-        "species_unverified": [],
         "species_verified": [
           "Mus musculus"
         ],
@@ -865,7 +789,6 @@
       },
       "created": "2026-05-02T13:30:07Z",
       "evidence": {
-        "effect_size": null,
         "evidence_spans": [],
         "method": "Western blot",
         "model_system": "mouse",
@@ -904,9 +827,6 @@
           "model_version": null
         },
         "journal": "Cross Journal",
-        "openalex_id": null,
-        "pmc": null,
-        "pmid": null,
         "review": null,
         "source_type": "published_paper",
         "title": "Cross-impl paper 13-7",
