@@ -4,82 +4,72 @@
     {
       "bytes": 37046,
       "path": "cascade-fixture-00.json",
-      "sha256": "sha256:b4dc05e8efe453c9c8258b83ea5b4cdafa459adefebba1d972f6a700cc6f784c"
+      "sha256": "sha256:805599d01ef75859f56bdc89f6a7f656c369089099e8a898e3d0ff6eee4a6272"
     },
     {
       "bytes": 37046,
       "path": "cascade-fixture-01.json",
-      "sha256": "sha256:828998d2cfa01dc721e3a03178562a6cff5e90bada83d22705672887cb4c1959"
+      "sha256": "sha256:7cb070e709c6c0d0c8c994111bdc80d75ba2582a410de82e4109d1a8e0dbc1ce"
     },
     {
       "bytes": 37046,
       "path": "cascade-fixture-02.json",
-      "sha256": "sha256:8dca8293ac1995fffae02e1bbbcc8e90089716f1847f75dd6595804a8af9b729"
+      "sha256": "sha256:1f6a299193821e054a139f7d7938c37e1529311fc8f929057f167c937dc55f21"
     },
     {
       "bytes": 37789,
       "path": "cascade-fixture-03.json",
-      "sha256": "sha256:07b1860d614b610f7b355d3928c9a2a0b345f944a1d091448f2e18b3d2521ae9"
+      "sha256": "sha256:b75707a56b283c72bdd1bfba08e9badae744e6e7b911316021767f2fc973640d"
     },
     {
       "bytes": 34516,
       "path": "cascade-fixture-04.json",
-      "sha256": "sha256:acda7442366b9203691596b894bdb9afd1f1acc501d1ff8e3a61e8c498b68559"
+      "sha256": "sha256:d7a514e216b57bf2bd4fdd06160efa94cef4b26c8fb9f096b30b756650cf72d0"
     },
     {
       "bytes": 29469,
       "path": "cascade-fixture-07.json",
-      "sha256": "sha256:edaf3eaba2c84994311ac3fe56ded09345908f57782d0e99f5b461042356a6a2"
+      "sha256": "sha256:9f6b270d0eb7a55a7114f09e2e17f905f4c971e24864fc5d9862ea11a86d5e5b"
     },
     {
-      "bytes": 34350,
+      "bytes": 34352,
       "path": "cascade-fixture-08.json",
-      "sha256": "sha256:68939c8ff3726277c8610fa0d45b9522832c96d99f82ec6c0a328138c20f241b"
+      "sha256": "sha256:5b275bfa609c724937c15bf7a860dce882b73088e5cbb3b5d0a8c483ab5dd478"
     },
     {
       "bytes": 24318,
       "path": "cascade-fixture-09.json",
-      "sha256": "sha256:38be4d73315e00291c7d172c2e7c5b9b75241ca71698dbf444edc06060cc26bc"
-    },
-    {
-      "bytes": 24466,
-      "path": "cascade-fixture-10.json",
-      "sha256": "sha256:cf4f8264991085e17b4fbcefdd6cbf3db400dfc5868bda7784cfb4d58b4f8593"
-    },
-    {
-      "bytes": 24344,
-      "path": "cascade-fixture-11.json",
-      "sha256": "sha256:1ff245eff609b84a2d920244f161cc39b74a32350f96bd4ead983b60a2cd04cf"
+      "sha256": "sha256:8a9be27b18601ca72e10c6e1a91a9b717b477012c5635f0085880b29ee89258e"
     },
     {
       "bytes": 27534,
       "path": "cascade-fixture-12.json",
-      "sha256": "sha256:b360258b28d0c2aa2f9a790bc55ce0c1f86cc8a8651c43c3e442f6907c6bc546"
+      "sha256": "sha256:4791c0c5b83913db28d12932c554238c553a81f5640e22e77453adb2d98bedba"
     },
     {
       "bytes": 25132,
       "path": "cascade-fixture-13.json",
-      "sha256": "sha256:ffbd6c6f58226ba590fb317c0d40dbef406462882030948ef4b4cf3ebd481753"
+      "sha256": "sha256:d3bc6061b23276cf62f3cfc18dc2dbe363e791ad8e915249a6a0f2bb8c25c71e"
     },
     {
       "bytes": 25039,
       "path": "cascade-fixture-14.json",
-      "sha256": "sha256:b751ae0e4f8d5d7e72102ddef8a1cc5b82f5ed8b2d58484efea570dcb61f73da"
+      "sha256": "sha256:38fc544e3de19b88fd7f7ac078d187773e310e0c6b78434842b394448b51db52"
     },
     {
       "bytes": 24939,
       "path": "cascade-fixture-15.json",
-      "sha256": "sha256:75cf360e36075f2d00bf78dafce005004190ed4168610a370b8519052a4b9313"
+      "sha256": "sha256:3fda34f56177978037dd27af90de87e6776e59626502b1830d2cf5dadc303e7c"
     },
     {
       "bytes": 9984,
       "path": "cascade-fixture-16.json",
-      "sha256": "sha256:ed61c980d70610dc4ecf0ba99c1cec10a6156cad0a6159544f17a96e236b194c"
+      "sha256": "sha256:a194a711f8b8e26a59703063c0fbf7d52a9fe665d6811a57bc3d93ccf7fea672"
     },
     {
       "bytes": 25076,
       "path": "cascade-fixture-17.json",
-      "sha256": "sha256:3ca27e0a4e36c585aad897a0c662332aa66ea36c6a5e02119e655d990f3dd215"
+      "sha256": "sha256:6412c68db1f520a845ae6a4694cc77937b8e5b666ca0fbefd385c462f6ad6789"
     }
   ],
   "schema": "vela.conformance-fixtures-manifest.v1"

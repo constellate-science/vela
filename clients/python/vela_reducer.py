@@ -383,103 +383,6 @@ def apply_finding_span_repaired(findings: list[dict], event: dict) -> None:
         spans.append({"section": section, "text": text})
 
 
-def apply_finding_entity_resolved(findings: list[dict], event: dict) -> None:
-    """v0.57: Mechanical entity resolution on a finding.
-
-    Sets canonical_id, resolution_method, resolution_provenance, and
-    resolution_confidence on the named entity inside the target
-    finding's assertion.entities array, and clears the entity's
-    needs_review flag.
-    """
-    target = event.get("target") or {}
-    if target.get("type") != "finding":
-        raise ValueError("finding.entity_resolved target.type must be 'finding'")
-    finding_id = target.get("id")
-    payload = event.get("payload") or {}
-    entity_name = payload.get("entity_name")
-    source = payload.get("source")
-    id_value = payload.get("id")
-    confidence = payload.get("confidence")
-    matched_name = payload.get("matched_name")
-    method = payload.get("resolution_method", "manual")
-    provenance = payload.get("resolution_provenance", "delegated_human_curation")
-    if not all(isinstance(v, str) and v for v in [finding_id, entity_name, source, id_value]):
-        raise ValueError("finding.entity_resolved missing required string fields")
-    if not isinstance(confidence, (int, float)):
-        raise ValueError("finding.entity_resolved missing payload.confidence")
-    finding = next((f for f in findings if f.get("id") == finding_id), None)
-    if finding is None:
-        raise ValueError(
-            f"finding.entity_resolved targets unknown finding {finding_id!r}"
-        )
-    entities = finding.get("assertion", {}).get("entities", [])
-    entity = next((e for e in entities if e.get("name") == entity_name), None)
-    if entity is None:
-        raise ValueError(
-            f"finding.entity_resolved entity {entity_name!r} not in finding {finding_id!r}"
-        )
-    canonical = {
-        "source": source,
-        "id": id_value,
-        "confidence": float(confidence),
-    }
-    if isinstance(matched_name, str) and matched_name:
-        canonical["matched_name"] = matched_name
-    entity["canonical_id"] = canonical
-    entity["resolution_method"] = method
-    entity["resolution_provenance"] = provenance
-    entity["resolution_confidence"] = float(confidence)
-    entity["needs_review"] = False
-
-
-def apply_finding_entity_added(findings: list[dict], event: dict) -> None:
-    """v0.79: Append a new entity to a finding's assertion.entities.
-
-    Idempotent on (finding_id, entity_name): re-applying with the same
-    name + type is a no-op so federation re-sync stays clean. Mirrors
-    reducer.rs::apply_finding_entity_added.
-    """
-    target = event.get("target") or {}
-    if target.get("type") != "finding":
-        raise ValueError(
-            f"finding.entity_added target.type must be 'finding', got "
-            f"{target.get('type')!r}"
-        )
-    finding_id = target.get("id")
-    payload = event.get("payload") or {}
-    entity_name = payload.get("entity_name")
-    entity_type = payload.get("entity_type")
-    if not isinstance(finding_id, str) or not finding_id:
-        raise ValueError("finding.entity_added missing target.id")
-    if not isinstance(entity_name, str) or not entity_name:
-        raise ValueError("finding.entity_added missing payload.entity_name")
-    if not isinstance(entity_type, str) or not entity_type:
-        raise ValueError("finding.entity_added missing payload.entity_type")
-    finding = next((f for f in findings if f.get("id") == finding_id), None)
-    if finding is None:
-        raise ValueError(
-            f"finding.entity_added targets unknown finding {finding_id!r}"
-        )
-    entities = finding.setdefault("assertion", {}).setdefault("entities", [])
-    if any(e.get("name") == entity_name for e in entities):
-        return
-    entities.append(
-        {
-            "name": entity_name,
-            "entity_type": entity_type,
-            "identifiers": {},
-            "canonical_id": None,
-            "candidates": [],
-            "aliases": [],
-            "resolution_provenance": None,
-            "resolution_confidence": 1.0,
-            "resolution_method": None,
-            "species_context": None,
-            "needs_review": False,
-        }
-    )
-
-
 def apply_event(state: dict, event: dict) -> None:
     """state is a dict {findings, artifacts, ...} so non-finding
     events have somewhere to land. The Rust reducer's apply_event
@@ -515,10 +418,6 @@ def apply_event(state: dict, event: dict) -> None:
         apply_evidence_atom_locator_repaired(state, event)
     elif kind == "finding.span_repaired":
         apply_finding_span_repaired(state["findings"], event)
-    elif kind == "finding.entity_resolved":
-        apply_finding_entity_resolved(state["findings"], event)
-    elif kind == "finding.entity_added":
-        apply_finding_entity_added(state["findings"], event)
     # v0.80: per-event attestation. No-op on findings; attestations
     # live as append-only canonical events pointing at a target
     # event id. The Rust mirror is reducer.rs:165.
@@ -825,10 +724,10 @@ def verify_fixture(path: Path) -> FixtureResult:
         result.error = f"unreadable fixture: {e}"
         return result
     fx_version = str(fx.get("fixture_version") or "")
-    if fx_version not in ("1", "2", "3", "4", "5"):
+    if fx_version not in ("1", "2", "3", "4", "5", "6"):
         result.error = (
             f"unsupported fixture_version {fx.get('fixture_version')!r}; "
-            f"expected '1', '2', '3', '4', or '5'"
+            f"expected '1', '2', '3', '4', '5', or '6'"
         )
         return result
     result.frontier_idx = int(fx.get("frontier_idx", -1))
@@ -867,11 +766,11 @@ def verify_fixture(path: Path) -> FixtureResult:
         ]
 
     _diff_collection("findings", actual_findings, expected_findings, result)
-    if fx_version in ("3", "4", "5"):
+    if fx_version in ("3", "4", "5", "6"):
         _diff_collection("artifacts", actual_artifacts, expected_artifacts, result)
 
     total_expected = len(expected_findings)
-    if fx_version in ("3", "4", "5"):
+    if fx_version in ("3", "4", "5", "6"):
         total_expected += len(expected_artifacts)
     result.ok = not result.diffs and result.matched == total_expected
     return result

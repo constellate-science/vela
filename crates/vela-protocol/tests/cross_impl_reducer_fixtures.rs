@@ -504,7 +504,7 @@ fn build_artifacts_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<e
     }
 
     let provenance = |title: String| Provenance {
-        source_type: "clinical_trial".into(),
+        source_type: "published_paper".into(),
         doi: None,
         pmid: None,
         pmc: None,
@@ -846,90 +846,6 @@ fn build_span_repair_log(
             "proposal_id": format!("vpr_span_repair_{frontier_idx}"),
             "section": "abstract",
             "text": format!("Fixture span body for span-repair coverage {frontier_idx}."),
-        }),
-        caveats: vec![],
-        signature: None,
-        schema_artifact_id: None,
-    }]
-}
-
-/// v0.57: Coverage fixture for the `finding.entity_resolved` reducer
-/// arm. Builds an event targeting an entity by name on the first
-/// fixture finding.
-fn build_entity_resolve_log(
-    frontier_idx: usize,
-    findings: &[FindingBundle],
-) -> Vec<events::StateEvent> {
-    let target_finding = &findings[0];
-    // make_finding seeds at least one entity; pick the first by name.
-    let entity_name = target_finding
-        .assertion
-        .entities
-        .first()
-        .map(|e| e.name.clone())
-        .unwrap_or_else(|| format!("fixture-entity-{frontier_idx}"));
-    vec![StateEvent {
-        schema: events::EVENT_SCHEMA.to_string(),
-        id: String::new(),
-        kind: "finding.entity_resolved".into(),
-        target: StateTarget {
-            r#type: "finding".to_string(),
-            id: target_finding.id.clone(),
-        },
-        actor: StateActor {
-            id: format!("reviewer:entity-resolve-fixture-{frontier_idx}"),
-            r#type: "human".to_string(),
-        },
-        timestamp: fixture_timestamp(frontier_idx, 0),
-        reason: "Mechanical entity resolution".to_string(),
-        before_hash: NULL_HASH.to_string(),
-        after_hash: NULL_HASH.to_string(),
-        payload: json!({
-            "proposal_id": format!("vpr_entity_resolve_{frontier_idx}"),
-            "entity_name": entity_name,
-            "source": "fixture",
-            "id": format!("F-{frontier_idx}"),
-            "confidence": 0.95,
-            "resolution_method": "manual",
-            "resolution_provenance": "delegated_human_curation",
-        }),
-        caveats: vec![],
-        signature: None,
-        schema_artifact_id: None,
-    }]
-}
-
-/// v0.79: build a `finding.entity_added` log. Adds a new entity
-/// tag to a finding that the make_finding seed didn't include,
-/// proving the v0.79.1 reducer arm is exercised in cross-impl
-/// fixtures. Idempotent: re-applying with the same name is a
-/// no-op so the cross-impl byte-equivalence promise holds.
-fn build_entity_added_log(
-    frontier_idx: usize,
-    findings: &[FindingBundle],
-) -> Vec<events::StateEvent> {
-    let target_finding = &findings[0];
-    vec![StateEvent {
-        schema: events::EVENT_SCHEMA.to_string(),
-        id: String::new(),
-        kind: "finding.entity_added".into(),
-        target: StateTarget {
-            r#type: "finding".to_string(),
-            id: target_finding.id.clone(),
-        },
-        actor: StateActor {
-            id: format!("reviewer:entity-add-fixture-{frontier_idx}"),
-            r#type: "human".to_string(),
-        },
-        timestamp: fixture_timestamp(frontier_idx, 0),
-        reason: "Fixture-level entity-add".to_string(),
-        before_hash: NULL_HASH.to_string(),
-        after_hash: NULL_HASH.to_string(),
-        payload: json!({
-            "proposal_id": format!("vpr_entity_add_{frontier_idx}"),
-            "entity_name": format!("fixture-tag-{frontier_idx}"),
-            "entity_type": "other",
-            "reason": "cross-impl fixture",
         }),
         caveats: vec![],
         signature: None,
@@ -1578,6 +1494,13 @@ fn export_one(
     let kinds_value: Value = serde_json::to_value(&kinds_seen).unwrap();
 
     let fixture = json!({
+        // bumped from "5" to "6". The entity-resolution event family
+        // (finding.entity_resolved, finding.entity_added) was retired
+        // from the protocol, so the entity_resolve + entity_added
+        // coverage fixtures are gone. The per-finding digest never
+        // covered entity fields, so the surviving fixtures' digests are
+        // byte-identical across the bump.
+        //
         // v0.108: bumped from "4" to "5". The empirical object families
         // (negative_results, trajectories, replications, predictions)
         // were retired from the protocol, so the digest now covers only
@@ -1590,8 +1513,8 @@ fn export_one(
         // v0.53: added access_tier on each finding so `tier.set` events
         // on findings participate in the cross-impl byte-equivalence
         // promise.
-        "fixture_version": "5",
-        "schema_url": "https://vela.science/schema/cross-impl-reducer-fixture/v5",
+        "fixture_version": "6",
+        "schema_url": "https://vela.science/schema/cross-impl-reducer-fixture/v6",
         "doctrine": "every reducer implementation must agree on per-kind mutation rules across findings and artifacts",
         "scenario": scenario,
         "frontier_idx": fixture_idx,
@@ -1726,31 +1649,9 @@ fn export_cross_impl_reducer_fixtures() {
         export_one(&out_dir, frontier_idx, "span_repair", findings, event_log);
     }
 
-    // Fixture 10 — finding.entity_resolved scenario (v0.57).
-    {
-        let frontier_idx = FIXTURE_FRONTIER_COUNT + 7;
-        let findings: Vec<FindingBundle> = (0..FINDINGS_PER_FRONTIER)
-            .map(|i| make_finding(frontier_idx, i))
-            .collect();
-        let event_log = build_entity_resolve_log(frontier_idx, &findings);
-        export_one(
-            &out_dir,
-            frontier_idx,
-            "entity_resolve",
-            findings,
-            event_log,
-        );
-    }
-
-    // Fixture 11 — finding.entity_added scenario (v0.79).
-    {
-        let frontier_idx = FIXTURE_FRONTIER_COUNT + 8;
-        let findings: Vec<FindingBundle> = (0..FINDINGS_PER_FRONTIER)
-            .map(|i| make_finding(frontier_idx, i))
-            .collect();
-        let event_log = build_entity_added_log(frontier_idx, &findings);
-        export_one(&out_dir, frontier_idx, "entity_added", findings, event_log);
-    }
+    // Fixtures 10 and 11 (finding.entity_resolved / finding.entity_added)
+    // were retired with the entity-resolution event family. The slots are
+    // left vacant; surviving fixtures keep their numbers.
 
     // Fixture 12 — side-table events. Pins the reducer arms that
     // mutate side tables outside the finding-effects digest
@@ -1994,12 +1895,6 @@ fn fixture_coverage_includes_every_reducer_arm() {
         all_kinds.insert(ev.kind.to_string());
     }
     for ev in build_span_repair_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind.to_string());
-    }
-    for ev in build_entity_resolve_log(frontier_idx, &findings) {
-        all_kinds.insert(ev.kind.to_string());
-    }
-    for ev in build_entity_added_log(frontier_idx, &findings) {
         all_kinds.insert(ev.kind.to_string());
     }
     for ev in build_diff_pack_released_log(frontier_idx, &findings) {

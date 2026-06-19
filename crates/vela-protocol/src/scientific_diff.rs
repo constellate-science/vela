@@ -695,9 +695,6 @@ fn operation_class_for_kind(kind: &str, proposal: Option<&serde_json::Value>) ->
     if normalized.contains("caveat") {
         return "add_caveat";
     }
-    if normalized.contains("entity_resolve") || normalized.contains("entity.resolve") {
-        return "resolve_entity";
-    }
     if normalized.contains("span_repair") || normalized.contains("span.repair") {
         return "repair_span";
     }
@@ -729,9 +726,6 @@ fn operation_review_requirements(
         }
         "add_evidence_atom" | "repair_locator" | "repair_span" => {
             out.insert("source_reviewer".to_string());
-        }
-        "resolve_entity" => {
-            out.insert("entity_reviewer".to_string());
         }
         "open_gap" | "request_downstream_review" => {
             out.insert("frontier_reviewer".to_string());
@@ -976,7 +970,6 @@ mod tests {
             ("evidence_atom.add", "add_evidence_atom"),
             ("finding.locator_repair", "repair_locator"),
             ("finding.span_repair", "repair_span"),
-            ("finding.entity_resolve", "resolve_entity"),
             ("link.add", "add_link"),
             ("finding.caveat", "add_caveat"),
             ("finding.confidence_revise", "revise_confidence"),

@@ -7,33 +7,6 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 
-/// Valid entity types per schema. Single source of truth shared by the validator
-/// and the `vela finding add` CLI; do not duplicate.
-///
-/// v0.10 added domain-neutral entries — `particle`, `instrument`, `dataset`,
-/// `quantity` — surfaced by the first non-bio frontier on the public hub
-/// (Nakamura's dark-matter constraints). The biology-leaning entries remain
-/// for back-compat; the additions widen expressiveness without churn.
-pub const VALID_ENTITY_TYPES: &[&str] = &[
-    // bio (pre-v0.10)
-    "gene",
-    "protein",
-    "compound",
-    "disease",
-    "cell_type",
-    "organism",
-    "pathway",
-    "assay",
-    "anatomical_structure",
-    // domain-neutral (v0.10)
-    "particle",
-    "instrument",
-    "dataset",
-    "quantity",
-    // escape valve
-    "other",
-];
-
 /// Valid assertion types per schema.
 ///
 /// v0.10 added `measurement` and `exclusion` for measurement-heavy domains
@@ -2100,19 +2073,6 @@ mod tests {
         assert_eq!(b.id, b2.id);
         assert_eq!(b.assertion.text, b2.assertion.text);
         assert_eq!(b.confidence.score, b2.confidence.score);
-    }
-
-    #[test]
-    fn valid_entity_types_list() {
-        // Pre-v0.10 (bio) entries
-        for t in ["gene", "protein", "compound", "other"] {
-            assert!(VALID_ENTITY_TYPES.contains(&t), "missing {t}");
-        }
-        // v0.10 domain-neutral additions
-        for t in ["particle", "instrument", "dataset", "quantity"] {
-            assert!(VALID_ENTITY_TYPES.contains(&t), "missing {t}");
-        }
-        assert_eq!(VALID_ENTITY_TYPES.len(), 14);
     }
 
     #[test]

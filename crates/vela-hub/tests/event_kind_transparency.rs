@@ -63,19 +63,3 @@ fn finding_span_repaired_round_trips() {
         }),
     );
 }
-
-#[test]
-fn finding_entity_resolved_round_trips() {
-    roundtrip(
-        "finding.entity_resolved",
-        "finding",
-        "vf_test",
-        json!({
-            "proposal_id": "vpr_test",
-            "entity_name": "PDGFRB",
-            "source": "hgnc",
-            "id": "8804",
-            "confidence": 0.95,
-        }),
-    );
-}

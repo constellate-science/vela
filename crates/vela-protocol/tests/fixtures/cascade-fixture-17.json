@@ -122,7 +122,7 @@
       "review_state": "none"
     }
   ],
-  "fixture_version": "5",
+  "fixture_version": "6",
   "frontier_idx": 17,
   "genesis_findings": [
     {
@@ -911,7 +911,7 @@
     }
   ],
   "scenario": "register_with_finding_edge",
-  "schema_url": "https://vela.science/schema/cross-impl-reducer-fixture/v5",
+  "schema_url": "https://vela.science/schema/cross-impl-reducer-fixture/v6",
   "stats": {
     "artifacts": 0,
     "cascade_depth": 0,

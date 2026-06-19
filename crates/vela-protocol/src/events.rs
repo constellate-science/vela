@@ -73,14 +73,6 @@ pub const EVENT_KIND_EVIDENCE_ATOM_LOCATOR_REPAIRED: &str = "evidence_atom.locat
 /// equal span twice on the same finding).
 pub const EVENT_KIND_FINDING_SPAN_REPAIRED: &str = "finding.span_repaired";
 
-/// v0.57: Entity resolution on a finding. Sets the canonical_id,
-/// resolution_method, resolution_provenance, and resolution_confidence
-/// fields on a single entity inside `state.findings[i].assertion.entities`,
-/// and clears the entity's `needs_review` flag.
-/// Required payload: `{proposal_id, entity_name, source, id, confidence}`
-/// plus optional `matched_name`, `resolution_method`, `resolution_provenance`.
-pub const EVENT_KIND_FINDING_ENTITY_RESOLVED: &str = "finding.entity_resolved";
-
 /// v0.79.4: Per-event attestation. The substrate's existing
 /// frontier-wide signing path (`vela attest <frontier>`) is
 /// coarse-grained: it signs every unsigned finding under one key.
@@ -100,26 +92,6 @@ pub const EVENT_KIND_FINDING_ENTITY_RESOLVED: &str = "finding.entity_resolved";
 /// scripts, hub mirrors) project them per-event by reading the
 /// log.
 pub const EVENT_KIND_ATTESTATION_RECORDED: &str = "attestation.recorded";
-
-/// v0.79: Add a new entity to a finding's `assertion.entities` after
-/// the finding was first asserted. Closes the v0.78.4 honest gap: the
-/// substrate previously could only attach entities at finding-creation
-/// time, so reviewers had to append new findings to add tags.
-///
-/// `finding.entity_added` is append-only: the new entity is added to
-/// the list, never replacing or mutating existing entries. Entity
-/// resolution (assigning a canonical id) is still done via
-/// `finding.entity_resolved` after the fact.
-///
-/// Required payload: `{proposal_id, entity_name, entity_type, reason}`.
-/// Optional: `entity_role`, `provenance` (source paper / reviewer
-/// context for why this entity belongs).
-///
-/// Reducer arm: pushes a new `Entity{name, type, ...}` onto
-/// `Project.findings[id].assertion.entities`. Idempotent on
-/// `(finding_id, entity_name)`: re-applying with the same name + type
-/// is a no-op, so federation re-sync stays clean.
-pub const EVENT_KIND_FINDING_ENTITY_ADDED: &str = "finding.entity_added";
 
 /// Review verdict over non-mutating frontier observation material,
 /// such as research traces and correction returns. This records what
@@ -211,8 +183,6 @@ pub const KNOWN_EVENT_KINDS: &[&str] = &[
     "finding.superseded",
     "finding.dependency_invalidated",
     "finding.span_repaired",
-    "finding.entity_resolved",
-    "finding.entity_added",
     "assertion.reinterpreted_causal",
     "source_text.reviewed",
     "artifact.asserted",
@@ -335,8 +305,6 @@ event_kinds! {
     TierSet => "tier.set",
     EvidenceAtomLocatorRepaired => "evidence_atom.locator_repaired",
     FindingSpanRepaired => "finding.span_repaired",
-    FindingEntityResolved => "finding.entity_resolved",
-    FindingEntityAdded => "finding.entity_added",
     AttestationRecorded => "attestation.recorded",
     DiffPackReleased => "diff_pack.released",
     DiffPackReviewed => "diff_pack.reviewed",
@@ -1582,28 +1550,6 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
                 return Err("payload.text must be non-empty".to_string());
             }
         }
-        // v0.57: Set canonical_id + resolution metadata on a single
-        // entity inside finding.assertion.entities. Required payload:
-        // {proposal_id, entity_name, source, id, confidence}.
-        EVENT_KIND_FINDING_ENTITY_RESOLVED => {
-            require_str("proposal_id")?;
-            let entity_name = require_str("entity_name")?;
-            if entity_name.trim().is_empty() {
-                return Err("payload.entity_name must be non-empty".to_string());
-            }
-            let source = require_str("source")?;
-            if source.trim().is_empty() {
-                return Err("payload.source must be non-empty".to_string());
-            }
-            let id = require_str("id")?;
-            if id.trim().is_empty() {
-                return Err("payload.id must be non-empty".to_string());
-            }
-            let confidence = require_f64("confidence")?;
-            if !(0.0..=1.0).contains(&confidence) {
-                return Err(format!("payload.confidence {confidence} out of [0.0, 1.0]"));
-            }
-        }
         // v0.79.4: Per-event attestation. Required payload:
         // `{target_event_id, attester_id, scope_note}`. Optional:
         // `scopes`, `reviewer_role`, `orcid`, `ror`,
@@ -1674,45 +1620,6 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
                 return Err(format!(
                     "payload.proof_id must start with 'vpf_' when present, got '{s}'"
                 ));
-            }
-        }
-        // v0.79: Add a new entity tag to an existing finding. The
-        // valid `entity_type` values are the same as `validate_entities`
-        // accepts at finding-creation time
-        // (gene/protein/compound/disease/cell_type/organism/pathway/
-        //  assay/anatomical_structure/particle/instrument/dataset/
-        //  quantity/other).
-        EVENT_KIND_FINDING_ENTITY_ADDED => {
-            require_str("proposal_id")?;
-            let entity_name = require_str("entity_name")?;
-            if entity_name.trim().is_empty() {
-                return Err("payload.entity_name must be non-empty".to_string());
-            }
-            let entity_type = require_str("entity_type")?;
-            const VALID_ENTITY_TYPES: &[&str] = &[
-                "gene",
-                "protein",
-                "compound",
-                "disease",
-                "cell_type",
-                "organism",
-                "pathway",
-                "assay",
-                "anatomical_structure",
-                "particle",
-                "instrument",
-                "dataset",
-                "quantity",
-                "other",
-            ];
-            if !VALID_ENTITY_TYPES.contains(&entity_type) {
-                return Err(format!(
-                    "payload.entity_type '{entity_type}' not in {VALID_ENTITY_TYPES:?}"
-                ));
-            }
-            let reason = require_str("reason")?;
-            if reason.trim().is_empty() {
-                return Err("payload.reason must be non-empty".to_string());
             }
         }
         "verifier_attachment.added" => {
@@ -2457,46 +2364,5 @@ mod tests {
             "proof_id": "not_a_vpf"
         });
         assert!(validate_event_payload(EVENT_KIND_ATTESTATION_RECORDED, &bad_proof).is_err());
-    }
-
-    /// v0.79: finding.entity_added validator pins the entity_type
-    /// to the same allowlist `validate_entities` enforces at
-    /// finding-creation time.
-    #[test]
-    fn finding_entity_added_validator() {
-        // PASS: well-formed payload.
-        let good = json!({
-            "proposal_id": "vpr_demo",
-            "entity_name": "claudin-5",
-            "entity_type": "protein",
-            "reason": "Cardinal BBB tight-junction protein; cited in finding source paper."
-        });
-        assert!(validate_event_payload(EVENT_KIND_FINDING_ENTITY_ADDED, &good).is_ok());
-
-        // FAIL: missing reason.
-        let no_reason = json!({
-            "proposal_id": "vpr_demo",
-            "entity_name": "claudin-5",
-            "entity_type": "protein"
-        });
-        assert!(validate_event_payload(EVENT_KIND_FINDING_ENTITY_ADDED, &no_reason).is_err());
-
-        // FAIL: bad entity_type.
-        let bad_type = json!({
-            "proposal_id": "vpr_demo",
-            "entity_name": "claudin-5",
-            "entity_type": "fancy_new_thing",
-            "reason": "x"
-        });
-        assert!(validate_event_payload(EVENT_KIND_FINDING_ENTITY_ADDED, &bad_type).is_err());
-
-        // FAIL: empty entity_name.
-        let empty_name = json!({
-            "proposal_id": "vpr_demo",
-            "entity_name": "",
-            "entity_type": "protein",
-            "reason": "x"
-        });
-        assert!(validate_event_payload(EVENT_KIND_FINDING_ENTITY_ADDED, &empty_name).is_err());
     }
 }

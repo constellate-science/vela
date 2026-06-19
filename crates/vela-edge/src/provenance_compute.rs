@@ -127,10 +127,9 @@ where
                 retract_pending = true;
             }
             _ => {
-                // Other event kinds (entity_added, span_repaired,
-                // etc.) do not change support polarity in v0.84.
-                // They may be wired in later cycles via Carina
-                // payload typing.
+                // Other event kinds (span_repaired, etc.) do not
+                // change support polarity in v0.84. They may be
+                // wired in later cycles via Carina payload typing.
             }
         }
     }
@@ -435,8 +434,7 @@ mod tests {
         let null = json!(null);
         let events = vec![
             ev("vev_001", "finding.asserted", "vf_x", &null),
-            ev("vev_002", "finding.entity_added", "vf_x", &null),
-            ev("vev_003", "finding.span_repaired", "vf_x", &null),
+            ev("vev_002", "finding.span_repaired", "vf_x", &null),
         ];
         let sp = compute_status_provenance(events);
         assert_eq!(sp.derive_status(), BelnapStatus::True);

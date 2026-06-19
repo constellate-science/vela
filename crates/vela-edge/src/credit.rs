@@ -99,10 +99,6 @@ pub fn roles_for_event_kind(kind: &str) -> Vec<CreditRole> {
         "finding.note" => vec![CreditRole::WritingReviewEditing],
         "finding.caveat" => vec![CreditRole::WritingReviewEditing],
 
-        // Entity resolution / conceptual structure.
-        "finding.entity_add" => vec![CreditRole::Conceptualization],
-        "finding.entity_resolve" => vec![CreditRole::Conceptualization],
-
         // Evidence curation.
         "evidence_atom.locator_repair" => vec![CreditRole::DataCuration],
         "evidence_atom.locator_repaired" => vec![CreditRole::DataCuration],

@@ -157,7 +157,7 @@
       "review_state": "accepted"
     }
   ],
-  "fixture_version": "5",
+  "fixture_version": "6",
   "frontier_idx": 16,
   "genesis_findings": [
     {
@@ -352,7 +352,7 @@
     }
   ],
   "scenario": "supersession_propagation",
-  "schema_url": "https://vela.science/schema/cross-impl-reducer-fixture/v5",
+  "schema_url": "https://vela.science/schema/cross-impl-reducer-fixture/v6",
   "stats": {
     "artifacts": 0,
     "cascade_depth": 0,

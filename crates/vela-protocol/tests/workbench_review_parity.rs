@@ -154,42 +154,6 @@ fn span_repair_cli_and_ui_produce_identical_proposal_ids() {
     assert!(cli_id.starts_with("vpr_"));
 }
 
-fn entity_resolve_proposal(
-    finding_id: &str,
-    entity_name: &str,
-    source: &str,
-    id: &str,
-    confidence: f64,
-    matched_name: Option<&str>,
-    reviewer: &str,
-    reason: &str,
-) -> String {
-    let mut payload = json!({
-        "entity_name": entity_name,
-        "source": source,
-        "id": id,
-        "confidence": confidence,
-        "resolution_method": "manual",
-    });
-    if let Some(m) = matched_name {
-        payload["matched_name"] = json!(m);
-    }
-    new_proposal(
-        "finding.entity_resolve",
-        StateTarget {
-            r#type: "finding".to_string(),
-            id: finding_id.to_string(),
-        },
-        reviewer,
-        "human",
-        reason,
-        payload,
-        Vec::new(),
-        Vec::new(),
-    )
-    .id
-}
-
 // v0.59: promote-to-accepted-core (the `finding.review` event) goes
 // through the same proposal builder via `state::review_finding`.
 // Both the CLI and the local Workbench POST handler call that
@@ -230,32 +194,6 @@ fn promote_cli_and_ui_produce_identical_proposal_ids() {
         cli_id, ui_id,
         "promote CLI and UI must produce identical proposal ids"
     );
-    assert!(cli_id.starts_with("vpr_"));
-}
-
-#[test]
-fn entity_resolve_cli_and_ui_produce_identical_proposal_ids() {
-    let cli_id = entity_resolve_proposal(
-        "vf_abc",
-        "PDGFRB",
-        "hgnc",
-        "8804",
-        0.95,
-        Some("PDGFRB"),
-        "reviewer:test",
-        "fixture",
-    );
-    let ui_id = entity_resolve_proposal(
-        "vf_abc",
-        "PDGFRB",
-        "hgnc",
-        "8804",
-        0.95,
-        Some("PDGFRB"),
-        "reviewer:test",
-        "fixture",
-    );
-    assert_eq!(cli_id, ui_id);
     assert!(cli_id.starts_with("vpr_"));
 }
 

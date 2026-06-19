@@ -726,16 +726,6 @@ pub async fn run_command() {
                 );
                 let parsed_entities = parse_entities(&entities);
                 let parsed_evidence_spans = parse_evidence_spans(&evidence_span);
-                for (name, etype) in &parsed_entities {
-                    if !bundle::VALID_ENTITY_TYPES.contains(&etype.as_str()) {
-                        fail(&format!(
-                            "invalid entity type '{}' for '{}'. Valid: {}",
-                            etype,
-                            name,
-                            bundle::VALID_ENTITY_TYPES.join(", "),
-                        ));
-                    }
-                }
                 let parsed_source_authors = source_authors
                     .map(|s| {
                         s.split(';')
@@ -830,16 +820,6 @@ pub async fn run_command() {
                     bundle::VALID_PROVENANCE_SOURCE_TYPES,
                 );
                 let parsed_entities = parse_entities(&entities);
-                for (name, etype) in &parsed_entities {
-                    if !bundle::VALID_ENTITY_TYPES.contains(&etype.as_str()) {
-                        fail(&format!(
-                            "invalid entity type '{}' for '{}'. Valid: {}",
-                            etype,
-                            name,
-                            bundle::VALID_ENTITY_TYPES.join(", "),
-                        ));
-                    }
-                }
                 let parsed_source_authors = source_authors
                     .map(|s| {
                         s.split(';')
@@ -5359,7 +5339,7 @@ Proposals and review:
   queue         Walk the local draft queue: list, sign-and-apply, or clear queued review actions
   finding       Manage finding bundles + per-finding verbs:
                   finding add | review | note | caveat | revise | reject |
-                  retract | link | entity | supersede | causal-set
+                  retract | link | supersede | causal-set
 
 Production (multi-producer coordination, signed judgment):
   claim              Lease an open obligation (TTL; one live lease per target)

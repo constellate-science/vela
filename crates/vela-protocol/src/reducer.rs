@@ -91,17 +91,6 @@ pub const REDUCER_MUTATION_KINDS: &[&str] = &[
     // to `state.findings[i].evidence.evidence_spans`. Idempotent under
     // identical re-application (refuses to append an equal span twice).
     "finding.span_repaired",
-    // v0.57: finding.entity_resolved sets canonical_id + resolution
-    // metadata on a named entity inside finding.assertion.entities and
-    // clears the entity's needs_review flag.
-    "finding.entity_resolved",
-    // v0.79: finding.entity_added pushes a new Entity{name, type}
-    // onto state.findings[i].assertion.entities. Idempotent on
-    // (finding_id, entity_name): re-applying with the same name +
-    // type is a no-op so federation re-sync stays clean. Closes the
-    // v0.78.4 honest gap that forced reviewers to append new
-    // findings just to add a tag.
-    "finding.entity_added",
     // v0.213: Released Diff Pack tracking. Both arms mutate
     // `state.released_diff_packs`:
     //   * `diff_pack.released` appends a new ReleasedDiffPackRecord
@@ -191,10 +180,6 @@ pub fn apply_event_indexed(
         EventKind::EvidenceAtomLocatorRepaired => apply_evidence_atom_locator_repaired(state, event),
         // v0.57: mechanical finding-level span repair.
         EventKind::FindingSpanRepaired => apply_finding_span_repaired(state, event, idx),
-        // v0.57: entity resolution.
-        EventKind::FindingEntityResolved => apply_finding_entity_resolved(state, event, idx),
-        // v0.79: append a new entity tag to an existing finding.
-        EventKind::FindingEntityAdded => apply_finding_entity_added(state, event, idx),
         // v0.79.4: per-event attestation. No-op on findings;
         // attestations live as append-only canonical events
         // pointing at a target event id.
@@ -993,160 +978,6 @@ fn apply_tier_set(state: &mut Project, event: &StateEvent) -> Result<(), String>
     Ok(())
 }
 
-/// v0.57: Apply a `finding.entity_resolved` event. Sets the
-/// canonical_id, resolution_method, resolution_provenance, and
-/// resolution_confidence on the named entity inside the target
-/// finding's assertion.entities array, and clears the entity's
-/// `needs_review` flag.
-fn apply_finding_entity_resolved(
-    state: &mut Project,
-    event: &StateEvent,
-    index: &mut FindingIndex,
-) -> Result<(), String> {
-    use crate::bundle::{ResolutionMethod, ResolvedId};
-
-    if event.target.r#type != "finding" {
-        return Err(format!(
-            "reducer: finding.entity_resolved target.type must be 'finding', got '{}'",
-            event.target.r#type
-        ));
-    }
-    let finding_id = event.target.id.as_str();
-    let entity_name = event
-        .payload
-        .get("entity_name")
-        .and_then(Value::as_str)
-        .ok_or("reducer: finding.entity_resolved missing payload.entity_name")?;
-    let source = event
-        .payload
-        .get("source")
-        .and_then(Value::as_str)
-        .ok_or("reducer: finding.entity_resolved missing payload.source")?;
-    let id = event
-        .payload
-        .get("id")
-        .and_then(Value::as_str)
-        .ok_or("reducer: finding.entity_resolved missing payload.id")?;
-    let confidence = event
-        .payload
-        .get("confidence")
-        .and_then(Value::as_f64)
-        .ok_or("reducer: finding.entity_resolved missing payload.confidence")?;
-    let matched_name = event
-        .payload
-        .get("matched_name")
-        .and_then(Value::as_str)
-        .map(str::to_string);
-    let provenance = event
-        .payload
-        .get("resolution_provenance")
-        .and_then(Value::as_str)
-        .unwrap_or("delegated_human_curation")
-        .to_string();
-    let method_str = event
-        .payload
-        .get("resolution_method")
-        .and_then(Value::as_str)
-        .unwrap_or("manual");
-    let method = match method_str {
-        "exact_match" => ResolutionMethod::ExactMatch,
-        "fuzzy_match" => ResolutionMethod::FuzzyMatch,
-        "llm_inference" => ResolutionMethod::LlmInference,
-        "manual" => ResolutionMethod::Manual,
-        other => {
-            return Err(format!(
-                "reducer: finding.entity_resolved unknown resolution_method '{other}'"
-            ));
-        }
-    };
-
-    let f_idx = *index.get(finding_id).ok_or_else(|| {
-        format!("reducer: finding.entity_resolved targets unknown finding {finding_id}")
-    })?;
-    let e_idx = state.findings[f_idx]
-        .assertion
-        .entities
-        .iter()
-        .position(|e| e.name == entity_name)
-        .ok_or_else(|| {
-            format!(
-                "reducer: finding.entity_resolved entity_name '{entity_name}' not in finding {finding_id}"
-            )
-        })?;
-    let entity = &mut state.findings[f_idx].assertion.entities[e_idx];
-    entity.canonical_id = Some(ResolvedId {
-        source: source.to_string(),
-        id: id.to_string(),
-        confidence,
-        matched_name,
-    });
-    entity.resolution_method = Some(method);
-    entity.resolution_provenance = Some(provenance);
-    entity.resolution_confidence = confidence;
-    entity.needs_review = false;
-    Ok(())
-}
-
-/// v0.79: Apply a `finding.entity_added` event. Pushes a new
-/// `Entity{name, type, ...}` onto the target finding's
-/// `assertion.entities` list. Idempotent on
-/// `(finding_id, entity_name)`: if an entity with the same name
-/// already exists, the apply is a no-op so federation re-sync
-/// stays clean. Closes the v0.78.4 honest gap that forced
-/// reviewers to append new findings just to add a tag.
-fn apply_finding_entity_added(
-    state: &mut Project,
-    event: &StateEvent,
-    index: &mut FindingIndex,
-) -> Result<(), String> {
-    use crate::bundle::Entity;
-
-    if event.target.r#type != "finding" {
-        return Err(format!(
-            "reducer: finding.entity_added target.type must be 'finding', got '{}'",
-            event.target.r#type
-        ));
-    }
-    let finding_id = event.target.id.as_str();
-    let entity_name = event
-        .payload
-        .get("entity_name")
-        .and_then(Value::as_str)
-        .ok_or("reducer: finding.entity_added missing payload.entity_name")?;
-    let entity_type = event
-        .payload
-        .get("entity_type")
-        .and_then(Value::as_str)
-        .ok_or("reducer: finding.entity_added missing payload.entity_type")?;
-
-    let f_idx = *index.get(finding_id).ok_or_else(|| {
-        format!("reducer: finding.entity_added targets unknown finding {finding_id}")
-    })?;
-    // Idempotency: if entity with this name already exists, no-op.
-    if state.findings[f_idx]
-        .assertion
-        .entities
-        .iter()
-        .any(|e| e.name == entity_name)
-    {
-        return Ok(());
-    }
-    let entity = Entity {
-        name: entity_name.to_string(),
-        entity_type: entity_type.to_string(),
-        identifiers: serde_json::Map::new(),
-        canonical_id: None,
-        candidates: Vec::new(),
-        aliases: Vec::new(),
-        resolution_provenance: None,
-        resolution_confidence: 1.0,
-        resolution_method: None,
-        species_context: None,
-        needs_review: false,
-    };
-    state.findings[f_idx].assertion.entities.push(entity);
-    Ok(())
-}
 /// v0.213: append a ReleasedDiffPackRecord to
 /// `state.released_diff_packs` when a `diff_pack.released` event
 /// lands on the canonical log. Idempotent on pack_id — re-applying

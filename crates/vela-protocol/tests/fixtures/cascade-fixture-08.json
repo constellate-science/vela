@@ -177,7 +177,7 @@
       "after_hash": "sha256:null",
       "before_hash": "sha256:null",
       "caveats": [],
-      "id": "vev_bf9e3fbc74124ca7",
+      "id": "vev_a7e98b751d380070",
       "kind": "artifact.asserted",
       "payload": {
         "artifact": {
@@ -211,7 +211,7 @@
             "pmc": null,
             "pmid": null,
             "review": null,
-            "source_type": "clinical_trial",
+            "source_type": "published_paper",
             "title": "Cross-impl trial source 8",
             "url": "https://example.org/frontier-8/trial",
             "year": 2026
@@ -288,7 +288,7 @@
       "after_hash": "sha256:null",
       "before_hash": "sha256:null",
       "caveats": [],
-      "id": "vev_1496bcb2f81055ff",
+      "id": "vev_d042f6ed77808495",
       "kind": "artifact.asserted",
       "payload": {
         "artifact": {
@@ -318,7 +318,7 @@
             "pmc": null,
             "pmid": null,
             "review": null,
-            "source_type": "clinical_trial",
+            "source_type": "published_paper",
             "title": "Cross-impl lab source 8",
             "url": "https://example.org/frontier-8/trial",
             "year": 2026
@@ -449,7 +449,7 @@
       "review_state": "none"
     }
   ],
-  "fixture_version": "5",
+  "fixture_version": "6",
   "frontier_idx": 8,
   "genesis_findings": [
     {
@@ -1238,7 +1238,7 @@
     }
   ],
   "scenario": "artifacts",
-  "schema_url": "https://vela.science/schema/cross-impl-reducer-fixture/v5",
+  "schema_url": "https://vela.science/schema/cross-impl-reducer-fixture/v6",
   "stats": {
     "artifacts": 2,
     "cascade_depth": 0,

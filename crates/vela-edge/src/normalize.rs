@@ -74,66 +74,13 @@ impl NormalizeReport {
     }
 }
 
-/// Map LLM-invented entity types to the 10 valid schema types.
+/// Normalize an entity type to canonical form. Domain-general: lower-case
+/// and collapse surrounding whitespace only. The pre-math-wedge biology
+/// type table (mapping LLM-invented types onto a fixed schema vocabulary)
+/// lived here; a frontier's type coercion belongs in its own ingest
+/// config, not hard-coded into the substrate.
 pub fn entity_type(raw: &str) -> String {
-    let t = raw.to_lowercase();
-
-    match t.as_str() {
-        // Already valid
-        "gene"
-        | "protein"
-        | "compound"
-        | "disease"
-        | "cell_type"
-        | "organism"
-        | "pathway"
-        | "assay"
-        | "anatomical_structure"
-        | "other" => t.clone(),
-        // Compounds
-        "chemical" | "chemical_class" | "chemical_family" | "chemical_compound"
-        | "chemical_group" | "drug" | "drug_class" | "metabolite" | "lipid" | "hormone"
-        | "nucleic_acid" | "nucleic acid" | "amino_acid_residue" => "compound".into(),
-        // Proteins
-        "protein_complex" | "protein complex" | "protein family" | "receptor" | "antibody"
-        | "antibody_marker" | "modified_protein" | "biomarker" => "protein".into(),
-        // Genes
-        "gene_variant" | "genetic_variant" => "gene".into(),
-        // Cell types
-        "cell" | "cell type" => "cell_type".into(),
-        // Diseases
-        "disease_state"
-        | "pathological state"
-        | "pathological_process"
-        | "pathology"
-        | "condition" => "disease".into(),
-        // Anatomical
-        "structure"
-        | "tissue"
-        | "organ system"
-        | "organ_system"
-        | "subcellular structure"
-        | "organelle"
-        | "cellular_structure"
-        | "biological_barrier"
-        | "fluid" => "anatomical_structure".into(),
-        // Pathways
-        "biological_process"
-        | "biological process"
-        | "process"
-        | "molecular process"
-        | "metabolic pathway"
-        | "physiological_process"
-        | "physiological process" => "pathway".into(),
-        // Assays
-        "method" | "technology" | "imaging_modality" | "diagnostic tool" | "device" => {
-            "assay".into()
-        }
-        // Organisms
-        "bacterium" | "virus" | "pathogen" | "microbiome" => "organism".into(),
-        // Everything else
-        _ => "other".into(),
-    }
+    raw.trim().to_lowercase()
 }
 
 /// Normalize an entity name to canonical form. Domain-general: collapse
@@ -608,114 +555,13 @@ mod tests {
     // ── entity_type tests ────────────────────────────────────────────
 
     #[test]
-    fn valid_types_pass_through() {
-        for t in &[
-            "gene",
-            "protein",
-            "compound",
-            "disease",
-            "cell_type",
-            "organism",
-            "pathway",
-            "assay",
-            "anatomical_structure",
-            "other",
-        ] {
-            assert_eq!(entity_type(t), *t);
-        }
-    }
-
-    #[test]
-    fn gene_variants_map_to_gene() {
-        assert_eq!(entity_type("gene_variant"), "gene");
-        assert_eq!(entity_type("genetic_variant"), "gene");
-    }
-
-    #[test]
-    fn drug_maps_to_compound() {
-        for t in &[
-            "drug",
-            "chemical",
-            "metabolite",
-            "lipid",
-            "hormone",
-            "drug_class",
-        ] {
-            assert_eq!(entity_type(t), "compound", "expected compound for {t}");
-        }
-    }
-
-    #[test]
-    fn protein_complex_maps_to_protein() {
-        for t in &["protein_complex", "receptor", "antibody", "biomarker"] {
-            assert_eq!(entity_type(t), "protein", "expected protein for {t}");
-        }
-    }
-
-    #[test]
-    fn cell_variants_map_to_cell_type() {
-        assert_eq!(entity_type("cell"), "cell_type");
-        assert_eq!(entity_type("cell type"), "cell_type");
-    }
-
-    #[test]
-    fn disease_variants_map_to_disease() {
-        for t in &["condition", "pathology", "disease_state"] {
-            assert_eq!(entity_type(t), "disease", "expected disease for {t}");
-        }
-    }
-
-    #[test]
-    fn anatomical_variants() {
-        for t in &[
-            "tissue",
-            "organ system",
-            "organelle",
-            "biological_barrier",
-            "fluid",
-        ] {
-            assert_eq!(
-                entity_type(t),
-                "anatomical_structure",
-                "expected anatomical_structure for {t}"
-            );
-        }
-    }
-
-    #[test]
-    fn pathway_variants() {
-        for t in &["biological_process", "process", "metabolic pathway"] {
-            assert_eq!(entity_type(t), "pathway", "expected pathway for {t}");
-        }
-    }
-
-    #[test]
-    fn assay_variants() {
-        for t in &["method", "technology", "device"] {
-            assert_eq!(entity_type(t), "assay", "expected assay for {t}");
-        }
-    }
-
-    #[test]
-    fn organism_variants() {
-        for t in &["bacterium", "virus", "pathogen", "microbiome"] {
-            assert_eq!(entity_type(t), "organism", "expected organism for {t}");
-        }
-    }
-
-    #[test]
-    fn unknown_type_maps_to_other() {
-        assert_eq!(entity_type("banana"), "other");
-        assert_eq!(entity_type("foobar"), "other");
-        assert_eq!(entity_type(""), "other");
-    }
-
-    #[test]
-    fn case_insensitive_type_mapping() {
-        assert_eq!(entity_type("Gene"), "gene");
-        assert_eq!(entity_type("DRUG"), "compound");
-        assert_eq!(entity_type("Protein_Complex"), "protein");
-        assert_eq!(entity_type("CELL"), "cell_type");
+    fn entity_type_is_domain_general_lower_and_trim() {
+        // No hard-coded biology coercion table: types lower-case and
+        // trim, otherwise pass through unchanged.
+        assert_eq!(entity_type("structure"), "structure");
+        assert_eq!(entity_type("Sidon set"), "sidon set");
+        assert_eq!(entity_type("  PRIME GAP  "), "prime gap");
+        assert_eq!(entity_type(""), "");
     }
 
     // ── entity_name tests ────────────────────────────────────────────
@@ -733,21 +579,18 @@ mod tests {
 
     #[test]
     fn normalize_fixes_types_and_names() {
-        // Types coerce to the valid schema set; names are trimmed.
+        // Types lower-case; names are trimmed. No biology coercion.
         let mut bundles = vec![make_finding_with_entities(vec![
-            make_entity("  Sidon set  ", "structure"),
-            make_entity("  prime gap  ", "condition"),
+            make_entity("  Sidon set  ", "Structure"),
+            make_entity("  prime gap  ", "Condition"),
         ])];
         let (type_fixes, name_fixes) = normalize_findings(&mut bundles);
         assert_eq!(type_fixes, 2);
         assert_eq!(name_fixes, 2);
         assert_eq!(bundles[0].assertion.entities[0].name, "Sidon set");
-        assert_eq!(
-            bundles[0].assertion.entities[0].entity_type,
-            "anatomical_structure"
-        );
+        assert_eq!(bundles[0].assertion.entities[0].entity_type, "structure");
         assert_eq!(bundles[0].assertion.entities[1].name, "prime gap");
-        assert_eq!(bundles[0].assertion.entities[1].entity_type, "disease");
+        assert_eq!(bundles[0].assertion.entities[1].entity_type, "condition");
     }
 
     #[test]
@@ -782,8 +625,12 @@ mod tests {
     #[test]
     fn plan_findings_reports_safe_entity_repairs() {
         let bundles = vec![make_finding_with_entities(vec![
-            make_entity("  prime gap  ", "structure"),
-            make_entity("prime gap", "anatomical_structure"),
+            // Mixed-case type triggers a lower-case EntityType repair;
+            // the trailing whitespace triggers an EntityName repair.
+            make_entity("  prime gap  ", "Structure"),
+            // Same name + same canonical type as the first entity once
+            // both are normalized: a DuplicateEntity repair.
+            make_entity("prime gap", "structure"),
         ])];
 
         let plan = plan_findings(&bundles);
@@ -855,7 +702,7 @@ mod tests {
         assert_eq!(report.summary.applied, report.summary.safe);
         assert_eq!(
             saved.findings[0].assertion.entities[0].entity_type,
-            "anatomical_structure"
+            "structure"
         );
         assert_eq!(saved.findings[0].assertion.entities[0].name, "Sidon set");
         assert_eq!(

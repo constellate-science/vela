@@ -13,8 +13,8 @@ use crate::lint;
 use crate::normalize;
 use crate::packet;
 use vela_protocol::bundle::{
-    ConfidenceMethod, FindingBundle, VALID_ASSERTION_TYPES, VALID_ENTITY_TYPES,
-    VALID_EVIDENCE_TYPES, VALID_LINK_TYPES, VALID_PROVENANCE_SOURCE_TYPES,
+    ConfidenceMethod, FindingBundle, VALID_ASSERTION_TYPES, VALID_EVIDENCE_TYPES, VALID_LINK_TYPES,
+    VALID_PROVENANCE_SOURCE_TYPES,
 };
 use vela_protocol::repo;
 
@@ -358,9 +358,7 @@ fn lint_section(id: &str, report: lint::LintReport) -> QualityCheckSection {
 }
 
 fn schema_rule_id(message: &str) -> &'static str {
-    if message.contains("Invalid entity type") {
-        "schema.entity_type"
-    } else if message.contains("Invalid assertion type") {
+    if message.contains("Invalid assertion type") {
         "schema.assertion_type"
     } else if message.contains("Invalid evidence type") {
         "schema.evidence_type"
@@ -384,9 +382,7 @@ fn schema_rule_id(message: &str) -> &'static str {
 }
 
 fn schema_suggestion(message: &str) -> Option<&'static str> {
-    if message.contains("Invalid entity type") {
-        Some("Run the normalization plan/apply API to map entity types to schema vocabulary")
-    } else if message.contains("Project stats.") {
+    if message.contains("Project stats.") {
         Some("Reassemble or resave the frontier after applying content changes")
     } else if message.contains("does not match content-address") {
         Some(
@@ -400,9 +396,7 @@ fn schema_suggestion(message: &str) -> Option<&'static str> {
 }
 
 fn schema_fixability(message: &str) -> Fixability {
-    if message.contains("Invalid entity type") {
-        Fixability::Safe
-    } else if message.contains("Packet validation failed") || message.contains("Failed to load") {
+    if message.contains("Packet validation failed") || message.contains("Failed to load") {
         Fixability::NotFixable
     } else {
         Fixability::ManualReview
@@ -629,20 +623,6 @@ fn validate_finding(
                 VALID_EVIDENCE_TYPES.join(", "),
             ),
         });
-    }
-
-    for entity in &finding.assertion.entities {
-        if !VALID_ENTITY_TYPES.contains(&entity.entity_type.as_str()) {
-            errors.push(ValidationError {
-                file: file_label.to_string(),
-                error: format!(
-                    "Invalid entity type '{}' for entity '{}'. Valid: {}",
-                    entity.entity_type,
-                    entity.name,
-                    VALID_ENTITY_TYPES.join(", "),
-                ),
-            });
-        }
     }
 
     if !VALID_PROVENANCE_SOURCE_TYPES.contains(&finding.provenance.source_type.as_str()) {
@@ -1242,41 +1222,6 @@ mod tests {
         let path = write_frontier(tmp.path(), vec![f1, f2]);
         let report = validate(&path);
         assert!(report.errors.iter().any(|e| e.error.contains("Duplicate")));
-    }
-
-    #[test]
-    fn invalid_entity_type_detected_and_marked_fixable() {
-        let tmp = TempDir::new().unwrap();
-        let mut f = make_valid_finding("vf_0000000000000001");
-        f.assertion.entities.push(Entity {
-            // Invalid type (coerces to anatomical_structure) + a name with
-            // surrounding whitespace (trims): two distinct safe repairs.
-            name: "  Sidon set  ".into(),
-            entity_type: "biological_barrier".into(),
-            identifiers: serde_json::Map::new(),
-            canonical_id: None,
-            candidates: vec![],
-            aliases: vec![],
-            resolution_provenance: None,
-            resolution_confidence: 1.0,
-            resolution_method: None,
-            species_context: None,
-            needs_review: false,
-        });
-        f.id = FindingBundle::content_address(&f.assertion, &f.provenance);
-        let path = write_frontier(tmp.path(), vec![f]);
-
-        let report = quality_report(&path, QualityCheckOptions::default());
-
-        assert!(
-            report
-                .checks
-                .iter()
-                .flat_map(|check| check.diagnostics.iter())
-                .any(|diagnostic| diagnostic.rule_id == "schema.entity_type"
-                    && diagnostic.fixability == Fixability::Safe)
-        );
-        assert!(report.repair_plan.safe_items >= 2);
     }
 
     #[test]

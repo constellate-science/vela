@@ -359,70 +359,6 @@ function applyFindingSpanRepaired(findings: Finding[], event: Event): void {
   if (!alreadyPresent) spans.push({ section, text });
 }
 
-function applyFindingEntityResolved(findings: Finding[], event: Event): void {
-  if (event.target?.type !== "finding") {
-    throw new Error("finding.entity_resolved target.type must be 'finding'");
-  }
-  const findingId = event.target?.id ?? "";
-  const payload = event.payload ?? {};
-  const entityName = payload.entity_name;
-  const source = payload.source;
-  const idValue = payload.id;
-  const confidence = payload.confidence;
-  if (
-    !findingId ||
-    typeof entityName !== "string" ||
-    entityName.length === 0 ||
-    typeof source !== "string" ||
-    source.length === 0 ||
-    typeof idValue !== "string" ||
-    idValue.length === 0
-  ) {
-    throw new Error("finding.entity_resolved missing required string fields");
-  }
-  if (typeof confidence !== "number") {
-    throw new Error("finding.entity_resolved missing payload.confidence");
-  }
-  const finding = findings.find((f) => f.id === findingId);
-  if (!finding) {
-    throw new Error(`finding.entity_resolved targets unknown finding ${findingId}`);
-  }
-  const assertion = (finding.assertion ?? {}) as { [k: string]: Json };
-  const entities = assertion.entities as Json[] | undefined;
-  if (!Array.isArray(entities)) {
-    throw new Error(`finding.entity_resolved entity ${entityName} not in finding ${findingId}`);
-  }
-  const entity = entities.find((e) => {
-    if (!e || typeof e !== "object" || Array.isArray(e)) return false;
-    return e.name === entityName;
-  }) as { [k: string]: Json } | undefined;
-  if (!entity) {
-    throw new Error(`finding.entity_resolved entity ${entityName} not in finding ${findingId}`);
-  }
-  const canonical: { [k: string]: Json } = {
-    source,
-    id: idValue,
-    confidence,
-  };
-  if (
-    typeof payload.matched_name === "string" &&
-    payload.matched_name.length > 0
-  ) {
-    canonical.matched_name = payload.matched_name;
-  }
-  entity.canonical_id = canonical;
-  entity.resolution_method =
-    typeof payload.resolution_method === "string"
-      ? payload.resolution_method
-      : "manual";
-  entity.resolution_provenance =
-    typeof payload.resolution_provenance === "string"
-      ? payload.resolution_provenance
-      : "delegated_human_curation";
-  entity.resolution_confidence = confidence;
-  entity.needs_review = false;
-}
-
 // v0.51: tier.set mutates access_tier on the matched object. The
 // payload carries object_type so the dispatcher knows which
 // collection to mutate; we re-check inside this function for
@@ -481,19 +417,16 @@ function applyEvent(state: ReducerState, event: Event): void {
   else if (kind === "tier.set") applyTierSet(state, event);
   else if (kind === "finding.span_repaired")
     applyFindingSpanRepaired(state.findings, event);
-  else if (kind === "finding.entity_resolved")
-    applyFindingEntityResolved(state.findings, event);
   // v0.82: cross-impl reducer parity for newer protocol kinds. The
   // following events do not touch any field the TS effect-digest
   // captures (id, retracted, contested, review_state,
   // confidence_score, annotation_ids, access_tier on findings; the
   // analogous projections on artifacts). The Rust reducer is canonical
   // and recomputes derived structures from the event log directly
-  // (attestations, finding.entities). Treating them as no-ops here
-  // keeps the third-implementation reducer-effects digest
-  // byte-identical with Rust + Python.
+  // (attestations). Treating them as no-ops here keeps the
+  // third-implementation reducer-effects digest byte-identical with
+  // Rust + Python.
   else if (kind === "attestation.recorded") return; // audit-only
-  else if (kind === "finding.entity_added") return; // entity list outside digest
   // Side-table / federation arms. Each mutates a collection the Rust +
   // Python reducers keep outside the digested collections
   // (released_diff_packs, verdict_conflicts, contradictions,
@@ -654,13 +587,14 @@ function verifyFixture(path: string): FixtureResult {
   }
   const fxVersion = String(fx.fixture_version ?? "");
   if (
+    fxVersion !== "6" &&
     fxVersion !== "5" &&
     fxVersion !== "4" &&
     fxVersion !== "3" &&
     fxVersion !== "2" &&
     fxVersion !== "1"
   ) {
-    result.error = `unsupported fixture_version ${JSON.stringify(fx.fixture_version)}; expected '1', '2', '3', '4', or '5'`;
+    result.error = `unsupported fixture_version ${JSON.stringify(fx.fixture_version)}; expected '1', '2', '3', '4', '5', or '6'`;
     return result;
   }
   result.frontierIdx = Number(fx.frontier_idx ?? -1);
@@ -710,12 +644,22 @@ function verifyFixture(path: string): FixtureResult {
   const actualA = artifactEffects(state.artifacts);
 
   diffCollection("findings", actualF, expectedFindings, result);
-  if (fxVersion === "3" || fxVersion === "4" || fxVersion === "5") {
+  if (
+    fxVersion === "3" ||
+    fxVersion === "4" ||
+    fxVersion === "5" ||
+    fxVersion === "6"
+  ) {
     diffCollection("artifacts", actualA, expectedArtifacts, result);
   }
 
   let totalExpected = expectedFindings.length;
-  if (fxVersion === "3" || fxVersion === "4" || fxVersion === "5")
+  if (
+    fxVersion === "3" ||
+    fxVersion === "4" ||
+    fxVersion === "5" ||
+    fxVersion === "6"
+  )
     totalExpected += expectedArtifacts.length;
   result.ok = result.diffs.length === 0 && result.matched === totalExpected;
   return result;
