@@ -1,0 +1,122 @@
+{
+  "schema": "vela.records.v1",
+  "frontier": "gf2_sidon",
+  "verifier": {
+    "kind": "gf2_sidon",
+    "crate": "vela-verify",
+    "reproduce": "vela reproduce <witness>.json"
+  },
+  "direction": "max",
+  "generated_from": "examples/open-constructions/witnesses (build_family_records.py)",
+  "how_to_beat": "Construct a max-better gf2_sidon witness at an n below and run vela reproduce; a frozen-verified beat updates this record.",
+  "bounds": [
+    {
+      "n": 2,
+      "best_lower_bound": 3,
+      "accepted": true,
+      "witness": {
+        "file": "gf2_sidon-n2.witness.json",
+        "sha256": "sha256:bdf382f8e96db12a6a14c79035f0ac58ac44c65ab96a25391012b5f997086f4e"
+      }
+    },
+    {
+      "n": 3,
+      "best_lower_bound": 4,
+      "accepted": true,
+      "witness": {
+        "file": "gf2_sidon-n3.witness.json",
+        "sha256": "sha256:c170af00d0e905be0dfef3e739b2dd886e3bd35cdecb44ed6f15f4f7d9412369"
+      }
+    },
+    {
+      "n": 4,
+      "best_lower_bound": 6,
+      "accepted": true,
+      "witness": {
+        "file": "gf2_sidon-n4.witness.json",
+        "sha256": "sha256:e9c1fadd3296312b11785cc81eb2743ea4460e81691413a9db50e13f8814d509"
+      }
+    },
+    {
+      "n": 5,
+      "best_lower_bound": 7,
+      "accepted": true,
+      "witness": {
+        "file": "gf2_sidon-n5.witness.json",
+        "sha256": "sha256:b2aad9250e0622588fb43b120d5018065154ece0d4cd6537ba0e498acd7aae54"
+      }
+    },
+    {
+      "n": 6,
+      "best_lower_bound": 9,
+      "accepted": true,
+      "witness": {
+        "file": "gf2_sidon-n6.witness.json",
+        "sha256": "sha256:fb17c7566177539d305c857f3747f101bbe35d043a97af68ad29556ebafa8f15"
+      }
+    },
+    {
+      "n": 7,
+      "best_lower_bound": 12,
+      "accepted": true,
+      "witness": {
+        "file": "gf2_sidon-n7.witness.json",
+        "sha256": "sha256:c9f4cf162f808b1e629a8259d262df624c80e7393149d3af591fbe4a4a4641b0"
+      }
+    },
+    {
+      "n": 8,
+      "best_lower_bound": 18,
+      "accepted": true,
+      "witness": {
+        "file": "gf2_sidon-n8.witness.json",
+        "sha256": "sha256:284146eba8de3ce7e28791b22c99662117894d8c16339e7f0a912992a5bf8eb3"
+      }
+    },
+    {
+      "n": 9,
+      "best_lower_bound": 24,
+      "accepted": true,
+      "witness": {
+        "file": "gf2_sidon-n9.witness.json",
+        "sha256": "sha256:deec57952143d1c9c0fbc28511cb1e710e5ad0c4fd1a715fa10cb883a5e68020"
+      }
+    },
+    {
+      "n": 10,
+      "best_lower_bound": 31,
+      "accepted": true,
+      "witness": {
+        "file": "gf2_sidon-n10.witness.json",
+        "sha256": "sha256:e11e60f474aa1140386d2d516fe22dc38ffbcfcf0df25ef2aacf776bc8df278c"
+      }
+    },
+    {
+      "n": 12,
+      "best_lower_bound": 52,
+      "accepted": true,
+      "witness": {
+        "file": "gf2_sidon-n12.witness.json",
+        "sha256": "sha256:549ac6aa19b92446abe5beecfb815de30627a0b688e12460ce6199d19d4e356f"
+      }
+    },
+    {
+      "n": 13,
+      "best_lower_bound": 68,
+      "accepted": true,
+      "witness": {
+        "file": "gf2_sidon-n13.witness.json",
+        "sha256": "sha256:cf7c7375aaaa9b96d087eab0261eb02e07fd6083116fd429034f61f79a19d652"
+      }
+    },
+    {
+      "n": 14,
+      "best_lower_bound": 88,
+      "accepted": true,
+      "witness": {
+        "file": "gf2_sidon-n14.witness.json",
+        "sha256": "sha256:7a927a5ca1dc3931256dae716ecc769843c24e51df6bb08e6e9b691a9df5d260"
+      }
+    }
+  ]
+}

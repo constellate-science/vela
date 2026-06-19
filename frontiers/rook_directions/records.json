@@ -1,0 +1,167 @@
+{
+  "schema": "vela.records.v1",
+  "frontier": "rook_directions",
+  "verifier": {
+    "kind": "rook_directions",
+    "crate": "vela-verify",
+    "reproduce": "vela reproduce <witness>.json"
+  },
+  "direction": "max",
+  "generated_from": "examples/open-constructions/witnesses (build_family_records.py)",
+  "how_to_beat": "Construct a max-better rook_directions witness at an n below and run vela reproduce; a frozen-verified beat updates this record.",
+  "bounds": [
+    {
+      "n": 4,
+      "best_lower_bound": 4,
+      "accepted": true,
+      "witness": {
+        "file": "rook_directions-n4.witness.json",
+        "sha256": "sha256:509b8b53802de7296ec2fef5e2f3289373156ac1e6e0bcf08af6cbd45c1b9125"
+      }
+    },
+    {
+      "n": 5,
+      "best_lower_bound": 6,
+      "accepted": true,
+      "witness": {
+        "file": "rook_directions-n5.witness.json",
+        "sha256": "sha256:f2ad94657192af3acb32137f96be17a0780bcb5a851e897d0d9ca8821bccaedc"
+      }
+    },
+    {
+      "n": 6,
+      "best_lower_bound": 8,
+      "accepted": true,
+      "witness": {
+        "file": "rook_directions-n6.witness.json",
+        "sha256": "sha256:1c7ef8217d3259b8efcc9ff46e2b14a71221dc6ac179d0aeeb46e5ead5bad34b"
+      }
+    },
+    {
+      "n": 7,
+      "best_lower_bound": 11,
+      "accepted": true,
+      "witness": {
+        "file": "rook_directions-n7.witness.json",
+        "sha256": "sha256:44896530e5163638aef94cd38a730bbbbd06c0b35ad898ba207efd162d120dac"
+      }
+    },
+    {
+      "n": 8,
+      "best_lower_bound": 14,
+      "accepted": true,
+      "witness": {
+        "file": "rook_directions-n8.witness.json",
+        "sha256": "sha256:1f3c656413a60dd93904115eeed125ba4c111f5ff8cec92a79fc57e97361b515"
+      }
+    },
+    {
+      "n": 9,
+      "best_lower_bound": 18,
+      "accepted": true,
+      "witness": {
+        "file": "rook_directions-n9.witness.json",
+        "sha256": "sha256:e5badea4541e021449140e7e5f1df2bf27bbd38f267f24581317ca314659969e"
+      }
+    },
+    {
+      "n": 10,
+      "best_lower_bound": 23,
+      "accepted": true,
+      "witness": {
+        "file": "rook_directions-n10.witness.json",
+        "sha256": "sha256:5502f3bb116a68706445daf141b7fd2afb499a1532d9e1afbe5aaa2b2ed03ecb"
+      }
+    },
+    {
+      "n": 11,
+      "best_lower_bound": 28,
+      "accepted": true,
+      "witness": {
+        "file": "rook-n11.witness.json",
+        "sha256": "sha256:4bfb3084c4f76778a52d794dc80b1149c5033f543aff6fb874d4babbe32b724a"
+      }
+    },
+    {
+      "n": 12,
+      "best_lower_bound": 33,
+      "accepted": true,
+      "witness": {
+        "file": "rook-n12.witness.json",
+        "sha256": "sha256:ceb24555fcd98f5425cee6e902a467c7ba3e405828556f50f8dd06675839056e"
+      }
+    },
+    {
+      "n": 13,
+      "best_lower_bound": 38,
+      "accepted": true,
+      "witness": {
+        "file": "rook-n13.witness.json",
+        "sha256": "sha256:323dcc475dd81081b562b0c4d2508eef4e66f0d7068df0d92a096278e84cb73b"
+      }
+    },
+    {
+      "n": 14,
+      "best_lower_bound": 43,
+      "accepted": true,
+      "witness": {
+        "file": "rook-n14.witness.json",
+        "sha256": "sha256:a36995eb6815145a1e9f506406371eaf76ddf4304cf669f95f4a15c545538d56"
+      }
+    },
+    {
+      "n": 15,
+      "best_lower_bound": 49,
+      "accepted": true,
+      "witness": {
+        "file": "rook_directions-n15.witness.json",
+        "sha256": "sha256:d50a59a50cc75102f489b654c6ed14f0f8d706e09d629444ca14c7b036764bec"
+      }
+    },
+    {
+      "n": 16,
+      "best_lower_bound": 56,
+      "accepted": true,
+      "witness": {
+        "file": "rook_directions-n16.witness.json",
+        "sha256": "sha256:1b2ab2b6461db621b3dbb8d3f114896c2ca569a4612b762910f1573d228ec804"
+      }
+    },
+    {
+      "n": 17,
+      "best_lower_bound": 62,
+      "accepted": true,
+      "witness": {
+        "file": "rook_directions-n17.witness.json",
+        "sha256": "sha256:16d48611be87cea63e65f4b952f90458cdefad64194cb37e465d0a7da0820f88"
+      }
+    },
+    {
+      "n": 18,
+      "best_lower_bound": 70,
+      "accepted": true,
+      "witness": {
+        "file": "rook_directions-n18.witness.json",
+        "sha256": "sha256:15c6c5d4e4d05754f56fadef8f16ddbca1588a621b24c9f7771d32ca68b3b328"
+      }
+    },
+    {
+      "n": 19,
+      "best_lower_bound": 77,
+      "accepted": true,
+      "witness": {
+        "file": "rook_directions-n19.witness.json",
+        "sha256": "sha256:418467b6dcfeb63aa0b28187ff3113380aff0c783298e22760c3106c8bedcd1c"
+      }
+    },
+    {
+      "n": 20,
+      "best_lower_bound": 86,
+      "accepted": true,
+      "witness": {
+        "file": "rook_directions-n20.witness.json",
+        "sha256": "sha256:6b94e3ff9259ceb8cd2d58c0b00ef7d39337b72bbde2c11a3dc84be5f80b6f21"
+      }
+    }
+  ]
+}

@@ -1,0 +1,77 @@
+{
+  "schema": "vela.records.v1",
+  "frontier": "golomb",
+  "verifier": {
+    "kind": "golomb",
+    "crate": "vela-verify",
+    "reproduce": "vela reproduce <witness>.json"
+  },
+  "direction": "min",
+  "generated_from": "examples/open-constructions/witnesses (build_family_records.py)",
+  "how_to_beat": "Construct a min-better golomb witness at an n below and run vela reproduce; a frozen-verified beat updates this record.",
+  "bounds": [
+    {
+      "n": 2,
+      "best_lower_bound": 1,
+      "accepted": true,
+      "witness": {
+        "file": "golomb-order-2.witness.json",
+        "sha256": "sha256:c534d06f4540cfdf7f5b2bf4b164f3191d45f3344f20dcbaf065ce7c42efdb0b"
+      }
+    },
+    {
+      "n": 3,
+      "best_lower_bound": 3,
+      "accepted": true,
+      "witness": {
+        "file": "golomb-order-3.witness.json",
+        "sha256": "sha256:f2eabe5a2eade91c2db07c9cb389354eed4d6c4208bff294615c536ad8e7c5d9"
+      }
+    },
+    {
+      "n": 4,
+      "best_lower_bound": 6,
+      "accepted": true,
+      "witness": {
+        "file": "golomb-order-4.witness.json",
+        "sha256": "sha256:8dae69576102cc01fe924778de1a747608fe70abd56511f43e8408ee3b40e047"
+      }
+    },
+    {
+      "n": 5,
+      "best_lower_bound": 11,
+      "accepted": true,
+      "witness": {
+        "file": "golomb-order-5.witness.json",
+        "sha256": "sha256:a878f906fd622cf3c88e865d17b40a5eae2b1003bf49d01a12f3133881d1cdc1"
+      }
+    },
+    {
+      "n": 6,
+      "best_lower_bound": 17,
+      "accepted": true,
+      "witness": {
+        "file": "golomb-order-6.witness.json",
+        "sha256": "sha256:94b74481e1401f0fb2ec7fe08a6d681207182e74d74e1e31d7d0403f19f944a2"
+      }
+    },
+    {
+      "n": 7,
+      "best_lower_bound": 25,
+      "accepted": true,
+      "witness": {
+        "file": "golomb-order-7.witness.json",
+        "sha256": "sha256:0cc1780a8951e2494c0e2ade68176e487cff30fdc7ec909914871cdea3b5ecf5"
+      }
+    },
+    {
+      "n": 8,
+      "best_lower_bound": 34,
+      "accepted": true,
+      "witness": {
+        "file": "golomb-order-8.witness.json",
+        "sha256": "sha256:eaf83aa6861d9527055cce37cd83abe7ce1080160d04ad04338b7ba9f1cf5f4c"
+      }
+    }
+  ]
+}

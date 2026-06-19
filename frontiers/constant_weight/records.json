@@ -1,0 +1,23 @@
+{
+  "schema": "vela.records.v1",
+  "frontier": "constant_weight",
+  "verifier": {
+    "kind": "constant_weight",
+    "crate": "vela-verify",
+    "reproduce": "vela reproduce <witness>.json"
+  },
+  "direction": "max",
+  "generated_from": "examples/open-constructions/witnesses (build_family_records.py)",
+  "how_to_beat": "Construct a max-better constant_weight witness at an n below and run vela reproduce; a frozen-verified beat updates this record.",
+  "bounds": [
+    {
+      "n": 8,
+      "best_lower_bound": 14,
+      "accepted": true,
+      "witness": {
+        "file": "cw-n8-d4-w4.witness.json",
+        "sha256": "sha256:f746caf45808ad431ca109f8aa3d7085dd55ead30ec98131fd937233a3713ad8"
+      }
+    }
+  ]
+}

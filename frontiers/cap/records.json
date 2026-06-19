@@ -1,0 +1,68 @@
+{
+  "schema": "vela.records.v1",
+  "frontier": "cap",
+  "verifier": {
+    "kind": "cap",
+    "crate": "vela-verify",
+    "reproduce": "vela reproduce <witness>.json"
+  },
+  "direction": "max",
+  "generated_from": "examples/open-constructions/witnesses (build_family_records.py)",
+  "how_to_beat": "Construct a max-better cap witness at an n below and run vela reproduce; a frozen-verified beat updates this record.",
+  "bounds": [
+    {
+      "n": 1,
+      "best_lower_bound": 2,
+      "accepted": true,
+      "witness": {
+        "file": "cap-n1.witness.json",
+        "sha256": "sha256:1ec417319064d90d33dd2dc36c96e65e38b5bb78172c7ade8b425d84f75d3296"
+      }
+    },
+    {
+      "n": 2,
+      "best_lower_bound": 4,
+      "accepted": true,
+      "witness": {
+        "file": "cap-n2.witness.json",
+        "sha256": "sha256:e42e83f9a382e4a2fffcacf72c6a8216dfaf64b89958c665f676c4357ffe5395"
+      }
+    },
+    {
+      "n": 3,
+      "best_lower_bound": 9,
+      "accepted": true,
+      "witness": {
+        "file": "cap-n3.witness.json",
+        "sha256": "sha256:a41f25b17535536a47671c4bd68a4c836f222228e77eb892535f8f7bbdbfaf53"
+      }
+    },
+    {
+      "n": 4,
+      "best_lower_bound": 18,
+      "accepted": true,
+      "witness": {
+        "file": "cap-n4.witness.json",
+        "sha256": "sha256:66eb928eae4db08e93ce87d441bd6f37847dd4fa7650d96541bc5f34cfdaccc5"
+      }
+    },
+    {
+      "n": 5,
+      "best_lower_bound": 38,
+      "accepted": true,
+      "witness": {
+        "file": "cap-n5.witness.json",
+        "sha256": "sha256:762988bd4ad88d004a8703a5de9b8c5421cdb2afb0dce4f994b2f75e6e8282cd"
+      }
+    },
+    {
+      "n": 6,
+      "best_lower_bound": 75,
+      "accepted": true,
+      "witness": {
+        "file": "cap-n6.witness.json",
+        "sha256": "sha256:acf2b21b70095c4a659beaa5462a13508bb1bf5560f871b0746d5ab9cbdb2a08"
+      }
+    }
+  ]
+}

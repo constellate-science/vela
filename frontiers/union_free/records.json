@@ -1,0 +1,95 @@
+{
+  "schema": "vela.records.v1",
+  "frontier": "union_free",
+  "verifier": {
+    "kind": "union_free",
+    "crate": "vela-verify",
+    "reproduce": "vela reproduce <witness>.json"
+  },
+  "direction": "max",
+  "generated_from": "examples/open-constructions/witnesses (build_family_records.py)",
+  "how_to_beat": "Construct a max-better union_free witness at an n below and run vela reproduce; a frozen-verified beat updates this record.",
+  "bounds": [
+    {
+      "n": 2,
+      "best_lower_bound": 2,
+      "accepted": true,
+      "witness": {
+        "file": "union_free-n2.witness.json",
+        "sha256": "sha256:36a171aff88400645506c55f8171b79bf25b610a27dc979669887b0dfe2dd320"
+      }
+    },
+    {
+      "n": 3,
+      "best_lower_bound": 4,
+      "accepted": true,
+      "witness": {
+        "file": "union_free-n3.witness.json",
+        "sha256": "sha256:eb0db8cb6a230b82cf36339d129681290020fbe0b3f1ff756c15d22a25b570ba"
+      }
+    },
+    {
+      "n": 4,
+      "best_lower_bound": 7,
+      "accepted": true,
+      "witness": {
+        "file": "union_free-n4.witness.json",
+        "sha256": "sha256:09728cb328e18eb83cf170a7154861e7ca305d1115f5a2b8b2a90a55ac712899"
+      }
+    },
+    {
+      "n": 5,
+      "best_lower_bound": 13,
+      "accepted": true,
+      "witness": {
+        "file": "union_free-n5.witness.json",
+        "sha256": "sha256:44c57bf04402d88f4743f6fc2ce5db8eda99b8e056c3b8c76b1dd81987b5efea"
+      }
+    },
+    {
+      "n": 6,
+      "best_lower_bound": 23,
+      "accepted": true,
+      "witness": {
+        "file": "union_free-n6.witness.json",
+        "sha256": "sha256:60658d3f531fc375bbcdac067877d30a604fa29b3100e1cd1de381975527de94"
+      }
+    },
+    {
+      "n": 7,
+      "best_lower_bound": 44,
+      "accepted": true,
+      "witness": {
+        "file": "unionfree-n7.witness.json",
+        "sha256": "sha256:a19a0bd8ef1053675c3f6b9d3d41607230d864ec81c7cc46d81e44a01f69e252"
+      }
+    },
+    {
+      "n": 8,
+      "best_lower_bound": 60,
+      "accepted": true,
+      "witness": {
+        "file": "union_free-n8.witness.json",
+        "sha256": "sha256:82ffa3ec963c2d58a6c88a0c5510054c75d99d2846802b6a67cf7298d782c88b"
+      }
+    },
+    {
+      "n": 9,
+      "best_lower_bound": 107,
+      "accepted": true,
+      "witness": {
+        "file": "union_free-n9.witness.json",
+        "sha256": "sha256:8c86bfb1a6ca1cdc7ce55bcc280fa1933deb30678cadc503e34987ddeba4954f"
+      }
+    },
+    {
+      "n": 10,
+      "best_lower_bound": 175,
+      "accepted": true,
+      "witness": {
+        "file": "union_free-n10.witness.json",
+        "sha256": "sha256:40d4985141a1c15002a572ce23799ed40bdbcfca23e86bca58476a1cf87a1d67"
+      }
+    }
+  ]
+}

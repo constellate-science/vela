@@ -860,10 +860,16 @@ fn cmd_foundry_targets(catalog: &Path, records: &Path, attackable_only: bool, js
         .cloned()
         .unwrap_or_default();
 
-    // Live accepted extent, where a records file exists. Today only sidon has
-    // one (`frontiers/sidon-sets/bounds.json`); other families draw their
-    // value-to-beat from the catalog's stated basis (no Vela-accepted record yet).
-    let sidon_best = read_records_best(&records.join("sidon-sets/bounds.json"));
+    // Live accepted extent per family, where a records file exists: sidon's
+    // canonical `bounds.json`, or the generated `frontiers/<kind>/records.json`
+    // (scripts/spine/build_family_records.py). Path relative to `--records`.
+    let records_path = |kind: &str| -> std::path::PathBuf {
+        if kind == "sidon" {
+            records.join("sidon-sets/bounds.json")
+        } else {
+            records.join(format!("{kind}/records.json"))
+        }
+    };
 
     let mut rows: Vec<Value> = Vec::new();
     for p in &problems {
@@ -893,10 +899,9 @@ fn cmd_foundry_targets(catalog: &Path, records: &Path, attackable_only: bool, js
             .and_then(|i| i.get("basis"))
             .and_then(|v| v.as_str())
             .unwrap_or("");
-        let (accepted_best, records_source) = match kind {
-            "sidon" => (sidon_best.clone(), Some("frontiers/sidon-sets/bounds.json")),
-            _ => (None, None),
-        };
+        let rpath = records_path(kind);
+        let accepted_best = read_records_best(&rpath);
+        let records_source = accepted_best.as_ref().map(|_| rpath.display().to_string());
         rows.push(json!({
             "id": id,
             "domain": p.get("domain"),

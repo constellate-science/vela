@@ -1,0 +1,32 @@
+{
+  "schema": "vela.records.v1",
+  "frontier": "covering",
+  "verifier": {
+    "kind": "covering",
+    "crate": "vela-verify",
+    "reproduce": "vela reproduce <witness>.json"
+  },
+  "direction": "min",
+  "generated_from": "examples/open-constructions/witnesses (build_family_records.py)",
+  "how_to_beat": "Construct a min-better covering witness at an n below and run vela reproduce; a frozen-verified beat updates this record.",
+  "bounds": [
+    {
+      "n": 7,
+      "best_lower_bound": 7,
+      "accepted": true,
+      "witness": {
+        "file": "cover-v7-k3-t2.witness.json",
+        "sha256": "sha256:d59078c14a6fd01e9a5fbc30e6d48a19acca6bca892d77e72869e833b6ce7848"
+      }
+    },
+    {
+      "n": 9,
+      "best_lower_bound": 12,
+      "accepted": true,
+      "witness": {
+        "file": "cover-v9-k3-t2.witness.json",
+        "sha256": "sha256:6410b5674053d0d0983c34d90e3fcaecb16216f940aadd241472509cf8536873"
+      }
+    }
+  ]
+}

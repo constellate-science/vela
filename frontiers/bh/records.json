@@ -1,0 +1,131 @@
+{
+  "schema": "vela.records.v1",
+  "frontier": "bh",
+  "verifier": {
+    "kind": "bh",
+    "crate": "vela-verify",
+    "reproduce": "vela reproduce <witness>.json"
+  },
+  "direction": "max",
+  "generated_from": "examples/open-constructions/witnesses (build_family_records.py)",
+  "how_to_beat": "Construct a max-better bh witness at an n below and run vela reproduce; a frozen-verified beat updates this record.",
+  "bounds": [
+    {
+      "n": 0,
+      "best_lower_bound": 1,
+      "accepted": true,
+      "witness": {
+        "file": "b3-n0.witness.json",
+        "sha256": "sha256:419a6f074785d8935d67b069f1b57b392b568484c82daecec32e3779b939e1bf"
+      }
+    },
+    {
+      "n": 1,
+      "best_lower_bound": 2,
+      "accepted": true,
+      "witness": {
+        "file": "b3-n1.witness.json",
+        "sha256": "sha256:598c2d2dd9d7362bc03876413369fb42243cab22ea4d27460d3c07a30efa1204"
+      }
+    },
+    {
+      "n": 2,
+      "best_lower_bound": 3,
+      "accepted": true,
+      "witness": {
+        "file": "b3-n2.witness.json",
+        "sha256": "sha256:056abc1718aaf73b1f0ac7839373590e4868e3de80c1246e9a3cb21fcd8d1151"
+      }
+    },
+    {
+      "n": 3,
+      "best_lower_bound": 4,
+      "accepted": true,
+      "witness": {
+        "file": "b3-n3.witness.json",
+        "sha256": "sha256:26fd65ee98ef495bc7607a4c8a41279caf78e44eaa9c9c003cd071ea1211a043"
+      }
+    },
+    {
+      "n": 4,
+      "best_lower_bound": 6,
+      "accepted": true,
+      "witness": {
+        "file": "b3-n4.witness.json",
+        "sha256": "sha256:86c33bf2ec7c0bcdbf1c8f9c7429862887cdc9c7923382e06b731ca6f4127e88"
+      }
+    },
+    {
+      "n": 5,
+      "best_lower_bound": 8,
+      "accepted": true,
+      "witness": {
+        "file": "b3-n5.witness.json",
+        "sha256": "sha256:36646b36faebbc8a539835f75969d006693c466c139a7f06c00f5dd4d59b067a"
+      }
+    },
+    {
+      "n": 6,
+      "best_lower_bound": 11,
+      "accepted": true,
+      "witness": {
+        "file": "b3-n6.witness.json",
+        "sha256": "sha256:45240a97a299bf2cab72bc13eee19fc1d9a50c17ef0dd2471eaa10c99a81c2c7"
+      }
+    },
+    {
+      "n": 7,
+      "best_lower_bound": 16,
+      "accepted": true,
+      "witness": {
+        "file": "b3-n7.witness.json",
+        "sha256": "sha256:6bbdc87c8dc95270fd3528f6abbf0a30d3d0349e15cf9689d793adf320bba486"
+      }
+    },
+    {
+      "n": 8,
+      "best_lower_bound": 19,
+      "accepted": true,
+      "witness": {
+        "file": "b3-n8.witness.json",
+        "sha256": "sha256:1d5e5884cc9c8c19c51c4a4401bfbcc340fc20cc467dcddfa7182d5ddb7b0dd8"
+      }
+    },
+    {
+      "n": 9,
+      "best_lower_bound": 23,
+      "accepted": true,
+      "witness": {
+        "file": "b3-ext-n9.witness.json",
+        "sha256": "sha256:b58b8cb556bc249ac0e2f65e5b205559e907b40de32149de9405996bcaa0295a"
+      }
+    },
+    {
+      "n": 10,
+      "best_lower_bound": 28,
+      "accepted": true,
+      "witness": {
+        "file": "b3-ext-n10.witness.json",
+        "sha256": "sha256:8c0931652110d62701438492bc550d8cf316ed714d762e29a141154f7dd8f26f"
+      }
+    },
+    {
+      "n": 11,
+      "best_lower_bound": 36,
+      "accepted": true,
+      "witness": {
+        "file": "b3-ext-n11.witness.json",
+        "sha256": "sha256:786feac60dd285c2d007f6d7672ad65caab9804c8209cab0e3011dc69f517b0d"
+      }
+    },
+    {
+      "n": 12,
+      "best_lower_bound": 46,
+      "accepted": true,
+      "witness": {
+        "file": "b3-ext-n12.witness.json",
+        "sha256": "sha256:1131ea5b4bfd11ef13441958ff15ea00f5ce3b93721bac93cd871dc7797f93cc"
+      }
+    }
+  ]
+}
