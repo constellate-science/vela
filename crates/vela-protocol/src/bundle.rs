@@ -756,18 +756,6 @@ impl Confidence {
     }
 }
 
-/// Parse a sample_size string into a numeric value for scoring.
-/// Handles formats like "n=30", "n = 120", "3 cohorts of 20", "500", "n=24 per group".
-fn parse_sample_size(s: &str) -> Option<u64> {
-    let mut max_num: Option<u64> = None;
-    for word in s.split(|c: char| !c.is_ascii_digit()) {
-        if let Ok(n) = word.parse::<u64>() {
-            max_num = Some(max_num.map_or(n, |prev: u64| prev.max(n)));
-        }
-    }
-    max_num
-}
-
 /// Compute frontier epistemic confidence from evidence and condition fields.
 /// Returns a fully populated Confidence with components and aggregate score,
 /// using a deterministic, auditable support computation.
@@ -853,7 +841,7 @@ pub fn causal_consistency_multiplier(
 #[must_use]
 pub fn compute_confidence_from_components(
     evidence: &Evidence,
-    conditions: &Conditions,
+    _conditions: &Conditions,
     contested: bool,
     n_replicated: u32,
     n_failed: u32,
@@ -876,24 +864,13 @@ pub fn compute_confidence_from_components(
         - 0.10 * f64::from(n_failed))
     .clamp(0.4, 1.0);
 
-    let sample_strength = match evidence.sample_size.as_deref().and_then(parse_sample_size) {
-        Some(n) if n > 1000 => 1.0,
-        Some(n) if n > 100 => 0.9,
-        Some(n) if n > 30 => 0.8,
-        Some(n) if n > 10 => 0.7,
-        Some(_) => 0.6,
-        None => 0.6,
-    };
-
-    let model_relevance = if conditions.human_data {
-        1.0
-    } else if conditions.in_vivo {
-        0.8
-    } else if conditions.in_vitro {
-        0.6
-    } else {
-        0.5
-    };
+    // v0.701: math-native core. The empirical sample-size and
+    // model-relevance signals (clinical `Conditions`, sample sizes) are
+    // not part of a math finding, so these collapse to the domain-neutral
+    // baseline the all-default branch always produced. The fields they
+    // read are removed from the schema in the A5 migration.
+    let sample_strength = 0.6;
+    let model_relevance = 0.5;
 
     let review_penalty = if contested { 0.15 } else { 0.0 };
     let calibration_adjustment = 0.0;
@@ -2455,12 +2432,13 @@ mod tests {
         let c = conf.components.unwrap();
         assert!((c.evidence_strength - 0.95).abs() < 0.001);
         assert!((c.replication_strength - 1.0).abs() < 0.001); // 0.7 + 0.1*5 = 1.2 -> clamped to 1.0
-        assert!((c.sample_strength - 1.0).abs() < 0.001); // >1000
-        assert!((c.model_relevance - 1.0).abs() < 0.001); // human_data
+        // v0.701: sample/model collapsed to the domain-neutral constants.
+        assert!((c.sample_strength - 0.6).abs() < 0.001);
+        assert!((c.model_relevance - 0.5).abs() < 0.001);
         assert!((c.review_penalty - 0.0).abs() < 0.001);
         assert!((c.calibration_adjustment - 0.0).abs() < 0.001);
-        // 0.95 * 1.0 * 1.0 * 1.0 - 0.0 = 0.95
-        assert!((conf.score - 0.95).abs() < 0.001);
+        // 0.95 * 1.0 * 0.5 * 0.6 - 0.0 = 0.285
+        assert!((conf.score - 0.285).abs() < 0.001);
     }
 
     #[test]
@@ -2533,15 +2511,6 @@ mod tests {
     }
 
     #[test]
-    fn compute_confidence_sample_size_parsing() {
-        assert_eq!(parse_sample_size("n=30"), Some(30));
-        assert_eq!(parse_sample_size("n = 120"), Some(120));
-        assert_eq!(parse_sample_size("3 cohorts of 20"), Some(20));
-        assert_eq!(parse_sample_size("500"), Some(500));
-        assert_eq!(parse_sample_size(""), None);
-    }
-
-    #[test]
     fn compute_confidence_v010_deserialize_compat() {
         // Simulate an older JSON confidence object (no method, no components).
         let json = r#"{"score": 0.75, "basis": "legacy seeded confidence", "extraction_confidence": 0.85}"#;
@@ -2610,9 +2579,10 @@ mod tests {
         let changed = recompute_all_confidence(std::slice::from_mut(&mut b));
         assert_eq!(b.confidence.method, ConfidenceMethod::Computed);
         assert!(b.confidence.components.is_some());
-        // experimental=0.80, replicated(3)=min(1.0,0.7+0.3)=1.0, in_vitro=0.6, sample=n=30 (not >30)->0.7
-        // 0.80 * 1.0 * 0.6 * 0.7 = 0.336
-        assert!((b.confidence.score - 0.336).abs() < 0.001);
+        // experimental=0.80, replicated(3)=min(1.0,0.7+0.3)=1.0; model + sample
+        // collapsed to the v0.701 constants 0.5 and 0.6.
+        // 0.80 * 1.0 * 0.5 * 0.6 = 0.24
+        assert!((b.confidence.score - 0.24).abs() < 0.001);
         assert_eq!(changed, 1);
     }
 

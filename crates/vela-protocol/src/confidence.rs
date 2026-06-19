@@ -81,7 +81,6 @@ pub fn ground_confidence(bundles: &mut [FindingBundle]) -> Vec<ConfidenceUpdate>
         let etype = bundle.evidence.evidence_type.as_str();
         let etype_adj = match etype {
             "meta_analysis" | "systematic_review" => 0.10,
-            "experimental" if bundle.conditions.human_data => 0.05,
             "experimental" => 0.0,
             "observational" => 0.0,
             "theoretical" | "computational" => -0.05,
@@ -287,18 +286,6 @@ mod tests {
         ];
         ground_confidence(&mut bundles);
         // meta_analysis gets +0.10, theoretical gets -0.05
-        assert!(bundles[0].confidence.score > bundles[1].confidence.score);
-    }
-
-    #[test]
-    fn experimental_human_data_boost() {
-        let current_year = Utc::now().naive_utc().year();
-        let mut b_human = make_bundle(0.70, 100, current_year - 5, "experimental");
-        b_human.conditions.human_data = true;
-        let b_animal = make_bundle(0.70, 100, current_year - 5, "experimental");
-        let mut bundles = vec![b_human, b_animal];
-        ground_confidence(&mut bundles);
-        // experimental + human_data gets +0.05, experimental alone gets 0.0
         assert!(bundles[0].confidence.score > bundles[1].confidence.score);
     }
 
