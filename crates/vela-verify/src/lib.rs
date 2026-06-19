@@ -404,6 +404,225 @@ pub fn verify_witness(witness: &Witness) -> VerifyResult {
     }
 }
 
+/// A claim parsed from a finding's free-text assertion into the structured,
+/// frozen-verifiable shape needed to BIND it to a witness. Deliberately
+/// conservative: `parse_claim` returns `None` for anything it cannot read
+/// unambiguously, so an unrecognized assertion is never faithful (fail-closed).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ParsedClaim {
+    /// The witness kind keyword found in the assertion (e.g. "sidon").
+    pub kind: String,
+    /// The ambient dimension `n` from `{0,1}^n` / `GF(2)^n`, where present.
+    pub ambient_n: Option<usize>,
+    /// The claimed size / order bound `k`.
+    pub bound: usize,
+    /// `true` when the claim is an equality (`= k` / `exactly k`), `false`
+    /// for a lower bound (`>= k` / `at least k`). Only lower bounds and
+    /// matched equalities are admissible.
+    pub exact: bool,
+}
+
+/// The frozen faithfulness verdict: does `witness` ESTABLISH the claim in
+/// `assertion_text`? This is the load-bearing, un-forgeable check the
+/// exact-lane auto-admission rests on. `verify_witness` only confirms a
+/// witness is INTERNALLY valid (a genuine Sidon set of size `points.len()`);
+/// it never reads the assertion, so an INFLATED assertion ("a(20) >= 2500")
+/// over a valid-but-weaker witness (a real Sidon set of 1989 points) would
+/// pass `verify_witness`. `claim_witness_faithful` closes that: it re-derives
+/// faithfulness from frozen inputs (the parsed assertion + the witness
+/// structure), never from the drafter-set `match_to_claim.matches` flag an
+/// agent can author. `faithful` is true only when the witness both verifies
+/// AND its parameters meet/exceed the parsed claim.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Faithfulness {
+    pub faithful: bool,
+    pub reasons: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parsed: Option<ParsedClaim>,
+}
+
+/// Leading `usize` from a string slice after skipping ASCII whitespace.
+fn leading_usize(s: &str) -> Option<usize> {
+    let s = s.trim_start();
+    let digits: String = s.chars().take_while(|c| c.is_ascii_digit()).collect();
+    if digits.is_empty() {
+        None
+    } else {
+        digits.parse().ok()
+    }
+}
+
+/// The `usize` immediately following the EARLIEST occurrence of any `needle`
+/// (the headline bound, so a trailing "(was N)" aside cannot override it).
+fn usize_after_any(hay: &str, needles: &[&str]) -> Option<usize> {
+    let mut best: Option<(usize, usize)> = None; // (value, position)
+    for needle in needles {
+        if let Some(idx) = hay.find(needle)
+            && let Some(v) = leading_usize(&hay[idx + needle.len()..])
+            && best.map(|(_, p)| idx < p).unwrap_or(true)
+        {
+            best = Some((v, idx));
+        }
+    }
+    best.map(|(v, _)| v)
+}
+
+/// Parse a finding assertion into a [`ParsedClaim`]. Conservative and
+/// fail-closed: recognizes only the exact lower-bound / size forms the
+/// exact lane admits, and returns `None` on any ambiguity (no kind keyword,
+/// no parseable bound, both `>=` and `=` present, etc.).
+pub fn parse_claim(assertion_text: &str) -> Option<ParsedClaim> {
+    let text = assertion_text.to_lowercase();
+
+    // Witness-kind keyword. Order matters: check the more specific ones first.
+    let kind = if text.contains("gf(2)") && text.contains("sidon") {
+        "gf2_sidon"
+    } else if text.contains("sidon") {
+        "sidon"
+    } else if text.contains("golomb") {
+        "golomb"
+    } else if text.contains("cap set") || text.contains("cap-set") {
+        "cap"
+    } else if text.contains("b_h") || text.contains("bh set") {
+        "bh"
+    } else if text.contains("constant weight") || text.contains("constant-weight") {
+        "constant_weight"
+    } else if text.contains("union-free") || text.contains("union free") {
+        "union_free"
+    } else {
+        return None;
+    };
+
+    // Ambient dimension from `{0,1}^n` or `gf(2)^n`.
+    let ambient_n = ["{0,1}^", "gf(2)^"]
+        .iter()
+        .find_map(|m| text.find(m).and_then(|i| leading_usize(&text[i + m.len()..])));
+
+    // Bound: a lower bound (`>=`, `≥`, `at least`) or an equality (`exactly`).
+    // If BOTH a lower bound and an equality marker appear, bail (ambiguous).
+    let lower = usize_after_any(&text, &[">=", "\u{2265}", "at least "]);
+    let exact = usize_after_any(&text, &["exactly "]);
+    let (bound, is_exact) = match (lower, exact) {
+        (Some(l), None) => (l, false),
+        (None, Some(e)) => (e, true),
+        // both present, or neither: ambiguous / unparseable -> fail closed.
+        _ => return None,
+    };
+
+    Some(ParsedClaim {
+        kind: kind.to_string(),
+        ambient_n,
+        bound,
+        exact: is_exact,
+    })
+}
+
+/// Frozen check that `witness` establishes the claim in `assertion_text`.
+/// See [`Faithfulness`] for why this is the un-forgeable core of the exact
+/// lane. Fail-closed throughout: any parse miss, kind/dimension mismatch,
+/// size shortfall, or internal-validity failure yields `faithful: false`.
+pub fn claim_witness_faithful(assertion_text: &str, witness: &Witness) -> Faithfulness {
+    let mut reasons = Vec::new();
+
+    let Some(parsed) = parse_claim(assertion_text) else {
+        reasons.push(
+            "assertion does not parse to a recognized exact-lane claim (kind keyword + a single \
+             unambiguous >=/exactly bound); routes to review"
+                .to_string(),
+        );
+        return Faithfulness {
+            faithful: false,
+            reasons,
+            parsed: None,
+        };
+    };
+
+    // The witness must be internally valid first (a genuine Sidon set, etc.).
+    let vr = verify_witness(witness);
+    if !vr.ok {
+        reasons.push(format!("witness does not verify: {}", vr.message));
+        return Faithfulness {
+            faithful: false,
+            reasons,
+            parsed: Some(parsed),
+        };
+    }
+
+    // Kind must match the witness variant.
+    if parsed.kind != witness.kind() {
+        reasons.push(format!(
+            "claim kind '{}' does not match witness kind '{}'",
+            parsed.kind,
+            witness.kind()
+        ));
+        return Faithfulness {
+            faithful: false,
+            reasons,
+            parsed: Some(parsed),
+        };
+    }
+
+    // The witness's size/order and ambient dimension must meet the claim.
+    let (size, wn): (usize, Option<usize>) = match witness {
+        Witness::Sidon { n, points, .. } => (points.len(), Some(*n)),
+        Witness::Cap { n, points, .. } => (points.len(), Some(*n)),
+        Witness::Bh { n, points, .. } => (points.len(), Some(*n)),
+        Witness::ConstantWeight { n, words, .. } => (words.len(), Some(*n)),
+        Witness::UnionFree { n, sets, .. } => (sets.len(), Some(*n)),
+        Witness::Gf2Sidon { elements, .. } => (elements.len(), None),
+        Witness::Golomb { marks } => (marks.len(), None),
+        // Any other variant is outside the size/order-bearing exact lane.
+        _ => {
+            reasons.push(format!(
+                "witness kind '{}' is not an exact-lane size/order claim",
+                witness.kind()
+            ));
+            return Faithfulness {
+                faithful: false,
+                reasons,
+                parsed: Some(parsed),
+            };
+        }
+    };
+
+    if let (Some(claim_n), Some(witness_n)) = (parsed.ambient_n, wn)
+        && claim_n != witness_n
+    {
+        reasons.push(format!(
+            "claim ambient dimension n={claim_n} does not match witness n={witness_n}"
+        ));
+        return Faithfulness {
+            faithful: false,
+            reasons,
+            parsed: Some(parsed),
+        };
+    }
+
+    let size_ok = if parsed.exact {
+        size == parsed.bound
+    } else {
+        size >= parsed.bound
+    };
+    if !size_ok {
+        reasons.push(format!(
+            "witness size/order {size} does not establish the claimed {} {}",
+            if parsed.exact { "=" } else { ">=" },
+            parsed.bound
+        ));
+        return Faithfulness {
+            faithful: false,
+            reasons,
+            parsed: Some(parsed),
+        };
+    }
+
+    Faithfulness {
+        faithful: true,
+        reasons,
+        parsed: Some(parsed),
+    }
+}
+
 /// Fold a `claimed_size` cross-check into a verifier result: the witness
 /// must pass AND have exactly the claimed number of elements.
 fn with_size(mut r: VerifyResult, actual: usize, claimed: Option<usize>) -> VerifyResult {
@@ -1723,6 +1942,125 @@ mod tests {
         // sums include 000,100,010,001 (i=j) and 110,101,011 (i<j) — all
         // distinct. A valid (small) Sidon set.
         vec![vec![0, 0, 0], vec![1, 0, 0], vec![0, 1, 0], vec![0, 0, 1]]
+    }
+
+    // ---- claim<->witness faithfulness (the un-forgeable exact-lane core) ----
+
+    #[test]
+    fn faithful_parses_real_a309370_assertion() {
+        let text = "OEIS A309370 a(20) >= 1989: a Sidon set of 1989 distinct binary \
+                    vectors in {0,1}^20 under componentwise integer addition, with all \
+                    pairwise sums distinct. Frozen-verified by vela-verify (sidon kind).";
+        let p = parse_claim(text).expect("should parse the canonical A309370 form");
+        assert_eq!(p.kind, "sidon");
+        assert_eq!(p.ambient_n, Some(20));
+        assert_eq!(p.bound, 1989);
+        assert!(!p.exact);
+    }
+
+    #[test]
+    fn faithful_happy_path() {
+        let text = "a(3) >= 4: a Sidon set of 4 vectors in {0,1}^3.";
+        let w = Witness::Sidon {
+            n: 3,
+            points: small_sidon(),
+            claimed_size: Some(4),
+        };
+        let f = claim_witness_faithful(text, &w);
+        assert!(f.faithful, "{:?}", f.reasons);
+    }
+
+    // ATTACK: inflated assertion over a valid-but-weaker witness. verify_witness
+    // passes (it IS a genuine size-4 Sidon set), but the claim says >= 5.
+    #[test]
+    fn faithful_rejects_inflated_lower_bound() {
+        let text = "a(3) >= 5: a Sidon set of 5 vectors in {0,1}^3.";
+        let w = Witness::Sidon {
+            n: 3,
+            points: small_sidon(), // only 4 points
+            claimed_size: None,
+        };
+        assert!(verify_witness(&w).ok, "the witness itself is valid");
+        let f = claim_witness_faithful(text, &w);
+        assert!(!f.faithful);
+        assert!(f.reasons.iter().any(|r| r.contains("does not establish")));
+    }
+
+    // ATTACK: claim names a different ambient dimension than the witness.
+    #[test]
+    fn faithful_rejects_dimension_mismatch() {
+        let text = "a(8) >= 4: a Sidon set of 4 vectors in {0,1}^8.";
+        let w = Witness::Sidon {
+            n: 3,
+            points: small_sidon(),
+            claimed_size: None,
+        };
+        let f = claim_witness_faithful(text, &w);
+        assert!(!f.faithful);
+        assert!(f.reasons.iter().any(|r| r.contains("dimension")));
+    }
+
+    // ATTACK: a Golomb claim bound to a Sidon witness.
+    #[test]
+    fn faithful_rejects_kind_mismatch() {
+        let text = "an optimal Golomb ruler of order 4 with >= 4 marks.";
+        let w = Witness::Sidon {
+            n: 3,
+            points: small_sidon(),
+            claimed_size: None,
+        };
+        let f = claim_witness_faithful(text, &w);
+        assert!(!f.faithful);
+        assert!(f.reasons.iter().any(|r| r.contains("kind")));
+    }
+
+    // ATTACK: a witness that does not actually verify (collision injected).
+    #[test]
+    fn faithful_rejects_invalid_witness() {
+        let text = "a(3) >= 4: a Sidon set of 4 vectors in {0,1}^3.";
+        // {000, 100, 100, 010}: 100 repeated -> not a valid Sidon set.
+        let w = Witness::Sidon {
+            n: 3,
+            points: vec![vec![0, 0, 0], vec![1, 0, 0], vec![1, 0, 0], vec![0, 1, 0]],
+            claimed_size: None,
+        };
+        let f = claim_witness_faithful(text, &w);
+        assert!(!f.faithful);
+        assert!(f.reasons.iter().any(|r| r.contains("does not verify")));
+    }
+
+    // ATTACK: an existence/asymptotic assertion with no exact bound -> the
+    // conservative parser refuses, so it can never auto-admit.
+    #[test]
+    fn faithful_refuses_unparseable_asymptotic_claim() {
+        let text = "Singer's perfect-difference-set construction yields Sidon sets in \
+                    {1,...,N} of size sqrt(N) + O(N^{1/4}).";
+        let w = Witness::Sidon {
+            n: 3,
+            points: small_sidon(),
+            claimed_size: None,
+        };
+        let f = claim_witness_faithful(text, &w);
+        assert!(!f.faithful);
+        assert!(f.parsed.is_none());
+    }
+
+    // ATTACK: ambiguous claim carrying BOTH a lower bound and an equality.
+    #[test]
+    fn faithful_refuses_ambiguous_bound() {
+        let text = "a Sidon set in {0,1}^3 with >= 4 and exactly 5 elements.";
+        assert!(parse_claim(text).is_none());
+    }
+
+    #[test]
+    fn faithful_exact_equality_requires_exact_size() {
+        let w = Witness::Sidon {
+            n: 3,
+            points: small_sidon(), // 4 points
+            claimed_size: None,
+        };
+        assert!(claim_witness_faithful("a Sidon set in {0,1}^3 with exactly 4 elements.", &w).faithful);
+        assert!(!claim_witness_faithful("a Sidon set in {0,1}^3 with exactly 5 elements.", &w).faithful);
     }
 
     #[test]
