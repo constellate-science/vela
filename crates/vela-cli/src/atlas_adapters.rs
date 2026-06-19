@@ -301,15 +301,99 @@ pub fn read_horizonmath(input: &Path, _rev: &str) -> Result<Vec<SourceRecord>, S
     Ok(out)
 }
 
+/// Formal-Conjectures (FULL corpus): read the staged `nodes.json` index (one
+/// entry per `.lean` file: `{title, erdos, has_statement, path}`) under `dir`
+/// and derive each statement-bearing file's declared status from its real
+/// `@[category research open|solved]` annotations. The full-corpus counterpart
+/// of `read_formal` (which reads only the numbered `ErdosProblems/N.lean`
+/// files). Erdős-tagged files carry the Erdős number in the assertion text (the
+/// HardIdentity join into the `erdos` namespace happens at compile/join time).
+/// Deterministic (sorted by path); offline (reads the local Lean tree).
+pub fn read_formal_corpus(dir: &Path, rev: &str) -> Result<Vec<SourceRecord>, String> {
+    let index_path = dir.join("nodes.json");
+    let raw = std::fs::read_to_string(&index_path)
+        .map_err(|e| format!("read {}: {e}", index_path.display()))?;
+    let doc: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", index_path.display()))?;
+    let nodes = doc
+        .as_array()
+        .ok_or_else(|| format!("{}: expected a JSON array of nodes", index_path.display()))?;
+    let mut out: Vec<SourceRecord> = Vec::new();
+    for node in nodes {
+        // Infra files (no statement) are not conjectures — skip them.
+        if !node
+            .get("has_statement")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false)
+        {
+            continue;
+        }
+        let rel = node
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
+        let title = node
+            .get("title")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
+        if rel.is_empty() {
+            continue;
+        }
+        let erdos = node
+            .get("erdos")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string());
+        // Status from the real category annotations in the file. `research open`
+        // wins (an unresolved conjecture in a file with mixed categories is open);
+        // a file with only API/test/textbook statements is exposition, not a
+        // research conjecture.
+        let text = std::fs::read_to_string(dir.join(rel)).unwrap_or_default();
+        let status = if text.contains("@[category research open") {
+            "open"
+        } else if text.contains("@[category research solved") {
+            "solved"
+        } else {
+            "exposition"
+        };
+        let ext = rel
+            .strip_prefix("formal-conjectures-main/")
+            .unwrap_or(rel)
+            .to_string();
+        let erdos_note = match &erdos {
+            Some(e) => format!(" Erdős #{e}."),
+            None => String::new(),
+        };
+        out.push(SourceRecord {
+            external_id: ext,
+            assertion_text: format!(
+                "Formal-Conjectures: {title} ({rel} @ {rev}), declared status '{status}'.{erdos_note}"
+            ),
+            assertion_type: "lean-formalization".into(),
+            implies: implied_problems(&text, erdos.as_deref().unwrap_or("")),
+        });
+    }
+    out.sort_by(|a, b| a.external_id.cmp(&b.external_id));
+    if out.is_empty() {
+        return Err(format!(
+            "{}: no statement-bearing nodes",
+            index_path.display()
+        ));
+    }
+    Ok(out)
+}
+
 /// Dispatch an adapter by name.
 pub fn read_adapter(adapter: &str, input: &Path, rev: &str) -> Result<Vec<SourceRecord>, String> {
     match adapter {
         "formal" => read_formal(input, rev),
+        "formal_corpus" => read_formal_corpus(input, rev),
         "alphaproof" => read_alphaproof(input, rev),
         "oeis" => read_oeis(input, rev),
         "horizonmath" => read_horizonmath(input, rev),
         other => Err(format!(
-            "unknown adapter '{other}' (supported: formal | alphaproof | oeis | horizonmath; tao stays scripts/atlas/ingest_tao.py)"
+            "unknown adapter '{other}' (supported: formal | formal_corpus | alphaproof | oeis | horizonmath; tao stays scripts/atlas/ingest_tao.py)"
         )),
     }
 }
@@ -362,6 +446,49 @@ mod tests {
         assert!(recs[1].assertion_text.contains("The prime numbers."));
         // a finding built from it is content-addressed like any other adapter record.
         assert!(build_finding(&recs[0], "oeis").id.starts_with("vf_"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn read_formal_corpus_derives_status_and_skips_infra() {
+        let dir = std::env::temp_dir().join(format!("vela_fc_test_{}", std::process::id()));
+        let tree = dir.join("formal-conjectures-main/FormalConjectures/Demo");
+        std::fs::create_dir_all(&tree).unwrap();
+        let open_rel = "formal-conjectures-main/FormalConjectures/Demo/Open.lean";
+        let solved_rel = "formal-conjectures-main/FormalConjectures/Demo/Solved.lean";
+        std::fs::write(
+            dir.join(open_rel),
+            "@[category research open, AMS 11]\ntheorem o : True := trivial\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join(solved_rel),
+            "@[category research solved, AMS 5]\ntheorem s : True := trivial\n",
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("nodes.json"),
+            format!(
+                r#"[
+                  {{"title":"Open One","erdos":"42","has_statement":true,"path":"{open_rel}"}},
+                  {{"title":"Solved One","erdos":null,"has_statement":true,"path":"{solved_rel}"}},
+                  {{"title":"Infra","erdos":null,"has_statement":false,"path":"x.lean"}}
+                ]"#
+            ),
+        )
+        .unwrap();
+        let recs = read_formal_corpus(&dir, "fc@test").unwrap();
+        assert_eq!(recs.len(), 2, "infra node (no statement) skipped");
+        // sorted by external id ("...Open.lean" < "...Solved.lean")
+        assert!(recs[0].assertion_text.contains("declared status 'open'"));
+        assert!(recs[0].assertion_text.contains("Erdős #42."));
+        assert!(recs[1].assertion_text.contains("declared status 'solved'"));
+        assert_eq!(recs[0].assertion_type, "lean-formalization");
+        assert!(
+            build_finding(&recs[0], "formal_corpus")
+                .id
+                .starts_with("vf_")
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 
