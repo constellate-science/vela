@@ -213,6 +213,18 @@ pub enum Witness {
         cnf: Vec<Vec<i64>>,
         proof: Vec<LratStep>,
     },
+    /// A difference triangle set (HorizonMath / coding theory): `rows` of
+    /// strictly increasing non-negative integers each starting at 0, such that
+    /// every positive within-row pairwise difference is GLOBALLY distinct (no
+    /// difference repeats anywhere in the set). A `(I, J)`-DTS has `I` rows of
+    /// `J + 1` marks; the objective is to MINIMIZE the scope (the largest mark).
+    /// `claimed_scope`, when present, must equal the recomputed scope, so a
+    /// record claim ("scope < 112") cannot ship a witness of a different scope.
+    DiffTriangle {
+        rows: Vec<Vec<i64>>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        claimed_scope: Option<usize>,
+    },
 }
 
 /// One addition step of an LRAT proof: clause `id` is the listed
@@ -294,8 +306,62 @@ impl Witness {
             Witness::BinomDeficiency { .. } => "binom_deficiency",
             Witness::BinomExceptionEnum { .. } => "binom_exception_enum",
             Witness::UnsatCert { .. } => "unsat_cert",
+            Witness::DiffTriangle { .. } => "diff_triangle",
         }
     }
+}
+
+/// Verify a difference triangle set: `rows` of strictly increasing
+/// non-negative integers, each starting at 0, with every positive within-row
+/// pairwise difference GLOBALLY distinct (no difference repeats across the
+/// whole set). Reports the scope (the largest mark). `claimed_scope`, when
+/// present, must equal the recomputed scope.
+pub fn verify_diff_triangle(rows: &[Vec<i64>], claimed_scope: Option<usize>) -> VerifyResult {
+    if rows.is_empty() {
+        return VerifyResult::fail("empty difference triangle set");
+    }
+    let mut diffs: HashSet<i64> = HashSet::new();
+    let mut diff_count = 0usize;
+    let mut scope: i64 = 0;
+    for (r, row) in rows.iter().enumerate() {
+        if row.len() < 2 {
+            return VerifyResult::fail(format!("row {r} has fewer than 2 marks"));
+        }
+        if row[0] != 0 {
+            return VerifyResult::fail(format!("row {r} does not start at 0"));
+        }
+        // strictly increasing, non-negative
+        for w in row.windows(2) {
+            if w[1] <= w[0] {
+                return VerifyResult::fail(format!("row {r} is not strictly increasing"));
+            }
+        }
+        scope = scope.max(*row.last().unwrap());
+        // every within-row positive difference must be globally distinct
+        for i in 0..row.len() {
+            for j in (i + 1)..row.len() {
+                let d = row[j] - row[i];
+                if !diffs.insert(d) {
+                    return VerifyResult::fail(format!(
+                        "difference {d} repeats (row {r}) — not a difference triangle set"
+                    ));
+                }
+                diff_count += 1;
+            }
+        }
+    }
+    let scope_usize = scope as usize;
+    if let Some(c) = claimed_scope
+        && c != scope_usize
+    {
+        return VerifyResult::fail(format!(
+            "verifier passed but scope {scope_usize} != claimed_scope {c}"
+        ));
+    }
+    VerifyResult::ok(format!(
+        "difference triangle set: {} rows, scope {scope_usize}, all {diff_count} within-row differences globally distinct",
+        rows.len()
+    ))
 }
 
 /// Verify a witness against its exact verifier, plus the optional
@@ -407,6 +473,10 @@ pub fn verify_witness(witness: &Witness) -> VerifyResult {
             claimed_d,
             generator,
         } => verify_linear_code(generator, *q, *claimed_d),
+        Witness::DiffTriangle {
+            rows,
+            claimed_scope,
+        } => verify_diff_triangle(rows, *claimed_scope),
     }
 }
 
@@ -2072,6 +2142,49 @@ mod tests {
         assert!(
             !claim_witness_faithful("a Sidon set in {0,1}^3 with exactly 5 elements.", &w).faithful
         );
+    }
+
+    // ---- difference triangle set (HorizonMath (7,5), scope < 112) ----
+
+    #[test]
+    fn diff_triangle_accepts_valid_and_reports_scope() {
+        // rows {0,1,3} (diffs 1,2,3) and {0,4,9} (diffs 4,5,9): all distinct.
+        let w = Witness::DiffTriangle {
+            rows: vec![vec![0, 1, 3], vec![0, 4, 9]],
+            claimed_scope: Some(9),
+        };
+        let r = verify_witness(&w);
+        assert!(r.ok, "{}", r.message);
+        assert!(r.message.contains("scope 9"));
+    }
+
+    #[test]
+    fn diff_triangle_rejects_global_difference_collision() {
+        // row2 {0,2,5} has differences 2 and 3, which collide with row1.
+        let w = Witness::DiffTriangle {
+            rows: vec![vec![0, 1, 3], vec![0, 2, 5]],
+            claimed_scope: None,
+        };
+        let r = verify_witness(&w);
+        assert!(!r.ok);
+        assert!(r.message.contains("repeats"));
+    }
+
+    #[test]
+    fn diff_triangle_rejects_non_increasing_and_nonzero_start() {
+        assert!(!verify_diff_triangle(&[vec![0, 3, 1]], None).ok);
+        assert!(!verify_diff_triangle(&[vec![1, 2, 4]], None).ok);
+    }
+
+    #[test]
+    fn diff_triangle_rejects_inflated_scope_claim() {
+        // A valid set, but a record claim ("scope below 112") that lies about
+        // the actual scope must fail.
+        let w = Witness::DiffTriangle {
+            rows: vec![vec![0, 1, 3], vec![0, 4, 9]],
+            claimed_scope: Some(100),
+        };
+        assert!(!verify_witness(&w).ok);
     }
 
     #[test]
