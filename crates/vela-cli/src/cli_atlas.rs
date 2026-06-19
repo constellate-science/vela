@@ -299,6 +299,59 @@ fn run_blast_radius(args: &[String]) {
     );
 }
 
+/// `vela correct` — scientific record repair (memo Program Two). The dependency
+/// blast radius of correcting/retracting a finding, read over the frozen
+/// Bottleneck-kappa cascade: which downstream findings lose their only support,
+/// which are weakened but keep surviving routes, which are unaffected. Read-only
+/// analysis; the write (`vela retract`) is key custody.
+pub(crate) fn cmd_correct(frontier: &Path, finding: &str, json_out: bool) {
+    let project = repo::load_from_path(frontier)
+        .unwrap_or_else(|e| fail(&format!("load {}: {e}", frontier.display())));
+    let graph = FrontierGraph::from_project(&project);
+    let center = graph.find_node(finding).unwrap_or_else(|| {
+        fail(&format!(
+            "no finding matching '{finding}' in {}",
+            frontier.display()
+        ))
+    });
+    let blast = graph.blast_radius_graded(&project, &center, &[], BlastDirection::Downstream);
+    if json_out {
+        print_json(&blast.to_json());
+        return;
+    }
+    let s = &blast.summary;
+    let unaffected = s.downstream_candidates.saturating_sub(s.weakened);
+    println!("record repair — correcting {}", blast.structural.center);
+    println!("  finding: {}", blast.structural.center_label);
+    println!(
+        "  current support: belnap '{}'  (support kappa {})",
+        blast.center_status.belnap, blast.center_status.support_kappa
+    );
+    println!(
+        "  downstream dependents: {} weakened, {} lose all support, {} unaffected (alternative support survives)",
+        s.weakened, s.killed, unaffected
+    );
+    for g in &blast.impacted {
+        let verdict = if g.support_killed {
+            "SUPPORT KILLED (the corrected finding was its only route)"
+        } else {
+            "weakened, but surviving routes remain"
+        };
+        println!(
+            "    - {} [{}]: support kappa {} -> {}  ({verdict})",
+            g.id, g.label, g.kappa_before, g.kappa_after
+        );
+    }
+    println!(
+        "  history preserved: a correction mints a NEW root; the prior state stays replayable (no rewrite)."
+    );
+    println!(
+        "  to apply the retraction: vela retract {} {}  (key custody)",
+        frontier.display(),
+        blast.structural.center
+    );
+}
+
 /// Extract a problem/sequence number from a finding's assertion text. Handles
 /// "Erdős Problem #105", "#105", "Problem 105", "Erdos257", "erdos_1150",
 /// "A309370" — so the same problem written different ways in different databases

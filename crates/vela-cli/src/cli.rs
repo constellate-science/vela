@@ -475,6 +475,11 @@ pub async fn run_command() {
             json,
         ),
         Commands::Reproduce { path, json } => cmd_reproduce(&path, json),
+        Commands::Correct {
+            frontier,
+            finding,
+            json,
+        } => crate::cli_atlas::cmd_correct(&frontier, &finding, json),
         Commands::Version => println!("vela {}", env!("CARGO_PKG_VERSION")),
         Commands::Sign { action } => cmd_sign(action),
         Commands::Id { action } => cmd_id(action),
@@ -5262,6 +5267,7 @@ Verification:
   conformance   Run protocol conformance vectors
   gate          Verification gate: deliverable-grade + verifier-attachment checks
   reproduce     Re-verify stored witnesses from scratch (frozen exact verifiers)
+  correct       Record repair: dependency blast radius of a correction/retraction
   campaign      Discovery engine: search verifier-gated constructions, verify, propose
   foundry       One unattended compounding turn: produce -> frozen-verify -> auto-admit
   sidon         Sidon Producer Profile (A309370): submit, observe, export, frontier-map, support

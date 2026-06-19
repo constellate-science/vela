@@ -335,6 +335,21 @@ pub(crate) enum Commands {
         #[arg(long)]
         json: bool,
     },
+    /// Scientific record repair: the dependency blast radius of correcting or
+    /// retracting a finding. Over the frozen Bottleneck-kappa cascade it shows
+    /// which downstream findings LOSE their only support, which are weakened but
+    /// keep surviving routes, and which are unaffected (alternative support
+    /// prunes them). The correction is a new root; prior state stays replayable.
+    /// READ-ONLY analysis; the actual retraction is `vela retract` (key custody).
+    Correct {
+        /// Frontier directory (e.g. `examples/erdos-problems`).
+        frontier: PathBuf,
+        /// The finding id (`vf_…`) being corrected/retracted.
+        #[arg(long)]
+        finding: String,
+        #[arg(long)]
+        json: bool,
+    },
     /// The discovery engine: search for verifier-gated constructions, then
     /// verify them with the frozen `vela-verify` and (optionally) propose the
     /// result. Search *produces* candidates; the frozen verifier is the gate —
