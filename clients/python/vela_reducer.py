@@ -507,6 +507,12 @@ def apply_event(state: dict, event: dict) -> None:
         "review.revision_requested",
     ):
         return
+    # policy.auto_admitted (Phase 1A): deterministic machine-verified admission
+    # audit record. No-op on the finding-effects digest, exactly like review.*;
+    # the verifier attachments define trust. Rust mirror: the no-op arm in
+    # reducer.rs (EventKind::PolicyAutoAdmitted).
+    elif kind == "policy.auto_admitted":
+        return
     else:
         raise ValueError(f"reducer: unsupported event kind {kind!r}")
 

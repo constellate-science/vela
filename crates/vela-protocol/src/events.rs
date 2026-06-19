@@ -165,6 +165,18 @@ pub const EVENT_KIND_REVIEW_ACCEPTED: &str = "review.accepted";
 pub const EVENT_KIND_REVIEW_REJECTED: &str = "review.rejected";
 pub const EVENT_KIND_REVIEW_REVISION_REQUESTED: &str = "review.revision_requested";
 
+/// Deterministic machine-verified admission (Phase 1A). Emitted, UNSIGNED, when a
+/// proposal clears the exact-lane auto-admission predicate (kernel-clean, >=2
+/// independent attachments derive `Verified`, a present-and-Survived
+/// FormalismFidelity probe, Sound method integrity, no synthetic-source block, no
+/// frontier contradiction). The trust is the frozen verifier + the audited
+/// deterministic predicate, never a model and never a human rubber stamp; this
+/// materializes the `machine_verified` tier, distinct from `review.accepted`
+/// (human, signed, = significance/release). `before_hash == after_hash` (no
+/// finding mutation): it is an audit record of the admission decision, binding
+/// (proposal_id, attachment_ids, signal_status, policy_version).
+pub const EVENT_KIND_POLICY_AUTO_ADMITTED: &str = "policy.auto_admitted";
+
 /// The complete registry of event kinds the protocol can emit or store.
 /// This is the writer-side universe; the reducer must handle every kind
 /// here (a real arm or an explicit no-op) — `reducer::every_known_kind_reduces`
@@ -213,6 +225,7 @@ pub const KNOWN_EVENT_KINDS: &[&str] = &[
     "review.accepted",
     "review.rejected",
     "review.revision_requested",
+    "policy.auto_admitted",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -329,6 +342,7 @@ event_kinds! {
     ReviewAccepted => "review.accepted",
     ReviewRejected => "review.rejected",
     ReviewRevisionRequested => "review.revision_requested",
+    PolicyAutoAdmitted => "policy.auto_admitted",
 }
 
 impl From<String> for EventKind {
@@ -1726,6 +1740,12 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
         // no-ops; the payload shape is whatever the retired surface
         // minted. Object-ness is already enforced above.
         "correction_return.review" | "research_trace.review" => {}
+
+        // policy.auto_admitted (Phase 1A): deterministic machine-verified admission
+        // audit record. Binds the proposal it admitted; the attachments define trust.
+        "policy.auto_admitted" => {
+            require_str("proposal_id")?;
+        }
 
         other => return Err(format!("unknown event kind '{other}'")),
     }

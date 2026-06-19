@@ -474,6 +474,10 @@ function applyEvent(state: ReducerState, event: Event): void {
     kind === "key.revoke"
   )
     return;
+  // policy.auto_admitted (Phase 1A): deterministic machine-verified admission
+  // audit record. No-op on the findings digest (mirror of the Rust + Python
+  // reducers); the verifier attachments define trust.
+  else if (kind === "policy.auto_admitted") return;
   else
     throw new Error(`reducer: unsupported event kind ${JSON.stringify(kind)}`);
 }

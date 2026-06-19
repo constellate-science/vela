@@ -253,7 +253,12 @@ pub fn apply_event_indexed(
         // here, so verify_replay's finding hashes are untouched.
         | EventKind::ReviewAccepted
         | EventKind::ReviewRejected
-        | EventKind::ReviewRevisionRequested => Ok(()),
+        | EventKind::ReviewRevisionRequested
+        // policy.auto_admitted: deterministic machine-verified admission (Phase 1A).
+        // Like review.*, it records the decision (WHO/HOW: the frozen verifier + the
+        // audited predicate) without mutating findings — the verifier attachments
+        // already on the frontier define the gate status. No-op on finding hashes.
+        | EventKind::PolicyAutoAdmitted => Ok(()),
         EventKind::Other(other) => Err(format!("reducer: unsupported event kind '{other}'")),
     }
 }
