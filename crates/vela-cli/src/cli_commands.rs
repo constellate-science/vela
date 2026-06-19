@@ -845,8 +845,10 @@ pub(crate) enum Commands {
         /// identity (`vela id create`).
         #[arg(long)]
         reviewer: Option<String>,
+        /// Decision note recorded in the signed event. Optional: defaults to
+        /// "accepted via review". Key custody, not the note, is the authority.
         #[arg(long)]
-        reason: String,
+        reason: Option<String>,
         /// Path to the reviewer's Ed25519 private key (hex seed). Optional:
         /// defaults to your configured identity's key. Key custody, not the
         /// typed name, is the accept authority; the event is signed with it.

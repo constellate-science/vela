@@ -536,14 +536,30 @@ pub async fn run_command() {
             json,
             quiet,
         } => {
-            // v0.74.3: if the first positional looks like a
-            // proposal id, route to proposals preview. Otherwise
-            // treat it as a frontier path or `vfr_*` registry id
-            // and run the two-frontier diff (v0.140 cross-frontier).
-            if target.starts_with("vpr_") {
+            // v0.701: arg-order-insensitive. A `vpr_*` id in EITHER positional
+            // routes to proposal preview; the other positional (or `--frontier`,
+            // else `.`) is the frontier. So `vela diff <frontier> <vpr_>`,
+            // `vela diff <vpr_> <frontier>`, and `vela diff <vpr_>` all work — no
+            // more "Path does not exist" when the args are transposed.
+            let first = target.clone();
+            let vpr = if target.starts_with("vpr_") {
+                Some(target.clone())
+            } else if frontier_b.as_deref().is_some_and(|s| s.starts_with("vpr_")) {
+                frontier_b.clone()
+            } else {
+                None
+            };
+            if let Some(target) = vpr {
                 let frontier_root = frontier
                     .clone()
-                    .or_else(|| frontier_b.clone().map(std::path::PathBuf::from))
+                    .or_else(|| {
+                        // the positional that is NOT the proposal id, if any
+                        if first.starts_with("vpr_") {
+                            frontier_b.clone().map(std::path::PathBuf::from)
+                        } else {
+                            Some(std::path::PathBuf::from(&first))
+                        }
+                    })
                     .unwrap_or_else(|| std::path::PathBuf::from("."));
                 let preview = proposals::preview_at_path(&frontier_root, &target, &reviewer)
                     .unwrap_or_else(|e| fail_return(&e));
@@ -1068,6 +1084,7 @@ pub async fn run_command() {
             json,
         } => {
             let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
+            let reason = reason.unwrap_or_else(|| "accepted via review".to_string());
             let signing_key = crate::cli_identity::resolve_signing_key_opt(key.as_deref());
             // The Engine runs Evidence CI on the post-accept state and gates
             // the acceptance on the regression it would introduce.
