@@ -140,6 +140,7 @@ mod tests {
                 verifier_attachments: vec![],
                 deliverable_grade: None,
                 provenance: Default::default(),
+                ..Default::default()
             },
             &key(),
         )

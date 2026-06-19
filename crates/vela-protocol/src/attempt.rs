@@ -67,6 +67,25 @@ pub struct Provenance {
     pub date: String,
 }
 
+/// The generic Producer primitive (v0.700 minimal core): which system emitted
+/// the attempt, its version, and a digest of its configuration. Generalizes the
+/// Sidon producer so any solver, an API reasoning model, an open prover, or a
+/// closed agent, declares itself uniformly. The ablation and the retained-loop
+/// handoff key on this to compare like producers and detect cross-producer reuse.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProducerRef {
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub system: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub version: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub config_digest: String,
+}
+
+fn is_default_producer(p: &ProducerRef) -> bool {
+    *p == ProducerRef::default()
+}
+
 /// A signed, content-addressed banked attempt.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Attempt {
@@ -110,6 +129,35 @@ pub struct Attempt {
     pub deliverable_grade: Option<String>,
     #[serde(default, skip_serializing_if = "is_default_provenance")]
     pub provenance: Provenance,
+    // ── v0.700 Attempt Packet (the producer-forced minimal-core promotion) ──
+    // Additive + skip-guarded, so legacy attempts serialize and content-address
+    // byte-identically. These fields make the retained-producer handoff and the
+    // inherited-state ablation measurable.
+    /// The frontier root this attempt was made against. The pin that makes
+    /// "Agent B with vs without Agent A's accepted state" a controlled compare,
+    /// and that lets a later root be a clean continuation.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub base_frontier_root: String,
+    /// The residual obligation this attempt targeted (free-form id; the
+    /// Obligation/StatementVariant nouns stay domain-local until promoted).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub target_obligation_id: String,
+    /// The statement variant attempted (free-form id).
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub statement_variant_id: String,
+    /// Method families exercised. Drives duplicate-search detection in the ablation.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub method_families: Vec<String>,
+    /// Obligations left open after this attempt (free-form ids).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub remaining_obligations: Vec<String>,
+    /// Named obstructions encountered, free-form `kind:scope` until the
+    /// Obstruction noun is promoted under a second producer's pressure.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub named_obstructions: Vec<String>,
+    /// What produced this attempt (the generic Producer primitive).
+    #[serde(default, skip_serializing_if = "is_default_producer")]
+    pub producer: ProducerRef,
     pub signature: String,
     pub signer_pubkey_hex: String,
 }
@@ -143,6 +191,14 @@ pub struct AttemptDraft {
     pub verifier_attachments: Vec<String>,
     pub deliverable_grade: Option<String>,
     pub provenance: Provenance,
+    // v0.700 Attempt Packet fields (all optional).
+    pub base_frontier_root: String,
+    pub target_obligation_id: String,
+    pub statement_variant_id: String,
+    pub method_families: Vec<String>,
+    pub remaining_obligations: Vec<String>,
+    pub named_obstructions: Vec<String>,
+    pub producer: ProducerRef,
 }
 
 /// The one canonical claim digest (`sha256(claim.trim())[:16]`), defined in
@@ -188,6 +244,13 @@ impl Attempt {
             verifier_attachments: draft.verifier_attachments,
             deliverable_grade: draft.deliverable_grade,
             provenance: draft.provenance,
+            base_frontier_root: draft.base_frontier_root,
+            target_obligation_id: draft.target_obligation_id,
+            statement_variant_id: draft.statement_variant_id,
+            method_families: draft.method_families,
+            remaining_obligations: draft.remaining_obligations,
+            named_obstructions: draft.named_obstructions,
+            producer: draft.producer,
             signature: String::new(),
             signer_pubkey_hex: hex::encode(key.verifying_key().to_bytes()),
         };
@@ -453,7 +516,36 @@ mod tests {
                 run: "wf_demo".to_string(),
                 date: "2026-06-09".to_string(),
             },
+            ..Default::default()
         }
+    }
+
+    #[test]
+    fn packet_fields_round_trip_and_legacy_id_is_stable() {
+        // A packet-bearing attempt carries the v0.700 fields, round-trips through
+        // canonical JSON, and re-verifies; the producer/root/obstruction fields
+        // are part of the content address (a tampered root breaks the id).
+        let mut d = ok_draft();
+        d.base_frontier_root = "sha256:deadbeef".into();
+        d.target_obligation_id = "sidon:a309370:n8".into();
+        d.method_families = vec!["cp-sat".into(), "randomized-restart".into()];
+        d.remaining_obligations = vec!["sidon:a309370:n9".into()];
+        d.named_obstructions = vec!["search-does-not-scale:greedy".into()];
+        d.producer = ProducerRef {
+            system: "claude".into(),
+            version: "opus-4-8".into(),
+            config_digest: "sha256:cfg".into(),
+        };
+        let a = Attempt::build(d, &key()).unwrap();
+        a.verify().unwrap();
+        let round: Attempt = serde_json::from_str(&serde_json::to_string(&a).unwrap()).unwrap();
+        assert_eq!(round, a);
+        round.verify().unwrap();
+        assert_eq!(round.producer.system, "claude");
+        assert_eq!(round.base_frontier_root, "sha256:deadbeef");
+        // A legacy attempt (no packet fields) keeps a distinct, stable id.
+        let legacy = Attempt::build(ok_draft(), &key()).unwrap();
+        assert_ne!(legacy.attempt_id, a.attempt_id);
     }
 
     #[test]
