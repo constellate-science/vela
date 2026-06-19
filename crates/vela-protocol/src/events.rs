@@ -1763,7 +1763,7 @@ pub fn event_content_preimage_bytes(event: &StateEvent) -> Vec<u8> {
     canonical::to_canonical_bytes(&content).unwrap_or_default()
 }
 
-fn event_id(event: &StateEvent) -> String {
+pub fn event_id(event: &StateEvent) -> String {
     format!(
         "vev_{}",
         &hex::encode(Sha256::digest(event_content_preimage_bytes(event)))[..16]
