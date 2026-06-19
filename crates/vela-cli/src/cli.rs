@@ -234,6 +234,7 @@ pub async fn run_command() {
         Commands::Sidon { action } => crate::cli_sidon::cmd_sidon(action),
         Commands::Agents { action } => crate::cli_agents::cmd_agents(action),
         Commands::Campaign { action } => crate::cli_campaign::cmd_campaign(action),
+        Commands::Foundry { action } => crate::cli_engine::cmd_foundry(action),
         Commands::Onboard { frontier, json } => {
             let project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
             let name = project.project.name.clone();
@@ -5262,6 +5263,7 @@ Verification:
   gate          Verification gate: deliverable-grade + verifier-attachment checks
   reproduce     Re-verify stored witnesses from scratch (frozen exact verifiers)
   campaign      Discovery engine: search verifier-gated constructions, verify, propose
+  foundry       One unattended compounding turn: produce -> frozen-verify -> auto-admit
   sidon         Sidon Producer Profile (A309370): submit, observe, export, frontier-map, support
   attach        Bind a verifier attachment to a finding (propose -> accept in one step)
   attempt       Verify banked attempts (vat_): id re-derivation + signature + claim digest

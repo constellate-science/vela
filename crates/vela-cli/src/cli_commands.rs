@@ -344,6 +344,15 @@ pub(crate) enum Commands {
         #[command(subcommand)]
         action: CampaignAction,
     },
+    /// The foundry: one unattended compounding turn (Phase 2). Produce a
+    /// candidate with the frozen-verifier campaign, register its witness, and
+    /// run it through the exact-lane de-human-gate — produce -> frozen-verify
+    /// -> auto-admit -> machine_verified, with no human and no key. Dry-run by
+    /// default (previews the gate); `--apply` records the admission.
+    Foundry {
+        #[command(subcommand)]
+        action: FoundryAction,
+    },
     /// Show version information
     Version,
     /// Optional signing and signature verification
@@ -1310,6 +1319,38 @@ pub(crate) enum SignAction {
         /// Number of unique valid signatures required (>= 1).
         #[arg(long)]
         to: u32,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+/// `vela foundry` — one unattended compounding turn over the de-human-gate.
+#[derive(Subcommand)]
+pub(crate) enum FoundryAction {
+    /// Run one turn: produce a candidate (campaign), register its witness, and
+    /// run the exact-lane auto-admit. Dry-run by default; `--apply` records the
+    /// `policy.auto_admitted` admission when the gate says YES.
+    Run {
+        /// Frontier directory (e.g. `examples/sidon-sets`).
+        frontier: PathBuf,
+        /// Witness kind: `sidon`, `golomb`, `cap`, `bh`, …
+        #[arg(long)]
+        kind: String,
+        /// The ambient size parameter `n`.
+        #[arg(long)]
+        n: usize,
+        /// For `bh` witnesses, the order `h`.
+        #[arg(long, default_value_t = 2)]
+        h: usize,
+        /// Search restarts.
+        #[arg(long, default_value_t = 200)]
+        restarts: u64,
+        /// Search seed.
+        #[arg(long, default_value_t = 1)]
+        seed: u64,
+        /// Record the admission (else dry-run preview the whole turn).
+        #[arg(long)]
+        apply: bool,
         #[arg(long)]
         json: bool,
     },

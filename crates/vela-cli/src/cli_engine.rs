@@ -453,6 +453,220 @@ fn attachments_human_vouched(
     (true, String::new())
 }
 
+// ---- the foundry: one unattended compounding turn (Phase 2) ----
+
+/// `vela foundry run`: produce -> frozen-verify -> register -> auto-admit, one
+/// unattended turn over the de-human-gate, no human and no key. Dry-run by
+/// default; `--apply` records the admission. The turn chains the tested paths:
+/// the frozen-verifier `campaign` producer, the witness-artifact registration
+/// (agent-allowed provenance), and the exact-lane `gate auto-admit` (which
+/// re-runs the frozen verifier itself). This is the memo's compounding loop:
+/// the de-human-gate made to fire on a freshly produced candidate.
+pub(crate) fn cmd_foundry(action: FoundryAction) {
+    match action {
+        FoundryAction::Run {
+            frontier,
+            kind,
+            n,
+            h,
+            restarts,
+            seed,
+            apply,
+            json,
+        } => cmd_foundry_run(&frontier, &kind, n, h, restarts, seed, apply, json),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn cmd_foundry_run(
+    frontier: &Path,
+    kind: &str,
+    n: usize,
+    h: usize,
+    restarts: u64,
+    seed: u64,
+    apply: bool,
+    json_out: bool,
+) {
+    let exe = std::env::current_exe()
+        .unwrap_or_else(|e| fail_return(&format!("locate vela binary: {e}")));
+
+    // 1. PRODUCE + PROPOSE via the frozen-verifier campaign (the tested path:
+    //    it runs vela-verify on the witness before returning, writes the
+    //    witness file, records a `vac_` activity envelope, and lands a pending
+    //    finding.add proposal). A failed search is a valid (null) turn.
+    let mut produce = std::process::Command::new(&exe);
+    produce
+        .arg("campaign")
+        .arg("run")
+        .arg(kind)
+        .arg("--n")
+        .arg(n.to_string())
+        .arg("--restarts")
+        .arg(restarts.to_string())
+        .arg("--seed")
+        .arg(seed.to_string())
+        .arg("--frontier")
+        .arg(frontier)
+        .arg("--propose");
+    if kind == "bh" {
+        produce.arg("--h").arg(h.to_string());
+    }
+    let produced = produce
+        .output()
+        .unwrap_or_else(|e| fail_return(&format!("foundry: campaign produce failed: {e}")));
+    if !produced.status.success() {
+        let why = String::from_utf8_lossy(&produced.stderr);
+        if json_out {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "turn": "null",
+                    "produced": false,
+                    "reason": why.trim(),
+                }))
+                .unwrap()
+            );
+        } else {
+            println!(
+                "foundry turn: NULL (no candidate produced) — {}",
+                why.trim()
+            );
+        }
+        return;
+    }
+
+    // 2. DISCOVER the finding the campaign just proposed: the pending
+    //    finding.add whose assertion names this kind + n. (The campaign's
+    //    assertion_for embeds "in {0,1}^n" / the kind keyword.)
+    let source = repo::detect(frontier).unwrap_or_else(|e| fail_return(&e));
+    let proj = repo::load(&source).unwrap_or_else(|e| fail_return(&e));
+    let needle_n = format!("{n}");
+    let mut candidates: Vec<&vela_protocol::proposals::StateProposal> = proj
+        .proposals
+        .iter()
+        .filter(|p| {
+            p.kind == "finding.add"
+                && p.applied_event_id.is_none()
+                && p.payload
+                    .get("finding")
+                    .and_then(|f| f.get("assertion"))
+                    .and_then(|a| a.get("text"))
+                    .and_then(|t| t.as_str())
+                    .map(|t| {
+                        let lt = t.to_lowercase();
+                        lt.contains(kind) && lt.contains(&needle_n)
+                    })
+                    .unwrap_or(false)
+        })
+        .collect();
+    candidates.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+    let proposal = candidates.last().copied().unwrap_or_else(|| {
+        fail_return(&format!(
+            "foundry: produced a candidate but found no matching pending finding.add for {kind} n={n}"
+        ))
+    });
+    let finding_id = proposal.target.id.clone();
+
+    // 3. MAP the witness file to the finding in witnesses/targets.json, the
+    //    contract register_canonical_witnesses reads.
+    let witness_file = if kind == "bh" {
+        format!("{kind}-n{n}-h{h}.witness.json")
+    } else {
+        format!("{kind}-n{n}.witness.json")
+    };
+    upsert_witness_target(frontier, &witness_file, &finding_id);
+
+    // 4. REGISTER the witness as a content-addressed artifact targeting the
+    //    finding (agent-allowed provenance, not a verdict), so the exact lane's
+    //    floor can re-run the frozen verifier over it.
+    let (registered, _no_target) =
+        register_canonical_witnesses(frontier, "agent:vela-foundry", false);
+
+    // 5. AUTO-ADMIT through the exact-lane de-human-gate (the tested command;
+    //    exit 1 on a NO verdict is captured, never fatal to the turn).
+    let mut admit = std::process::Command::new(&exe);
+    admit
+        .arg("gate")
+        .arg("auto-admit")
+        .arg(frontier)
+        .arg("--finding")
+        .arg(&finding_id)
+        .arg("--json");
+    if apply {
+        admit.arg("--apply");
+    }
+    let admit_out = admit
+        .output()
+        .unwrap_or_else(|e| fail_return(&format!("foundry: auto-admit failed: {e}")));
+    let verdict: Value = serde_json::from_slice(&admit_out.stdout)
+        .unwrap_or_else(|_| json!({"would_auto_admit": false}));
+    let admitted = verdict
+        .get("would_auto_admit")
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
+
+    // 6. REPORT the turn.
+    if json_out {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&json!({
+                "turn": "complete",
+                "produced": true,
+                "finding": finding_id,
+                "witnesses_registered": registered,
+                "applied": apply,
+                "auto_admit": verdict,
+                "tier": if admitted && apply { "machine_verified" } else { "pending" },
+            }))
+            .unwrap()
+        );
+    } else {
+        println!("foundry turn for {kind} n={n}:");
+        println!("  produced + proposed: {finding_id}");
+        println!("  witness registered as artifact: {registered} new");
+        println!(
+            "  exact-lane auto-admit: {}",
+            if admitted { "YES" } else { "NO" }
+        );
+        if let Some(reasons) = verdict
+            .get("proposal_guard_reasons")
+            .and_then(Value::as_array)
+            .filter(|r| !r.is_empty())
+        {
+            for r in reasons {
+                if let Some(s) = r.as_str() {
+                    println!("      - {s}");
+                }
+            }
+        }
+        if admitted && apply {
+            println!("  => machine_verified (recorded, no human, no key)");
+        } else if admitted {
+            println!("  => WOULD auto-admit (dry-run; pass --apply to record)");
+        } else {
+            println!("  => stays a candidate pending corroboration/review");
+        }
+    }
+}
+
+/// Merge `{witness_file: finding_id}` into `witnesses/targets.json` (create if
+/// absent), the map `register_canonical_witnesses` consumes.
+fn upsert_witness_target(frontier: &Path, witness_file: &str, finding_id: &str) {
+    let dir = frontier.join("witnesses");
+    std::fs::create_dir_all(&dir)
+        .unwrap_or_else(|e| fail_return(&format!("create {}: {e}", dir.display())));
+    let path = dir.join("targets.json");
+    let mut map: serde_json::Map<String, Value> = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    map.insert(witness_file.to_string(), json!(finding_id));
+    let body = serde_json::to_string_pretty(&map).unwrap_or_else(|e| fail_return(&e.to_string()));
+    std::fs::write(&path, body + "\n")
+        .unwrap_or_else(|e| fail_return(&format!("write {}: {e}", path.display())));
+}
+
 /// Re-run the frozen verifier over the finding's witness artifact (the
 /// reproduce-binding the exact lane computes itself, never trusting a field).
 /// Returns (ok, human-detail, the parsed witness).

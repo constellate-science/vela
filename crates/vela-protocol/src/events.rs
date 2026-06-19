@@ -1743,17 +1743,21 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
 
         // policy.auto_admitted (Phase 1A): deterministic machine-verified admission
         // audit record. The audit record is the only accountability artifact for
-        // a human-free admit, so every binding field is mandatory and well-formed
-        // (checklist #10): the proposal it admitted, the claim digest the gate
-        // matched, a non-empty list of the corroborating attachments, the frozen
-        // policy version, and the frozen verifier-env hash.
+        // a human-free admit (checklist #10), so the binding fields are mandatory
+        // and well-formed: the proposal it admitted, the claim digest the gate
+        // matched, the frozen policy version, and the frozen verifier-env hash —
+        // these let an auditor re-derive a FLOOR admission (reproduce the witness
+        // under `verifier_env_hash` + check `claim_digest` against the assertion)
+        // independently of attachments. `attachment_ids` lists the corroborating
+        // attachments and MAY be empty: a floor-sufficient exact-lane admit has
+        // none — the frozen verifier + faithful binding is itself the proof.
         "policy.auto_admitted" => {
             require_str("proposal_id")?;
             require_str("claim_digest")?;
             require_str("policy_version")?;
             require_str("verifier_env_hash")?;
             match payload.get("attachment_ids") {
-                Some(serde_json::Value::Array(ids)) if !ids.is_empty() => {
+                Some(serde_json::Value::Array(ids)) => {
                     if !ids.iter().all(|v| v.is_string()) {
                         return Err(
                             "policy.auto_admitted: attachment_ids must be strings".to_string()
@@ -1761,10 +1765,7 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
                     }
                 }
                 _ => {
-                    return Err(
-                        "policy.auto_admitted: attachment_ids must be a non-empty array"
-                            .to_string(),
-                    );
+                    return Err("policy.auto_admitted: attachment_ids must be an array".to_string());
                 }
             }
         }
@@ -2366,15 +2367,26 @@ mod tests {
         let minimal = json!({ "proposal_id": "vpr_abc" });
         assert!(validate_event_payload(EVENT_KIND_POLICY_AUTO_ADMITTED, &minimal).is_err());
 
-        // FAIL: empty attachment_ids (an admit with no corroboration).
-        let no_atts = json!({
+        // PASS: empty attachment_ids — a floor-sufficient admit has no
+        // attachments; the frozen verifier + faithful binding is the proof, and
+        // claim_digest + verifier_env_hash are the accountability.
+        let floor_admit = json!({
             "proposal_id": "vpr_abc",
             "claim_digest": "deadbeef",
             "attachment_ids": [],
             "policy_version": "exact-lane.v1",
             "verifier_env_hash": "sha256:cafe"
         });
-        assert!(validate_event_payload(EVENT_KIND_POLICY_AUTO_ADMITTED, &no_atts).is_err());
+        assert!(validate_event_payload(EVENT_KIND_POLICY_AUTO_ADMITTED, &floor_admit).is_ok());
+
+        // FAIL: a missing claim_digest (the floor accountability) still rejects.
+        let no_digest = json!({
+            "proposal_id": "vpr_abc",
+            "attachment_ids": [],
+            "policy_version": "exact-lane.v1",
+            "verifier_env_hash": "sha256:cafe"
+        });
+        assert!(validate_event_payload(EVENT_KIND_POLICY_AUTO_ADMITTED, &no_digest).is_err());
 
         // PASS: with optional signature + proof_id.
         let with_proof = json!({
