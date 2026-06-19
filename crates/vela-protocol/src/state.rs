@@ -11,8 +11,8 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 use crate::bundle::{
-    Artifact, Assertion, Author, Conditions, Confidence, ConfidenceKind, ConfidenceMethod, Entity,
-    Evidence, Extraction, FindingBundle, Flags, Provenance, ResolutionMethod, Review,
+    Artifact, Assertion, Author, Conditions, Confidence, ConfidenceKind, ConfidenceMethod,
+    Evidence, Extraction, FindingBundle, Flags, Provenance, Review,
 };
 use crate::events::{self, NULL_HASH, StateActor, StateEvent, StateTarget};
 use crate::project::{self, Project};
@@ -43,16 +43,13 @@ pub struct FindingDraftOptions {
     pub author: String,
     pub confidence: f64,
     pub evidence_type: String,
-    pub entities: Vec<(String, String)>,
     /// v0.11: structured provenance — populates the existing `Provenance`
     /// fields instead of jamming everything into `title`. Each is optional
     /// so `vela finding add` callers don't have to know all of them up front;
     /// the substrate has the fields, the CLI just exposes them.
     // populated by CLI; consumed by build_add_finding_proposal
     pub doi: Option<String>,
-    pub pmid: Option<String>,
     pub year: Option<i32>,
-    pub journal: Option<String>,
     pub url: Option<String>,
     /// Authors of the source artifact (the paper/preprint/etc).
     /// Distinct from `author` above, which is the Vela actor doing the curation.
@@ -61,12 +58,6 @@ pub struct FindingDraftOptions {
     /// "Manually added finding; requires evidence review…" that was on
     /// every manually-added finding in v0.10. Each field independently optional.
     pub conditions_text: Option<String>,
-    pub species: Vec<String>,
-    pub in_vivo: bool,
-    pub in_vitro: bool,
-    pub human_data: bool,
-    pub clinical_trial: bool,
-    pub entities_reviewed: bool,
     pub evidence_spans: Vec<Value>,
     pub gap: bool,
     pub negative_space: bool,
@@ -1181,27 +1172,7 @@ fn build_finding_bundle(options: &FindingDraftOptions) -> FindingBundle {
     let assertion = Assertion {
         text: options.text.clone(),
         assertion_type: options.assertion_type.clone(),
-        entities: options
-            .entities
-            .iter()
-            .map(|(name, entity_type)| Entity {
-                name: name.clone(),
-                entity_type: entity_type.clone(),
-                identifiers: serde_json::Map::new(),
-                canonical_id: None,
-                candidates: Vec::new(),
-                aliases: Vec::new(),
-                resolution_provenance: Some("manual_state_transition".to_string()),
-                resolution_confidence: if options.entities_reviewed { 0.95 } else { 0.6 },
-                resolution_method: if options.entities_reviewed {
-                    Some(ResolutionMethod::Manual)
-                } else {
-                    None
-                },
-                species_context: None,
-                needs_review: !options.entities_reviewed,
-            })
-            .collect(),
+        entities: vec![],
         relation: None,
         direction: None,
         causal_claim: None,
@@ -1210,22 +1181,11 @@ fn build_finding_bundle(options: &FindingDraftOptions) -> FindingBundle {
     let evidence = Evidence {
         evidence_type: options.evidence_type.clone(),
         model_system: String::new(),
-        species: options
-            .species
-            .first()
-            .cloned()
-            .or_else(|| options.human_data.then(|| "Homo sapiens".to_string())),
-        method: if options.clinical_trial {
-            "manual state transition; placebo-controlled clinical trial where source reports control arm"
-                .to_string()
-        } else if options.evidence_type == "experimental" {
+        method: if options.evidence_type == "experimental" {
             "manual state transition; control details require source inspection".to_string()
         } else {
             "manual state transition".to_string()
         },
-        sample_size: None,
-        effect_size: None,
-        p_value: None,
         replicated: false,
         replication_count: None,
         evidence_spans: options.evidence_spans.clone(),
@@ -1234,16 +1194,7 @@ fn build_finding_bundle(options: &FindingDraftOptions) -> FindingBundle {
         text: options.conditions_text.clone().unwrap_or_else(|| {
             "Manually added finding; requires evidence review before scientific use.".to_string()
         }),
-        species_verified: options.species.clone(),
-        species_unverified: Vec::new(),
-        in_vitro: options.in_vitro,
-        in_vivo: options.in_vivo,
-        human_data: options.human_data,
-        clinical_trial: options.clinical_trial,
-        concentration_range: None,
         duration: None,
-        age_group: None,
-        cell_type: None,
     };
     let confidence = Confidence {
         kind: ConfidenceKind::FrontierEpistemic,
@@ -1271,14 +1222,10 @@ fn build_finding_bundle(options: &FindingDraftOptions) -> FindingBundle {
     let provenance = Provenance {
         source_type: options.source_type.clone(),
         doi: options.doi.clone(),
-        pmid: options.pmid.clone(),
-        pmc: None,
-        openalex_id: None,
         url: options.url.clone(),
         title: options.source.clone(),
         authors: source_authors,
         year: options.year,
-        journal: options.journal.clone(),
         license: None,
         publisher: None,
         funders: Vec::new(),
@@ -1295,7 +1242,6 @@ fn build_finding_bundle(options: &FindingDraftOptions) -> FindingBundle {
             reviewed_at: None,
             corrections: Vec::new(),
         }),
-        citation_count: None,
     };
     let flags = Flags {
         gap: options.gap,
@@ -1363,27 +1309,7 @@ fn build_add_finding_proposal(options: FindingDraftOptions) -> Result<StatePropo
     let assertion = Assertion {
         text: options.text.clone(),
         assertion_type: options.assertion_type.clone(),
-        entities: options
-            .entities
-            .iter()
-            .map(|(name, entity_type)| Entity {
-                name: name.clone(),
-                entity_type: entity_type.clone(),
-                identifiers: serde_json::Map::new(),
-                canonical_id: None,
-                candidates: Vec::new(),
-                aliases: Vec::new(),
-                resolution_provenance: Some("manual_state_transition".to_string()),
-                resolution_confidence: if options.entities_reviewed { 0.95 } else { 0.6 },
-                resolution_method: if options.entities_reviewed {
-                    Some(ResolutionMethod::Manual)
-                } else {
-                    None
-                },
-                species_context: None,
-                needs_review: !options.entities_reviewed,
-            })
-            .collect(),
+        entities: vec![],
         relation: None,
         direction: None,
         causal_claim: None,
@@ -1392,22 +1318,11 @@ fn build_add_finding_proposal(options: FindingDraftOptions) -> Result<StatePropo
     let evidence = Evidence {
         evidence_type: options.evidence_type.clone(),
         model_system: String::new(),
-        species: options
-            .species
-            .first()
-            .cloned()
-            .or_else(|| options.human_data.then(|| "Homo sapiens".to_string())),
-        method: if options.clinical_trial {
-            "manual state transition; placebo-controlled clinical trial where source reports control arm"
-                .to_string()
-        } else if options.evidence_type == "experimental" {
+        method: if options.evidence_type == "experimental" {
             "manual state transition; control details require source inspection".to_string()
         } else {
             "manual state transition".to_string()
         },
-        sample_size: None,
-        effect_size: None,
-        p_value: None,
         replicated: false,
         replication_count: None,
         evidence_spans: options.evidence_spans.clone(),
@@ -1420,16 +1335,7 @@ fn build_add_finding_proposal(options: FindingDraftOptions) -> Result<StatePropo
         text: options.conditions_text.clone().unwrap_or_else(|| {
             "Manually added finding; requires evidence review before scientific use.".to_string()
         }),
-        species_verified: options.species.clone(),
-        species_unverified: Vec::new(),
-        in_vitro: options.in_vitro,
-        in_vivo: options.in_vivo,
-        human_data: options.human_data,
-        clinical_trial: options.clinical_trial,
-        concentration_range: None,
         duration: None,
-        age_group: None,
-        cell_type: None,
     };
     let confidence = Confidence {
         kind: ConfidenceKind::FrontierEpistemic,
@@ -1461,14 +1367,10 @@ fn build_add_finding_proposal(options: FindingDraftOptions) -> Result<StatePropo
     let provenance = Provenance {
         source_type: options.source_type.clone(),
         doi: options.doi.clone(),
-        pmid: options.pmid.clone(),
-        pmc: None,
-        openalex_id: None,
         url: options.url.clone(),
         title: options.source.clone(),
         authors: source_authors,
         year: options.year,
-        journal: options.journal.clone(),
         license: None,
         publisher: None,
         funders: Vec::new(),
@@ -1485,7 +1387,6 @@ fn build_add_finding_proposal(options: FindingDraftOptions) -> Result<StatePropo
             reviewed_at: None,
             corrections: Vec::new(),
         }),
-        citation_count: None,
     };
     let flags = Flags {
         gap: options.gap,
@@ -1568,20 +1469,11 @@ mod v0_11_finding_tests {
             author: "reviewer:test".to_string(),
             confidence: 0.5,
             evidence_type: "experimental".to_string(),
-            entities: Vec::new(),
             doi: None,
-            pmid: None,
             year: None,
-            journal: None,
             url: None,
             source_authors: Vec::new(),
             conditions_text: None,
-            species: Vec::new(),
-            in_vivo: false,
-            in_vitro: false,
-            human_data: false,
-            clinical_trial: false,
-            entities_reviewed: false,
             evidence_spans: Vec::new(),
             gap: false,
             negative_space: false,
@@ -1593,9 +1485,7 @@ mod v0_11_finding_tests {
     fn provenance_flags_populate_structured_fields() {
         let mut opts = base_options();
         opts.doi = Some("10.1056/NEJMoa2212948".to_string());
-        opts.pmid = Some("36449413".to_string());
         opts.year = Some(2023);
-        opts.journal = Some("NEJM".to_string());
         opts.url = Some("https://nejm.org/...".to_string());
         opts.source_authors = vec!["van Dyck CH".to_string(), "Swanson CJ".to_string()];
         let proposal = build_add_finding_proposal(opts).unwrap();
@@ -1605,9 +1495,7 @@ mod v0_11_finding_tests {
             finding.provenance.doi.as_deref(),
             Some("10.1056/NEJMoa2212948")
         );
-        assert_eq!(finding.provenance.pmid.as_deref(), Some("36449413"));
         assert_eq!(finding.provenance.year, Some(2023));
-        assert_eq!(finding.provenance.journal.as_deref(), Some("NEJM"));
         assert_eq!(
             finding.provenance.url.as_deref(),
             Some("https://nejm.org/...")
@@ -1627,28 +1515,15 @@ mod v0_11_finding_tests {
     fn conditions_flags_populate_structured_fields() {
         let mut opts = base_options();
         opts.conditions_text = Some("Phase 3 RCT, 18 mo".to_string());
-        opts.species = vec!["Homo sapiens".to_string()];
-        opts.in_vivo = true;
-        opts.human_data = true;
-        opts.clinical_trial = true;
         let proposal = build_add_finding_proposal(opts).unwrap();
         let finding: bundle::FindingBundle =
             serde_json::from_value(proposal.payload["finding"].clone()).unwrap();
         assert_eq!(finding.conditions.text, "Phase 3 RCT, 18 mo");
-        assert_eq!(
-            finding.conditions.species_verified,
-            vec!["Homo sapiens".to_string()]
-        );
-        assert!(finding.conditions.in_vivo);
-        assert!(finding.conditions.human_data);
-        assert!(finding.conditions.clinical_trial);
     }
 
     #[test]
     fn reviewed_entities_spans_and_gap_flags_populate_structured_fields() {
         let mut opts = base_options();
-        opts.entities = vec![("lecanemab".to_string(), "drug".to_string())];
-        opts.entities_reviewed = true;
         opts.evidence_spans = vec![json!({
             "section": "abstract",
             "text": "Lecanemab slowed decline under early symptomatic AD trial conditions."
@@ -1660,12 +1535,6 @@ mod v0_11_finding_tests {
         let finding: bundle::FindingBundle =
             serde_json::from_value(proposal.payload["finding"].clone()).unwrap();
 
-        assert_eq!(finding.assertion.entities.len(), 1);
-        assert!(!finding.assertion.entities[0].needs_review);
-        assert_eq!(
-            finding.assertion.entities[0].resolution_method,
-            Some(bundle::ResolutionMethod::Manual)
-        );
         assert_eq!(finding.evidence.evidence_spans.len(), 1);
         assert_eq!(
             finding.evidence.evidence_spans[0]["section"].as_str(),
@@ -1713,20 +1582,11 @@ mod v0_38_causal_tests {
             author: "reviewer:test".to_string(),
             confidence: 0.5,
             evidence_type: "experimental".to_string(),
-            entities: Vec::new(),
             doi: None,
-            pmid: None,
             year: Some(2025),
-            journal: None,
             url: None,
             source_authors: Vec::new(),
             conditions_text: None,
-            species: Vec::new(),
-            in_vivo: false,
-            in_vitro: false,
-            human_data: false,
-            clinical_trial: false,
-            entities_reviewed: false,
             evidence_spans: Vec::new(),
             gap: false,
             negative_space: false,

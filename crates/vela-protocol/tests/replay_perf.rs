@@ -59,9 +59,6 @@ fn make_finding(idx: usize) -> FindingBundle {
     let provenance = Provenance {
         source_type: "expert_assertion".into(),
         doi: None,
-        pmid: None,
-        pmc: None,
-        openalex_id: None,
         url: None,
         title: format!("synthetic source {idx}"),
         authors: vec![Author {
@@ -69,38 +66,23 @@ fn make_finding(idx: usize) -> FindingBundle {
             orcid: None,
         }],
         year: None,
-        journal: None,
         license: None,
         publisher: None,
         funders: vec![],
         extraction: Default::default(),
         review: None,
-        citation_count: None,
     };
     let evidence = Evidence {
         evidence_type: "experimental".into(),
         model_system: "synthetic".into(),
-        species: None,
         method: "test".into(),
-        sample_size: None,
-        effect_size: None,
-        p_value: None,
         replicated: false,
         replication_count: None,
         evidence_spans: vec![],
     };
     let conditions = Conditions {
         text: String::new(),
-        species_verified: vec![],
-        species_unverified: vec![],
-        in_vitro: false,
-        in_vivo: false,
-        human_data: false,
-        clinical_trial: false,
-        concentration_range: None,
         duration: None,
-        age_group: None,
-        cell_type: None,
     };
     let confidence = Confidence {
         kind: ConfidenceKind::FrontierEpistemic,

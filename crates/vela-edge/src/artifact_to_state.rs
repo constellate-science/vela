@@ -638,11 +638,7 @@ fn claim_to_finding(
         Evidence {
             evidence_type: "computational".to_string(),
             model_system: "agent artifact packet".to_string(),
-            species: None,
             method: "ScienceClaw-shaped artifact packet import".to_string(),
-            sample_size: None,
-            effect_size: None,
-            p_value: None,
             replicated: false,
             replication_count: None,
             evidence_spans,
@@ -653,16 +649,7 @@ fn claim_to_finding(
             } else {
                 claim.conditions.join("; ")
             },
-            species_verified: Vec::new(),
-            species_unverified: Vec::new(),
-            in_vitro: false,
-            in_vivo: false,
-            human_data: false,
-            clinical_trial: false,
-            concentration_range: None,
             duration: None,
-            age_group: None,
-            cell_type: None,
         },
         Confidence {
             kind: ConfidenceKind::FrontierEpistemic,
@@ -717,9 +704,6 @@ fn packet_provenance(
     Provenance {
         source_type: source_type.to_string(),
         doi: None,
-        pmid: None,
-        pmc: None,
-        openalex_id: None,
         url,
         title: format!("{} · {}", packet.packet_id, title),
         authors: vec![Author {
@@ -727,7 +711,6 @@ fn packet_provenance(
             orcid: None,
         }],
         year: None,
-        journal: None,
         license: None,
         publisher: Some("artifact packet".to_string()),
         funders: Vec::new(),
@@ -744,7 +727,6 @@ fn packet_provenance(
             reviewed_at: None,
             corrections: Vec::new(),
         }),
-        citation_count: None,
     }
 }
 

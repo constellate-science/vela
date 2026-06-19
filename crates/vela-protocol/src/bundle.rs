@@ -209,18 +209,11 @@ pub struct Evidence {
     pub evidence_type: String,
     #[serde(default)]
     pub model_system: String,
-    // v0.700 empirical-measurement slots: unpopulated in the math wedge,
-    // skip-guarded so math findings carry no empirical keys (see Conditions).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub species: Option<String>,
     #[serde(default)]
     pub method: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sample_size: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub effect_size: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub p_value: Option<String>,
+    // v0.700: the empirical-measurement slots (species/sample_size/effect_size/
+    // p_value) were removed — unused in the math wedge, stripped from every live
+    // finding by the re-genesis, byte-identical to their skip-guarded form.
     #[serde(default)]
     pub replicated: bool,
     pub replication_count: Option<u32>,
@@ -589,31 +582,12 @@ fn normalize_sha256(value: String) -> Result<String, String> {
 pub struct Conditions {
     #[serde(default)]
     pub text: String,
-    // v0.700 empirical-context fields: domain-general schema slots that the
-    // cheap-verifier math wedge never populates. Skip-guarded so a math
-    // finding serialises with no empirical keys (byte-identical to having
-    // dropped them); `#[serde(default)]` keeps reads of pre-v0.700 frontiers
-    // backward-compatible. The struct fields stay so an empirical producer can
-    // still fill them; hard-removing the slots later is a byte-free code edit.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub species_verified: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub species_unverified: Vec<String>,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub in_vitro: bool,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub in_vivo: bool,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub human_data: bool,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub clinical_trial: bool,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub concentration_range: Option<String>,
+    // v0.700: the empirical-context slots (species_verified/species_unverified/
+    // in_vitro/in_vivo/human_data/clinical_trial/concentration_range/age_group/
+    // cell_type) were removed. The cheap-verifier math wedge never populated them,
+    // the re-genesis stripped them from every live finding, and dropping the struct
+    // fields is byte-identical to their skip-guarded (always-omitted) form.
     pub duration: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub age_group: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub cell_type: Option<String>,
 }
 
 /// Structured breakdown of frontier epistemic confidence (v0.2.0).
@@ -970,16 +944,11 @@ pub struct Provenance {
     #[serde(default = "default_source_type")]
     pub source_type: String,
     pub doi: Option<String>,
-    // v0.700 bibliometric slots: the math wedge cites by DOI/title, never
-    // PubMed/OpenAlex, so these stay None and are skip-guarded out of the
-    // serialised finding (see Conditions). `pmid` is still read by
-    // `content_address` as a fallback id source, so the field is retained.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pmid: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pmc: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub openalex_id: Option<String>,
+    // v0.700: the bibliometric slots (pmid/pmc/openalex_id/journal/citation_count)
+    // were removed. The math wedge cites by DOI/title, never PubMed/OpenAlex; the
+    // re-genesis stripped them from every live finding (0 were pmid-addressed, so
+    // content_address now uses doi||title with no id change). Byte-identical to the
+    // skip-guarded form.
     /// v0.11: generic source URL when none of the structured identifiers
     /// fit (preprint server URL, dataset landing page, talk recording, etc.).
     /// Skipped when None so pre-v0.11 frontiers serialise byte-identically.
@@ -990,8 +959,6 @@ pub struct Provenance {
     #[serde(default)]
     pub authors: Vec<Author>,
     pub year: Option<i32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub journal: Option<String>,
     /// License URL (e.g., Creative Commons), typically from Crossref.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub license: Option<String>,
@@ -1004,10 +971,6 @@ pub struct Provenance {
     #[serde(default)]
     pub extraction: Extraction,
     pub review: Option<Review>,
-    /// Citation count of the source paper (from OpenAlex). v0.700: skip-guarded
-    /// (the math wedge has no OpenAlex provenance), see the bibliometric note above.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub citation_count: Option<u64>,
 }
 
 fn default_source_type() -> String {
@@ -1672,11 +1635,9 @@ impl FindingBundle {
     /// Returns first 16 hex chars prefixed with "vf_".
     pub fn content_address(assertion: &Assertion, provenance: &Provenance) -> String {
         let norm_text = Self::normalize_text(&assertion.text);
-        let prov_id = provenance
-            .doi
-            .as_deref()
-            .or(provenance.pmid.as_deref())
-            .unwrap_or(&provenance.title);
+        // v0.700: pmid removed. doi || title (no live finding was pmid-addressed,
+        // so every existing vf_ id is unchanged).
+        let prov_id = provenance.doi.as_deref().unwrap_or(&provenance.title);
         let preimage = format!("{}|{}|{}", norm_text, assertion.assertion_type, prov_id);
         let hash = Sha256::digest(preimage.as_bytes());
         format!("vf_{}", &hex::encode(hash)[..16])
@@ -1773,11 +1734,7 @@ mod tests {
         Evidence {
             evidence_type: "experimental".into(),
             model_system: "mouse".into(),
-            species: Some("Mus musculus".into()),
             method: "Western blot".into(),
-            sample_size: Some("n=30".into()),
-            effect_size: None,
-            p_value: Some("p<0.05".into()),
             replicated: true,
             replication_count: Some(3),
             evidence_spans: vec![],
@@ -1787,16 +1744,7 @@ mod tests {
     fn sample_conditions() -> Conditions {
         Conditions {
             text: "In vitro, mouse microglia".into(),
-            species_verified: vec!["Mus musculus".into()],
-            species_unverified: vec![],
-            in_vitro: true,
-            in_vivo: false,
-            human_data: false,
-            clinical_trial: false,
-            concentration_range: None,
             duration: None,
-            age_group: None,
-            cell_type: Some("microglia".into()),
         }
     }
 
@@ -1815,9 +1763,6 @@ mod tests {
         Provenance {
             source_type: "published_paper".into(),
             doi: Some("10.1234/test".into()),
-            pmid: None,
-            pmc: None,
-            openalex_id: None,
             url: None,
             title: "Test Paper".into(),
             authors: vec![Author {
@@ -1825,13 +1770,11 @@ mod tests {
                 orcid: None,
             }],
             year: Some(2024),
-            journal: Some("Nature".into()),
             license: None,
             publisher: None,
             funders: vec![],
             extraction: Extraction::default(),
             review: None,
-            citation_count: Some(100),
         }
     }
 
@@ -2225,20 +2168,15 @@ mod tests {
         let prov1 = Provenance {
             source_type: "published_paper".into(),
             doi: Some("10.1038/s41586-023-06789-1".into()),
-            pmid: None,
-            pmc: None,
-            openalex_id: None,
             url: None,
             title: "Mitochondria in AD".into(),
             authors: vec![],
             year: Some(2023),
-            journal: None,
             license: None,
             publisher: None,
             funders: vec![],
             extraction: Extraction::default(),
             review: None,
-            citation_count: None,
         };
 
         // Different entities, evidence, conditions, confidence -- should NOT matter
@@ -2266,9 +2204,6 @@ mod tests {
         let prov2 = Provenance {
             source_type: "published_paper".into(),
             doi: Some("10.1038/s41586-023-06789-1".into()),
-            pmid: Some("37654321".into()),
-            pmc: None,
-            openalex_id: None,
             url: None,
             title: "Different title".into(),
             authors: vec![Author {
@@ -2276,13 +2211,11 @@ mod tests {
                 orcid: None,
             }],
             year: Some(2023),
-            journal: Some("Nature".into()),
             license: None,
             publisher: None,
             funders: vec![],
             extraction: Extraction::default(),
             review: None,
-            citation_count: Some(50),
         };
 
         let id1 = FindingBundle::content_address(&assertion1, &prov1);
@@ -2323,11 +2256,10 @@ mod tests {
     }
 
     #[test]
-    fn content_address_falls_back_to_title_when_no_doi_or_pmid() {
+    fn content_address_falls_back_to_title_when_no_doi() {
         let assertion = sample_assertion();
         let mut prov = sample_provenance();
         prov.doi = None;
-        prov.pmid = None;
         prov.title = "Fallback Title".into();
         let id = FindingBundle::content_address(&assertion, &prov);
         assert!(id.starts_with("vf_"));
@@ -2336,38 +2268,26 @@ mod tests {
         // Same title -> same ID
         let mut prov2 = sample_provenance();
         prov2.doi = None;
-        prov2.pmid = None;
         prov2.title = "Fallback Title".into();
         let id2 = FindingBundle::content_address(&assertion, &prov2);
         assert_eq!(id, id2);
     }
 
     #[test]
-    fn content_address_prefers_doi_over_pmid_over_title() {
+    fn content_address_prefers_doi_over_title() {
         let assertion = sample_assertion();
 
         let mut prov_doi = sample_provenance();
         prov_doi.doi = Some("10.1234/test".into());
-        prov_doi.pmid = Some("12345".into());
         prov_doi.title = "Title".into();
-
-        let mut prov_pmid = sample_provenance();
-        prov_pmid.doi = None;
-        prov_pmid.pmid = Some("12345".into());
-        prov_pmid.title = "Title".into();
 
         let mut prov_title = sample_provenance();
         prov_title.doi = None;
-        prov_title.pmid = None;
         prov_title.title = "Title".into();
 
         let id_doi = FindingBundle::content_address(&assertion, &prov_doi);
-        let id_pmid = FindingBundle::content_address(&assertion, &prov_pmid);
         let id_title = FindingBundle::content_address(&assertion, &prov_title);
 
-        // All three should be different since the provenance component differs
-        assert_ne!(id_doi, id_pmid, "DOI vs PMID should differ");
-        assert_ne!(id_pmid, id_title, "PMID vs title should differ");
         assert_ne!(id_doi, id_title, "DOI vs title should differ");
     }
 
@@ -2378,27 +2298,14 @@ mod tests {
         let evidence = Evidence {
             evidence_type: "experimental".into(),
             model_system: String::new(),
-            species: None,
             method: "construction".into(),
-            sample_size: None,
-            effect_size: None,
-            p_value: None,
             replicated: true,
             replication_count: Some(5),
             evidence_spans: vec![],
         };
         let conditions = Conditions {
             text: String::new(),
-            species_verified: vec![],
-            species_unverified: vec![],
-            in_vitro: false,
-            in_vivo: false,
-            human_data: true,
-            clinical_trial: false,
-            concentration_range: None,
             duration: None,
-            age_group: None,
-            cell_type: None,
         };
         let conf = compute_confidence(&evidence, &conditions, false);
         assert_eq!(conf.method, ConfidenceMethod::Computed);
@@ -2421,27 +2328,14 @@ mod tests {
         let evidence = Evidence {
             evidence_type: "theoretical".into(),
             model_system: "computational".into(),
-            species: None,
             method: "simulation".into(),
-            sample_size: None,
-            effect_size: None,
-            p_value: None,
             replicated: false,
             replication_count: None,
             evidence_spans: vec![],
         };
         let conditions = Conditions {
             text: String::new(),
-            species_verified: vec![],
-            species_unverified: vec![],
-            in_vitro: false,
-            in_vivo: false,
-            human_data: false,
-            clinical_trial: false,
-            concentration_range: None,
             duration: None,
-            age_group: None,
-            cell_type: None,
         };
         let conf = compute_confidence(&evidence, &conditions, false);
         let c = conf.components.unwrap();
@@ -2458,27 +2352,14 @@ mod tests {
         let evidence = Evidence {
             evidence_type: "experimental".into(),
             model_system: "mouse".into(),
-            species: Some("Mus musculus".into()),
             method: "Western blot".into(),
-            sample_size: Some("n=30".into()),
-            effect_size: None,
-            p_value: None,
             replicated: false,
             replication_count: None,
             evidence_spans: vec![],
         };
         let conditions = Conditions {
             text: String::new(),
-            species_verified: vec![],
-            species_unverified: vec![],
-            in_vitro: false,
-            in_vivo: true,
-            human_data: false,
-            clinical_trial: false,
-            concentration_range: None,
             duration: None,
-            age_group: None,
-            cell_type: None,
         };
         let uncontested = compute_confidence(&evidence, &conditions, false);
         let contested = compute_confidence(&evidence, &conditions, true);

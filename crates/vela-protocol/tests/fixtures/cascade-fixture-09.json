@@ -121,12 +121,7 @@
         "type": "mechanism"
       },
       "conditions": {
-        "cell_type": "microglia",
         "duration": null,
-        "in_vitro": true,
-        "species_verified": [
-          "Mus musculus"
-        ],
         "text": "In vitro, mouse microglia"
       },
       "confidence": {
@@ -141,11 +136,8 @@
         "evidence_spans": [],
         "method": "Western blot",
         "model_system": "mouse",
-        "p_value": "p<0.05",
         "replicated": true,
         "replication_count": 3,
-        "sample_size": "n=30",
-        "species": "Mus musculus",
         "type": "experimental"
       },
       "flags": {
@@ -174,7 +166,6 @@
             "orcid": null
           }
         ],
-        "citation_count": 0,
         "doi": "10.0000/crossimpl.frontier0009.finding0000",
         "extraction": {
           "extracted_at": "",
@@ -183,7 +174,6 @@
           "model": null,
           "model_version": null
         },
-        "journal": "Cross Journal",
         "review": null,
         "source_type": "published_paper",
         "title": "Cross-impl paper 9-0",
@@ -210,12 +200,7 @@
         "type": "mechanism"
       },
       "conditions": {
-        "cell_type": "microglia",
         "duration": null,
-        "in_vitro": true,
-        "species_verified": [
-          "Mus musculus"
-        ],
         "text": "In vitro, mouse microglia"
       },
       "confidence": {
@@ -230,11 +215,8 @@
         "evidence_spans": [],
         "method": "Western blot",
         "model_system": "mouse",
-        "p_value": "p<0.05",
         "replicated": true,
         "replication_count": 3,
-        "sample_size": "n=30",
-        "species": "Mus musculus",
         "type": "experimental"
       },
       "flags": {
@@ -263,7 +245,6 @@
             "orcid": null
           }
         ],
-        "citation_count": 0,
         "doi": "10.0000/crossimpl.frontier0009.finding0001",
         "extraction": {
           "extracted_at": "",
@@ -272,7 +253,6 @@
           "model": null,
           "model_version": null
         },
-        "journal": "Cross Journal",
         "review": null,
         "source_type": "published_paper",
         "title": "Cross-impl paper 9-1",
@@ -299,12 +279,7 @@
         "type": "mechanism"
       },
       "conditions": {
-        "cell_type": "microglia",
         "duration": null,
-        "in_vitro": true,
-        "species_verified": [
-          "Mus musculus"
-        ],
         "text": "In vitro, mouse microglia"
       },
       "confidence": {
@@ -319,11 +294,8 @@
         "evidence_spans": [],
         "method": "Western blot",
         "model_system": "mouse",
-        "p_value": "p<0.05",
         "replicated": true,
         "replication_count": 3,
-        "sample_size": "n=30",
-        "species": "Mus musculus",
         "type": "experimental"
       },
       "flags": {
@@ -352,7 +324,6 @@
             "orcid": null
           }
         ],
-        "citation_count": 0,
         "doi": "10.0000/crossimpl.frontier0009.finding0002",
         "extraction": {
           "extracted_at": "",
@@ -361,7 +332,6 @@
           "model": null,
           "model_version": null
         },
-        "journal": "Cross Journal",
         "review": null,
         "source_type": "published_paper",
         "title": "Cross-impl paper 9-2",
@@ -388,12 +358,7 @@
         "type": "mechanism"
       },
       "conditions": {
-        "cell_type": "microglia",
         "duration": null,
-        "in_vitro": true,
-        "species_verified": [
-          "Mus musculus"
-        ],
         "text": "In vitro, mouse microglia"
       },
       "confidence": {
@@ -408,11 +373,8 @@
         "evidence_spans": [],
         "method": "Western blot",
         "model_system": "mouse",
-        "p_value": "p<0.05",
         "replicated": true,
         "replication_count": 3,
-        "sample_size": "n=30",
-        "species": "Mus musculus",
         "type": "experimental"
       },
       "flags": {
@@ -441,7 +403,6 @@
             "orcid": null
           }
         ],
-        "citation_count": 0,
         "doi": "10.0000/crossimpl.frontier0009.finding0003",
         "extraction": {
           "extracted_at": "",
@@ -450,7 +411,6 @@
           "model": null,
           "model_version": null
         },
-        "journal": "Cross Journal",
         "review": null,
         "source_type": "published_paper",
         "title": "Cross-impl paper 9-3",
@@ -477,12 +437,7 @@
         "type": "mechanism"
       },
       "conditions": {
-        "cell_type": "microglia",
         "duration": null,
-        "in_vitro": true,
-        "species_verified": [
-          "Mus musculus"
-        ],
         "text": "In vitro, mouse microglia"
       },
       "confidence": {
@@ -497,11 +452,8 @@
         "evidence_spans": [],
         "method": "Western blot",
         "model_system": "mouse",
-        "p_value": "p<0.05",
         "replicated": true,
         "replication_count": 3,
-        "sample_size": "n=30",
-        "species": "Mus musculus",
         "type": "experimental"
       },
       "flags": {
@@ -530,7 +482,6 @@
             "orcid": null
           }
         ],
-        "citation_count": 0,
         "doi": "10.0000/crossimpl.frontier0009.finding0004",
         "extraction": {
           "extracted_at": "",
@@ -539,7 +490,6 @@
           "model": null,
           "model_version": null
         },
-        "journal": "Cross Journal",
         "review": null,
         "source_type": "published_paper",
         "title": "Cross-impl paper 9-4",
@@ -566,12 +516,7 @@
         "type": "mechanism"
       },
       "conditions": {
-        "cell_type": "microglia",
         "duration": null,
-        "in_vitro": true,
-        "species_verified": [
-          "Mus musculus"
-        ],
         "text": "In vitro, mouse microglia"
       },
       "confidence": {
@@ -586,11 +531,8 @@
         "evidence_spans": [],
         "method": "Western blot",
         "model_system": "mouse",
-        "p_value": "p<0.05",
         "replicated": true,
         "replication_count": 3,
-        "sample_size": "n=30",
-        "species": "Mus musculus",
         "type": "experimental"
       },
       "flags": {
@@ -619,7 +561,6 @@
             "orcid": null
           }
         ],
-        "citation_count": 0,
         "doi": "10.0000/crossimpl.frontier0009.finding0005",
         "extraction": {
           "extracted_at": "",
@@ -628,7 +569,6 @@
           "model": null,
           "model_version": null
         },
-        "journal": "Cross Journal",
         "review": null,
         "source_type": "published_paper",
         "title": "Cross-impl paper 9-5",
@@ -655,12 +595,7 @@
         "type": "mechanism"
       },
       "conditions": {
-        "cell_type": "microglia",
         "duration": null,
-        "in_vitro": true,
-        "species_verified": [
-          "Mus musculus"
-        ],
         "text": "In vitro, mouse microglia"
       },
       "confidence": {
@@ -675,11 +610,8 @@
         "evidence_spans": [],
         "method": "Western blot",
         "model_system": "mouse",
-        "p_value": "p<0.05",
         "replicated": true,
         "replication_count": 3,
-        "sample_size": "n=30",
-        "species": "Mus musculus",
         "type": "experimental"
       },
       "flags": {
@@ -708,7 +640,6 @@
             "orcid": null
           }
         ],
-        "citation_count": 0,
         "doi": "10.0000/crossimpl.frontier0009.finding0006",
         "extraction": {
           "extracted_at": "",
@@ -717,7 +648,6 @@
           "model": null,
           "model_version": null
         },
-        "journal": "Cross Journal",
         "review": null,
         "source_type": "published_paper",
         "title": "Cross-impl paper 9-6",
@@ -744,12 +674,7 @@
         "type": "mechanism"
       },
       "conditions": {
-        "cell_type": "microglia",
         "duration": null,
-        "in_vitro": true,
-        "species_verified": [
-          "Mus musculus"
-        ],
         "text": "In vitro, mouse microglia"
       },
       "confidence": {
@@ -764,11 +689,8 @@
         "evidence_spans": [],
         "method": "Western blot",
         "model_system": "mouse",
-        "p_value": "p<0.05",
         "replicated": true,
         "replication_count": 3,
-        "sample_size": "n=30",
-        "species": "Mus musculus",
         "type": "experimental"
       },
       "flags": {
@@ -789,7 +711,6 @@
             "orcid": null
           }
         ],
-        "citation_count": 0,
         "doi": "10.0000/crossimpl.frontier0009.finding0007",
         "extraction": {
           "extracted_at": "",
@@ -798,7 +719,6 @@
           "model": null,
           "model_version": null
         },
-        "journal": "Cross Journal",
         "review": null,
         "source_type": "published_paper",
         "title": "Cross-impl paper 9-7",

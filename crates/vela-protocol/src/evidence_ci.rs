@@ -793,19 +793,13 @@ fn fail(
 }
 
 fn finding_text(finding: &FindingBundle) -> String {
-    let mut parts = vec![
+    let parts = [
         finding.assertion.text.as_str(),
         finding.conditions.text.as_str(),
         finding.evidence.model_system.as_str(),
         finding.evidence.method.as_str(),
         finding.evidence.evidence_type.as_str(),
     ];
-    if let Some(species) = finding.evidence.species.as_deref() {
-        parts.push(species);
-    }
-    if let Some(effect) = finding.evidence.effect_size.as_deref() {
-        parts.push(effect);
-    }
     parts.join(" ").to_ascii_lowercase()
 }
 
@@ -850,14 +844,9 @@ fn is_study_design_applicable(finding: &FindingBundle) -> bool {
         return true;
     }
 
-    // A theoretical-typed finding that still carries empirical signal (wet-lab
-    // conditions or a trial mention) keeps the study-design checks.
-    let c = &finding.conditions;
-    c.clinical_trial
-        || c.human_data
-        || c.in_vivo
-        || c.in_vitro
-        || mentions_trial(&finding_text(finding))
+    // A theoretical-typed finding that still carries empirical signal (a trial
+    // mention in its text) keeps the study-design checks.
+    mentions_trial(&finding_text(finding))
 }
 
 fn has_trial_registry_ref(text: &str, sources: &[&SourceRecord]) -> bool {
@@ -874,34 +863,29 @@ fn has_trial_registry_ref(text: &str, sources: &[&SourceRecord]) -> bool {
         })
 }
 
-fn has_population(finding: &FindingBundle, text: &str, conditions: &[&ConditionRecord]) -> bool {
-    finding.conditions.human_data
-        || finding.conditions.clinical_trial
-        || !finding.conditions.species_verified.is_empty()
-        || finding.evidence.species.is_some()
-        || conditions.iter().any(|record| {
-            record.species.is_some()
-                || matches!(
-                    record.translation_scope.as_str(),
-                    "human" | "animal_model" | "in_vitro" | "computational"
-                )
-        })
-        || [
-            "patient",
-            "patients",
-            "human",
-            "mouse",
-            "mice",
-            "rat",
-            "cell",
-            "cohort",
-            "adult",
-            "pediatric",
-            "in vitro",
-            "in vivo",
-        ]
-        .iter()
-        .any(|needle| text.contains(needle))
+fn has_population(_finding: &FindingBundle, text: &str, conditions: &[&ConditionRecord]) -> bool {
+    conditions.iter().any(|record| {
+        record.species.is_some()
+            || matches!(
+                record.translation_scope.as_str(),
+                "human" | "animal_model" | "in_vitro" | "computational"
+            )
+    }) || [
+        "patient",
+        "patients",
+        "human",
+        "mouse",
+        "mice",
+        "rat",
+        "cell",
+        "cohort",
+        "adult",
+        "pediatric",
+        "in vitro",
+        "in vivo",
+    ]
+    .iter()
+    .any(|needle| text.contains(needle))
 }
 
 fn has_endpoint(text: &str) -> bool {

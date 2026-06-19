@@ -30,16 +30,6 @@ pub fn ground_confidence(bundles: &mut [FindingBundle]) -> Vec<ConfidenceUpdate>
         return Vec::new();
     }
 
-    // Compute citation percentiles across the corpus.
-    let mut citation_counts: Vec<u64> = bundles
-        .iter()
-        .filter_map(|b| b.provenance.citation_count)
-        .collect();
-    citation_counts.sort_unstable();
-
-    let p90 = percentile_value(&citation_counts, 90);
-    let p10 = percentile_value(&citation_counts, 10);
-
     let current_year = Utc::now().naive_utc().year();
     let mut updates: Vec<ConfidenceUpdate> = Vec::new();
     let now = Utc::now().to_rfc3339();
@@ -48,20 +38,6 @@ pub fn ground_confidence(bundles: &mut [FindingBundle]) -> Vec<ConfidenceUpdate>
         let prior_score = bundle.confidence.score;
         let mut adjustment = 0.0f64;
         let mut basis_parts: Vec<String> = vec![format!("pre_calibration: {:.2}", prior_score)];
-
-        // Factor 1: Citation count (log-scaled, clamped to -0.15 .. +0.15).
-        if let Some(cites) = bundle.provenance.citation_count {
-            let log_signal = (cites as f64 + 1.0).log10() / 4.0; // 0..~1 for 0..9999
-            let citation_adj = if cites >= p90 {
-                log_signal.min(0.15)
-            } else if cites <= p10 {
-                -(0.10f64.min(0.15 - log_signal))
-            } else {
-                (log_signal - 0.3).clamp(-0.05, 0.10)
-            };
-            adjustment += citation_adj;
-            basis_parts.push(format!("citations: {} ({:+.2})", cites, citation_adj));
-        }
 
         // Factor 2: Recency.
         if let Some(year) = bundle.provenance.year {
@@ -128,6 +104,7 @@ pub fn ground_confidence(bundles: &mut [FindingBundle]) -> Vec<ConfidenceUpdate>
     updates
 }
 
+#[cfg(test)]
 /// Return the value at the given percentile (0-100) from a sorted slice.
 fn percentile_value(sorted: &[u64], pct: usize) -> u64 {
     if sorted.is_empty() {
@@ -142,7 +119,7 @@ mod tests {
     use super::*;
     use crate::bundle::*;
 
-    fn make_bundle(score: f64, citations: u64, year: i32, etype: &str) -> FindingBundle {
+    fn make_bundle(score: f64, _citations: u64, year: i32, etype: &str) -> FindingBundle {
         FindingBundle {
             id: "test".into(),
             version: 1,
@@ -159,27 +136,14 @@ mod tests {
             evidence: Evidence {
                 evidence_type: etype.into(),
                 model_system: String::new(),
-                species: None,
                 method: String::new(),
-                sample_size: None,
-                effect_size: None,
-                p_value: None,
                 replicated: false,
                 replication_count: None,
                 evidence_spans: vec![],
             },
             conditions: Conditions {
                 text: String::new(),
-                species_verified: vec![],
-                species_unverified: vec![],
-                in_vitro: false,
-                in_vivo: false,
-                human_data: false,
-                clinical_trial: false,
-                concentration_range: None,
                 duration: None,
-                age_group: None,
-                cell_type: None,
             },
             confidence: Confidence {
                 kind: crate::bundle::ConfidenceKind::FrontierEpistemic,
@@ -192,20 +156,15 @@ mod tests {
             provenance: Provenance {
                 source_type: "published_paper".into(),
                 doi: None,
-                pmid: None,
-                pmc: None,
-                openalex_id: None,
                 url: None,
                 title: "Test".into(),
                 authors: vec![],
                 year: Some(year),
-                journal: None,
                 license: None,
                 publisher: None,
                 funders: vec![],
                 extraction: Extraction::default(),
                 review: None,
-                citation_count: Some(citations),
             },
             flags: Flags {
                 gap: false,
@@ -347,7 +306,6 @@ mod tests {
         ground_confidence(&mut bundles);
         let basis = &bundles[0].confidence.basis;
         assert!(basis.contains("pre_calibration:"));
-        assert!(basis.contains("citations:"));
         assert!(basis.contains("recency:"));
         assert!(basis.contains("evidence:"));
         assert!(basis.contains("calibration:"));
@@ -371,18 +329,6 @@ mod tests {
         assert_eq!(percentile_value(&[10], 50), 10);
         assert_eq!(percentile_value(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 90), 10);
         assert_eq!(percentile_value(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 10), 2);
-    }
-
-    #[test]
-    fn no_citation_count_still_works() {
-        let current_year = Utc::now().naive_utc().year();
-        let mut b = make_bundle(0.70, 0, current_year, "experimental");
-        b.provenance.citation_count = None;
-        let mut bundles = vec![b];
-        let _updates = ground_confidence(&mut bundles);
-        // Should not panic; score should still be valid
-        assert!(bundles[0].confidence.score >= 0.05);
-        assert!(bundles[0].confidence.score <= 0.99);
     }
 
     #[test]

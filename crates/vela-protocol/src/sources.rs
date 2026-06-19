@@ -68,10 +68,6 @@ pub struct ConditionRecord {
     pub species: Option<String>,
     pub model_system: String,
     pub method: String,
-    pub in_vitro: bool,
-    pub in_vivo: bool,
-    pub human_data: bool,
-    pub clinical_trial: bool,
     pub exposure_or_efficacy: String,
     pub comparator_status: String,
     pub translation_scope: String,
@@ -120,14 +116,10 @@ pub struct SourceEvidenceProjection {
 pub fn resync_provenance_from_sources(project: &mut Project) -> usize {
     use crate::bundle::Author;
     let mut by_doi: BTreeMap<String, &SourceRecord> = BTreeMap::new();
-    let mut by_pmid: BTreeMap<String, &SourceRecord> = BTreeMap::new();
     let mut by_title: BTreeMap<String, &SourceRecord> = BTreeMap::new();
     for source in &project.sources {
         if let Some(doi) = source.doi.as_deref() {
             by_doi.insert(doi.to_lowercase(), source);
-        }
-        if let Some(pmid) = source.pmid.as_deref() {
-            by_pmid.insert(pmid.to_string(), source);
         }
         if !source.title.trim().is_empty() {
             by_title.insert(normalize_title_key(&source.title), source);
@@ -142,13 +134,6 @@ pub fn resync_provenance_from_sources(project: &mut Project) -> usize {
             .as_deref()
             .map(str::to_lowercase)
             .and_then(|key| by_doi.get(&key).copied())
-            .or_else(|| {
-                finding
-                    .provenance
-                    .pmid
-                    .as_deref()
-                    .and_then(|key| by_pmid.get(key).copied())
-            })
             .or_else(|| {
                 if finding.provenance.title.trim().is_empty() {
                     None
@@ -404,8 +389,6 @@ pub fn condition_matrix(records: &[ConditionRecord]) -> Value {
                 "species": record.species,
                 "model_system": record.model_system,
                 "method": record.method,
-                "human_data": record.human_data,
-                "clinical_trial": record.clinical_trial,
                 "exposure_or_efficacy": record.exposure_or_efficacy,
                 "comparator_status": record.comparator_status,
                 "translation_scope": record.translation_scope,
@@ -490,17 +473,14 @@ pub fn source_record_for_finding(finding: &FindingBundle) -> SourceRecord {
         &locator,
         content_hash.as_deref(),
         finding.provenance.doi.as_deref(),
-        finding.provenance.pmid.as_deref(),
+        None,
         &finding.provenance.title,
     );
     let mut caveats = Vec::new();
     if source_type == "synthetic_report" || source_type == "agent_trace" {
         caveats.push("source requires human review before being treated as evidence".to_string());
     }
-    if finding.provenance.title.trim().is_empty()
-        && finding.provenance.doi.is_none()
-        && finding.provenance.pmid.is_none()
-    {
+    if finding.provenance.title.trim().is_empty() && finding.provenance.doi.is_none() {
         caveats.push("weak source metadata; locator derived from finding id".to_string());
     }
     let source_quality = if caveats.is_empty()
@@ -527,7 +507,7 @@ pub fn source_record_for_finding(finding: &FindingBundle) -> SourceRecord {
             .collect(),
         year: finding.provenance.year,
         doi: finding.provenance.doi.clone(),
-        pmid: finding.provenance.pmid.clone(),
+        pmid: None,
         imported_at: finding.provenance.extraction.extracted_at.clone(),
         extraction_mode: finding.provenance.extraction.method.clone(),
         source_quality,
@@ -731,12 +711,7 @@ fn derive_condition_records(project: &Project) -> Vec<ConditionRecord> {
 
 pub fn condition_record_for_finding(finding: &FindingBundle) -> ConditionRecord {
     let text = finding.conditions.text.trim().to_string();
-    let species = finding
-        .conditions
-        .species_verified
-        .first()
-        .cloned()
-        .or_else(|| finding.evidence.species.clone());
+    let species: Option<String> = None;
     let combined = format!(
         "{} {} {} {} {}",
         finding.assertion.text,
@@ -773,10 +748,6 @@ pub fn condition_record_for_finding(finding: &FindingBundle) -> ConditionRecord 
         species,
         model_system: finding.evidence.model_system.clone(),
         method: finding.evidence.method.clone(),
-        in_vitro: finding.conditions.in_vitro,
-        in_vivo: finding.conditions.in_vivo,
-        human_data: finding.conditions.human_data,
-        clinical_trial: finding.conditions.clinical_trial,
         exposure_or_efficacy,
         comparator_status,
         translation_scope,
@@ -881,7 +852,7 @@ pub fn condition_record_id(finding: &FindingBundle) -> String {
         finding.conditions.text.trim(),
         finding.evidence.model_system,
         finding.evidence.method,
-        finding.evidence.species.clone().unwrap_or_default()
+        ""
     );
     format!("vcnd_{}", short_hash(input.as_bytes()))
 }
@@ -921,7 +892,7 @@ fn exposure_or_efficacy(text: &str) -> String {
     .to_string()
 }
 
-fn comparator_status(text: &str, finding: &FindingBundle) -> String {
+fn comparator_status(text: &str, _finding: &FindingBundle) -> String {
     let lower = text.to_ascii_lowercase();
     if [
         "control",
@@ -934,8 +905,6 @@ fn comparator_status(text: &str, finding: &FindingBundle) -> String {
     ]
     .iter()
     .any(|needle| lower.contains(needle))
-        || finding.evidence.effect_size.is_some()
-        || finding.evidence.p_value.is_some()
     {
         "declared"
     } else {
@@ -944,26 +913,23 @@ fn comparator_status(text: &str, finding: &FindingBundle) -> String {
     .to_string()
 }
 
-fn translation_scope(finding: &FindingBundle, text: &str) -> String {
+fn translation_scope(_finding: &FindingBundle, text: &str) -> String {
     let lower = text.to_ascii_lowercase();
-    if finding.conditions.clinical_trial || finding.conditions.human_data {
-        return "human".to_string();
+    if lower.contains("cell") || lower.contains("in vitro") || lower.contains("organoid") {
+        return "in_vitro".to_string();
     }
-    if finding.conditions.in_vivo
-        || finding
-            .evidence
-            .species
-            .as_deref()
-            .is_some_and(|species| !species.to_ascii_lowercase().contains("human"))
+    if lower.contains("mice")
+        || lower.contains("mouse")
+        || lower.contains(" rat ")
+        || lower.contains("rats")
+        || lower.contains("rodent")
+        || lower.contains("zebrafish")
+        || lower.contains("monkey")
+        || lower.contains("primate")
+        || lower.contains("in vivo")
+        || lower.contains("animal model")
     {
         return "animal_model".to_string();
-    }
-    if finding.conditions.in_vitro
-        || lower.contains("cell")
-        || lower.contains("in vitro")
-        || lower.contains("organoid")
-    {
-        return "in_vitro".to_string();
     }
     if lower.contains("benchmark")
         || lower.contains("dataset")
@@ -1006,8 +972,6 @@ fn source_locator(provenance: &Provenance, finding_id: &str) -> String {
         .doi
         .as_ref()
         .map(|doi| format!("doi:{doi}"))
-        .or_else(|| provenance.pmid.as_ref().map(|pmid| format!("pmid:{pmid}")))
-        .or_else(|| provenance.pmc.as_ref().map(|pmc| format!("pmc:{pmc}")))
         .or_else(|| {
             (!provenance.title.trim().is_empty()).then(|| format!("title:{}", provenance.title))
         })
@@ -1116,46 +1080,28 @@ mod tests {
             evidence: Evidence {
                 evidence_type: "experimental".to_string(),
                 model_system: "mouse".to_string(),
-                species: Some("Mus musculus".to_string()),
                 method: "in vivo exposure assay".to_string(),
-                sample_size: None,
-                effect_size: None,
-                p_value: None,
                 replicated: false,
                 replication_count: None,
                 evidence_spans: vec![span],
             },
             conditions: Conditions {
                 text: "Mouse exposure assay; not human therapeutic efficacy.".to_string(),
-                species_verified: vec!["Mus musculus".to_string()],
-                species_unverified: Vec::new(),
-                in_vitro: false,
-                in_vivo: true,
-                human_data: false,
-                clinical_trial: false,
-                concentration_range: None,
                 duration: None,
-                age_group: None,
-                cell_type: None,
             },
             confidence: Confidence::raw(0.6, "test", 0.8),
             provenance: Provenance {
                 source_type: "published_paper".to_string(),
                 doi: Some("10.0000/test".to_string()),
-                pmid: None,
-                pmc: None,
-                openalex_id: None,
                 url: None,
                 title: "Test paper".to_string(),
                 authors: vec![],
                 year: Some(2026),
-                journal: None,
                 license: None,
                 publisher: None,
                 funders: vec![],
                 extraction: Extraction::default(),
                 review: None,
-                citation_count: None,
             },
             flags: Flags {
                 gap: false,

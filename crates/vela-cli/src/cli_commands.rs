@@ -3516,12 +3516,6 @@ pub(crate) enum FindingCommands {
         /// Evidence type. One of: experimental, observational, computational, theoretical, extracted_from_notes
         #[arg(long, default_value = "theoretical")]
         evidence_type: String,
-        /// Entities as comma-separated name:type pairs. Type is a free-form lowercase tag (e.g. sequence, set, code, theorem, dataset).
-        #[arg(long, default_value = "")]
-        entities: String,
-        /// Mark manually supplied entities as curator-reviewed
-        #[arg(long)]
-        entities_reviewed: bool,
         /// Evidence span text or JSON. Repeat to attach multiple source spans
         #[arg(long)]
         evidence_span: Vec<String>,
@@ -3534,15 +3528,9 @@ pub(crate) enum FindingCommands {
         /// v0.11: DOI of the source artifact (e.g. "10.1038/s41586-024-...")
         #[arg(long)]
         doi: Option<String>,
-        /// v0.11: PubMed ID
-        #[arg(long)]
-        pmid: Option<String>,
         /// v0.11: Publication year
         #[arg(long)]
         year: Option<i32>,
-        /// v0.11: Journal name
-        #[arg(long)]
-        journal: Option<String>,
         /// v0.11: Generic source URL when none of the structured identifiers fit
         #[arg(long)]
         url: Option<String>,
@@ -3552,21 +3540,6 @@ pub(crate) enum FindingCommands {
         /// v0.11: Conditions/scope text. Replaces the placeholder otherwise written. Should describe scope boundaries (species, dosing, age range, model, etc.)
         #[arg(long)]
         conditions_text: Option<String>,
-        /// v0.11: Verified species as semicolon-separated list (e.g. "Mus musculus;Homo sapiens")
-        #[arg(long)]
-        species: Option<String>,
-        /// v0.11: Mark the finding as in vivo
-        #[arg(long)]
-        in_vivo: bool,
-        /// v0.11: Mark the finding as in vitro
-        #[arg(long)]
-        in_vitro: bool,
-        /// v0.11: Mark the finding as having human data
-        #[arg(long)]
-        human_data: bool,
-        /// v0.11: Mark the finding as a clinical trial
-        #[arg(long)]
-        clinical_trial: bool,
         /// Output stable JSON
         #[arg(long)]
         json: bool,
@@ -3629,21 +3602,12 @@ pub(crate) enum FindingCommands {
         /// New evidence type
         #[arg(long, default_value = "experimental")]
         evidence_type: String,
-        /// New entities (`name:type` pairs, comma-separated)
-        #[arg(long, default_value = "")]
-        entities: String,
         /// DOI of the source artifact
         #[arg(long)]
         doi: Option<String>,
-        /// PubMed ID
-        #[arg(long)]
-        pmid: Option<String>,
         /// Publication year
         #[arg(long)]
         year: Option<i32>,
-        /// Journal name
-        #[arg(long)]
-        journal: Option<String>,
         /// Generic source URL
         #[arg(long)]
         url: Option<String>,
@@ -3653,18 +3617,6 @@ pub(crate) enum FindingCommands {
         /// Conditions/scope text
         #[arg(long)]
         conditions_text: Option<String>,
-        /// Verified species (semicolon-separated)
-        #[arg(long)]
-        species: Option<String>,
-        #[arg(long)]
-        in_vivo: bool,
-        #[arg(long)]
-        in_vitro: bool,
-        #[arg(long)]
-        human_data: bool,
-        #[arg(long)]
-        clinical_trial: bool,
-        #[arg(long)]
         json: bool,
         /// Immediately accept and apply the proposal locally
         #[arg(long)]

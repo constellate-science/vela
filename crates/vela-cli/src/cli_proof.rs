@@ -236,20 +236,15 @@ pub(crate) fn cmd_proof_add(
     let provenance = vela_protocol::bundle::Provenance {
         source_type: "code_repository".to_string(),
         doi: None,
-        pmid: None,
-        pmc: None,
-        openalex_id: None,
         url: None,
         title: format!("Proof script for {target_finding} ({tool} {tool_version})"),
         authors: Vec::new(),
         year: None,
-        journal: None,
         license: Some("Apache-2.0 OR MIT".to_string()),
         publisher: None,
         funders: Vec::new(),
         extraction: vela_protocol::bundle::Extraction::default(),
         review: None,
-        citation_count: None,
     };
 
     let artifact_id = vela_protocol::bundle::Artifact::content_address(

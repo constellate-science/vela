@@ -714,11 +714,7 @@ mod tests {
             Evidence {
                 evidence_type: "experimental".into(),
                 model_system: String::new(),
-                species: None,
                 method: String::new(),
-                sample_size: None,
-                effect_size: None,
-                p_value: None,
                 replicated: false,
                 replication_count: None,
                 evidence_spans: vec![],
@@ -747,16 +743,7 @@ mod tests {
         fn default_for_test() -> Self {
             Self {
                 text: String::new(),
-                species_verified: vec![],
-                species_unverified: vec![],
-                in_vitro: false,
-                in_vivo: false,
-                human_data: false,
-                clinical_trial: false,
-                concentration_range: None,
                 duration: None,
-                age_group: None,
-                cell_type: None,
             }
         }
     }
@@ -765,20 +752,15 @@ mod tests {
             Self {
                 source_type: "published_paper".into(),
                 doi: None,
-                pmid: None,
-                pmc: None,
-                openalex_id: None,
                 url: None,
                 title: "Test".into(),
                 authors: vec![],
                 year: Some(2025),
-                journal: None,
                 license: None,
                 publisher: None,
                 funders: vec![],
                 extraction: Extraction::default(),
                 review: None,
-                citation_count: None,
             }
         }
     }

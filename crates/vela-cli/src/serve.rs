@@ -3191,8 +3191,6 @@ fn tool_frontier_compare(args: &Value, frontier: &Project) -> Result<String, Str
                 "model_system": f.evidence.model_system,
                 "replicated": f.evidence.replicated,
                 "replication_count": f.evidence.replication_count,
-                "human_data": f.conditions.human_data,
-                "clinical_trial": f.conditions.clinical_trial,
                 "contested": f.flags.contested,
                 "gap": f.flags.gap,
                 "year": f.provenance.year,
@@ -3428,7 +3426,6 @@ fn tool_trace_evidence_chain(args: &Value, frontier: &Project) -> Result<String,
         .provenance
         .doi
         .as_deref()
-        .or(finding.provenance.pmid.as_deref())
         .unwrap_or(&finding.provenance.title);
     let review_state = finding
         .provenance
@@ -3576,27 +3573,14 @@ mod list_dependents_tests {
         let evidence = Evidence {
             evidence_type: "experimental".into(),
             model_system: "test".into(),
-            species: None,
             method: "test".into(),
-            sample_size: None,
-            effect_size: None,
-            p_value: None,
             replicated: false,
             replication_count: None,
             evidence_spans: vec![],
         };
         let conditions = Conditions {
             text: "test".into(),
-            species_verified: vec![],
-            species_unverified: vec![],
-            in_vitro: false,
-            in_vivo: false,
-            human_data: false,
-            clinical_trial: false,
-            concentration_range: None,
             duration: None,
-            age_group: None,
-            cell_type: None,
         };
         let confidence = Confidence {
             kind: ConfidenceKind::FrontierEpistemic,
@@ -3609,9 +3593,6 @@ mod list_dependents_tests {
         let provenance = Provenance {
             source_type: "published_paper".into(),
             doi: Some(format!("10.0000/reverse-dep-index-test.{idx:04}")),
-            pmid: None,
-            pmc: None,
-            openalex_id: None,
             url: None,
             title: format!("Synthetic test paper {idx}"),
             authors: vec![Author {
@@ -3619,13 +3600,11 @@ mod list_dependents_tests {
                 orcid: None,
             }],
             year: None,
-            journal: None,
             license: None,
             publisher: None,
             funders: vec![],
             extraction: Extraction::default(),
             review: None,
-            citation_count: None,
         };
         let flags = Flags::default();
         let mut bundle = FindingBundle::new(

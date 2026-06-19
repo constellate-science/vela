@@ -1329,11 +1329,7 @@ pub fn workflow_benchmark(
         .count();
     let total_provenance_complete = findings
         .iter()
-        .filter(|f| {
-            f.provenance.doi.is_some()
-                || f.provenance.pmid.is_some()
-                || !f.provenance.title.trim().is_empty()
-        })
+        .filter(|f| f.provenance.doi.is_some() || !f.provenance.title.trim().is_empty())
         .count();
     let evidence_span_coverage = if findings.is_empty() {
         1.0
@@ -1689,46 +1685,28 @@ mod tests {
             evidence: Evidence {
                 evidence_type: "experimental".into(),
                 model_system: String::new(),
-                species: None,
                 method: String::new(),
-                sample_size: None,
-                effect_size: None,
-                p_value: None,
                 replicated: false,
                 replication_count: None,
                 evidence_spans: vec![],
             },
             conditions: Conditions {
                 text: String::new(),
-                species_verified: vec![],
-                species_unverified: vec![],
-                in_vitro: false,
-                in_vivo: false,
-                human_data: false,
-                clinical_trial: false,
-                concentration_range: None,
                 duration: None,
-                age_group: None,
-                cell_type: None,
             },
             confidence: Confidence::raw(0.85, "test", 0.9),
             provenance: Provenance {
                 source_type: "published_paper".into(),
                 doi: None,
-                pmid: None,
-                pmc: None,
-                openalex_id: None,
                 url: None,
                 title: "Test".into(),
                 authors: vec![],
                 year: Some(2024),
-                journal: None,
                 license: None,
                 publisher: None,
                 funders: vec![],
                 extraction: Extraction::default(),
                 review: None,
-                citation_count: None,
             },
             flags: Flags {
                 gap: false,
@@ -1790,46 +1768,28 @@ mod tests {
             evidence: Evidence {
                 evidence_type: "experimental".into(),
                 model_system: String::new(),
-                species: None,
                 method: String::new(),
-                sample_size: None,
-                effect_size: None,
-                p_value: None,
                 replicated: false,
                 replication_count: None,
                 evidence_spans: vec![],
             },
             conditions: Conditions {
                 text: String::new(),
-                species_verified: vec![],
-                species_unverified: vec![],
-                in_vitro: false,
-                in_vivo: false,
-                human_data: false,
-                clinical_trial: false,
-                concentration_range: None,
                 duration: None,
-                age_group: None,
-                cell_type: None,
             },
             confidence: Confidence::raw(0.9, "test", 0.9),
             provenance: Provenance {
                 source_type: "published_paper".into(),
                 doi: None,
-                pmid: None,
-                pmc: None,
-                openalex_id: None,
                 url: None,
                 title: "Test".into(),
                 authors: vec![],
                 year: Some(2024),
-                journal: None,
                 license: None,
                 publisher: None,
                 funders: vec![],
                 extraction: Extraction::default(),
                 review: None,
-                citation_count: None,
             },
             flags: Flags {
                 gap: false,

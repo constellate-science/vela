@@ -481,20 +481,15 @@ fn register_canonical_witnesses(
         let provenance = bundle::Provenance {
             source_type: "data_release".to_string(),
             doi: None,
-            pmid: None,
-            pmc: None,
-            openalex_id: None,
             url: None,
             title: name.clone(),
             authors: Vec::new(),
             year: None,
-            journal: None,
             license: Some("CC-BY-4.0".to_string()),
             publisher: None,
             funders: Vec::new(),
             extraction: bundle::Extraction::default(),
             review: None,
-            citation_count: None,
         };
 
         let id = bundle::Artifact::content_address(

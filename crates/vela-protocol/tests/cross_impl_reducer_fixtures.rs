@@ -132,27 +132,14 @@ fn make_finding(frontier_idx: usize, finding_idx: usize) -> FindingBundle {
     let evidence = Evidence {
         evidence_type: "experimental".into(),
         model_system: "mouse".into(),
-        species: Some("Mus musculus".into()),
         method: "Western blot".into(),
-        sample_size: Some("n=30".into()),
-        effect_size: None,
-        p_value: Some("p<0.05".into()),
         replicated: true,
         replication_count: Some(3),
         evidence_spans: vec![],
     };
     let conditions = Conditions {
         text: "In vitro, mouse microglia".into(),
-        species_verified: vec!["Mus musculus".into()],
-        species_unverified: vec![],
-        in_vitro: true,
-        in_vivo: false,
-        human_data: false,
-        clinical_trial: false,
-        concentration_range: None,
         duration: None,
-        age_group: None,
-        cell_type: Some("microglia".into()),
     };
     let confidence = Confidence {
         kind: ConfidenceKind::FrontierEpistemic,
@@ -167,9 +154,6 @@ fn make_finding(frontier_idx: usize, finding_idx: usize) -> FindingBundle {
         doi: Some(format!(
             "10.0000/crossimpl.frontier{frontier_idx:04}.finding{finding_idx:04}"
         )),
-        pmid: None,
-        pmc: None,
-        openalex_id: None,
         url: None,
         title: format!("Cross-impl paper {frontier_idx}-{finding_idx}"),
         authors: vec![Author {
@@ -177,13 +161,11 @@ fn make_finding(frontier_idx: usize, finding_idx: usize) -> FindingBundle {
             orcid: None,
         }],
         year: Some(2026),
-        journal: Some("Cross Journal".into()),
         license: None,
         publisher: None,
         funders: vec![],
         extraction: Extraction::default(),
         review: None,
-        citation_count: Some(0),
     };
     let flags = Flags {
         gap: false,
@@ -232,20 +214,15 @@ fn synthetic_id(frontier_idx: usize, finding_idx: usize) -> String {
         doi: Some(format!(
             "10.0000/crossimpl.frontier{frontier_idx:04}.finding{finding_idx:04}"
         )),
-        pmid: None,
-        pmc: None,
-        openalex_id: None,
         url: None,
         title: format!("Cross-impl paper {frontier_idx}-{finding_idx}"),
         authors: vec![],
         year: None,
-        journal: None,
         license: None,
         publisher: None,
         funders: vec![],
         extraction: Extraction::default(),
         review: None,
-        citation_count: None,
     };
     FindingBundle::content_address(&assertion, &provenance)
 }
@@ -506,20 +483,15 @@ fn build_artifacts_log(frontier_idx: usize, findings: &[FindingBundle]) -> Vec<e
     let provenance = |title: String| Provenance {
         source_type: "published_paper".into(),
         doi: None,
-        pmid: None,
-        pmc: None,
-        openalex_id: None,
         url: Some(format!("https://example.org/frontier-{frontier_idx}/trial")),
         title,
         authors: vec![],
         year: Some(2026),
-        journal: None,
         license: Some("CC0-1.0".into()),
         publisher: None,
         funders: vec![],
         extraction: Extraction::default(),
         review: None,
-        citation_count: Some(0),
     };
 
     let mut metadata = BTreeMap::new();

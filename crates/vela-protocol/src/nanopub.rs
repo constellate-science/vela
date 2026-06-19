@@ -45,8 +45,6 @@ pub fn finding_to_nanopub_trig(finding: &FindingBundle, frontier_id: &str) -> St
     // else fall back to the title as a literal.
     let derived_from = if let Some(doi) = p.doi.as_deref().filter(|d| !d.is_empty()) {
         format!("<https://doi.org/{}>", doi.trim())
-    } else if let Some(pmid) = p.pmid.as_deref().filter(|m| !m.is_empty()) {
-        format!("<https://pubmed.ncbi.nlm.nih.gov/{}/>", pmid.trim())
     } else {
         format!("\"{}\"", lit(&p.title))
     };
@@ -135,7 +133,6 @@ mod tests {
         f.id = id.to_string();
         f.assertion.text = text.to_string();
         f.provenance.doi = doi.map(str::to_string);
-        f.provenance.pmid = None;
         f
     }
 
@@ -161,14 +158,6 @@ mod tests {
         assert!(trig.contains("prov:wasDerivedFrom <https://doi.org/10.1000/xyz>"));
         assert!(trig.contains("vela:frontier \"vfr_test\""));
         assert!(trig.contains("vela.finding.nanopub.v0.1"));
-    }
-
-    #[test]
-    fn falls_back_to_pubmed_then_title_for_provenance() {
-        let mut f = finding_with_provenance("vf_2222222222222222", "claim", None);
-        f.provenance.pmid = Some("12345".into());
-        let trig = finding_to_nanopub_trig(&f, "vfr_x");
-        assert!(trig.contains("<https://pubmed.ncbi.nlm.nih.gov/12345/>"));
     }
 
     #[test]

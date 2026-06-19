@@ -680,23 +680,14 @@ pub async fn run_command() {
                 author,
                 confidence,
                 evidence_type,
-                entities,
-                entities_reviewed,
                 evidence_span,
                 gap,
                 negative_space,
                 doi,
-                pmid,
                 year,
-                journal,
                 url,
                 source_authors,
                 conditions_text,
-                species,
-                in_vivo,
-                in_vitro,
-                human_data,
-                clinical_trial,
                 json,
                 apply,
                 replication_attestation,
@@ -724,17 +715,8 @@ pub async fn run_command() {
                     &source_type,
                     bundle::VALID_PROVENANCE_SOURCE_TYPES,
                 );
-                let parsed_entities = parse_entities(&entities);
                 let parsed_evidence_spans = parse_evidence_spans(&evidence_span);
                 let parsed_source_authors = source_authors
-                    .map(|s| {
-                        s.split(';')
-                            .map(|a| a.trim().to_string())
-                            .filter(|a| !a.is_empty())
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                let parsed_species = species
                     .map(|s| {
                         s.split(';')
                             .map(|a| a.trim().to_string())
@@ -752,20 +734,11 @@ pub async fn run_command() {
                         author,
                         confidence,
                         evidence_type,
-                        entities: parsed_entities,
                         doi,
-                        pmid,
                         year,
-                        journal,
                         url,
                         source_authors: parsed_source_authors,
                         conditions_text,
-                        species: parsed_species,
-                        in_vivo,
-                        in_vitro,
-                        human_data,
-                        clinical_trial,
-                        entities_reviewed,
                         evidence_spans: parsed_evidence_spans,
                         gap,
                         negative_space,
@@ -792,19 +765,11 @@ pub async fn run_command() {
                 reason,
                 confidence,
                 evidence_type,
-                entities,
                 doi,
-                pmid,
                 year,
-                journal,
                 url,
                 source_authors,
                 conditions_text,
-                species,
-                in_vivo,
-                in_vitro,
-                human_data,
-                clinical_trial,
                 json,
                 apply,
             } => {
@@ -819,16 +784,7 @@ pub async fn run_command() {
                     &source_type,
                     bundle::VALID_PROVENANCE_SOURCE_TYPES,
                 );
-                let parsed_entities = parse_entities(&entities);
                 let parsed_source_authors = source_authors
-                    .map(|s| {
-                        s.split(';')
-                            .map(|a| a.trim().to_string())
-                            .filter(|a| !a.is_empty())
-                            .collect()
-                    })
-                    .unwrap_or_default();
-                let parsed_species = species
                     .map(|s| {
                         s.split(';')
                             .map(|a| a.trim().to_string())
@@ -848,20 +804,11 @@ pub async fn run_command() {
                         author,
                         confidence,
                         evidence_type,
-                        entities: parsed_entities,
                         doi,
-                        pmid,
                         year,
-                        journal,
                         url,
                         source_authors: parsed_source_authors,
                         conditions_text,
-                        species: parsed_species,
-                        in_vivo,
-                        in_vitro,
-                        human_data,
-                        clinical_trial,
-                        entities_reviewed: false,
                         evidence_spans: Vec::new(),
                         gap: false,
                         negative_space: false,
@@ -3759,7 +3706,6 @@ pub(crate) fn cmd_frontier_diff(
                     "evidence_type": f.evidence.evidence_type,
                     "confidence": f.confidence.score,
                     "doi": f.provenance.doi,
-                    "pmid": f.provenance.pmid,
                 })
             })
             .collect()
@@ -4661,28 +4607,6 @@ fn cmd_mcp_setup(source: Option<&Path>, frontiers: Option<&Path>) {
 
 Source: {source_desc}"#
     );
-}
-
-fn parse_entities(input: &str) -> Vec<(String, String)> {
-    if input.trim().is_empty() {
-        return Vec::new();
-    }
-    input
-        .split(',')
-        .filter_map(|pair| {
-            let parts = pair.trim().splitn(2, ':').collect::<Vec<_>>();
-            if parts.len() == 2 {
-                Some((parts[0].trim().to_string(), parts[1].trim().to_string()))
-            } else {
-                eprintln!(
-                    "{} skipping malformed entity '{}'",
-                    style::warn("warn"),
-                    pair.trim()
-                );
-                None
-            }
-        })
-        .collect()
 }
 
 pub(crate) fn parse_evidence_spans(inputs: &[String]) -> Vec<Value> {

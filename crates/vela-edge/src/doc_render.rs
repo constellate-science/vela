@@ -279,9 +279,7 @@ fn render_finding_detail(
 <table class=\"provenance\">
 <tr><th>source type</th><td>{src_type}</td></tr>
 <tr><th>doi</th><td>{doi}</td></tr>
-<tr><th>pmid</th><td>{pmid}</td></tr>
 <tr><th>year</th><td>{year}</td></tr>
-<tr><th>journal</th><td>{journal}</td></tr>
 </table>
 </section>
 
@@ -320,22 +318,10 @@ fn render_finding_detail(
             .as_deref()
             .map(esc)
             .unwrap_or_default(),
-        pmid = finding
-            .provenance
-            .pmid
-            .as_deref()
-            .map(esc)
-            .unwrap_or_default(),
         year = finding
             .provenance
             .year
             .map(|y| y.to_string())
-            .unwrap_or_default(),
-        journal = finding
-            .provenance
-            .journal
-            .as_deref()
-            .map(esc)
             .unwrap_or_default(),
         events_rows = events_rows,
         n_events = related.len(),

@@ -239,46 +239,28 @@ fn make_test_finding(v: &serde_json::Value) -> FindingBundle {
         evidence: Evidence {
             evidence_type: "experimental".into(),
             model_system: String::new(),
-            species: None,
             method: String::new(),
-            sample_size: None,
-            effect_size: None,
-            p_value: None,
             replicated: false,
             replication_count: None,
             evidence_spans: vec![],
         },
         conditions: Conditions {
             text: String::new(),
-            species_verified: vec![],
-            species_unverified: vec![],
-            in_vitro: false,
-            in_vivo: false,
-            human_data: false,
-            clinical_trial: false,
-            concentration_range: None,
             duration: None,
-            age_group: None,
-            cell_type: None,
         },
         confidence: Confidence::raw(conf, "test", 0.85),
         provenance: Provenance {
             source_type: "published_paper".into(),
             doi,
-            pmid: None,
-            pmc: None,
-            openalex_id: None,
             url: None,
             title: "Test".into(),
             authors: vec![],
             year: Some(year),
-            journal: None,
             license: None,
             publisher: None,
             funders: vec![],
             extraction: Extraction::default(),
             review: None,
-            citation_count: None,
         },
         flags: default_flags(),
         links: vec![],
@@ -356,10 +338,8 @@ fn make_confidence_bundle(v: &serde_json::Value) -> FindingBundle {
         .and_then(|value| value.as_f64())
         .or_else(|| v.get("llm_score").and_then(|value| value.as_f64()))
         .unwrap_or(0.7);
-    let citations = v["citation_count"].as_u64().unwrap_or(0);
     let year = v["year"].as_i64().unwrap_or(2020) as i32;
     let etype = v["evidence_type"].as_str().unwrap_or("experimental");
-    let human = v["human_data"].as_bool().unwrap_or(false);
     let has_spans = v["has_evidence_spans"].as_bool().unwrap_or(false);
 
     let bundle = FindingBundle {
@@ -378,11 +358,7 @@ fn make_confidence_bundle(v: &serde_json::Value) -> FindingBundle {
         evidence: Evidence {
             evidence_type: etype.into(),
             model_system: String::new(),
-            species: None,
             method: String::new(),
-            sample_size: None,
-            effect_size: None,
-            p_value: None,
             replicated: false,
             replication_count: None,
             evidence_spans: if has_spans {
@@ -393,35 +369,21 @@ fn make_confidence_bundle(v: &serde_json::Value) -> FindingBundle {
         },
         conditions: Conditions {
             text: String::new(),
-            species_verified: vec![],
-            species_unverified: vec![],
-            in_vitro: false,
-            in_vivo: false,
-            human_data: human,
-            clinical_trial: false,
-            concentration_range: None,
             duration: None,
-            age_group: None,
-            cell_type: None,
         },
         confidence: Confidence::raw(score, "seeded prior", 0.85),
         provenance: Provenance {
             source_type: "published_paper".into(),
             doi: None,
-            pmid: None,
-            pmc: None,
-            openalex_id: None,
             url: None,
             title: "Test".into(),
             authors: vec![],
             year: Some(year),
-            journal: None,
             license: None,
             publisher: None,
             funders: vec![],
             extraction: Extraction::default(),
             review: None,
-            citation_count: Some(citations),
         },
         flags: default_flags(),
         links: vec![],
@@ -547,46 +509,28 @@ fn run_retraction_propagation(
                 evidence: Evidence {
                     evidence_type: "experimental".into(),
                     model_system: String::new(),
-                    species: None,
                     method: String::new(),
-                    sample_size: None,
-                    effect_size: None,
-                    p_value: None,
                     replicated: false,
                     replication_count: None,
                     evidence_spans: vec![],
                 },
                 conditions: Conditions {
                     text: String::new(),
-                    species_verified: vec![],
-                    species_unverified: vec![],
-                    in_vitro: false,
-                    in_vivo: false,
-                    human_data: false,
-                    clinical_trial: false,
-                    concentration_range: None,
                     duration: None,
-                    age_group: None,
-                    cell_type: None,
                 },
                 confidence: Confidence::raw(conf, "test", 0.85),
                 provenance: Provenance {
                     source_type: "published_paper".into(),
                     doi: None,
-                    pmid: None,
-                    pmc: None,
-                    openalex_id: None,
                     url: None,
                     title: "Test".into(),
                     authors: vec![],
                     year: Some(2025),
-                    journal: None,
                     license: None,
                     publisher: None,
                     funders: vec![],
                     extraction: Extraction::default(),
                     review: None,
-                    citation_count: None,
                 },
                 flags: default_flags(),
                 links,
@@ -700,11 +644,8 @@ fn run_retraction_propagation(
 fn make_observer_finding(v: &serde_json::Value) -> FindingBundle {
     let id = v["id"].as_str().unwrap_or("").to_string();
     let conf = v["confidence"].as_f64().unwrap_or(0.7);
-    let clinical_trial = v["clinical_trial"].as_bool().unwrap_or(false);
-    let human_data = v["human_data"].as_bool().unwrap_or(false);
     let replicated = v["replicated"].as_bool().unwrap_or(false);
     let year = v["year"].as_i64().unwrap_or(2020) as i32;
-    let citations = v["citation_count"].as_u64().unwrap_or(0);
     let has_spans = v["has_spans"].as_bool().unwrap_or(false);
     let assertion_type = v["assertion_type"]
         .as_str()
@@ -729,11 +670,7 @@ fn make_observer_finding(v: &serde_json::Value) -> FindingBundle {
         evidence: Evidence {
             evidence_type: "experimental".into(),
             model_system: String::new(),
-            species: None,
             method: String::new(),
-            sample_size: None,
-            effect_size: None,
-            p_value: None,
             replicated,
             replication_count: None,
             evidence_spans: if has_spans {
@@ -744,35 +681,21 @@ fn make_observer_finding(v: &serde_json::Value) -> FindingBundle {
         },
         conditions: Conditions {
             text: String::new(),
-            species_verified: vec![],
-            species_unverified: vec![],
-            in_vitro: false,
-            in_vivo: false,
-            human_data,
-            clinical_trial,
-            concentration_range: None,
             duration: None,
-            age_group: None,
-            cell_type: None,
         },
         confidence: Confidence::raw(conf, "test", 0.85),
         provenance: Provenance {
             source_type: "published_paper".into(),
             doi: None,
-            pmid: None,
-            pmc: None,
-            openalex_id: None,
             url: None,
             title: "Test".into(),
             authors: vec![],
             year: Some(year),
-            journal: None,
             license: None,
             publisher: None,
             funders: vec![],
             extraction: Extraction::default(),
             review: None,
-            citation_count: Some(citations),
         },
         flags: Flags {
             gap,

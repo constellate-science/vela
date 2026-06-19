@@ -272,7 +272,7 @@ fn semantic_similarity(
     let tokens_b = token_set(&key_b);
     let token_score = jaccard(&tokens_a, &tokens_b);
     let doi_match = a.provenance.doi.is_some() && a.provenance.doi == b.provenance.doi;
-    let pmid_match = a.provenance.pmid.is_some() && a.provenance.pmid == b.provenance.pmid;
+    let pmid_match = false;
     let type_match = a.assertion.assertion_type == b.assertion.assertion_type;
     let provenance_boost = if doi_match || pmid_match { 0.25 } else { 0.0 };
     let type_boost = if type_match { 0.1 } else { 0.0 };
@@ -1205,46 +1205,28 @@ mod tests {
             evidence: Evidence {
                 evidence_type: "experimental".into(),
                 model_system: String::new(),
-                species: None,
                 method: String::new(),
-                sample_size: None,
-                effect_size: None,
-                p_value: None,
                 replicated,
                 replication_count: None,
                 evidence_spans: vec![],
             },
             conditions: Conditions {
                 text: String::new(),
-                species_verified: vec![],
-                species_unverified: vec![],
-                in_vitro: false,
-                in_vivo: false,
-                human_data: false,
-                clinical_trial: false,
-                concentration_range: None,
                 duration: None,
-                age_group: None,
-                cell_type: None,
             },
             confidence: Confidence::raw(score, "seeded prior", 0.85),
             provenance: Provenance {
                 source_type: "published_paper".into(),
                 doi: None,
-                pmid: None,
-                pmc: None,
-                openalex_id: None,
                 url: None,
                 title: "Test".into(),
                 authors: vec![],
                 year: Some(2024),
-                journal: None,
                 license: None,
                 publisher: None,
                 funders: vec![],
                 extraction: Extraction::default(),
                 review: None,
-                citation_count: None,
             },
             flags: Flags {
                 gap,

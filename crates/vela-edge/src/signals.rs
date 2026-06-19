@@ -375,10 +375,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         .collect();
 
     for finding in &frontier.findings {
-        if finding.provenance.doi.is_none()
-            && finding.provenance.pmid.is_none()
-            && finding.provenance.title.trim().is_empty()
-        {
+        if finding.provenance.doi.is_none() && finding.provenance.title.trim().is_empty() {
             signals.push(SignalItem {
                 id: signal_id("weak_provenance", &finding.id),
                 kind: "weak_provenance".into(),
@@ -397,15 +394,9 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         }
 
         // Doctrine line 3: a finding without conditions is incomplete.
-        // Strict check blocker when both conditions.text is empty AND no
-        // scope flag is set, AND the finding is not theoretical (theoretical
-        // findings can be scope-free by nature).
-        let scope_declared = finding.conditions.in_vivo
-            || finding.conditions.in_vitro
-            || finding.conditions.human_data
-            || finding.conditions.clinical_trial;
+        // Strict check blocker when conditions.text is empty AND the finding
+        // is not theoretical (theoretical findings can be scope-free by nature).
         if finding.conditions.text.trim().is_empty()
-            && !scope_declared
             && finding.assertion.assertion_type != "theoretical"
             && !finding.flags.retracted
         {
@@ -693,14 +684,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
             .doi
             .as_deref()
             .map(str::to_lowercase)
-            .and_then(|k| by_doi.get(&k).copied())
-            .or_else(|| {
-                finding
-                    .provenance
-                    .pmid
-                    .as_deref()
-                    .and_then(|k| by_pmid.get(k).copied())
-            });
+            .and_then(|k| by_doi.get(&k).copied());
         let Some(source) = source else { continue };
 
         let mut diffs: Vec<String> = Vec::new();
@@ -1227,20 +1211,15 @@ mod tests {
         let provenance = Provenance {
             source_type: "published_paper".to_string(),
             doi: None,
-            pmid: None,
-            pmc: None,
-            openalex_id: None,
             url: None,
             title: String::new(),
             authors: vec![],
             year: Some(2020),
-            journal: None,
             license: None,
             publisher: None,
             funders: vec![],
             extraction: Default::default(),
             review: None,
-            citation_count: None,
         };
         FindingBundle {
             id: id.to_string(),
@@ -1250,27 +1229,14 @@ mod tests {
             evidence: Evidence {
                 evidence_type: "experimental".to_string(),
                 model_system: "mouse".to_string(),
-                species: Some("Mus musculus".to_string()),
                 method: "test".to_string(),
-                sample_size: None,
-                effect_size: None,
-                p_value: None,
                 replicated: false,
                 replication_count: None,
                 evidence_spans: vec![],
             },
             conditions: Conditions {
                 text: String::new(),
-                species_verified: vec![],
-                species_unverified: vec![],
-                in_vitro: false,
-                in_vivo: true,
-                human_data: false,
-                clinical_trial: false,
-                concentration_range: None,
                 duration: None,
-                age_group: None,
-                cell_type: None,
             },
             confidence: Confidence::raw(0.9, "test".to_string(), 0.9),
             provenance,

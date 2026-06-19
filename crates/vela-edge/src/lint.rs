@@ -139,6 +139,7 @@ pub fn all_rules() -> Vec<LintRule> {
     ]
 }
 
+#[cfg(test)]
 fn parse_sample_size(s: &str) -> Option<u32> {
     // Extract numeric portion: "n=24" -> 24, "24 patients" -> 24, "24" -> 24
     let cleaned = s.trim().to_lowercase();
@@ -150,6 +151,7 @@ fn parse_sample_size(s: &str) -> Option<u32> {
         .ok()
 }
 
+#[cfg(test)]
 fn parse_p_value(s: &str) -> Option<f64> {
     let cleaned = s.trim().to_lowercase();
     let cleaned = cleaned
@@ -172,23 +174,9 @@ fn has_abstract_only_caveat(finding: &FindingBundle) -> bool {
     })
 }
 
-pub fn check_sample_size(finding: &FindingBundle) -> Vec<Diagnostic> {
-    let mut diags = Vec::new();
-    if (finding.evidence.evidence_type == "experimental"
-        || finding.evidence.evidence_type == "observational")
-        && let Some(ref ss) = finding.evidence.sample_size
-        && let Some(n) = parse_sample_size(ss)
-        && n < 10
-    {
-        diags.push(Diagnostic {
-            rule_id: "L001".into(),
-            finding_id: finding.id.clone(),
-            message: format!("Sample size {} is below minimum threshold of 10", n),
-            suggestion: "Consider whether this finding has adequate statistical power".into(),
-            severity: Severity::Warning,
-        });
-    }
-    diags
+pub fn check_sample_size(_finding: &FindingBundle) -> Vec<Diagnostic> {
+    // sample_size field removed (empirical-domain field); always empty.
+    Vec::new()
 }
 
 pub fn check_no_replication(finding: &FindingBundle) -> Vec<Diagnostic> {
@@ -208,21 +196,9 @@ pub fn check_no_replication(finding: &FindingBundle) -> Vec<Diagnostic> {
     diags
 }
 
-pub fn check_missing_species(finding: &FindingBundle) -> Vec<Diagnostic> {
-    let mut diags = Vec::new();
-    if finding.evidence.evidence_type == "experimental"
-        && finding.evidence.species.is_none()
-        && !has_abstract_only_caveat(finding)
-    {
-        diags.push(Diagnostic {
-            rule_id: "L003".into(),
-            finding_id: finding.id.clone(),
-            message: "Experimental finding without species information".into(),
-            suggestion: "Specify the species or model organism used".into(),
-            severity: Severity::Warning,
-        });
-    }
-    diags
+pub fn check_missing_species(_finding: &FindingBundle) -> Vec<Diagnostic> {
+    // species field removed (empirical-domain field); always empty.
+    Vec::new()
 }
 
 pub fn check_confidence_mismatch(finding: &FindingBundle) -> Vec<Diagnostic> {
@@ -242,36 +218,14 @@ pub fn check_confidence_mismatch(finding: &FindingBundle) -> Vec<Diagnostic> {
     diags
 }
 
-pub fn check_unreported_effect(finding: &FindingBundle) -> Vec<Diagnostic> {
-    let mut diags = Vec::new();
-    if finding.evidence.p_value.is_some() && finding.evidence.effect_size.is_none() {
-        diags.push(Diagnostic {
-            rule_id: "L005".into(),
-            finding_id: finding.id.clone(),
-            message: "P-value reported but effect size is missing".into(),
-            suggestion: "Report effect size (Cohen's d, odds ratio, etc.) alongside p-value".into(),
-            severity: Severity::Warning,
-        });
-    }
-    diags
+pub fn check_unreported_effect(_finding: &FindingBundle) -> Vec<Diagnostic> {
+    // p_value and effect_size fields removed (empirical-domain fields); always empty.
+    Vec::new()
 }
 
-pub fn check_p_boundary(finding: &FindingBundle) -> Vec<Diagnostic> {
-    let mut diags = Vec::new();
-    if let Some(ref pv) = finding.evidence.p_value
-        && let Some(p) = parse_p_value(pv)
-        && (0.04..=0.06).contains(&p)
-    {
-        diags.push(Diagnostic {
-            rule_id: "L006".into(),
-            finding_id: finding.id.clone(),
-            message: format!("P-value {:.4} is near the significance boundary", p),
-            suggestion: "Consider this finding borderline; report exact p-value and effect size"
-                .into(),
-            severity: Severity::Info,
-        });
-    }
-    diags
+pub fn check_p_boundary(_finding: &FindingBundle) -> Vec<Diagnostic> {
+    // p_value field removed (empirical-domain field); always empty.
+    Vec::new()
 }
 
 pub fn check_missing_controls(finding: &FindingBundle) -> Vec<Diagnostic> {
@@ -322,48 +276,9 @@ pub fn check_multiple_comparisons(finding: &FindingBundle) -> Vec<Diagnostic> {
     diags
 }
 
-pub fn check_cherry_picking(frontier: &Project) -> Vec<Diagnostic> {
-    use std::collections::HashMap;
-
-    let mut doi_findings: HashMap<String, Vec<&FindingBundle>> = HashMap::new();
-    for f in &frontier.findings {
-        if let Some(ref doi) = f.provenance.doi {
-            doi_findings.entry(doi.clone()).or_default().push(f);
-        }
-    }
-
-    let mut diags = Vec::new();
-    for (doi, findings) in &doi_findings {
-        if findings.len() < 2 {
-            continue;
-        }
-        let has_significant = findings.iter().any(|f| {
-            f.evidence
-                .p_value
-                .as_ref()
-                .and_then(|pv| parse_p_value(pv))
-                .is_some_and(|p| p < 0.05)
-        });
-        let has_nonsignificant = findings.iter().any(|f| {
-            f.evidence
-                .p_value
-                .as_ref()
-                .and_then(|pv| parse_p_value(pv))
-                .is_some_and(|p| p >= 0.05)
-        });
-        if has_significant && has_nonsignificant {
-            for f in findings {
-                diags.push(Diagnostic {
-                    rule_id: "L009".into(),
-                    finding_id: f.id.clone(),
-                    message: format!("DOI {} has findings with mixed significance", doi),
-                    suggestion: "Verify all findings from this paper are reported, not just significant ones".into(),
-                    severity: Severity::Warning,
-                });
-            }
-        }
-    }
-    diags
+pub fn check_cherry_picking(_frontier: &Project) -> Vec<Diagnostic> {
+    // p_value field removed (empirical-domain field); always empty.
+    Vec::new()
 }
 
 pub fn check_wrong_test(finding: &FindingBundle) -> Vec<Diagnostic> {
@@ -375,8 +290,7 @@ pub fn check_wrong_test(finding: &FindingBundle) -> Vec<Diagnostic> {
             || assertion_lower.contains("three")
             || assertion_lower.contains("four")
             || assertion_lower.contains("multiple")
-            || assertion_lower.contains("several")
-            || finding.assertion.entities.len() > 3;
+            || assertion_lower.contains("several");
         if multi_group {
             diags.push(Diagnostic {
                 rule_id: "L010".into(),
@@ -789,46 +703,28 @@ mod tests {
             evidence: Evidence {
                 evidence_type: "experimental".into(),
                 model_system: "cell_culture".into(),
-                species: Some("Homo sapiens".into()),
                 method: "Western blot with control group".into(),
-                sample_size: Some("n=30".into()),
-                effect_size: Some("d=0.8".into()),
-                p_value: Some("p=0.01".into()),
                 replicated: true,
                 replication_count: Some(2),
                 evidence_spans: vec![],
             },
             conditions: Conditions {
                 text: "Standard conditions".into(),
-                species_verified: vec!["Homo sapiens".into()],
-                species_unverified: vec![],
-                in_vitro: true,
-                in_vivo: false,
-                human_data: false,
-                clinical_trial: false,
-                concentration_range: None,
                 duration: None,
-                age_group: None,
-                cell_type: None,
             },
             confidence: Confidence::raw(0.75, "experimental evidence", 0.9),
             provenance: Provenance {
                 source_type: "published_paper".into(),
                 doi: Some("10.1234/test".into()),
-                pmid: None,
-                pmc: None,
-                openalex_id: None,
                 url: None,
                 title: "Test paper".into(),
                 authors: vec![],
                 year: Some(2024),
-                journal: Some("Test Journal".into()),
                 license: None,
                 publisher: None,
                 funders: vec![],
                 extraction: Extraction::default(),
                 review: None,
-                citation_count: None,
             },
             flags: Flags {
                 gap: false,
@@ -930,11 +826,10 @@ mod tests {
 
     #[test]
     fn check_sample_size_small() {
-        let mut f = make_finding("vf_001");
-        f.evidence.sample_size = Some("n=5".into());
+        // sample_size field removed; check_sample_size always returns empty.
+        let f = make_finding("vf_001");
         let diags = check_sample_size(&f);
-        assert_eq!(diags.len(), 1);
-        assert_eq!(diags[0].rule_id, "L001");
+        assert!(diags.is_empty());
     }
 
     #[test]
@@ -965,11 +860,10 @@ mod tests {
 
     #[test]
     fn check_missing_species_experimental() {
-        let mut f = make_finding("vf_005");
-        f.evidence.species = None;
+        // species field removed; check_missing_species always returns empty.
+        let f = make_finding("vf_005");
         let diags = check_missing_species(&f);
-        assert_eq!(diags.len(), 1);
-        assert_eq!(diags[0].rule_id, "L003");
+        assert!(diags.is_empty());
     }
 
     #[test]
@@ -984,27 +878,24 @@ mod tests {
 
     #[test]
     fn check_unreported_effect_size() {
-        let mut f = make_finding("vf_007");
-        f.evidence.p_value = Some("p=0.01".into());
-        f.evidence.effect_size = None;
+        // p_value and effect_size fields removed; check_unreported_effect always returns empty.
+        let f = make_finding("vf_007");
         let diags = check_unreported_effect(&f);
-        assert_eq!(diags.len(), 1);
-        assert_eq!(diags[0].rule_id, "L005");
+        assert!(diags.is_empty());
     }
 
     #[test]
     fn check_p_boundary_near() {
-        let mut f = make_finding("vf_008");
-        f.evidence.p_value = Some("p=0.049".into());
+        // p_value field removed; check_p_boundary always returns empty.
+        let f = make_finding("vf_008");
         let diags = check_p_boundary(&f);
-        assert_eq!(diags.len(), 1);
-        assert_eq!(diags[0].rule_id, "L006");
+        assert!(diags.is_empty());
     }
 
     #[test]
     fn check_p_boundary_clear() {
-        let mut f = make_finding("vf_009");
-        f.evidence.p_value = Some("p=0.001".into());
+        // p_value field removed; check_p_boundary always returns empty.
+        let f = make_finding("vf_009");
         let diags = check_p_boundary(&f);
         assert!(diags.is_empty());
     }
@@ -1059,25 +950,20 @@ mod tests {
 
     #[test]
     fn check_cherry_picking_mixed_significance() {
+        // p_value field removed; check_cherry_picking always returns empty.
         let mut f1 = make_finding("vf_014a");
         f1.provenance.doi = Some("10.1234/mixed".into());
-        f1.evidence.p_value = Some("p=0.01".into());
-
         let mut f2 = make_finding("vf_014b");
         f2.provenance.doi = Some("10.1234/mixed".into());
-        f2.evidence.p_value = Some("p=0.15".into());
-
         let frontier = make_frontier(vec![f1, f2]);
         let diags = check_cherry_picking(&frontier);
-        assert_eq!(diags.len(), 2);
-        assert!(diags.iter().all(|d| d.rule_id == "L009"));
+        assert!(diags.is_empty());
     }
 
     #[test]
     fn lint_with_rule_filter() {
-        let mut f = make_finding("vf_015");
-        f.evidence.sample_size = Some("n=3".into());
-        f.evidence.species = None;
+        // sample_size and species fields removed; filter test still exercises the rule-filter path.
+        let f = make_finding("vf_015");
         let frontier = make_frontier(vec![f]);
         let report = lint(&frontier, Some("L001"), None);
         assert!(report.diagnostics.iter().all(|d| d.rule_id == "L001"));
@@ -1085,9 +971,8 @@ mod tests {
 
     #[test]
     fn lint_with_severity_filter() {
-        let mut f = make_finding("vf_016");
-        f.evidence.p_value = Some("p=0.05".into());
-        f.evidence.effect_size = None;
+        // p_value and effect_size fields removed; filter test still exercises the severity-filter path.
+        let f = make_finding("vf_016");
         let frontier = make_frontier(vec![f]);
         let report = lint(&frontier, None, Some("info"));
         assert!(

@@ -4109,27 +4109,14 @@ mod tests {
             evidence: Evidence {
                 evidence_type: "experimental".to_string(),
                 model_system: String::new(),
-                species: None,
                 method: "manual".to_string(),
-                sample_size: None,
-                effect_size: None,
-                p_value: None,
                 replicated: false,
                 replication_count: None,
                 evidence_spans: Vec::new(),
             },
             conditions: Conditions {
                 text: "mouse".to_string(),
-                species_verified: Vec::new(),
-                species_unverified: Vec::new(),
-                in_vitro: false,
-                in_vivo: true,
-                human_data: false,
-                clinical_trial: false,
-                concentration_range: None,
                 duration: None,
-                age_group: None,
-                cell_type: None,
             },
             confidence: Confidence {
                 kind: ConfidenceKind::FrontierEpistemic,
@@ -4142,20 +4129,15 @@ mod tests {
             provenance: Provenance {
                 source_type: "published_paper".to_string(),
                 doi: None,
-                pmid: None,
-                pmc: None,
-                openalex_id: None,
                 url: None,
                 title: "Test".to_string(),
                 authors: Vec::new(),
                 year: Some(2024),
-                journal: None,
                 license: None,
                 publisher: None,
                 funders: Vec::new(),
                 extraction: Extraction::default(),
                 review: None,
-                citation_count: None,
             },
             flags: Flags {
                 gap: false,
@@ -5044,7 +5026,6 @@ mod tests {
         let mut theo = finding("vf_theo");
         theo.assertion.assertion_type = "open_question".to_string();
         theo.evidence.evidence_type = "theoretical".to_string();
-        theo.conditions.in_vivo = false; // strip the empirical signal
         theo.conditions.text = "Erdős problem statement".to_string();
         let frontier = project::assemble("math", vec![theo], 0, 0, "test");
         repo::save_to_path(&path, &frontier).unwrap();

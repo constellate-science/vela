@@ -341,11 +341,6 @@ pub fn state_cell(project: &Project, finding: &FindingBundle) -> Value {
         "claim": finding.assertion.text,
         "context": {
             "conditions": finding.conditions.text,
-            "species_verified": finding.conditions.species_verified,
-            "in_vitro": finding.conditions.in_vitro,
-            "in_vivo": finding.conditions.in_vivo,
-            "human_data": finding.conditions.human_data,
-            "clinical_trial": finding.conditions.clinical_trial,
         },
         "id": id,
         "status": {

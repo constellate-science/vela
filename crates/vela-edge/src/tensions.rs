@@ -30,7 +30,6 @@ pub struct TensionSide {
     pub assertion: String,
     pub confidence: f64,
     pub assertion_type: String,
-    pub citation_count: u64,
     pub contradicts_count: usize,
 }
 
@@ -101,11 +100,9 @@ pub fn analyze(
             let side_a = make_side(f, &contradict_counts);
             let side_b = make_side(target, &contradict_counts);
 
-            // Tension score = min(conf_a, conf_b) * (citations_a + citations_b)
+            // Tension score = min(conf_a, conf_b)
             let min_conf = f.confidence.score.min(target.confidence.score);
-            let total_cites = side_a.citation_count + side_b.citation_count;
-            // Use at least 1 for citations to avoid zero scores when no citations available.
-            let score = min_conf * (total_cites.max(1) as f64);
+            let score = min_conf;
 
             // Check if resolved: is there a finding that supersedes either side?
             let (resolved, superseding_id) = check_resolved(&f.id, &target.id, frontier, &id_map);
@@ -138,7 +135,6 @@ fn make_side(
         assertion: f.assertion.text.clone(),
         confidence: f.confidence.score,
         assertion_type: f.assertion.assertion_type.clone(),
-        citation_count: f.provenance.citation_count.unwrap_or(0),
         contradicts_count: contradict_counts.get(f.id.as_str()).copied().unwrap_or(0),
     }
 }
@@ -259,46 +255,28 @@ mod tests {
             evidence: Evidence {
                 evidence_type: "experimental".into(),
                 model_system: String::new(),
-                species: None,
                 method: String::new(),
-                sample_size: None,
-                effect_size: None,
-                p_value: None,
                 replicated: false,
                 replication_count: None,
                 evidence_spans: vec![],
             },
             conditions: Conditions {
                 text: String::new(),
-                species_verified: vec![],
-                species_unverified: vec![],
-                in_vitro: false,
-                in_vivo: false,
-                human_data: false,
-                clinical_trial: false,
-                concentration_range: None,
                 duration: None,
-                age_group: None,
-                cell_type: None,
             },
             confidence: Confidence::raw(score, "test", 0.85),
             provenance: Provenance {
                 source_type: "published_paper".into(),
                 doi: None,
-                pmid: None,
-                pmc: None,
-                openalex_id: None,
                 url: None,
                 title: "Test".into(),
                 authors: vec![],
                 year: Some(2025),
-                journal: None,
                 license: None,
                 publisher: None,
                 funders: vec![],
                 extraction: Extraction::default(),
                 review: None,
-                citation_count: Some(50),
             },
             flags: Flags {
                 gap: false,
@@ -403,9 +381,9 @@ mod tests {
         let c = make_frontier_from(vec![a, b]);
         let results = analyze(&c, false, false, 20);
 
-        // score = min(0.9, 0.7) * (50 + 50) = 0.7 * 100 = 70.0
+        // score = min(0.9, 0.7) = 0.7
         assert_eq!(results.len(), 1);
-        assert!((results[0].score - 70.0).abs() < 0.1);
+        assert!((results[0].score - 0.7).abs() < 0.001);
     }
 
     #[test]

@@ -154,11 +154,7 @@ mod tests {
         Evidence {
             evidence_type: "experimental".into(),
             model_system: "test".into(),
-            species: None,
             method: "test".into(),
-            sample_size: None,
-            effect_size: None,
-            p_value: None,
             replicated: false,
             replication_count: None,
             evidence_spans: vec![],
@@ -168,16 +164,7 @@ mod tests {
     fn make_conditions() -> Conditions {
         Conditions {
             text: String::new(),
-            species_verified: vec![],
-            species_unverified: vec![],
-            in_vitro: false,
-            in_vivo: false,
-            human_data: false,
-            clinical_trial: false,
-            concentration_range: None,
             duration: None,
-            age_group: None,
-            cell_type: None,
         }
     }
 
@@ -196,9 +183,6 @@ mod tests {
         Provenance {
             source_type: "expert_assertion".into(),
             doi: None,
-            pmid: None,
-            pmc: None,
-            openalex_id: None,
             url: None,
             title: format!("title-{id_seed}"),
             authors: vec![Author {
@@ -206,13 +190,11 @@ mod tests {
                 orcid: None,
             }],
             year: None,
-            journal: None,
             license: None,
             publisher: None,
             funders: vec![],
             extraction: Default::default(),
             review: None,
-            citation_count: None,
         }
     }
 

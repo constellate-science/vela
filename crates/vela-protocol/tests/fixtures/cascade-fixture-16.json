@@ -178,12 +178,7 @@
         "type": "mechanism"
       },
       "conditions": {
-        "cell_type": "microglia",
         "duration": null,
-        "in_vitro": true,
-        "species_verified": [
-          "Mus musculus"
-        ],
         "text": "In vitro, mouse microglia"
       },
       "confidence": {
@@ -198,11 +193,8 @@
         "evidence_spans": [],
         "method": "Western blot",
         "model_system": "mouse",
-        "p_value": "p<0.05",
         "replicated": true,
         "replication_count": 3,
-        "sample_size": "n=30",
-        "species": "Mus musculus",
         "type": "experimental"
       },
       "flags": {
@@ -223,7 +215,6 @@
             "orcid": null
           }
         ],
-        "citation_count": 0,
         "doi": "10.0000/crossimpl.frontier0016.finding0000",
         "extraction": {
           "extracted_at": "",
@@ -232,7 +223,6 @@
           "model": null,
           "model_version": null
         },
-        "journal": "Cross Journal",
         "review": null,
         "source_type": "published_paper",
         "title": "Cross-impl paper 16-0",
@@ -259,12 +249,7 @@
         "type": "mechanism"
       },
       "conditions": {
-        "cell_type": "microglia",
         "duration": null,
-        "in_vitro": true,
-        "species_verified": [
-          "Mus musculus"
-        ],
         "text": "In vitro, mouse microglia"
       },
       "confidence": {
@@ -279,11 +264,8 @@
         "evidence_spans": [],
         "method": "Western blot",
         "model_system": "mouse",
-        "p_value": "p<0.05",
         "replicated": true,
         "replication_count": 3,
-        "sample_size": "n=30",
-        "species": "Mus musculus",
         "type": "experimental"
       },
       "flags": {
@@ -312,7 +294,6 @@
             "orcid": null
           }
         ],
-        "citation_count": 0,
         "doi": "10.0000/crossimpl.frontier0016.finding0001",
         "extraction": {
           "extracted_at": "",
@@ -321,7 +302,6 @@
           "model": null,
           "model_version": null
         },
-        "journal": "Cross Journal",
         "review": null,
         "source_type": "published_paper",
         "title": "Cross-impl paper 16-1",

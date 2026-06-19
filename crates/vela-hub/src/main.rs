@@ -6035,53 +6035,10 @@ fn render_finding_html(
             escape_html(&cond.text),
         ));
     }
-    if !cond.species_verified.is_empty() {
-        cond_rows.push(format!(
-            r#"<div class="fd-cond"><dt>species</dt><dd class="serif">{}</dd></div>"#,
-            escape_html(&cond.species_verified.join(", ")),
-        ));
-    }
-    let mut model_chips = Vec::new();
-    if cond.in_vivo {
-        model_chips.push("in vivo");
-    }
-    if cond.in_vitro {
-        model_chips.push("in vitro");
-    }
-    if cond.human_data {
-        model_chips.push("human data");
-    }
-    if cond.clinical_trial {
-        model_chips.push("clinical trial");
-    }
-    if !model_chips.is_empty() {
-        cond_rows.push(format!(
-            r#"<div class="fd-cond"><dt>model</dt><dd>{}</dd></div>"#,
-            escape_html(&model_chips.join(" · ")),
-        ));
-    }
-    if let Some(c) = &cond.concentration_range {
-        cond_rows.push(format!(
-            r#"<div class="fd-cond"><dt>concentration</dt><dd>{}</dd></div>"#,
-            escape_html(c),
-        ));
-    }
     if let Some(d) = &cond.duration {
         cond_rows.push(format!(
             r#"<div class="fd-cond"><dt>duration</dt><dd>{}</dd></div>"#,
             escape_html(d),
-        ));
-    }
-    if let Some(c) = &cond.cell_type {
-        cond_rows.push(format!(
-            r#"<div class="fd-cond"><dt>cell_type</dt><dd>{}</dd></div>"#,
-            escape_html(c),
-        ));
-    }
-    if let Some(a) = &cond.age_group {
-        cond_rows.push(format!(
-            r#"<div class="fd-cond"><dt>age_group</dt><dd>{}</dd></div>"#,
-            escape_html(a),
         ));
     }
     let conditions_dl = if cond_rows.is_empty() {
@@ -6111,30 +6068,6 @@ fn render_finding_html(
             escape_html(&ev.model_system),
         ));
     }
-    if let Some(s) = &ev.species {
-        ev_rows.push(format!(
-            r#"<div class="fd-cond"><dt>species</dt><dd>{}</dd></div>"#,
-            escape_html(s),
-        ));
-    }
-    if let Some(s) = &ev.sample_size {
-        ev_rows.push(format!(
-            r#"<div class="fd-cond"><dt>sample size</dt><dd>{}</dd></div>"#,
-            escape_html(s),
-        ));
-    }
-    if let Some(es) = &ev.effect_size {
-        ev_rows.push(format!(
-            r#"<div class="fd-cond"><dt>effect size</dt><dd>{}</dd></div>"#,
-            escape_html(es),
-        ));
-    }
-    if let Some(p) = &ev.p_value {
-        ev_rows.push(format!(
-            r#"<div class="fd-cond"><dt>p-value</dt><dd>{}</dd></div>"#,
-            escape_html(p),
-        ));
-    }
     let replicated_label = if ev.replicated {
         format!(
             "yes{}",
@@ -6158,12 +6091,6 @@ fn render_finding_html(
             escape_html(doi),
             escape_html(&prov.title),
         )
-    } else if let Some(pmid) = &prov.pmid {
-        format!(
-            r#"<a href="https://pubmed.ncbi.nlm.nih.gov/{}" rel="noopener">{}</a>"#,
-            escape_html(pmid),
-            escape_html(&prov.title),
-        )
     } else {
         escape_html(&prov.title)
     };
@@ -6176,9 +6103,6 @@ fn render_finding_html(
         } else {
             first.to_string()
         });
-    }
-    if let Some(j) = &prov.journal {
-        prov_meta.push(j.clone());
     }
     if let Some(y) = prov.year {
         prov_meta.push(y.to_string());

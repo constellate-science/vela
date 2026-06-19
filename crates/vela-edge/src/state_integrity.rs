@@ -207,15 +207,7 @@ pub fn analyze(frontier: &Project) -> StateIntegrityReport {
         // (extraction.model — e.g. an OpenAI/API/agent run), an author, or a
         // reviewer who attests it. A finding attributable to none of these came
         // from nowhere and cannot carry provenance.
-        let has_source_id = [
-            &prov.doi,
-            &prov.pmid,
-            &prov.pmc,
-            &prov.openalex_id,
-            &prov.url,
-        ]
-        .iter()
-        .any(|field| {
+        let has_source_id = [&prov.doi, &prov.url].iter().any(|field| {
             field
                 .as_deref()
                 .is_some_and(|value| !value.trim().is_empty())

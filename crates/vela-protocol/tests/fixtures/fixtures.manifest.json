@@ -2,74 +2,74 @@
   "doctrine": "every fixture's SHA-256 is recorded; verify.py refuses to run on a fixture whose bytes drift from the recorded digest. Closes THREAT_MODEL.md A12 (integrity half).",
   "fixtures": [
     {
-      "bytes": 34750,
+      "bytes": 32462,
       "path": "cascade-fixture-00.json",
-      "sha256": "sha256:e8d9ee9f8caef13e6740fde67bf58256493b8caf87b8272c49d09774d5004db4"
+      "sha256": "sha256:2bee20360069b89ee4a9c90d07cb0b19021a21c120416a82de4c6070a8e8d6e9"
     },
     {
-      "bytes": 34750,
+      "bytes": 32462,
       "path": "cascade-fixture-01.json",
-      "sha256": "sha256:0bf855ba551649267a291fbc8f8cb1e28e6fd4736b48003279eb77325b7aae37"
+      "sha256": "sha256:7650903d3d39401f54fa9aa6b3f196f0bd9621d5930b562a11187da20c577eee"
     },
     {
-      "bytes": 34750,
+      "bytes": 32462,
       "path": "cascade-fixture-02.json",
-      "sha256": "sha256:f92a85af22b4a4f5a69510f9a3b24c89bfac1409da3f547bee3ea93d6dbd944e"
+      "sha256": "sha256:01d0c73607932670b5c2c88a35eb688a44473ca2b6b20531b507c15b4ba9f513"
     },
     {
-      "bytes": 35493,
+      "bytes": 33205,
       "path": "cascade-fixture-03.json",
-      "sha256": "sha256:8218b64d46cdf0b82333007aa592350a6faa7caa973fba62de462796292acf8b"
+      "sha256": "sha256:4ee6422123e42aa52908e58bbc3e6ab75c1d3ec9ea1a92778d529af2b5bbf984"
     },
     {
-      "bytes": 32220,
+      "bytes": 29932,
       "path": "cascade-fixture-04.json",
-      "sha256": "sha256:7f36e6037409de5b41d06e76d1e62994ac4b43bb07b88978be299452a8245edb"
+      "sha256": "sha256:d02c803fc4bd61e004618ba7dc49f1aac0d6b4f51f5e2d049455faa36e6148a3"
     },
     {
-      "bytes": 27173,
+      "bytes": 24885,
       "path": "cascade-fixture-07.json",
-      "sha256": "sha256:e6d5dd662eadd2d3646a03bff4a94b6fd6b44583c4b777d89a88657ce8e05a69"
+      "sha256": "sha256:25045913fb2f0f277637590f3bc8e3bf057a1ef07b189e1c7974fd7e7e858cc1"
     },
     {
-      "bytes": 31830,
+      "bytes": 29476,
       "path": "cascade-fixture-08.json",
-      "sha256": "sha256:9c636efcb05f3cb214cb6c4e563adc8922de4c5cba302122a3e21f76cde1fdfe"
+      "sha256": "sha256:1c8230dd80d8502e4674ef6d3b89716905a804552990a3ca22740659e189736d"
     },
     {
-      "bytes": 22022,
+      "bytes": 19734,
       "path": "cascade-fixture-09.json",
-      "sha256": "sha256:27482ab64f156f72920dab2960dd8a2b9dc2d28dae20fe98f6f403eedf45b86a"
+      "sha256": "sha256:30f728c5bb4f1e6b438531c1752b2290d6ff5299974b7eaf19fc04d76e9dc7fe"
     },
     {
-      "bytes": 25238,
+      "bytes": 22950,
       "path": "cascade-fixture-12.json",
-      "sha256": "sha256:1266825f99e3df3eb9a0d287e03059df4ec97c22f543570dc4ce04ca820f41e7"
+      "sha256": "sha256:37b2ce55004bbce4ec3f9cd560a3b4c61ca0101ca50aab80f7b7e2cf08393606"
     },
     {
-      "bytes": 22836,
+      "bytes": 20548,
       "path": "cascade-fixture-13.json",
-      "sha256": "sha256:0f3ee4141c950e200ba2abc3870a78215d1fd1f242a70de012678476bfe78d60"
+      "sha256": "sha256:d4191d800eca09241161ee1ae61db87e1e1c91725e266d9903a5810f8b5d161e"
     },
     {
-      "bytes": 22743,
+      "bytes": 20455,
       "path": "cascade-fixture-14.json",
-      "sha256": "sha256:9e2f7f94082528ff07d39bd0f568f7fb3072ec997f69c91d09fbadce9da5c55a"
+      "sha256": "sha256:7e8e702ea520c8b5de7b675ca53a34e4599ac0e0fed962eb1269fcc0d18ea622"
     },
     {
-      "bytes": 22643,
+      "bytes": 20355,
       "path": "cascade-fixture-15.json",
-      "sha256": "sha256:a59ef7adc1c95431a9a5dbc3c34ef2720547f518cb35c67323806042f8a9f078"
+      "sha256": "sha256:fe1c8a62659c732c9d21c7931086d9f48d22518812a1abe5327fc5d56178f392"
     },
     {
-      "bytes": 9410,
+      "bytes": 8838,
       "path": "cascade-fixture-16.json",
-      "sha256": "sha256:c44d6527f9a23f2d9bc6fb634cc018b2b370101da25b7c91a9b6bb957615cfb4"
+      "sha256": "sha256:e6c93b55d1f6eaff243d4e3308b6bd7c4e935e66f4de3914ba263e8e7fe7ed2e"
     },
     {
-      "bytes": 22780,
+      "bytes": 20492,
       "path": "cascade-fixture-17.json",
-      "sha256": "sha256:311e886d9a6226b02bcb8820c341e11e6d3de61b4487e9f76ac82f210089f4de"
+      "sha256": "sha256:f38c1412943bea0fa0b84185c670b2887384bd6906db273d7f8e8e2f9195f22f"
     }
   ],
   "schema": "vela.conformance-fixtures-manifest.v1"

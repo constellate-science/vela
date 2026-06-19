@@ -586,7 +586,6 @@ pub(crate) fn cmd_tensions(
                     "assertion": &t.finding_a.assertion,
                     "confidence": t.finding_a.confidence,
                     "assertion_type": &t.finding_a.assertion_type,
-                    "citation_count": t.finding_a.citation_count,
                     "contradicts_count": t.finding_a.contradicts_count,
                 },
                 "finding_b": {
@@ -594,7 +593,6 @@ pub(crate) fn cmd_tensions(
                     "assertion": &t.finding_b.assertion,
                     "confidence": t.finding_b.confidence,
                     "assertion_type": &t.finding_b.assertion_type,
-                    "citation_count": t.finding_b.citation_count,
                     "contradicts_count": t.finding_b.contradicts_count,
                 }
             })).collect::<Vec<_>>()

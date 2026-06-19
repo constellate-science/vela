@@ -110,14 +110,9 @@ pub fn render_finding(
         .map(|a| a.name.clone())
         .collect();
     let doi = finding.provenance.doi.clone();
-    let pmid = finding.provenance.pmid.clone();
     let url = doi
         .as_ref()
         .map(|d| format!("https://doi.org/{d}"))
-        .or_else(|| {
-            pmid.as_ref()
-                .map(|p| format!("https://pubmed.ncbi.nlm.nih.gov/{p}/"))
-        })
         .unwrap_or_else(|| format!("vela://frontier/{vfr_id}/finding/{id}"));
 
     match format {

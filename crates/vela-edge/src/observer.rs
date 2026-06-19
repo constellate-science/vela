@@ -23,12 +23,8 @@ pub struct ObserverPolicy {
 }
 
 pub struct ObserverWeights {
-    /// Weight for clinical trial evidence (0.0-2.0, 1.0 = neutral).
-    pub clinical_trial: f64,
     /// Weight for replicated findings.
     pub replication: f64,
-    /// Weight for human data vs animal models.
-    pub human_data: f64,
     /// Weight for recency (newer = higher).
     pub recency: f64,
     /// Weight for citation count.
@@ -84,9 +80,7 @@ pub fn pharma() -> ObserverPolicy {
         name: "pharma".into(),
         description: "Weights clinical trial data, human evidence, and citation count.".into(),
         weights: ObserverWeights {
-            clinical_trial: 1.5,
             replication: 1.0,
-            human_data: 1.5,
             recency: 1.0,
             citations: 1.3,
             evidence_spans: 1.0,
@@ -103,9 +97,7 @@ pub fn academic() -> ObserverPolicy {
         name: "academic".into(),
         description: "Weights replication, evidence spans, and recency.".into(),
         weights: ObserverWeights {
-            clinical_trial: 1.0,
             replication: 1.5,
-            human_data: 1.0,
             recency: 1.2,
             citations: 1.0,
             evidence_spans: 1.3,
@@ -123,9 +115,7 @@ pub fn regulatory() -> ObserverPolicy {
         description: "Demands human data, clinical trials, and auditability. High threshold."
             .into(),
         weights: ObserverWeights {
-            clinical_trial: 2.0,
             replication: 1.0,
-            human_data: 2.0,
             recency: 1.0,
             citations: 1.0,
             evidence_spans: 1.5,
@@ -142,9 +132,7 @@ pub fn clinical() -> ObserverPolicy {
         name: "clinical".into(),
         description: "Weights human data, replication, and recency for clinical relevance.".into(),
         weights: ObserverWeights {
-            clinical_trial: 1.0,
             replication: 1.5,
-            human_data: 1.5,
             recency: 1.3,
             citations: 1.0,
             evidence_spans: 1.0,
@@ -161,9 +149,7 @@ pub fn exploration() -> ObserverPolicy {
         name: "exploration".into(),
         description: "No minimum confidence. Surfaces gaps and dark territory.".into(),
         weights: ObserverWeights {
-            clinical_trial: 1.0,
             replication: 1.0,
-            human_data: 1.0,
             recency: 1.0,
             citations: 1.0,
             evidence_spans: 1.0,
@@ -183,19 +169,9 @@ fn score_finding(finding: &FindingBundle, w: &ObserverWeights) -> f64 {
     let base = finding.confidence.score;
     let mut multiplier = 1.0;
 
-    // Clinical trial signal.
-    if finding.conditions.clinical_trial {
-        multiplier *= w.clinical_trial;
-    }
-
     // Replication signal: the finding's own `evidence.replicated` flag.
     if finding.evidence.replicated {
         multiplier *= w.replication;
-    }
-
-    // Human data signal.
-    if finding.conditions.human_data {
-        multiplier *= w.human_data;
     }
 
     // Recency signal: papers from the last 3 years get the weight boost.
@@ -204,13 +180,6 @@ fn score_finding(finding: &FindingBundle, w: &ObserverWeights) -> f64 {
         && current_year - year <= 3
     {
         multiplier *= w.recency;
-    }
-
-    // Citation count signal: papers with 100+ citations get the boost.
-    if let Some(cites) = finding.provenance.citation_count
-        && cites >= 100
-    {
-        multiplier *= w.citations;
     }
 
     // Evidence spans (auditability).
@@ -464,8 +433,8 @@ mod tests {
     fn make_finding(
         id: &str,
         score: f64,
-        clinical_trial: bool,
-        human: bool,
+        _clinical_trial: bool,
+        _human: bool,
         replicated: bool,
     ) -> FindingBundle {
         FindingBundle {
@@ -484,46 +453,28 @@ mod tests {
             evidence: Evidence {
                 evidence_type: "experimental".into(),
                 model_system: String::new(),
-                species: None,
                 method: String::new(),
-                sample_size: None,
-                effect_size: None,
-                p_value: None,
                 replicated,
                 replication_count: if replicated { Some(3) } else { None },
                 evidence_spans: vec![],
             },
             conditions: Conditions {
                 text: String::new(),
-                species_verified: vec![],
-                species_unverified: vec![],
-                in_vitro: false,
-                in_vivo: false,
-                human_data: human,
-                clinical_trial,
-                concentration_range: None,
                 duration: None,
-                age_group: None,
-                cell_type: None,
             },
             confidence: Confidence::raw(score, "test", 0.85),
             provenance: Provenance {
                 source_type: "published_paper".into(),
                 doi: None,
-                pmid: None,
-                pmc: None,
-                openalex_id: None,
                 url: None,
                 title: "Test".into(),
                 authors: vec![],
                 year: Some(2020),
-                journal: None,
                 license: None,
                 publisher: None,
                 funders: vec![],
                 extraction: Extraction::default(),
                 review: None,
-                citation_count: Some(10),
             },
             flags: Flags {
                 gap: false,
@@ -548,17 +499,6 @@ mod tests {
     }
 
     #[test]
-    fn pharma_ranks_clinical_higher() {
-        let findings = vec![
-            make_finding("a", 0.8, true, true, false),
-            make_finding("b", 0.8, false, false, false),
-        ];
-        let view = observe(&findings, &pharma());
-        assert!(view.findings[0].finding_id == "a");
-        assert!(view.findings[0].observer_score > view.findings[1].observer_score);
-    }
-
-    #[test]
     fn exploration_shows_all() {
         let findings = vec![make_finding("low", 0.3, false, false, false)];
         let view = observe(&findings, &exploration());
@@ -580,7 +520,8 @@ mod tests {
     fn policy_by_name_returns_pharma() {
         let p = policy_by_name("pharma").unwrap();
         assert_eq!(p.name, "pharma");
-        assert!(p.weights.clinical_trial > 1.0);
+        // clinical_trial weight removed; verify other weights are present
+        assert!(p.weights.citations > 1.0);
     }
 
     #[test]
@@ -601,7 +542,8 @@ mod tests {
     fn policy_by_name_returns_clinical() {
         let p = policy_by_name("clinical").unwrap();
         assert_eq!(p.name, "clinical");
-        assert!(p.weights.human_data > 1.0);
+        // human_data weight removed; verify replication weight is present
+        assert!(p.weights.replication > 1.0);
     }
 
     #[test]
@@ -644,26 +586,14 @@ mod tests {
     }
 
     #[test]
-    fn clinical_ranks_human_higher() {
+    fn clinical_ranks_replicated_higher() {
+        // human_data no longer affects scoring; replicated does.
         let findings = vec![
-            make_finding("human", 0.7, false, true, false),
-            make_finding("nohuman", 0.7, false, false, false),
+            make_finding("rep", 0.7, false, false, true),
+            make_finding("norep", 0.7, false, false, false),
         ];
         let view = observe(&findings, &clinical());
-        assert_eq!(view.findings[0].finding_id, "human");
-        assert!(view.findings[0].observer_score > view.findings[1].observer_score);
-    }
-
-    #[test]
-    fn regulatory_boosts_clinical_trial_and_human() {
-        let findings = vec![
-            make_finding("both", 0.9, true, true, false),
-            make_finding("neither", 0.9, false, false, false),
-        ];
-        let view = observe(&findings, &regulatory());
-        // "both" should be ranked first with a much higher score
-        assert_eq!(view.findings[0].finding_id, "both");
-        // The boost should be substantial (2.0 * 2.0 = 4x multiplier)
+        assert_eq!(view.findings[0].finding_id, "rep");
         assert!(view.findings[0].observer_score > view.findings[1].observer_score);
     }
 
@@ -752,10 +682,9 @@ mod tests {
     #[test]
     fn score_clamped_to_one() {
         // A finding with every possible boost should still be <= 1.0
-        let mut f = make_finding("max", 0.95, true, true, true);
+        let mut f = make_finding("max", 0.95, false, false, true);
         f.evidence.evidence_spans = vec![serde_json::json!("span")];
         f.provenance.year = Some(2025);
-        f.provenance.citation_count = Some(500);
         f.flags.gap = true;
         f.assertion.assertion_type = "therapeutic".into();
         let findings = vec![f];

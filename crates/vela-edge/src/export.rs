@@ -308,9 +308,7 @@ fn export_bibtex(frontier: &Project) -> String {
         if let Some(year) = f.provenance.year {
             out.push_str(&format!("  year = {{{}}},\n", year));
         }
-        if let Some(journal) = &f.provenance.journal {
-            out.push_str(&format!("  journal = {{{}}},\n", journal));
-        }
+        // journal field removed (empirical-domain field)
         if let Some(doi) = &f.provenance.doi {
             out.push_str(&format!("  doi = {{{}}},\n", doi));
         }
@@ -419,8 +417,6 @@ struct PacketEvidenceMatrixRow {
     method: String,
     confidence: f64,
     replicated: bool,
-    human_data: bool,
-    clinical_trial: bool,
     source_key: String,
     source_id: Option<String>,
     evidence_atom_ids: Vec<String>,
@@ -969,8 +965,6 @@ pub fn export_packet_with_source(
                 method: finding.evidence.method.clone(),
                 confidence: finding.confidence.score,
                 replicated: finding.evidence.replicated,
-                human_data: finding.conditions.human_data,
-                clinical_trial: finding.conditions.clinical_trial,
                 source_key: source_key(finding),
                 source_id,
                 evidence_atom_ids,
@@ -1902,9 +1896,7 @@ fn source_key(finding: &FindingBundle) -> String {
     if let Some(doi) = &finding.provenance.doi {
         return format!("doi:{doi}");
     }
-    if let Some(pmid) = &finding.provenance.pmid {
-        return format!("pmid:{pmid}");
-    }
+    // pmid field removed (empirical-domain field)
     format!("title:{}", finding.provenance.title)
 }
 
@@ -2190,35 +2182,19 @@ mod tests {
             evidence: Evidence {
                 evidence_type: "experimental".into(),
                 model_system: "mouse".into(),
-                species: Some("Mus musculus".into()),
                 method: "Western blot".into(),
-                sample_size: None,
-                effect_size: None,
-                p_value: None,
                 replicated: true,
                 replication_count: None,
                 evidence_spans: vec![],
             },
             conditions: Conditions {
                 text: "In vitro".into(),
-                species_verified: vec![],
-                species_unverified: vec![],
-                in_vitro: true,
-                in_vivo: false,
-                human_data: false,
-                clinical_trial: false,
-                concentration_range: None,
                 duration: None,
-                age_group: None,
-                cell_type: None,
             },
             confidence: Confidence::raw(0.9, "grounded", 0.85),
             provenance: Provenance {
                 source_type: "published_paper".into(),
                 doi: Some("10.1234/test".into()),
-                pmid: None,
-                pmc: None,
-                openalex_id: None,
                 url: None,
                 title: "NLRP3 inflammasome paper".into(),
                 authors: vec![Author {
@@ -2226,13 +2202,11 @@ mod tests {
                     orcid: None,
                 }],
                 year: Some(2023),
-                journal: Some("Nature".into()),
                 license: None,
                 publisher: None,
                 funders: vec![],
                 extraction: Extraction::default(),
                 review: None,
-                citation_count: Some(50),
             },
             flags: Flags {
                 gap: false,

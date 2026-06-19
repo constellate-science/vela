@@ -52,27 +52,14 @@ pub fn build_finding(rec: &SourceRecord, source_tag: &str) -> FindingBundle {
     let evidence = Evidence {
         evidence_type: "catalogue".into(),
         model_system: "n/a".into(),
-        species: None,
         method: source_tag.into(),
-        sample_size: None,
-        effect_size: None,
-        p_value: None,
         replicated: false,
         replication_count: None,
         evidence_spans: vec![],
     };
     let conditions = Conditions {
         text: String::new(),
-        species_verified: vec![],
-        species_unverified: vec![],
-        in_vitro: false,
-        in_vivo: false,
-        human_data: false,
-        clinical_trial: false,
-        concentration_range: None,
         duration: None,
-        age_group: None,
-        cell_type: None,
     };
     let confidence = Confidence {
         kind: ConfidenceKind::FrontierEpistemic,
@@ -85,21 +72,16 @@ pub fn build_finding(rec: &SourceRecord, source_tag: &str) -> FindingBundle {
     let provenance = Provenance {
         source_type: "catalogue".into(),
         doi: None,
-        pmid: None,
-        pmc: None,
-        openalex_id: None,
         url: None,
         // The content-address prov id; unique per record so ids never collide.
         title: format!("{source_tag}:{}", rec.external_id),
         authors: vec![],
         year: None,
-        journal: None,
         license: None,
         publisher: None,
         funders: vec![],
         extraction: Extraction::default(),
         review: None,
-        citation_count: None,
     };
     let mut bundle = FindingBundle::new(
         assertion,

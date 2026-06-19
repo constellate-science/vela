@@ -901,14 +901,10 @@ mod tests {
         let provenance = Provenance {
             source_type: "published_paper".into(),
             doi: Some(format!("10.0000/{}", seed)),
-            pmid: None,
-            pmc: None,
-            openalex_id: None,
             url: None,
             title: format!("Test {seed}"),
             authors: vec![],
             year: Some(2024),
-            journal: None,
             license: None,
             publisher: None,
             funders: vec![],
@@ -920,34 +916,20 @@ mod tests {
                 extractor_version: "vela/0.2.0".to_string(),
             },
             review: None,
-            citation_count: None,
         };
         let mut finding = FindingBundle::new(
             assertion,
             Evidence {
                 evidence_type: "experimental".into(),
                 model_system: String::new(),
-                species: None,
                 method: String::new(),
-                sample_size: None,
-                effect_size: None,
-                p_value: None,
                 replicated: false,
                 replication_count: None,
                 evidence_spans: vec![],
             },
             Conditions {
                 text: String::new(),
-                species_verified: vec![],
-                species_unverified: vec![],
-                in_vitro: false,
-                in_vivo: false,
-                human_data: false,
-                clinical_trial: false,
-                concentration_range: None,
                 duration: None,
-                age_group: None,
-                cell_type: None,
             },
             Confidence::raw(0.85, "test", 0.9),
             provenance,
@@ -1228,7 +1210,6 @@ mod tests {
     fn quality_report_includes_schema_lint_and_graph_sections() {
         let tmp = TempDir::new().unwrap();
         let mut f = make_valid_finding("vf_0000000000000001");
-        f.evidence.sample_size = Some("n=4".into());
         f.evidence.replicated = false;
         f.confidence.score = 0.9;
         f.id = FindingBundle::content_address(&f.assertion, &f.provenance);
@@ -1239,12 +1220,14 @@ mod tests {
         assert!(report.checks.iter().any(|check| check.id == "schema"));
         assert!(report.checks.iter().any(|check| check.id == "lint"));
         assert!(report.checks.iter().any(|check| check.id == "graph"));
+        // L001 (sample_size) is now a stub (field removed); check L002 (no-replication)
+        // which still fires when replicated=false and score=0.9.
         assert!(
             report
                 .checks
                 .iter()
                 .flat_map(|check| check.diagnostics.iter())
-                .any(|diagnostic| diagnostic.rule_id == "L001")
+                .any(|diagnostic| diagnostic.rule_id == "L002")
         );
         assert!(
             report
