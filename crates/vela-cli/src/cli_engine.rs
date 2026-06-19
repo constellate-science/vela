@@ -469,11 +469,12 @@ pub(crate) fn cmd_foundry(action: FoundryAction) {
             kind,
             n,
             h,
+            k,
             restarts,
             seed,
             apply,
             json,
-        } => cmd_foundry_run(&frontier, &kind, n, h, restarts, seed, apply, json),
+        } => cmd_foundry_run(&frontier, &kind, n, h, k, restarts, seed, apply, json),
         FoundryAction::Targets {
             catalog,
             records,
@@ -607,6 +608,7 @@ fn cmd_foundry_run(
     kind: &str,
     n: usize,
     h: usize,
+    k: usize,
     restarts: u64,
     seed: u64,
     apply: bool,
@@ -633,6 +635,11 @@ fn cmd_foundry_run(
         .arg("--frontier")
         .arg(frontier)
         .arg("--propose");
+    // Secondary order param (diff_triangle within-row order J, covering block
+    // size, …): pass through only when supplied so other kinds are unaffected.
+    if k > 0 {
+        produce.arg("--k").arg(k.to_string());
+    }
     if kind == "bh" {
         produce.arg("--h").arg(h.to_string());
     }

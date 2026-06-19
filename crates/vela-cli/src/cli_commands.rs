@@ -1357,6 +1357,11 @@ pub(crate) enum FoundryAction {
         /// For `bh` witnesses, the order `h`.
         #[arg(long, default_value_t = 2)]
         h: usize,
+        /// Secondary order parameter `k` (e.g. `diff_triangle` within-row order J
+        /// for a HorizonMath DTS(n,k) target, or `covering`'s block size). Passed
+        /// to the campaign only when non-zero.
+        #[arg(long, default_value_t = 0)]
+        k: usize,
         /// Search restarts.
         #[arg(long, default_value_t = 200)]
         restarts: u64,
