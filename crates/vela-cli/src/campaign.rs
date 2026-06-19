@@ -836,15 +836,162 @@ fn search_diff_triangle(rows: usize, j: usize, restarts: u64, rng: &mut Rng) -> 
             best = Some((grid, scope));
         }
     }
-    best.map(|(grid, scope)| Found {
-        // For DTS the objective is the SCOPE (lower is better), so report it as
-        // the score; it is also pinned in the witness as claimed_scope.
+    // The greedy result seeds a branch-and-bound pass (a DIVERSE method): it
+    // searches for a strictly tighter scope within a node budget scaled by
+    // restarts. The frozen `verify_diff_triangle` re-checks whichever wins, so a
+    // solver bug can only yield a worse-or-rejected witness, never a false one.
+    let make = |grid: Vec<Vec<i64>>, scope: i64| Found {
         score: scope as usize,
         witness: Witness::DiffTriangle {
             rows: grid,
             claimed_scope: Some(scope as usize),
         },
         iterations,
+    };
+    let seed_scope = best.as_ref().map(|(_, s)| *s).unwrap_or(cap);
+    let node_budget = iterations
+        .saturating_mul(200_000)
+        .clamp(200_000, 10_000_000);
+    let bt = search_diff_triangle_bt(rows, j, seed_scope, node_budget);
+    match (best, bt) {
+        (Some((g_grid, g_scope)), Some(bt_found)) => {
+            if (bt_found.score as i64) < g_scope {
+                Some(bt_found)
+            } else {
+                Some(make(g_grid, g_scope))
+            }
+        }
+        (Some((g_grid, g_scope)), None) => Some(make(g_grid, g_scope)),
+        (None, bt) => bt,
+    }
+}
+
+/// Branch-and-bound DTS solver: a DIVERSE method (vs the greedy above). Places
+/// marks smallest-first with the global difference-set as the propagated
+/// constraint and prunes any partial whose marks reach the incumbent scope
+/// (`best_scope`), so every completed grid strictly improves on it. Seeded with
+/// the greedy scope, it then searches for a tighter one within a node budget, and
+/// stops early if it hits the information-theoretic lower bound (rows*C(J+1,2)
+/// distinct positive differences, each <= the max mark). The frozen
+/// `verify_diff_triangle` re-checks every returned witness, so the solver is only
+/// a candidate producer, never the trust.
+#[allow(clippy::too_many_arguments)]
+fn dts_place(
+    rows: usize,
+    mpr: usize,
+    lb: i64,
+    marks: &mut Vec<i64>,
+    cur_scope: i64,
+    diffs: &mut HashSet<i64>,
+    grid: &mut Vec<Vec<i64>>,
+    best_scope: &mut i64,
+    best_grid: &mut Option<Vec<Vec<i64>>>,
+    nodes: &mut u64,
+    budget: u64,
+) {
+    if *nodes >= budget || *best_scope <= lb {
+        return; // budget exhausted, or optimum already reached
+    }
+    if marks.len() == mpr {
+        let row_max = *marks.last().unwrap();
+        let new_scope = cur_scope.max(row_max);
+        grid.push(marks.clone());
+        if grid.len() == rows {
+            if new_scope < *best_scope {
+                *best_scope = new_scope;
+                *best_grid = Some(grid.clone());
+            }
+        } else {
+            let mut next = vec![0];
+            dts_place(
+                rows, mpr, lb, &mut next, new_scope, diffs, grid, best_scope, best_grid, nodes,
+                budget,
+            );
+        }
+        grid.pop();
+        return;
+    }
+    let last = *marks.last().unwrap();
+    // smallest-first; a mark must stay strictly below the incumbent scope.
+    for c in (last + 1)..*best_scope {
+        *nodes += 1;
+        if *nodes >= budget {
+            return;
+        }
+        let mut nd: Vec<i64> = Vec::with_capacity(marks.len());
+        let mut ok = true;
+        for &m in marks.iter() {
+            let d = c - m;
+            if diffs.contains(&d) || nd.contains(&d) {
+                ok = false;
+                break;
+            }
+            nd.push(d);
+        }
+        if !ok {
+            continue;
+        }
+        for &d in &nd {
+            diffs.insert(d);
+        }
+        marks.push(c);
+        dts_place(
+            rows,
+            mpr,
+            lb,
+            marks,
+            cur_scope.max(c),
+            diffs,
+            grid,
+            best_scope,
+            best_grid,
+            nodes,
+            budget,
+        );
+        marks.pop();
+        for &d in &nd {
+            diffs.remove(&d);
+        }
+    }
+}
+
+fn search_diff_triangle_bt(
+    rows: usize,
+    j: usize,
+    seed_scope: i64,
+    node_budget: u64,
+) -> Option<Found> {
+    let mpr = j + 1;
+    if rows == 0 || mpr < 2 || rows > 64 || mpr > 64 {
+        return None;
+    }
+    let lb = (rows * (mpr * (mpr - 1) / 2)) as i64;
+    let mut best_scope = seed_scope;
+    let mut best_grid: Option<Vec<Vec<i64>>> = None;
+    let mut diffs: HashSet<i64> = HashSet::new();
+    let mut grid: Vec<Vec<i64>> = Vec::with_capacity(rows);
+    let mut nodes = 0u64;
+    let mut first = vec![0];
+    dts_place(
+        rows,
+        mpr,
+        lb,
+        &mut first,
+        0,
+        &mut diffs,
+        &mut grid,
+        &mut best_scope,
+        &mut best_grid,
+        &mut nodes,
+        node_budget,
+    );
+    best_grid.map(|grid| Found {
+        score: best_scope as usize,
+        witness: Witness::DiffTriangle {
+            rows: grid,
+            claimed_scope: Some(best_scope as usize),
+        },
+        iterations: nodes,
     })
 }
 
@@ -965,6 +1112,26 @@ mod tests {
     fn b3_finds_verified() {
         let f = search("bh", 6, 3, 30, 0x333).unwrap();
         assert_verifies(&f);
+    }
+
+    #[test]
+    fn diff_triangle_portfolio_finds_verified_and_improves() {
+        // DTS(3,3): 3 rows, 4 marks each. The portfolio (greedy + branch-and-bound)
+        // returns a frozen-verified set.
+        let tg = Target {
+            kind: "diff_triangle".into(),
+            n: 3,
+            k: 3,
+            ..Default::default()
+        };
+        let f = search_target(&tg, 50, 0x777).unwrap();
+        assert_verifies(&f);
+        // B&B in isolation: seeded generously, returns a valid set strictly below
+        // the seed scope (a diverse method that the frozen verifier re-checks).
+        let seed = 200;
+        let bt = search_diff_triangle_bt(3, 3, seed, 2_000_000).expect("bt finds a DTS");
+        assert!(verify_witness(&bt.witness).ok, "bt witness must verify");
+        assert!((bt.score as i64) < seed, "bt improves on the seed scope");
     }
 
     #[test]
