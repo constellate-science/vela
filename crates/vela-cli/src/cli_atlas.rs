@@ -692,7 +692,7 @@ fn run_ingest_source(args: &[String]) {
             .or_insert(fid.clone());
         findings.push(finding);
         plan.push((
-            fid,
+            fid.clone(),
             Anchor {
                 namespace: ns.clone(),
                 id: rec.external_id.clone(),
@@ -704,6 +704,24 @@ fn run_ingest_source(args: &[String]) {
                 statement_fingerprint: None,
             },
         ));
+        // Secondary CROSS-namespace anchors (e.g. an Erdős-tagged FC formalization
+        // also anchoring into `erdos`), so the same finding joins the canonical
+        // problem cell under HardIdentity — the spine's statement-variant link.
+        for (extra_ns, extra_id) in &rec.extra_anchors {
+            plan.push((
+                fid.clone(),
+                Anchor {
+                    namespace: extra_ns.clone(),
+                    id: extra_id.clone(),
+                    role: "problem".to_string(),
+                    kind: AnchorKind::ProblemEntry,
+                    join_policy: JoinPolicy::HardIdentity,
+                    namespace_version: None,
+                    source_revision: Some(rev.clone()),
+                    statement_fingerprint: None,
+                },
+            ));
+        }
     }
 
     // Second pass: resolve cross-problem `implies` edges now that every finding

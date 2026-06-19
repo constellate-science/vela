@@ -18,6 +18,7 @@ use vela_protocol::bundle::{
 
 /// One external-catalogue record an adapter yields. The namespace and role are
 /// supplied by the command (`--namespace`), so a record is just the id + claim.
+#[derive(Default)]
 pub struct SourceRecord {
     /// Catalogue id digits (e.g. "40" for Erdős #40).
     pub external_id: String,
@@ -30,6 +31,12 @@ pub struct SourceRecord {
     /// these to a typed `implies` link once all finding ids are known. Sparse —
     /// see `scan_cross_problem_edges.py` (today: 2 across the whole corpus).
     pub implies: Vec<String>,
+    /// Additional CROSS-namespace anchors `(namespace, id)` this record should
+    /// also join under (beyond the command's `--namespace`). The Formal-Conjectures
+    /// adapter sets `[("erdos", "42")]` for an Erdős-tagged declaration so the FC
+    /// formalization and the canonical Erdős problem merge into one atlas cell
+    /// (the HardIdentity statement-variant join). Empty for most records.
+    pub extra_anchors: Vec<(String, String)>,
 }
 
 /// Build a real, content-addressed finding bundle from a source record. The id
@@ -158,6 +165,7 @@ pub fn read_formal(dir: &Path, rev: &str) -> Result<Vec<SourceRecord>, String> {
             ),
             assertion_type: "lean-formalization".into(),
             implies: implied_problems(&text, stem),
+            extra_anchors: Vec::new(),
         });
     }
     Ok(out)
@@ -181,6 +189,7 @@ pub fn read_alphaproof(dir: &Path, rev: &str) -> Result<Vec<SourceRecord>, Strin
             ),
             assertion_type: "lean-formalization".into(),
             implies: Vec::new(),
+            extra_anchors: Vec::new(),
         });
     }
     Ok(out)
@@ -216,6 +225,7 @@ pub fn read_oeis(input: &Path, _rev: &str) -> Result<Vec<SourceRecord>, String> 
             assertion_text: format!("OEIS {id}: {name}"),
             assertion_type: "oeis-sequence".into(),
             implies: vec![],
+            extra_anchors: Vec::new(),
         });
     }
     // BTreeMap-style determinism: serde_json object iteration is already sorted,
@@ -292,6 +302,7 @@ pub fn read_horizonmath(input: &Path, _rev: &str) -> Result<Vec<SourceRecord>, S
             ),
             assertion_type: "horizonmath-problem".into(),
             implies: Vec::new(),
+            extra_anchors: Vec::new(),
         });
     }
     out.sort_by(|a, b| a.external_id.cmp(&b.external_id));
@@ -380,6 +391,13 @@ pub fn read_formal_corpus(dir: &Path, rev: &str) -> Result<Vec<SourceRecord>, St
             ),
             assertion_type: "lean-formalization".into(),
             implies: implied_problems(&text, erdos.as_deref().unwrap_or("")),
+            // Erdős-tagged decls also anchor into the `erdos` namespace so the FC
+            // formalization and the canonical Erdős problem merge into one cell
+            // (the HardIdentity statement-variant join, the spine's cross-source link).
+            extra_anchors: erdos
+                .iter()
+                .map(|e| ("erdos".to_string(), e.clone()))
+                .collect(),
         });
     }
     out.sort_by(|a, b| a.external_id.cmp(&b.external_id));
@@ -492,6 +510,13 @@ mod tests {
         assert!(recs[0].assertion_text.contains("Erdős #42."));
         assert!(recs[1].assertion_text.contains("declared status 'solved'"));
         assert_eq!(recs[0].assertion_type, "lean-formalization");
+        // The Erdős-tagged decl carries a secondary `erdos` anchor (the
+        // cross-source HardIdentity join); the untagged one carries none.
+        assert_eq!(
+            recs[0].extra_anchors,
+            vec![("erdos".to_string(), "42".to_string())]
+        );
+        assert!(recs[1].extra_anchors.is_empty());
         assert!(
             build_finding(&recs[0], "formal_corpus")
                 .id
@@ -550,6 +575,7 @@ mod tests {
             assertion_text: "Erdős Problem #40: declared status 'solved'.".into(),
             assertion_type: "lean-formalization".into(),
             implies: vec![],
+            ..Default::default()
         };
         let a = build_finding(&rec, "formal");
         let b = build_finding(&rec, "formal");
