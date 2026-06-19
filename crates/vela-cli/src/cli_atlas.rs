@@ -51,6 +51,10 @@ pub(crate) fn run(args: &[String]) {
         run_blast_radius(args);
         return;
     }
+    if args.get(2).map(String::as_str) == Some("decl-blast") {
+        run_decl_blast(args);
+        return;
+    }
     if args.get(2).map(String::as_str) == Some("domains") {
         run_domains(args);
         return;
@@ -297,6 +301,116 @@ fn run_blast_radius(args: &[String]) {
             .blast_radius_graded(&project, &center, &kinds, direction)
             .to_json(),
     );
+}
+
+/// `vela atlas decl-blast [--edges <jsonl>] [--decl <name>] [--top <N>] [--json]`
+/// — the correction proof (memo §1.6) over a REAL premise graph. Loads the
+/// Mathlib declaration-dependency graph (`data/mathlib/decl-edges.jsonl`,
+/// `from --uses--> to`) as a `FrontierGraph` of `DependsOn` edges and reports the
+/// downstream blast radius of retracting one declaration: every transitive
+/// dependent that would need re-checking. Lean dependencies are CONJUNCTIVE
+/// (a declaration requires every constant it uses), so the structural downstream
+/// set IS the impacted set, exactly — there is no alternative route to survive
+/// on, the distinction the κ-graded cascade draws on a verifier-gated frontier.
+/// With no `--decl`, the highest-in-degree declaration (the highest-leverage
+/// retraction) is chosen. This is the demonstration flat Erdős could not give
+/// (no premise edges → 0 dependents).
+fn run_decl_blast(args: &[String]) {
+    use vela_protocol::frontier_graph::{BlastDirection, EdgeKind, FrontierGraph};
+
+    let flag = |name: &str| -> Option<String> {
+        args.iter()
+            .position(|a| a == name)
+            .and_then(|i| args.get(i + 1))
+            .map(String::clone)
+    };
+    let edges_path = flag("--edges").unwrap_or_else(|| "data/mathlib/decl-edges.jsonl".to_string());
+    let top: usize = flag("--top").and_then(|s| s.parse().ok()).unwrap_or(15);
+    let json_out = args.iter().any(|a| a == "--json");
+
+    let raw = std::fs::read_to_string(&edges_path)
+        .unwrap_or_else(|e| fail(&format!("read {edges_path}: {e}")));
+    let mut edges: Vec<(String, String, EdgeKind)> = Vec::new();
+    for line in raw.lines() {
+        let line = line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        let v: serde_json::Value = match serde_json::from_str(line) {
+            Ok(v) => v,
+            Err(_) => continue,
+        };
+        let (Some(from), Some(to)) = (
+            v.get("from").and_then(|x| x.as_str()),
+            v.get("to").and_then(|x| x.as_str()),
+        ) else {
+            continue;
+        };
+        // `from uses to` => `from DependsOn to`.
+        edges.push((from.to_string(), to.to_string(), EdgeKind::DependsOn));
+    }
+    if edges.is_empty() {
+        fail(&format!("{edges_path}: no usable decl edges"));
+    }
+    let graph = FrontierGraph::from_edges(edges);
+    let ranked = graph.in_degree_ranked(&[EdgeKind::DependsOn]);
+
+    let decl = flag("--decl")
+        .and_then(|d| graph.find_node(&d))
+        .or_else(|| ranked.first().map(|(id, _)| id.clone()))
+        .unwrap_or_else(|| fail("no declaration to retract (empty graph)"));
+
+    let blast = graph.blast_radius(&decl, &[EdgeKind::DependsOn], BlastDirection::Downstream);
+    let in_deg = ranked
+        .iter()
+        .find(|(id, _)| *id == decl)
+        .map(|(_, d)| *d)
+        .unwrap_or(0);
+
+    if json_out {
+        print_json(&json!({
+            "object": "vela.correction_blast.v1",
+            "edges_source": edges_path,
+            "nodes": graph.node_count(),
+            "edges": graph.edge_count(),
+            "retracted": decl,
+            "direct_dependency_edges": in_deg,
+            "impacted_total": blast.summary.downstream,
+            "max_distance": blast.summary.max_downstream_distance,
+            "model": "conjunctive premise graph (Lean dependencies): every transitive dependent is impacted; no alternative route survives",
+            "impacted": blast.downstream.iter().take(top).map(|n| json!({
+                "id": n.id, "distance": n.distance,
+            })).collect::<Vec<_>>(),
+        }));
+        return;
+    }
+
+    println!("correction blast-radius — retract `{decl}`");
+    println!(
+        "  premise graph: {} declarations, {} dependency edges ({})",
+        graph.node_count(),
+        graph.edge_count(),
+        edges_path
+    );
+    println!("  retracted declaration is referenced by {in_deg} dependency edges");
+    println!(
+        "  => retracting it impacts {} downstream declarations (max depth {}), every one of which",
+        blast.summary.downstream, blast.summary.max_downstream_distance
+    );
+    println!("     would need re-checking: Lean dependencies are conjunctive, so there is no");
+    println!(
+        "     alternative route to survive on. History is preserved (a correction mints a new root)."
+    );
+    if blast.summary.downstream == 0 {
+        println!("  (this declaration is a leaf in the loaded slice: nothing depends on it here)");
+    }
+    for n in blast.downstream.iter().take(top) {
+        println!("    - [d{}] {}", n.distance, n.id);
+    }
+    let shown = top.min(blast.downstream.len());
+    if blast.downstream.len() > shown {
+        println!("    … and {} more", blast.downstream.len() - shown);
+    }
 }
 
 /// `vela correct` — scientific record repair (memo Program Two). The dependency

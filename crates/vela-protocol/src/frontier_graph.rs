@@ -577,6 +577,60 @@ impl FrontierGraph {
         Self { nodes, edges }
     }
 
+    /// Build a typed graph directly from an `(source, target, kind)` edge list,
+    /// for a premise graph that is NOT a findings frontier — e.g. a Mathlib
+    /// declaration-dependency graph (`from --uses--> to`, mapped to
+    /// `DependsOn`). Every endpoint becomes a minimal node (label = id, neutral
+    /// `Open` state, confidence 1.0). The κ-from-events graded cascade
+    /// (`blast_radius_graded`) is NOT meaningful here (no verifier status and no
+    /// events); use the structural `blast_radius` — over a CONJUNCTIVE premise
+    /// graph (every used premise is required) that is also exact, since every
+    /// transitive dependent is genuinely impacted with no alternative route.
+    #[must_use]
+    pub fn from_edges<I>(raw: I) -> Self
+    where
+        I: IntoIterator<Item = (String, String, EdgeKind)>,
+    {
+        let mut nodes: BTreeMap<String, Node> = BTreeMap::new();
+        let mut edges = Vec::new();
+        for (source, target, kind) in raw {
+            for id in [&source, &target] {
+                nodes.entry(id.clone()).or_insert_with(|| Node {
+                    id: id.clone(),
+                    label: id.clone(),
+                    contested: false,
+                    gap: false,
+                    confidence: 1.0,
+                    state: FindingState::Open,
+                });
+            }
+            edges.push(Edge {
+                source,
+                target,
+                kind,
+                note: String::new(),
+                target_in_frontier: true,
+            });
+        }
+        Self { nodes, edges }
+    }
+
+    /// In-degree of every node (count of edges of `kinds` whose target is the
+    /// node), sorted descending — the most-depended-on premises first. The
+    /// highest-in-degree node is the highest-leverage retraction target.
+    #[must_use]
+    pub fn in_degree_ranked(&self, kinds: &[EdgeKind]) -> Vec<(String, usize)> {
+        let mut deg: BTreeMap<String, usize> = BTreeMap::new();
+        for e in &self.edges {
+            if kinds.is_empty() || kinds.contains(&e.kind) {
+                *deg.entry(e.target.clone()).or_default() += 1;
+            }
+        }
+        let mut v: Vec<(String, usize)> = deg.into_iter().collect();
+        v.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        v
+    }
+
     /// Number of claim nodes.
     #[must_use]
     pub fn node_count(&self) -> usize {
@@ -1093,6 +1147,36 @@ mod tests {
         let mut link = link_to(target);
         link.link_type = link_type.into();
         link
+    }
+
+    #[test]
+    fn from_edges_builds_a_premise_graph_and_blasts_downstream() {
+        // A tiny conjunctive premise graph: thm1 and thm2 both use lemma; lemma
+        // uses prim. Retract `prim` -> impacts lemma, thm1, thm2 (all transitive
+        // dependents), at depths 1, 2, 2.
+        let edges = vec![
+            ("thm1".to_string(), "lemma".to_string(), EdgeKind::DependsOn),
+            ("thm2".to_string(), "lemma".to_string(), EdgeKind::DependsOn),
+            ("lemma".to_string(), "prim".to_string(), EdgeKind::DependsOn),
+        ];
+        let g = FrontierGraph::from_edges(edges);
+        assert_eq!(g.node_count(), 4);
+        assert_eq!(g.edge_count(), 3);
+        // in-degree: lemma is referenced twice, prim once.
+        let ranked = g.in_degree_ranked(&[EdgeKind::DependsOn]);
+        assert_eq!(ranked[0], ("lemma".to_string(), 2));
+        // downstream of `prim` (the dependents that rest on it) = lemma, thm1, thm2.
+        let blast = g.blast_radius("prim", &[EdgeKind::DependsOn], BlastDirection::Downstream);
+        assert_eq!(
+            blast.summary.downstream, 3,
+            "all transitive dependents impacted"
+        );
+        assert_eq!(blast.summary.max_downstream_distance, 2);
+        let ids: Vec<&str> = blast.downstream.iter().map(|n| n.id.as_str()).collect();
+        assert!(ids.contains(&"lemma") && ids.contains(&"thm1") && ids.contains(&"thm2"));
+        // a leaf (thm1) has no dependents.
+        let leaf = g.blast_radius("thm1", &[EdgeKind::DependsOn], BlastDirection::Downstream);
+        assert_eq!(leaf.summary.downstream, 0);
     }
 
     #[test]
