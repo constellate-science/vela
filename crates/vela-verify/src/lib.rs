@@ -498,6 +498,17 @@ pub struct ParsedClaim {
     /// for a lower bound (`>= k` / `at least k`). Only lower bounds and
     /// matched equalities are admissible.
     pub exact: bool,
+    /// The B_h order `h` (from `B_<h>` / `<h>-fold`), when stated. Bound to the
+    /// witness `h` for `bh` claims; required for B_h floor-admission.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub h: Option<usize>,
+    /// The constant-weight code distance `d` and weight `w` (from the
+    /// `A(n,d,w)` signature), when stated. Both bound to the witness for
+    /// `constant_weight` floor-admission.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub d: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub w: Option<usize>,
 }
 
 /// The frozen faithfulness verdict: does `witness` ESTABLISH the claim in
@@ -577,6 +588,45 @@ fn equality_bound(text: &str) -> Option<usize> {
     None
 }
 
+/// The B_h order `h` from the standard subscript form `b_<h>` and/or the
+/// `<h>-fold` form. Disagreeing signals -> `None` (fail closed via the
+/// mandatory bind). `b_h` with a literal `h` (no digit) yields `None`.
+fn bh_order(text: &str) -> Option<usize> {
+    let subscript = text.find("b_").and_then(|i| leading_usize(&text[i + 2..]));
+    let fold = text.find("-fold").and_then(|i| {
+        let pre: String = text[..i]
+            .chars()
+            .rev()
+            .take_while(|c| c.is_ascii_digit())
+            .collect();
+        pre.chars().rev().collect::<String>().parse().ok()
+    });
+    match (subscript, fold) {
+        (Some(a), Some(b)) if a != b => None,
+        (Some(a), _) => Some(a),
+        (None, Some(b)) => Some(b),
+        (None, None) => None,
+    }
+}
+
+/// The constant-weight `A(n, d, w)` triple from the first `a(...)` group that
+/// holds exactly three comma-separated integers. `None` when the signature is
+/// absent or malformed (so `(d, w)` go unbound and the claim routes to review).
+fn cw_params(text: &str) -> Option<(usize, usize, usize)> {
+    let i = text.find("a(")?;
+    let rest = &text[i + 2..];
+    let close = rest.find(')')?;
+    let parts: Vec<&str> = rest[..close].split(',').collect();
+    if parts.len() != 3 {
+        return None;
+    }
+    Some((
+        parts[0].trim().parse().ok()?,
+        parts[1].trim().parse().ok()?,
+        parts[2].trim().parse().ok()?,
+    ))
+}
+
 /// Parse a finding assertion into a [`ParsedClaim`]. Conservative and
 /// fail-closed: recognizes only the lower-bound forms the exact lane admits,
 /// and returns `None` on any ambiguity (no kind keyword, no parseable bound,
@@ -594,7 +644,7 @@ pub fn parse_claim(assertion_text: &str) -> Option<ParsedClaim> {
         "golomb"
     } else if text.contains("cap set") || text.contains("cap-set") {
         "cap"
-    } else if text.contains("b_h") || text.contains("bh set") {
+    } else if text.contains("b_h") || text.contains("bh set") || bh_order(&text).is_some() {
         "bh"
     } else if text.contains("constant weight") || text.contains("constant-weight") {
         "constant_weight"
@@ -635,11 +685,21 @@ pub fn parse_claim(assertion_text: &str) -> Option<ParsedClaim> {
         _ => return None,
     };
 
+    // Extra hardness parameters, bound per-kind in claim_witness_faithful.
+    let h = bh_order(&text);
+    let (d, w) = match cw_params(&text) {
+        Some((_, d, w)) => (Some(d), Some(w)),
+        None => (None, None),
+    };
+
     Some(ParsedClaim {
         kind: kind.to_string(),
         ambient_n,
         bound,
         exact: is_exact,
+        h,
+        d,
+        w,
     })
 }
 
@@ -724,14 +784,15 @@ pub fn claim_witness_faithful(assertion_text: &str, witness: &Witness) -> Faithf
         }
     };
 
-    // The floor admits a kind ONLY when its record is fully determined by
-    // (kind, n, bound). Kinds carrying an extra hardness parameter the parser
-    // does not yet bind — B_h's order `h`, constant-weight's `(d, w)` — would
-    // let an EASY witness (h=2, or A(n,2,1)) back a HARD headline (B_3, or
-    // A(n,10,8)); verify_witness only checks the witness against its OWN
-    // author-set h/d/w, never the assertion. Until those are parsed and bound
-    // they route to review, like golomb. (Confirmed by a third adversarial
-    // review: binding ambient `n` alone is necessary but not sufficient.)
+    // The floor admits a kind only when EVERY witness-defining parameter that
+    // changes a record's hardness is parsed from the assertion and bound to the
+    // witness — not just the ambient dimension `n`. A third adversarial review
+    // showed binding `n` alone is insufficient: verify_witness checks a witness
+    // against its OWN author-set h/d/w, so an EASY witness (B_2, or A(n,2,1))
+    // could back a HARD headline (B_3, or A(n,10,8)). B_h now binds the order
+    // `h`, constant-weight binds `(d, w)`; both route to review when the
+    // parameter is unstated. Golomb (a min-length problem) still has no sound
+    // witness->lower-bound binding and routes to review.
     let size: usize = match witness {
         Witness::Sidon { n, points, .. } | Witness::Cap { n, points, .. } => {
             if let Some(r) = dim_n_witness(*n) {
@@ -783,37 +844,82 @@ pub fn claim_witness_faithful(assertion_text: &str, witness: &Witness) -> Faithf
             }
             elements.len()
         }
-        Witness::Bh { .. } => {
-            // B_h's record hardness depends on the order h (a B_3 set admits
-            // strictly fewer points than B_2). The floor does not yet parse and
-            // bind h, so an h=2 witness could back a B_3 claim. Route to review
-            // until h-binding lands.
-            reasons.push(
-                "B_h claims are not floor-admissible (the order h is not yet parsed and bound \
-                 to the witness); routes to review"
-                    .to_string(),
-            );
-            return Faithfulness {
-                faithful: false,
-                reasons,
-                parsed: Some(parsed),
-            };
+        Witness::Bh { n, h, points, .. } => {
+            // B_h binds the ambient n AND the order h (a B_3 set admits strictly
+            // fewer points than B_2). h is mandatory and must match the witness;
+            // an unstated or mismatched h routes to review.
+            if let Some(r) = dim_n_witness(*n) {
+                reasons.push(r);
+                return Faithfulness {
+                    faithful: false,
+                    reasons,
+                    parsed: Some(parsed),
+                };
+            }
+            match parsed.h {
+                Some(ch) if ch == *h => {}
+                Some(ch) => {
+                    reasons.push(format!(
+                        "claim B_{ch} does not match witness B_{h} (the order h binds the record)"
+                    ));
+                    return Faithfulness {
+                        faithful: false,
+                        reasons,
+                        parsed: Some(parsed),
+                    };
+                }
+                None => {
+                    reasons.push(
+                        "B_h claim does not state the order h (B_<h> / <h>-fold); routes to review"
+                            .to_string(),
+                    );
+                    return Faithfulness {
+                        faithful: false,
+                        reasons,
+                        parsed: Some(parsed),
+                    };
+                }
+            }
+            points.len()
         }
-        Witness::ConstantWeight { .. } => {
-            // A constant-weight record A(n,d,w) depends on the minimum distance
-            // d and the weight w, which the floor does not yet parse and bind;
-            // a trivial A(n,2,1) witness could back a hard A(n,10,8) claim.
-            // Route to review until (d, w)-binding lands.
-            reasons.push(
-                "constant-weight A(n,d,w) claims are not floor-admissible (d and w are not yet \
-                 parsed and bound to the witness); routes to review"
-                    .to_string(),
-            );
-            return Faithfulness {
-                faithful: false,
-                reasons,
-                parsed: Some(parsed),
-            };
+        Witness::ConstantWeight { n, d, w, words, .. } => {
+            // A constant-weight record A(n,d,w) binds the ambient n AND the
+            // minimum distance d and weight w; a trivial A(n,2,1) witness must
+            // not back a hard A(n,10,8) claim. Both d and w are mandatory (from
+            // the `A(n,d,w)` signature) and must match the witness.
+            if let Some(r) = dim_n_witness(*n) {
+                reasons.push(r);
+                return Faithfulness {
+                    faithful: false,
+                    reasons,
+                    parsed: Some(parsed),
+                };
+            }
+            match (parsed.d, parsed.w) {
+                (Some(cd), Some(cw)) if cd == *d && cw == *w => {}
+                (Some(cd), Some(cw)) => {
+                    reasons.push(format!(
+                        "claim A(n,{cd},{cw}) does not match witness A(n,{d},{w}) (d,w bind the record)"
+                    ));
+                    return Faithfulness {
+                        faithful: false,
+                        reasons,
+                        parsed: Some(parsed),
+                    };
+                }
+                _ => {
+                    reasons.push(
+                        "constant-weight claim does not state (d,w) as A(n,d,w); routes to review"
+                            .to_string(),
+                    );
+                    return Faithfulness {
+                        faithful: false,
+                        reasons,
+                        parsed: Some(parsed),
+                    };
+                }
+            }
+            words.len()
         }
         Witness::Golomb { .. } => {
             // A Golomb claim is a MIN-length problem (a(n) <= length); a ruler
@@ -860,6 +966,59 @@ pub fn claim_witness_faithful(assertion_text: &str, witness: &Witness) -> Faithf
         faithful: true,
         reasons,
         parsed: Some(parsed),
+    }
+}
+
+/// The canonical, WITNESS-DERIVED verified claim for a floor-admissible witness:
+/// exactly the lower bound the witness structurally establishes, independent of
+/// the author's assertion prose. Surfaces should DISPLAY this as the verified
+/// `machine_verified` claim (with the prose shown only as an unverified
+/// description), so author prose cannot puff a true bound into a false headline.
+/// `None` for kinds that are not floor-admissible. Mirrors the binding in
+/// `claim_witness_faithful` (kind, n, the bound-defining parameters, size).
+pub fn canonical_claim(witness: &Witness) -> Option<String> {
+    match witness {
+        Witness::Sidon { n, points, .. } => Some(format!(
+            "Sidon set: a({n}) >= {} (a Sidon set of {} points in {{0,1}}^{n})",
+            points.len(),
+            points.len()
+        )),
+        Witness::Cap { n, points, .. } => Some(format!(
+            "cap set: a({n}) >= {} (a cap set of {} points in F_3^{n})",
+            points.len(),
+            points.len()
+        )),
+        Witness::Gf2Sidon { elements, .. } => {
+            // The witness lives in GF(2)^n for n = the widest element's bit
+            // width; that is the strongest (smallest-n) true statement.
+            let n = elements
+                .iter()
+                .map(|e| (64 - e.leading_zeros()) as usize)
+                .max()
+                .unwrap_or(0);
+            Some(format!(
+                "GF(2)-Sidon set: a({n}) >= {} (a Sidon set of {} elements in GF(2)^{n})",
+                elements.len(),
+                elements.len()
+            ))
+        }
+        Witness::UnionFree { n, sets, .. } => Some(format!(
+            "union-free family: a({n}) >= {} (a union-free family of {} subsets of {{1..{n}}})",
+            sets.len(),
+            sets.len()
+        )),
+        Witness::Bh { n, h, points, .. } => Some(format!(
+            "B_{h} set: a({n}) >= {} (a B_{h} set of {} points in {{0,1}}^{n})",
+            points.len(),
+            points.len()
+        )),
+        Witness::ConstantWeight { n, d, w, words, .. } => Some(format!(
+            "constant-weight code: A({n},{d},{w}) >= {} ({} codewords of length {n}, weight {w}, min distance {d})",
+            words.len(),
+            words.len()
+        )),
+        // Not floor-admissible (golomb, covering, costas, rook, linear_code, ...).
+        _ => None,
     }
 }
 
@@ -2402,12 +2561,13 @@ mod tests {
         assert!(!f3.faithful, "{:?}", f3.reasons);
     }
 
-    // ATTACK (sub-parameter substitution): an EASY witness (B_2, or A(n,2,1))
-    // dressed with a HARD headline (B_3, or A(n,10,8)). verify_witness checks
-    // the witness only against its OWN author-set h/d/w, so the floor must not
-    // admit these kinds until h / (d,w) are parsed and bound. Route to review.
+    // B_h and constant-weight bind their extra hardness parameter (h; d,w).
+    // The round-3 attack (an EASY witness dressed with a HARD headline) now
+    // FAILS on the parameter mismatch; a matched claim PASSES; an unstated
+    // parameter routes to review.
     #[test]
-    fn faithful_routes_bh_and_constant_weight_to_review() {
+    fn faithful_binds_bh_order_and_constant_weight_params() {
+        // B_h: the witness is a valid B_2 set.
         let bh = Witness::Bh {
             n: 3,
             h: 2,
@@ -2415,10 +2575,26 @@ mod tests {
             claimed_size: None,
         };
         assert!(verify_witness(&bh).ok, "the B_2 witness is itself valid");
-        let f = claim_witness_faithful("a bh set of order three in {0,1}^3: a(3) >= 4.", &bh);
-        assert!(!f.faithful, "B_h is not floor-admissible: {:?}", f.reasons);
-        assert!(f.reasons.iter().any(|r| r.contains("B_h")));
+        // ATTACK: a B_3 headline over a B_2 witness -> h mismatch -> rejected.
+        let attack = claim_witness_faithful("a B_3 set in {0,1}^3: a(3) >= 4.", &bh);
+        assert!(
+            !attack.faithful,
+            "B_3 claim cannot ride a B_2 witness: {:?}",
+            attack.reasons
+        );
+        assert!(attack.reasons.iter().any(|r| r.contains("does not match")));
+        // GENUINE: a matched B_2 claim is faithful.
+        let ok = claim_witness_faithful("a B_2 set in {0,1}^3: a(3) >= 4.", &bh);
+        assert!(ok.faithful, "matched B_2 claim: {:?}", ok.reasons);
+        // h unstated -> route to review.
+        let bare = claim_witness_faithful("a bh set in {0,1}^3: a(3) >= 4.", &bh);
+        assert!(
+            !bare.faithful,
+            "unstated h routes to review: {:?}",
+            bare.reasons
+        );
 
+        // constant-weight: the witness is a valid A(4,2,1) code (2 weight-1 words).
         let cw = Witness::ConstantWeight {
             n: 4,
             d: 2,
@@ -2430,13 +2606,51 @@ mod tests {
             verify_witness(&cw).ok,
             "the A(4,2,1) witness is itself valid"
         );
-        let f2 = claim_witness_faithful("constant weight code A(4,10,8): a(4) >= 2.", &cw);
+        // ATTACK: a hard A(4,10,8) headline over the trivial witness -> rejected.
+        let attack2 = claim_witness_faithful("constant weight code A(4,10,8) >= 2.", &cw);
         assert!(
-            !f2.faithful,
-            "constant-weight is not floor-admissible: {:?}",
-            f2.reasons
+            !attack2.faithful,
+            "A(4,10,8) claim cannot ride an A(4,2,1) witness: {:?}",
+            attack2.reasons
         );
-        assert!(f2.reasons.iter().any(|r| r.contains("constant-weight")));
+        assert!(attack2.reasons.iter().any(|r| r.contains("does not match")));
+        // GENUINE: the matched A(4,2,1) claim is faithful.
+        let ok2 = claim_witness_faithful("constant weight code A(4,2,1) >= 2.", &cw);
+        assert!(ok2.faithful, "matched A(4,2,1) claim: {:?}", ok2.reasons);
+        // (d,w) unstated -> route to review.
+        let bare2 = claim_witness_faithful("a constant weight code, a(4) >= 2.", &cw);
+        assert!(
+            !bare2.faithful,
+            "unstated (d,w) routes to review: {:?}",
+            bare2.reasons
+        );
+    }
+
+    // The canonical, witness-derived verified claim (residual #1): the displayed
+    // claim is DERIVED from the witness, so prose cannot puff a true bound.
+    #[test]
+    fn canonical_claim_is_witness_derived() {
+        let s = Witness::Sidon {
+            n: 3,
+            points: small_sidon(),
+            claimed_size: None,
+        };
+        let c = canonical_claim(&s).expect("sidon has a canonical claim");
+        assert!(c.contains("a(3) >= 4"), "{c}");
+        // GF(2): n is the widest element's bit width (here 4 -> bit index 2).
+        let g = Witness::Gf2Sidon {
+            elements: vec![1, 2, 4],
+            claimed_size: None,
+        };
+        let cg = canonical_claim(&g).expect("gf2 has a canonical claim");
+        assert!(cg.contains("a(3) >= 3"), "{cg}");
+        // golomb (not floor-admissible) has no canonical claim.
+        assert!(
+            canonical_claim(&Witness::Golomb {
+                marks: vec![0, 1, 3]
+            })
+            .is_none()
+        );
     }
 
     // Golomb has no sound witness->lower-bound binding defined: route to review.

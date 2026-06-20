@@ -136,13 +136,15 @@ new tests:
    OEIS order `a(N)` (not only an ambient literal) and binds it to the witness
    `n` (mandatory for every size/order kind; for GF(2) every element must fit in
    `2^N`); it rejects equality/optimality claims and dual-bound assertions; and
-   it admits only kinds fully determined by `(kind, n, bound)` — sidon, cap,
-   gf2_sidon, union_free — routing B_h, constant-weight, golomb, and every other
-   kind to review (their extra hardness parameters `h` / `d,w` are not yet
-   bound). See §8 and the `claim_witness_faithful` adversarial regression tests
-   (`faithful_binds_a_of_n_order_to_witness`, `faithful_rejects_dual_bound_headline`,
-   `faithful_gf2_binds_dimension`, `faithful_routes_bh_and_constant_weight_to_review`,
-   `faithful_routes_equality_optimality_to_review`).
+   it binds EVERY record-defining parameter — `(kind, n, bound)` for sidon, cap,
+   gf2_sidon, union_free, plus the order `h` for B_h and the `(d, w)` for
+   constant-weight — routing golomb and every non-size/order kind to review. The
+   gate also surfaces `canonical_claim` (the witness-derived verified claim) so
+   prose cannot puff a true bound. See §8 and the `claim_witness_faithful`
+   adversarial regression tests (`faithful_binds_a_of_n_order_to_witness`,
+   `faithful_rejects_dual_bound_headline`, `faithful_gf2_binds_dimension`,
+   `faithful_binds_bh_order_and_constant_weight_params`,
+   `faithful_routes_equality_optimality_to_review`, `canonical_claim_is_witness_derived`).
 3. **Attachment provenance (critical) — REVISED after a second adversarial
    review.** The first design verified each matched attachment was "human-
    vouched" by a non-agent reviewer (an accepted `verifier.attach` proposal, or
@@ -199,35 +201,42 @@ new tests:
 ## 8. Enabled scope (when on)
 
 The narrowest safe start: reproduce-clean LOWER-BOUND witnesses where the
-verifier IS frozen `vela-verify` and `claim_witness_faithful` binds the WHOLE
-claim to the witness. After three adversarial review rounds, the floor admits
-ONLY the kinds whose record is fully determined by `(kind, ambient n, lower
-bound)`: **Sidon ({0,1}^n), Cap (F_3^n), GF(2)-Sidon (GF(2)^n), union-free
-({1..n})**. For each, the floor reads the OEIS order `a(N)` (and/or the ambient
-literal), binds it to the witness `n` (for GF(2), requires every element <
-`2^N`), and requires `witness size >= bound`.
+verifier IS frozen `vela-verify` and `claim_witness_faithful` binds EVERY
+record-defining parameter to the witness. After five adversarial review rounds,
+the floor admits a kind only when every parameter that changes its record
+hardness is parsed from the assertion and bound to the witness:
 
-Routed to review (NOT floor-admissible) until their extra hardness parameters
-are parsed and bound: **B_h** (the order `h`), **constant-weight A(n,d,w)** (the
-distance `d` and weight `w`), **golomb** (a min-length problem with no `>=`
-witness binding), and every non-size/order kind. Also routed to review:
-**equality / optimality claims** (`= N` / `exactly N`) — a construction witness
-proves only a lower bound, never that no larger object exists — and any
-**dual-bound** assertion (a `= 2500` headline beside an `at least 5` clause).
+- **Sidon ({0,1}^n), Cap (F_3^n), GF(2)-Sidon (GF(2)^n), union-free ({1..n})** —
+  fully determined by `(kind, n, bound)`. The floor reads the OEIS order `a(N)`
+  (and/or the ambient literal), binds it to the witness `n` (for GF(2), every
+  element `< 2^N`), and requires `witness size >= bound`.
+- **B_h ({0,1}^n, order h)** — additionally parses `h` (from `B_<h>` / `<h>-fold`)
+  and binds `h == witness.h`. Unstated `h` routes to review.
+- **constant-weight A(n,d,w)** — additionally parses `(d, w)` from the `A(n,d,w)`
+  signature and binds both to the witness. Unstated `(d,w)` routes to review.
 
-A fourth adversarial round (5 lenses over the four admissible kinds) found no
-remaining false-bound break: the verifiers constrain each witness to the claimed
-ambient space, struct-`n` cannot diverge from the verified `n`, none of the four
-carries a hidden hardness parameter, and `len()` is the deduplicated size the
-verifier validated.
+Routed to review (NOT floor-admissible): **golomb** (a min-length problem with no
+`>=` witness binding) and every non-size/order kind; **equality / optimality
+claims** (`= N` / `exactly N`, since a construction witness proves only a lower
+bound, never that no larger object exists); and any **dual-bound** assertion (a
+`= 2500` headline beside an `at least 5` clause).
 
-**Known residual (cosmetic, not a false bound):** the *displayed* assertion
-prose can still puff a TRUE bound ("a(20) >= 5 — a new record!") because the
-floor binds the parsed `>=`/`a(N)` claim, not free prose. No FALSE bound or
-dimension can reach `machine_verified` (every confirmed round-1/2/3 break is
-closed). The complete fix is to DERIVE the displayed/exported headline from the
-witness-verified `(kind, n, bound)` rather than from author prose; that is a
-surface contract for when the lane is enabled.
+The fourth round (5 lenses over the then-four admissible kinds) and the fifth (4
+lenses over the B_h/constant-weight binding + the canonical claim) found no
+false-bound break: the verifiers constrain each witness to the claimed ambient
+space, struct parameters cannot diverge from the verified ones, no admissible
+kind carries an unbound hardness parameter, and `len()` is the deduplicated size
+the verifier validated.
+
+**Residual closed — the canonical claim.** Author prose could once puff a TRUE
+bound ("a(20) >= 5, a new record!"). The gate now derives the verified claim
+PURELY from the witness (`vela_verify::canonical_claim`) — e.g. "Sidon set:
+a(20) >= 1989 (a Sidon set of 1989 points in {0,1}^20)" — and surfaces it as the
+authoritative `machine_verified` claim, with the author prose demoted to an
+unverified description. No FALSE bound, dimension, or hardness parameter can
+reach `machine_verified`, and the displayed claim is the witness-verified one,
+not the prose. (Surfaces beyond the CLI gate — web/atlas/hub — should display
+`canonical_claim` when the lane is enabled and live records exist.)
 
 ## 9. Shipped vs pending
 

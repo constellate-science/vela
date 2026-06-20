@@ -214,6 +214,11 @@ fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, apply: bool, json_outp
     let faithful = witness
         .as_ref()
         .map(|w| vela_verify::claim_witness_faithful(&finding.assertion.text, w));
+    // The canonical, WITNESS-DERIVED verified claim: exactly what an admit
+    // establishes, independent of the author's prose. Surfaces should display
+    // THIS (not the assertion text) as the machine_verified claim so prose
+    // cannot puff a true bound. (docs/EXACT_LANE_GATE.md §8 residual.)
+    let canonical_claim = witness.as_ref().and_then(vela_verify::canonical_claim);
 
     // Proposal-level guard inputs, derived live (never trusted from a field).
     let synthetic: BTreeSet<String> = proj
@@ -297,6 +302,7 @@ fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, apply: bool, json_outp
                 "claim_witness_faithful": faithful.as_ref().map(|f| f.faithful),
                 "faithful_reasons": faithful.as_ref().map(|f| f.reasons.clone()),
             },
+            "canonical_claim": canonical_claim,
             "proposal_guards_ok": wrapper_ok,
             "proposal_guard_reasons": wrapper_reasons,
             "attachment_provenance_ok": vouched_ok,
@@ -350,6 +356,9 @@ fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, apply: bool, json_outp
                 format!(" — {vouch_reason}")
             }
         );
+        if let Some(c) = &canonical_claim {
+            println!("  verified claim (witness-derived, not prose): {c}");
+        }
         println!(
             "  => auto-admit to machine_verified: {}",
             if would_admit { "YES" } else { "NO" }
