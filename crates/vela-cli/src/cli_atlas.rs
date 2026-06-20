@@ -55,6 +55,10 @@ pub(crate) fn run(args: &[String]) {
         run_decl_blast(args);
         return;
     }
+    if args.get(2).map(String::as_str) == Some("contradictions") {
+        run_contradictions(args);
+        return;
+    }
     if args.get(2).map(String::as_str) == Some("domains") {
         run_domains(args);
         return;
@@ -410,6 +414,151 @@ fn run_decl_blast(args: &[String]) {
     let shown = top.min(blast.downstream.len());
     if blast.downstream.len() > shown {
         println!("    … and {} more", blast.downstream.len() - shown);
+    }
+}
+
+/// The declared status of a finding parsed from its assertion text, normalized
+/// to {open, solved, proved, disproved}. Handles the `declared status 'X'` form
+/// (FC / formal corpus) and the Erdős prose form ("remains OPEN", "SOLVED", …).
+fn declared_status(text: &str) -> Option<&'static str> {
+    let lt = text.to_lowercase();
+    let norm = |s: &str| -> Option<&'static str> {
+        match s.trim() {
+            "open" => Some("open"),
+            "solved" => Some("solved"),
+            "proved" => Some("proved"),
+            "disproved" => Some("disproved"),
+            _ => None,
+        }
+    };
+    if let Some(i) = lt.find("declared status '") {
+        let rest = &lt[i + "declared status '".len()..];
+        if let Some(s) = rest.split('\'').next() {
+            return norm(s);
+        }
+    }
+    for (kw, st) in [
+        ("disproved", "disproved"),
+        ("remains open", "open"),
+        ("is solved", "solved"),
+        ("is proved", "proved"),
+    ] {
+        if lt.contains(kw) {
+            return norm(st);
+        }
+    }
+    None
+}
+
+/// `vela atlas contradictions <frontier>... [--json]` — cross-source concordance
+/// (memo tier 3-4): find atlas cells whose members, joined under one anchor
+/// (e.g. an Erdős problem and its Formal-Conjectures formalization), declare an
+/// INCOMPATIBLE status — one "open", another "solved/proved/disproved". Each is
+/// minted as a CANDIDATE `Contradiction` (`vcx_`). Per the contradiction doctrine
+/// these are never auto-adjudicated: this is read-only detection, a signal for
+/// human review, never a verdict.
+fn run_contradictions(args: &[String]) {
+    use vela_protocol::bundle::bare_finding_id;
+    use vela_protocol::contradiction::Contradiction;
+
+    let frontiers: Vec<&str> = args
+        .iter()
+        .skip(3)
+        .filter(|a| !a.starts_with('-'))
+        .map(String::as_str)
+        .collect();
+    let json_out = args.iter().any(|a| a == "--json");
+    if frontiers.is_empty() {
+        fail("usage: vela atlas contradictions <frontier> [<frontier> ...] [--json]");
+    }
+    let projects: Vec<_> = frontiers
+        .iter()
+        .map(|f| {
+            repo::load_from_path(Path::new(f)).unwrap_or_else(|e| fail(&format!("load {f}: {e}")))
+        })
+        .collect();
+    let mut status_of: std::collections::HashMap<String, &'static str> =
+        std::collections::HashMap::new();
+    for p in &projects {
+        for f in &p.findings {
+            if let Some(s) = declared_status(&f.assertion.text) {
+                status_of.insert(f.id.clone(), s);
+            }
+        }
+    }
+    let refs: Vec<&_> = projects.iter().collect();
+    let out = atlas::project(&refs);
+
+    let mut found: Vec<serde_json::Value> = Vec::new();
+    for cell in &out.cells {
+        let mut by_status: std::collections::BTreeMap<&str, String> =
+            std::collections::BTreeMap::new();
+        for m in &cell.members {
+            let bare = bare_finding_id(m);
+            if let Some(s) = status_of.get(bare) {
+                by_status.entry(*s).or_insert_with(|| bare.to_string());
+            }
+        }
+        let open = by_status.get("open").cloned();
+        let resolved = by_status
+            .iter()
+            .find(|(s, _)| **s != "open")
+            .map(|(s, id)| (*s, id.clone()));
+        if let (Some(a), Some((rstat, b))) = (open, resolved) {
+            let anchor = cell
+                .anchors
+                .first()
+                .map(|an| format!("{}:{}", an.namespace, an.id))
+                .unwrap_or_else(|| "spine".to_string());
+            let cx = Contradiction::candidate(
+                &anchor,
+                &a,
+                &b,
+                &format!("cross-source status conflict: one member 'open', another '{rstat}'"),
+            );
+            found.push(json!({
+                "contradiction_id": cx.contradiction_id,
+                "anchor": anchor,
+                "label": cell.label.chars().take(80).collect::<String>(),
+                "open_member": a,
+                "resolved_member": b,
+                "resolved_status": rstat,
+                "status": "candidate",
+            }));
+        }
+    }
+
+    if json_out {
+        print_json(&json!({
+            "object": "vela.contradiction_scan.v1",
+            "frontiers": frontiers,
+            "cells_scanned": out.cells.len(),
+            "candidate_contradictions": found.len(),
+            "doctrine": "candidates only — never auto-adjudicated; a signal for human review",
+            "contradictions": found,
+        }));
+        return;
+    }
+    println!(
+        "cross-source contradiction scan — {} cells, {} candidate conflicts",
+        out.cells.len(),
+        found.len()
+    );
+    for c in &found {
+        println!(
+            "  {} [{}] {} : open vs {}",
+            c["contradiction_id"].as_str().unwrap_or(""),
+            c["anchor"].as_str().unwrap_or(""),
+            c["label"].as_str().unwrap_or(""),
+            c["resolved_status"].as_str().unwrap_or("")
+        );
+    }
+    if found.is_empty() {
+        println!("  (no cross-source status conflicts — sources agree where they overlap)");
+    } else {
+        println!(
+            "\ncandidates only — never auto-adjudicated; surfaced for human review (the doctrine)."
+        );
     }
 }
 
