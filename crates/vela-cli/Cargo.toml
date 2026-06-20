@@ -52,6 +52,10 @@ urlencoding = { workspace = true }
 ed25519-dalek = { workspace = true }
 rand = { workspace = true }
 tempfile = { workspace = true }
+# Pure-Rust CDCL SAT solver (no C deps): the structured-search backend for the
+# discovery portfolio. The solver only PRODUCES candidates; the frozen
+# vela-verify re-checks every witness, so trust stays the verifier.
+splr = "0.17"
 
 [lints]
 workspace = true

@@ -874,6 +874,20 @@ fn search_diff_triangle(rows: usize, j: usize, restarts: u64, rng: &mut Rng) -> 
     if let Some((sa_grid, sa_scope)) = search_diff_triangle_sa(rows, j, node_budget, rng) {
         candidates.push((sa_grid, sa_scope));
     }
+    // A fourth, STRUCTURED-search method (effort-gated): a pure-Rust SAT
+    // encoding (marks + exactly-J cardinality + a global at-most-one per
+    // distance). CDCL learning reaches scopes the three heuristics plateau
+    // above (on DTS(7,5) it verifies sets well below the greedy seed). It is the
+    // slow, deep lane, so it runs only for a dedicated high-effort attack; the
+    // frozen `verify_diff_triangle` re-checks its output like every other method.
+    if iterations >= 200 {
+        let per_solve = node_budget.clamp(2_000_000, 8_000_000) as usize;
+        if let Some((sat_grid, sat_scope)) =
+            crate::solve_diff_triangle::best_dts_via_sat(rows, j, seed_scope as usize, per_solve, 5)
+        {
+            candidates.push((sat_grid, sat_scope as i64));
+        }
+    }
     candidates
         .into_iter()
         .min_by_key(|(_, s)| *s)

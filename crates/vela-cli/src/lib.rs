@@ -35,6 +35,7 @@ mod cli_source_fetch;
 mod cli_write;
 mod review_work;
 mod serve;
+mod solve_diff_triangle;
 
 pub fn run() {
     // Atlas R.2 intercept: read-only verifier subcommands for the
