@@ -2140,6 +2140,22 @@ pub(crate) enum AttemptAction {
         #[arg(long)]
         json: bool,
     },
+    /// List the banked attempts (`vat_`) in a frontier's event log — the
+    /// durable inherited memory (every run's outcome, including failures). The
+    /// next portfolio reads this to avoid repeating searched routes. Filter by
+    /// `--problem`, `--kind`, or `--status`.
+    List {
+        /// Frontier directory or repo.
+        frontier: PathBuf,
+        #[arg(long)]
+        problem: Option<u32>,
+        #[arg(long)]
+        kind: Option<String>,
+        #[arg(long)]
+        status: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]

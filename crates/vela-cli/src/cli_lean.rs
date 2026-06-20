@@ -609,6 +609,76 @@ pub(crate) fn cmd_attempt(action: AttemptAction) {
                 ));
             }
         }
+        AttemptAction::List {
+            frontier,
+            problem,
+            kind,
+            status,
+            json,
+        } => {
+            let source = vela_protocol::repo::detect(&frontier).unwrap_or_else(|e| fail_return(&e));
+            let proj = vela_protocol::repo::load(&source).unwrap_or_else(|e| fail_return(&e));
+            let mut rows: Vec<serde_json::Value> = Vec::new();
+            for ev in &proj.events {
+                if ev.kind != "attempt.deposited" {
+                    continue;
+                }
+                let a = ev.payload.get("attempt").cloned().unwrap_or_default();
+                let p = a.get("problem").and_then(|v| v.as_u64());
+                let k = a.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+                let st = a
+                    .get("claimed_status")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                if problem.is_some() && p != problem.map(u64::from) {
+                    continue;
+                }
+                if kind.as_deref().is_some_and(|kf| kf != k) {
+                    continue;
+                }
+                if status.as_deref().is_some_and(|sf| sf != st) {
+                    continue;
+                }
+                rows.push(serde_json::json!({
+                    "attempt_id": a.get("attempt_id"),
+                    "problem": p, "kind": k, "status": st,
+                    "claim": a.get("claim"),
+                    "method_families": a.get("method_families"),
+                    "named_obstructions": a.get("named_obstructions"),
+                }));
+            }
+            if json {
+                crate::cli::print_json(&serde_json::json!({
+                    "frontier": frontier.display().to_string(),
+                    "attempts": rows.len(),
+                    "ledger": rows,
+                }));
+            } else {
+                println!(
+                    "banked attempts in {} — {} (durable inherited memory)",
+                    frontier.display(),
+                    rows.len()
+                );
+                for r in &rows {
+                    println!(
+                        "  {} [problem {} {}] {}: {}",
+                        r["attempt_id"].as_str().unwrap_or(""),
+                        r["problem"],
+                        r["kind"].as_str().unwrap_or(""),
+                        r["status"].as_str().unwrap_or(""),
+                        r["claim"]
+                            .as_str()
+                            .unwrap_or("")
+                            .chars()
+                            .take(60)
+                            .collect::<String>()
+                    );
+                }
+                if rows.is_empty() {
+                    println!("  (no banked attempts in this frontier's log)");
+                }
+            }
+        }
     }
 }
 
