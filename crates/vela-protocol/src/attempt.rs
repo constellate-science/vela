@@ -94,6 +94,12 @@ pub struct Attempt {
     /// `attempt_id`, `signature`, `signer_pubkey_hex` zeroed. Key-independent
     /// so Rust and Python derive the same id from the same body.
     pub attempt_id: String,
+    /// The Erdős problem number this attempt targets, or `0` for a
+    /// domain-general attempt (sidon / diff_triangle / other foundry kinds with
+    /// no Erdős number — identified by `frontier` + `kind` + `claim` instead).
+    /// Skip-guarded so every existing problem-numbered attempt content-addresses
+    /// byte-identically; a `0` simply omits the field for a new id.
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
     pub problem: u32,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub frontier: String,
@@ -162,6 +168,9 @@ pub struct Attempt {
     pub signer_pubkey_hex: String,
 }
 
+fn is_zero_u32(n: &u32) -> bool {
+    *n == 0
+}
 fn is_default_reproduction(r: &Reproduction) -> bool {
     *r == Reproduction::default()
 }
@@ -210,8 +219,13 @@ impl Attempt {
     /// Build and sign a banked attempt. The id is content-addressed over the
     /// canonical body (key-independent); the signature binds the signer.
     pub fn build(draft: AttemptDraft, key: &SigningKey) -> Result<Self, String> {
-        if draft.problem == 0 {
-            return Err("attempt.problem must be a positive problem number".to_string());
+        // `problem == 0` is a valid domain-general attempt (no Erdős number);
+        // such an attempt must instead name its frontier so it is still
+        // attributable to a target surface.
+        if draft.problem == 0 && draft.frontier.trim().is_empty() {
+            return Err(
+                "attempt needs a positive Erdős problem number or a frontier id".to_string(),
+            );
         }
         if draft.kind.trim().is_empty() {
             return Err("attempt.kind cannot be empty".to_string());
@@ -546,6 +560,41 @@ mod tests {
         // A legacy attempt (no packet fields) keeps a distinct, stable id.
         let legacy = Attempt::build(ok_draft(), &key()).unwrap();
         assert_ne!(legacy.attempt_id, a.attempt_id);
+    }
+
+    #[test]
+    fn domain_general_attempt_omits_problem_and_round_trips() {
+        // A foundry attempt against a non-Erdős frontier (sidon/diff_triangle)
+        // carries problem == 0: it builds, the canonical body OMITS the problem
+        // field (skip-guarded), and it content-addresses + re-verifies. A
+        // problem-numbered attempt with the SAME other fields gets a distinct id
+        // (problem is part of the content address), so legacy ids never move.
+        let d = AttemptDraft {
+            problem: 0,
+            frontier: "diff-triangle".to_string(),
+            kind: "diff_triangle".into(),
+            claim: "DTS(7,5) scope 231".to_string(),
+            ..Default::default()
+        };
+        let a = Attempt::build(d, &key()).unwrap();
+        a.verify().unwrap();
+        let json = serde_json::to_string(&a).unwrap();
+        assert!(
+            !json.contains("\"problem\""),
+            "problem must be omitted when 0"
+        );
+        let round: Attempt = serde_json::from_str(&json).unwrap();
+        assert_eq!(round, a);
+        assert_eq!(round.problem, 0);
+        round.verify().unwrap();
+        // problem == 0 with no frontier is still rejected (unattributable).
+        let bad = AttemptDraft {
+            problem: 0,
+            kind: "diff_triangle".into(),
+            claim: "x".into(),
+            ..Default::default()
+        };
+        assert!(Attempt::build(bad, &key()).is_err());
     }
 
     #[test]
