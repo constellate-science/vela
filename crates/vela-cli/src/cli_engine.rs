@@ -472,9 +472,23 @@ pub(crate) fn cmd_foundry(action: FoundryAction) {
             k,
             restarts,
             seed,
+            seeds,
+            run_ablation,
             apply,
             json,
-        } => cmd_foundry_run(&frontier, &kind, n, h, k, restarts, seed, apply, json),
+        } => cmd_foundry_run(
+            &frontier,
+            &kind,
+            n,
+            h,
+            k,
+            restarts,
+            seed,
+            seeds,
+            run_ablation,
+            apply,
+            json,
+        ),
         FoundryAction::Targets {
             catalog,
             records,
@@ -602,6 +616,77 @@ fn cmd_foundry_ablate(
     // lever; the reading reflects that honestly per (kind, frontier).
 }
 
+/// Diverse-search portfolio: run the campaign across `count` consecutive seeds
+/// (each to a throwaway file, no proposal), parse the printed score, and return
+/// the seed that produced the best result (lowest for minimization kinds, highest
+/// otherwise). The caller then proposes only that seed's witness.
+#[allow(clippy::too_many_arguments)]
+fn pick_best_seed(
+    exe: &Path,
+    frontier: &Path,
+    kind: &str,
+    n: usize,
+    h: usize,
+    k: usize,
+    restarts: u64,
+    base_seed: u64,
+    count: u64,
+    minimize: bool,
+) -> u64 {
+    let mut best_seed = base_seed;
+    let mut best_score: Option<i64> = None;
+    for s in base_seed..base_seed.saturating_add(count) {
+        let tmp = std::env::temp_dir().join(format!("vela_portfolio_{kind}_{n}_{s}.json"));
+        let mut c = std::process::Command::new(exe);
+        c.arg("campaign")
+            .arg("run")
+            .arg(kind)
+            .arg("--n")
+            .arg(n.to_string())
+            .arg("--restarts")
+            .arg(restarts.to_string())
+            .arg("--seed")
+            .arg(s.to_string())
+            .arg("--out")
+            .arg(&tmp);
+        if k > 0 {
+            c.arg("--k").arg(k.to_string());
+        }
+        if kind == "bh" {
+            c.arg("--h").arg(h.to_string());
+        }
+        let _ = frontier; // portfolio scan is frontier-independent (writes a temp)
+        let out = match c.output() {
+            Ok(o) if o.status.success() => o,
+            _ => continue,
+        };
+        let txt = String::from_utf8_lossy(&out.stdout);
+        let score = txt
+            .split("verified score ")
+            .nth(1)
+            .and_then(|s| s.split_whitespace().next())
+            .and_then(|s| s.parse::<i64>().ok());
+        let _ = std::fs::remove_file(&tmp);
+        if let Some(sc) = score {
+            let better = match best_score {
+                None => true,
+                Some(b) => {
+                    if minimize {
+                        sc < b
+                    } else {
+                        sc > b
+                    }
+                }
+            };
+            if better {
+                best_score = Some(sc);
+                best_seed = s;
+            }
+        }
+    }
+    best_seed
+}
+
 #[allow(clippy::too_many_arguments)]
 fn cmd_foundry_run(
     frontier: &Path,
@@ -611,11 +696,27 @@ fn cmd_foundry_run(
     k: usize,
     restarts: u64,
     seed: u64,
+    seeds: u64,
+    run_ablation: bool,
     apply: bool,
     json_out: bool,
 ) {
     let exe = std::env::current_exe()
         .unwrap_or_else(|e| fail_return(&format!("locate vela binary: {e}")));
+
+    // 0. PORTFOLIO: scan `seeds` consecutive seeds (a diverse-search portfolio),
+    //    keep the best-scoring, then propose only that one. Lower score is better
+    //    for the minimization kinds (diff_triangle/golomb/covering), higher for
+    //    the rest. The campaign re-verifies every find, so this never proposes an
+    //    unverified witness.
+    let minimize = matches!(kind, "diff_triangle" | "golomb" | "covering");
+    let seed = if seeds > 1 {
+        pick_best_seed(
+            &exe, frontier, kind, n, h, k, restarts, seed, seeds, minimize,
+        )
+    } else {
+        seed
+    };
 
     // 1. PRODUCE + PROPOSE via the frozen-verifier campaign (the tested path:
     //    it runs vela-verify on the witness before returning, writes the
@@ -736,6 +837,43 @@ fn cmd_foundry_run(
         .get("would_auto_admit")
         .and_then(Value::as_bool)
         .unwrap_or(false);
+
+    // 5b. ABLATION GATE: optionally require that inherited frontier state makes
+    //     this kind compound (the skip-known-work H1 measure, same as
+    //     `foundry ablate`). Fails the run when treatment <= control on a kind
+    //     that carries inherited state — the plan's hard gate.
+    if run_ablation {
+        let known = proj
+            .findings
+            .iter()
+            .filter(|f| f.assertion.text.to_lowercase().contains(kind))
+            .count();
+        let budget = 40u64;
+        let control_budget = (budget / ((known as u64) + 1)).max(1);
+        let target = crate::campaign::Target {
+            kind: kind.to_string(),
+            n,
+            h,
+            ..Default::default()
+        };
+        let (mut t_total, mut c_total) = (0u64, 0u64);
+        for s in 1..=5u64 {
+            let score_of =
+                |restarts: u64| match crate::campaign::search_target(&target, restarts, s) {
+                    Ok(Some(f)) => f.score as u64,
+                    _ => 0,
+                };
+            t_total += score_of(budget);
+            c_total += score_of(control_budget);
+        }
+        let (t_mean, c_mean) = (t_total as f64 / 5.0, c_total as f64 / 5.0);
+        if known > 0 && t_mean <= c_mean {
+            fail_return::<()>(&format!(
+                "foundry: ablation gate FAILED for {kind} — inherited state does not compound \
+                 (treatment {t_mean:.2} <= control {c_mean:.2}); not a free-pass turn"
+            ));
+        }
+    }
 
     // 6. REPORT the turn.
     if json_out {

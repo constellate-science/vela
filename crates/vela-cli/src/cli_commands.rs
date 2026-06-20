@@ -1368,6 +1368,14 @@ pub(crate) enum FoundryAction {
         /// Search seed.
         #[arg(long, default_value_t = 1)]
         seed: u64,
+        /// Portfolio size: scan this many consecutive seeds (a diverse-search
+        /// portfolio), keep the best-scoring, and propose only that one.
+        #[arg(long, default_value_t = 1)]
+        seeds: u64,
+        /// Gate the turn on the continuous ablation: fail (exit 1) if inherited
+        /// frontier state does NOT make this kind compound (treatment <= control).
+        #[arg(long)]
+        run_ablation: bool,
         /// Record the admission (else dry-run preview the whole turn).
         #[arg(long)]
         apply: bool,
