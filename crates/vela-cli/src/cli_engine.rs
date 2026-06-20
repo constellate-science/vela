@@ -883,8 +883,8 @@ fn cmd_foundry_run(
     //     the vac_ envelope the campaign already records. problem == 0 makes it a
     //     domain-general attempt keyed on frontier + kind + claim.
     let mut deposited_attempt: Option<String> = None;
-    if apply {
-        if let Some(signing_key) = crate::cli_identity::resolve_signing_key_opt(None) {
+    if apply
+        && let Some(signing_key) = crate::cli_identity::resolve_signing_key_opt(None) {
             let claim = proposal
                 .payload
                 .get("finding")
@@ -932,20 +932,18 @@ fn cmd_foundry_run(
                             "agent",
                             "foundry turn: banked attempt (provenance, not a verdict)",
                         );
-                        if vela_protocol::reducer::apply_event(&mut project2, &ev).is_ok() {
-                            if let Ok(sig) = vela_protocol::sign::sign_event(&ev, &signing_key) {
+                        if vela_protocol::reducer::apply_event(&mut project2, &ev).is_ok()
+                            && let Ok(sig) = vela_protocol::sign::sign_event(&ev, &signing_key) {
                                 ev.signature = Some(sig);
                                 project2.events.push(ev);
                                 if repo::save_to_path(frontier, &project2).is_ok() {
                                     deposited_attempt = Some(att.attempt_id);
                                 }
                             }
-                        }
                     }
                 }
             }
         }
-    }
 
     // 6. REPORT the turn.
     if json_out {

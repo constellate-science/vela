@@ -325,8 +325,7 @@ fn run_decl_blast(args: &[String]) {
     let flag = |name: &str| -> Option<String> {
         args.iter()
             .position(|a| a == name)
-            .and_then(|i| args.get(i + 1))
-            .map(String::clone)
+            .and_then(|i| args.get(i + 1)).cloned()
     };
     let edges_path = flag("--edges").unwrap_or_else(|| "data/mathlib/decl-edges.jsonl".to_string());
     let top: usize = flag("--top").and_then(|s| s.parse().ok()).unwrap_or(15);

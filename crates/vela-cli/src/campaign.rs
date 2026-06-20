@@ -50,6 +50,12 @@ impl Rng {
     fn below(&mut self, n: usize) -> usize {
         (self.next_u64() % n as u64) as usize
     }
+    /// A uniform f64 in [0, 1). 53 mantissa bits, seeded — used for the
+    /// Metropolis acceptance test in the simulated-annealing DTS method.
+    #[inline]
+    fn next_f64(&mut self) -> f64 {
+        (self.next_u64() >> 11) as f64 / ((1u64 << 53) as f64)
+    }
     /// In-place Fisher-Yates shuffle.
     fn shuffle<T>(&mut self, v: &mut [T]) {
         for i in (1..v.len()).rev() {
@@ -852,18 +858,25 @@ fn search_diff_triangle(rows: usize, j: usize, restarts: u64, rng: &mut Rng) -> 
     let node_budget = iterations
         .saturating_mul(200_000)
         .clamp(200_000, 10_000_000);
-    let bt = search_diff_triangle_bt(rows, j, seed_scope, node_budget);
-    match (best, bt) {
-        (Some((g_grid, g_scope)), Some(bt_found)) => {
-            if (bt_found.score as i64) < g_scope {
-                Some(bt_found)
-            } else {
-                Some(make(g_grid, g_scope))
-            }
-        }
-        (Some((g_grid, g_scope)), None) => Some(make(g_grid, g_scope)),
-        (None, bt) => bt,
+    // Three DIVERSE methods, lowest scope wins: greedy restarts, branch-and-bound,
+    // and simulated annealing. Each is only a candidate producer; the frozen
+    // `verify_diff_triangle` re-checks the winner, so the portfolio can never
+    // admit a false set, only a worse-or-rejected one.
+    let mut candidates: Vec<(Vec<Vec<i64>>, i64)> = Vec::new();
+    if let Some((g_grid, g_scope)) = best {
+        candidates.push((g_grid, g_scope));
     }
+    if let Some(bt_found) = search_diff_triangle_bt(rows, j, seed_scope, node_budget)
+        && let Witness::DiffTriangle { rows: g, .. } = bt_found.witness {
+            candidates.push((g, bt_found.score as i64));
+        }
+    if let Some((sa_grid, sa_scope)) = search_diff_triangle_sa(rows, j, node_budget, rng) {
+        candidates.push((sa_grid, sa_scope));
+    }
+    candidates
+        .into_iter()
+        .min_by_key(|(_, s)| *s)
+        .map(|(grid, scope)| make(grid, scope))
 }
 
 /// Branch-and-bound DTS solver: a DIVERSE method (vs the greedy above). Places
@@ -993,6 +1006,175 @@ fn search_diff_triangle_bt(
         },
         iterations: nodes,
     })
+}
+
+/// Simulated-annealing DTS solver: a third DIVERSE method (alongside the greedy
+/// restarts and the branch-and-bound). It seeds from a greedy-feasible grid and
+/// anneals on `energy = scope + LAMBDA * conflicts`, so it can climb through
+/// briefly-infeasible neighbours to reach a strictly lower-scope difference
+/// triangle set. The frozen `verify_diff_triangle` re-checks whatever wins, so
+/// SA is only a candidate producer — a bug yields a worse-or-rejected witness,
+/// never a false one. Returns the best feasible (conflict-free) grid + its scope.
+fn search_diff_triangle_sa(
+    rows: usize,
+    j: usize,
+    budget: u64,
+    rng: &mut Rng,
+) -> Option<(Vec<Vec<i64>>, i64)> {
+    use std::collections::HashMap;
+    let mpr = j + 1;
+    if rows == 0 || mpr < 2 || rows > 64 || mpr > 64 {
+        return None;
+    }
+    let cap = (rows * mpr * mpr * 4).max(32) as i64;
+    // A greedy-feasible start: place the smallest valid next mark in each row.
+    let mut all_diffs: HashSet<i64> = HashSet::new();
+    let mut grid: Vec<Vec<i64>> = Vec::with_capacity(rows);
+    for _ in 0..rows {
+        let mut marks = vec![0i64];
+        while marks.len() < mpr {
+            let cur = *marks.last().unwrap();
+            let mut placed = false;
+            for c in (cur + 1)..=cap {
+                let mut nd = Vec::with_capacity(marks.len());
+                let mut good = true;
+                for &m in &marks {
+                    let d = c - m;
+                    if all_diffs.contains(&d) || nd.contains(&d) {
+                        good = false;
+                        break;
+                    }
+                    nd.push(d);
+                }
+                if good {
+                    for d in nd {
+                        all_diffs.insert(d);
+                    }
+                    marks.push(c);
+                    placed = true;
+                    break;
+                }
+            }
+            if !placed {
+                return None; // could not even build a feasible start
+            }
+        }
+        grid.push(marks);
+    }
+
+    // conflicts(grid) = repeated within-row differences (0 == valid DTS).
+    let build = |grid: &[Vec<i64>]| -> (HashMap<i64, u32>, i64) {
+        let mut counts: HashMap<i64, u32> = HashMap::new();
+        let mut conflicts = 0i64;
+        for row in grid {
+            for a in 0..row.len() {
+                for b in (a + 1)..row.len() {
+                    let d = row[b] - row[a];
+                    let c = counts.entry(d).or_insert(0);
+                    if *c >= 1 {
+                        conflicts += 1;
+                    }
+                    *c += 1;
+                }
+            }
+        }
+        (counts, conflicts)
+    };
+    let scope_of =
+        |grid: &[Vec<i64>]| -> i64 { grid.iter().map(|r| *r.last().unwrap()).max().unwrap_or(0) };
+
+    let (mut counts, mut conflicts) = build(&grid);
+    let mut scope = scope_of(&grid);
+    let lambda = (cap.max(64)) as f64; // a conflict must cost more than any scope move
+    let mut energy = scope as f64 + lambda * conflicts as f64;
+    let mut best_grid = grid.clone();
+    let mut best_scope = scope;
+    let lb = (rows * (mpr * (mpr - 1) / 2)) as i64;
+
+    let steps = budget.clamp(200_000, 8_000_000);
+    let t0 = (lambda / 4.0).max(8.0);
+    for step in 0..steps {
+        if best_scope <= lb {
+            break; // provably optimal; nothing tighter exists
+        }
+        let frac = step as f64 / steps as f64;
+        let t = (t0 * (1.0 - frac)).max(0.05);
+        let r = rng.below(rows);
+        let m = 1 + rng.below(mpr - 1);
+        let low = grid[r][m - 1];
+        let high = if m + 1 < mpr { grid[r][m + 1] } else { cap + 1 };
+        if high - low <= 1 {
+            continue;
+        }
+        let old = grid[r][m];
+        // Bias the proposal downward (toward a smaller scope) but allow up-moves.
+        let span = (high - low - 1) as usize;
+        let v = low + 1 + rng.below(span) as i64;
+        if v == old {
+            continue;
+        }
+        // The marks (other than m) whose differences with m change.
+        let others: Vec<i64> = (0..mpr).filter(|&p| p != m).map(|p| grid[r][p]).collect();
+        let mut dconf: i64 = 0;
+        for &p in &others {
+            let d = (p - old).abs();
+            let c = counts.get_mut(&d).unwrap();
+            if *c > 1 {
+                dconf -= 1;
+            }
+            *c -= 1;
+            if *c == 0 {
+                counts.remove(&d);
+            }
+        }
+        for &p in &others {
+            let d = (p - v).abs();
+            let c = counts.entry(d).or_insert(0);
+            if *c >= 1 {
+                dconf += 1;
+            }
+            *c += 1;
+        }
+        let new_conflicts = conflicts + dconf;
+        let mut trial = grid[r].clone();
+        trial[m] = v;
+        let new_scope = if m + 1 == mpr {
+            // moved the last mark: this row's max changed; recompute global scope.
+            grid.iter()
+                .enumerate()
+                .map(|(i, row)| if i == r { v } else { *row.last().unwrap() })
+                .max()
+                .unwrap_or(0)
+        } else {
+            scope
+        };
+        let new_energy = new_scope as f64 + lambda * new_conflicts as f64;
+        let de = new_energy - energy;
+        if de <= 0.0 || rng.next_f64() < (-de / t).exp() {
+            grid[r][m] = v;
+            conflicts = new_conflicts;
+            scope = new_scope;
+            energy = new_energy;
+            if conflicts == 0 && scope < best_scope {
+                best_scope = scope;
+                best_grid = grid.clone();
+            }
+        } else {
+            // reject: roll the multiset back.
+            for &p in &others {
+                let d = (p - v).abs();
+                let c = counts.get_mut(&d).unwrap();
+                *c -= 1;
+                if *c == 0 {
+                    counts.remove(&d);
+                }
+            }
+            for &p in &others {
+                *counts.entry((p - old).abs()).or_insert(0) += 1;
+            }
+        }
+    }
+    Some((best_grid, best_scope))
 }
 
 // ---------------------------------------------------------------------------
