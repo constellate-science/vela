@@ -892,6 +892,28 @@ pub(crate) enum Commands {
         json: bool,
     },
 
+    /// Land a result in one step (the producer happy path, like `git push`):
+    /// accept a pending proposal under your configured identity, with zero hex.
+    /// `target` is either a `vpr_` proposal id (accepted directly) or a `vf_`
+    /// finding id (its pending `finding.add` proposal is found and accepted).
+    /// Key custody — running this IS the human accept; an agent must not.
+    Land {
+        frontier: PathBuf,
+        /// A `vpr_` proposal id or a `vf_` finding id to land.
+        target: String,
+        /// Decision note. Optional: defaults to "landed via review".
+        #[arg(long)]
+        reason: Option<String>,
+        /// Reviewer actor id. Optional: defaults to your configured identity.
+        #[arg(long)]
+        reviewer: Option<String>,
+        /// Reviewer key path. Optional: defaults to your configured identity's key.
+        #[arg(long)]
+        key: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+
     /// Bind a verifier attachment to a finding (propose → accept in one step).
     /// Reads a `vela.verifier_attachment.v0.1` JSON object (whose `target` is the
     /// finding's `vf_…` id) and lands it via the canonical `verifier.attach`

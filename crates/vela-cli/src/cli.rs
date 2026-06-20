@@ -1142,6 +1142,72 @@ pub async fn run_command() {
             }
         }
 
+        Commands::Land {
+            frontier,
+            target,
+            reason,
+            reviewer,
+            key,
+            json,
+        } => {
+            // Resolve the target to a pending proposal id. A `vpr_` is taken as
+            // the proposal directly; a `vf_` finding id resolves to its pending
+            // finding.add proposal (the one-step "land this finding" ergonomic).
+            let proposal_id = if target.starts_with("vpr_") {
+                target.clone()
+            } else {
+                let source = repo::detect(&frontier).unwrap_or_else(|e| fail_return(&e));
+                let proj = repo::load(&source).unwrap_or_else(|e| fail_return(&e));
+                proj.proposals
+                    .iter()
+                    .find(|p| {
+                        p.applied_event_id.is_none()
+                            && p.kind == "finding.add"
+                            && p.target.id == target
+                    })
+                    .map(|p| p.id.clone())
+                    .unwrap_or_else(|| {
+                        fail_return(&format!(
+                            "no pending finding.add proposal for {target} in {}",
+                            frontier.display()
+                        ))
+                    })
+            };
+            let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
+            let reason = reason.unwrap_or_else(|| "landed via review".to_string());
+            let signing_key = crate::cli_identity::resolve_signing_key_opt(key.as_deref());
+            let outcome = proposals::accept_at_path_engine(
+                &frontier,
+                &proposal_id,
+                &reviewer,
+                &reason,
+                proposals::AcceptOptions {
+                    strict: false,
+                    force: false,
+                    signing_key,
+                    custody_verified: false,
+                },
+            )
+            .unwrap_or_else(|e| fail_return(&e));
+            if json {
+                print_json(&json!({
+                    "ok": true, "command": "land", "target": target,
+                    "proposal_id": proposal_id, "reviewer": reviewer,
+                    "applied_event_id": outcome.event_id,
+                    "engine_verdict": outcome.verdict.status,
+                }));
+            } else {
+                println!(
+                    "{} landed {} (proposal {})",
+                    style::ok("ok"),
+                    target,
+                    proposal_id
+                );
+                println!("  event: {}", outcome.event_id);
+                print_engine_verdict(&outcome.verdict);
+            }
+        }
+
         Commands::AcceptBatch {
             frontier,
             all_pending,
@@ -5238,6 +5304,7 @@ Core flow:
   propose       Create a finding.review proposal
   diff          Preview a `vpr_*` proposal, or compare two frontier files
   accept        Apply a proposal under reviewer authority (keyed reviewers: --key)
+  land          Land a result in one step: accept a vpr_ proposal or a vf_ finding's pending add
   attest        Sign findings under your private key
   status        One-screen frontier state (replay, proposals, leases, attestations)
   log           Recent canonical state events
