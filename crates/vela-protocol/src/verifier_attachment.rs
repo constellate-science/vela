@@ -311,6 +311,21 @@ pub fn claim_digest(claim: &str) -> String {
     hex::encode(digest)[..16].to_string()
 }
 
+/// A deterministic, non-forgeable toolchain fingerprint for an attachment: the
+/// verifier-method class pinned to the attachment schema version. Two
+/// attachments from the same verifier TOOLCHAIN share it (replication of one
+/// checker); a Lean kernel and a frozen computational search differ (genuine
+/// toolchain diversity). Unlike `solver_id` — a free string the producing agent
+/// chooses — it is derived from the method, so a cosmetic rename cannot fake a
+/// "distinct" toolchain. The exact-lane independence reasoning surfaces it as
+/// corroborating evidence; the at-enable tightening can promote it from a
+/// reported signal to a hard distinctness requirement.
+#[must_use]
+pub fn derive_toolchain_hash(method: &VerifierMethod) -> String {
+    let tag = format!("{ATTACHMENT_SCHEMA}:{method:?}");
+    hex::encode(Sha256::digest(tag.as_bytes()))[..16].to_string()
+}
+
 impl VerifierAttachment {
     /// Build an attachment, deriving its content-addressed id from the
     /// canonical body. Mirrors the id-from-signed-body pattern in
@@ -337,7 +352,7 @@ impl VerifierAttachment {
             verifier_actor: draft.verifier_actor,
             note: draft.note,
             implementation_id: String::new(),
-            toolchain_hash: String::new(),
+            toolchain_hash: derive_toolchain_hash(&draft.verifier_method),
         };
         att.id = att.derive_id()?;
         Ok(att)

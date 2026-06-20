@@ -883,67 +883,67 @@ fn cmd_foundry_run(
     //     the vac_ envelope the campaign already records. problem == 0 makes it a
     //     domain-general attempt keyed on frontier + kind + claim.
     let mut deposited_attempt: Option<String> = None;
-    if apply
-        && let Some(signing_key) = crate::cli_identity::resolve_signing_key_opt(None) {
-            let claim = proposal
-                .payload
-                .get("finding")
-                .and_then(|f| f.get("assertion"))
-                .and_then(|a| a.get("text"))
-                .and_then(|t| t.as_str())
-                .unwrap_or_default()
-                .to_string();
-            let frontier_label = proj
-                .frontier_id
-                .clone()
-                .filter(|s| !s.trim().is_empty())
-                .unwrap_or_else(|| {
-                    frontier
-                        .file_name()
-                        .and_then(|s| s.to_str())
-                        .unwrap_or("frontier")
-                        .to_string()
-                });
-            if !claim.trim().is_empty() && !frontier_label.trim().is_empty() {
-                let draft = vela_protocol::attempt::AttemptDraft {
-                    problem: 0,
-                    frontier: frontier_label,
-                    kind: kind.to_string(),
-                    claim,
-                    claimed_status: if admitted {
-                        "machine_verified".to_string()
-                    } else {
-                        "candidate".to_string()
-                    },
-                    method_families: vec![kind.to_string(), "greedy-restart".to_string()],
-                    producer: vela_protocol::attempt::ProducerRef {
-                        system: "vela-foundry".to_string(),
-                        version: env!("CARGO_PKG_VERSION").to_string(),
-                        config_digest: format!("seed={seed};restarts={restarts}"),
-                    },
-                    ..Default::default()
-                };
-                if let Ok(att) = vela_protocol::attempt::Attempt::build(draft, &signing_key) {
-                    // Reload: the auto-admit --apply subprocess may have appended
-                    // events to the log since `proj` was read.
-                    if let Ok(mut project2) = repo::load_from_path(frontier) {
-                        let mut ev = att.deposit_event(
-                            "agent:vela-foundry",
-                            "agent",
-                            "foundry turn: banked attempt (provenance, not a verdict)",
-                        );
-                        if vela_protocol::reducer::apply_event(&mut project2, &ev).is_ok()
-                            && let Ok(sig) = vela_protocol::sign::sign_event(&ev, &signing_key) {
-                                ev.signature = Some(sig);
-                                project2.events.push(ev);
-                                if repo::save_to_path(frontier, &project2).is_ok() {
-                                    deposited_attempt = Some(att.attempt_id);
-                                }
-                            }
+    if apply && let Some(signing_key) = crate::cli_identity::resolve_signing_key_opt(None) {
+        let claim = proposal
+            .payload
+            .get("finding")
+            .and_then(|f| f.get("assertion"))
+            .and_then(|a| a.get("text"))
+            .and_then(|t| t.as_str())
+            .unwrap_or_default()
+            .to_string();
+        let frontier_label = proj
+            .frontier_id
+            .clone()
+            .filter(|s| !s.trim().is_empty())
+            .unwrap_or_else(|| {
+                frontier
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .unwrap_or("frontier")
+                    .to_string()
+            });
+        if !claim.trim().is_empty() && !frontier_label.trim().is_empty() {
+            let draft = vela_protocol::attempt::AttemptDraft {
+                problem: 0,
+                frontier: frontier_label,
+                kind: kind.to_string(),
+                claim,
+                claimed_status: if admitted {
+                    "machine_verified".to_string()
+                } else {
+                    "candidate".to_string()
+                },
+                method_families: vec![kind.to_string(), "greedy-restart".to_string()],
+                producer: vela_protocol::attempt::ProducerRef {
+                    system: "vela-foundry".to_string(),
+                    version: env!("CARGO_PKG_VERSION").to_string(),
+                    config_digest: format!("seed={seed};restarts={restarts}"),
+                },
+                ..Default::default()
+            };
+            if let Ok(att) = vela_protocol::attempt::Attempt::build(draft, &signing_key) {
+                // Reload: the auto-admit --apply subprocess may have appended
+                // events to the log since `proj` was read.
+                if let Ok(mut project2) = repo::load_from_path(frontier) {
+                    let mut ev = att.deposit_event(
+                        "agent:vela-foundry",
+                        "agent",
+                        "foundry turn: banked attempt (provenance, not a verdict)",
+                    );
+                    if vela_protocol::reducer::apply_event(&mut project2, &ev).is_ok()
+                        && let Ok(sig) = vela_protocol::sign::sign_event(&ev, &signing_key)
+                    {
+                        ev.signature = Some(sig);
+                        project2.events.push(ev);
+                        if repo::save_to_path(frontier, &project2).is_ok() {
+                            deposited_attempt = Some(att.attempt_id);
+                        }
                     }
                 }
             }
         }
+    }
 
     // 6. REPORT the turn.
     if json_out {

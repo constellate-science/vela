@@ -867,9 +867,10 @@ fn search_diff_triangle(rows: usize, j: usize, restarts: u64, rng: &mut Rng) -> 
         candidates.push((g_grid, g_scope));
     }
     if let Some(bt_found) = search_diff_triangle_bt(rows, j, seed_scope, node_budget)
-        && let Witness::DiffTriangle { rows: g, .. } = bt_found.witness {
-            candidates.push((g, bt_found.score as i64));
-        }
+        && let Witness::DiffTriangle { rows: g, .. } = bt_found.witness
+    {
+        candidates.push((g, bt_found.score as i64));
+    }
     if let Some((sa_grid, sa_scope)) = search_diff_triangle_sa(rows, j, node_budget, rng) {
         candidates.push((sa_grid, sa_scope));
     }
