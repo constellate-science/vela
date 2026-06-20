@@ -260,12 +260,9 @@ fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, apply: bool, json_outp
         floor_ok,
     );
 
-    // Guard #3 (attachment provenance): each matched attachment must have
-    // landed via an ACCEPTED `verifier.attach` proposal by a NON-AGENT
-    // reviewer. The trust anchor the lane otherwise only assumes — the gate
-    // verifies it here so a single non-human-vouched write into the attachment
-    // set cannot manufacture machine_verified.
-    let (vouched_ok, vouch_reason) = attachments_human_vouched(&proj, &matched);
+    // Guard #3 (attachment provenance), scoped to where attachments are
+    // actually load-bearing — see `attachment_vouch_gate`.
+    let (vouched_ok, vouch_reason) = attachment_vouch_gate(floor_ok, matched.len());
 
     let would_admit = floor_ok && wrapper_ok && vouched_ok;
 
@@ -419,38 +416,45 @@ fn is_synthetic_source(source_type: &str) -> bool {
     s == "synthetic_report" || s == "agent_trace"
 }
 
-/// Guard #3 (attachment provenance): every matched attachment must have landed
-/// via an ACCEPTED `verifier.attach` proposal whose reviewer is NOT an agent.
-/// `verifier.attach` is excluded from every agent self-apply set, so this holds
-/// today — the lane VERIFIES it rather than assuming it, closing the path where
-/// a single non-human-vouched write into the attachment set manufactures
-/// machine_verified. Returns (ok, reason).
-fn attachments_human_vouched(
-    proj: &vela_protocol::project::Project,
-    matched: &[vela_protocol::verifier_attachment::VerifierAttachment],
-) -> (bool, String) {
-    for att in matched {
-        let vouched = proj.proposals.iter().any(|p| {
-            p.kind == "verifier.attach"
-                && p.applied_event_id.is_some()
-                && !p.actor.id.trim().to_ascii_lowercase().starts_with("agent:")
-                && p.payload
-                    .get("attachment")
-                    .and_then(|a| a.get("id"))
-                    .and_then(|i| i.as_str())
-                    == Some(att.id.as_str())
-        });
-        if !vouched {
-            return (
-                false,
+/// Guard #3 (attachment provenance), scoped to where attachments are actually
+/// load-bearing. The exact lane's trust is the FLOOR: a fresh frozen `vela
+/// reproduce` over the witness plus `claim_witness_faithful` binding the parsed
+/// claim to the witness structure. When the floor holds it is a complete,
+/// un-forgeable proof of the exact lower-bound/size claim (an agent cannot make
+/// a fabricated witness reproduce, nor inflate a claim past what the witness
+/// structurally establishes), so matched attachments are non-load-bearing
+/// corroboration and do NOT gate admission. This mirrors `exact_lane_auto_admit`'s
+/// own guard #8, which waives the >=2-attachment requirement under
+/// floor-sufficiency.
+///
+/// When the floor does NOT hold, attachments would be the load-bearing evidence
+/// (the general / non-exact, e.g. Lean lane). Admitting there rests on
+/// attachment provenance being a trustworthy HUMAN signal, and it is not yet:
+/// actor registration is open self-enrollment, so a "registered non-agent
+/// reviewer" can be a key an agent minted and self-registered under a
+/// `reviewer:` id, then honestly signed with (an adversarial review confirmed
+/// this self-enrollment bypass). Until the vouch binds to an owner/maintainer-
+/// signed roster rooted in the frontier owner key, the non-floor lane REFUSES,
+/// in the safe direction. (docs/EXACT_LANE_GATE.md §7 guard #3.)
+fn attachment_vouch_gate(floor_ok: bool, matched_len: usize) -> (bool, String) {
+    if floor_ok {
+        if matched_len == 0 {
+            (true, String::new())
+        } else {
+            (
+                true,
                 format!(
-                    "attachment {} was not added by an accepted verifier.attach from a non-agent reviewer",
-                    att.id
+                    "floor-sufficient: {matched_len} matched attachment(s) are non-load-bearing corroboration, not gating"
                 ),
-            );
+            )
         }
+    } else {
+        (
+            false,
+            "non-floor-sufficient admission would rest on attachment provenance, which is not yet owner-rooted (open actor self-enrollment is forgeable); lane refuses in the safe direction"
+                .to_string(),
+        )
     }
-    (true, String::new())
 }
 
 // ---- the foundry: one unattended compounding turn (Phase 2) ----
@@ -2200,6 +2204,55 @@ mod foundry_targets_tests {
             "golomb",
         ] {
             assert!(FOUNDRY_ENGINE_KINDS.contains(&k), "{k} must be attackable");
+        }
+    }
+
+    // The exact-lane vouch gate. An adversarial review showed the prior vouch
+    // (a "registered non-agent reviewer" signing a verifier_attachment.added
+    // event, or accepting a verifier.attach proposal) is forgeable: actor
+    // registration is open self-enrollment, so an agent mints a key, registers
+    // `reviewer:x`, and honestly signs. The fix scopes the vouch to where
+    // attachments are load-bearing (the non-floor lane), and admits the exact
+    // lane on the un-forgeable FLOOR alone.
+
+    #[test]
+    fn floor_sufficient_admits_without_any_vouch_even_with_attachments() {
+        // The exact lane: the floor (fresh reproduce + claim_witness_faithful)
+        // is the proof. Matched attachments are non-load-bearing corroboration
+        // and must NOT block admission, regardless of who signed them. This is
+        // what lets the foundry compound without a human, soundly.
+        let (ok, reason) = attachment_vouch_gate(true, 0);
+        assert!(ok, "floor-sufficient with no attachments admits");
+        assert!(reason.is_empty());
+
+        let (ok, reason) = attachment_vouch_gate(true, 3);
+        assert!(
+            ok,
+            "floor-sufficient admits even with attachments present (they do not gate)"
+        );
+        assert!(
+            reason.contains("non-load-bearing"),
+            "the reason is honest that attachments are not gating: {reason}"
+        );
+    }
+
+    #[test]
+    fn non_floor_sufficient_refuses_until_vouch_is_owner_rooted() {
+        // The non-exact / Lean lane, where attachments WOULD be the evidence.
+        // Because the only vouch root today is open self-enrollment (forgeable),
+        // the lane must refuse in the safe direction rather than admit on a
+        // forgeable vouch. This keeps the de-human-gate firing ONLY on the
+        // un-forgeable floor.
+        for matched_len in [0usize, 1, 5] {
+            let (ok, reason) = attachment_vouch_gate(false, matched_len);
+            assert!(
+                !ok,
+                "non-floor-sufficient must refuse (matched_len={matched_len})"
+            );
+            assert!(
+                reason.contains("owner-rooted") || reason.contains("refuses"),
+                "the refusal names the missing owner-rooted vouch: {reason}"
+            );
         }
     }
 }

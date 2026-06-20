@@ -8,10 +8,14 @@
 > YES verdict, in the narrow enabled scope (§8). It never auto-fires — an
 > unattended producer/foundry driving it is Phase 2. Of the §7 checklist:
 > **done** = 1 (reproduce-binding, the command re-runs the frozen verifier),
-> 2 (faithfulness), 3 (attachment provenance: human-vouched `verifier.attach`),
-> 6 (producer != verifier), 7 (lifecycle), 9 (idempotent emit), 10 (payload
-> validation), 11 (tier honesty), 12 (surface separation, terminal + the
-> `finding_context` data layer serve reads); **deferred with rationale** = 4
+> 2 (faithfulness), 3 (attachment provenance — REVISED: a second adversarial
+> review found the human-vouch forgeable via open actor self-enrollment, so the
+> vouch is removed from the admission path; the un-forgeable floor is the trust
+> and attachments are non-gating corroboration; the non-floor lane refuses until
+> an owner-rooted reviewer roster exists), 6 (producer != verifier), 7
+> (lifecycle), 9 (idempotent emit), 10 (payload validation), 11 (tier honesty),
+> 12 (surface separation, terminal + the `finding_context` data layer serve
+> reads); **deferred with rationale** = 4
 > (toolchain_hash distinctness — needs the attachment-creation path to populate
 > real build hashes first; enforcing it now blocks the lane with no data to
 > satisfy it), 5 (a frozen re-runnable FormalismFidelity probe — superseded for
@@ -126,13 +130,42 @@ new tests:
 1. **Reproduce-binding (critical):** the admit command runs `vela reproduce`
    over the witness itself at admit time and requires PASS; it never trusts a
    recorded result field.
-2. **Faithfulness (critical):** the command calls `claim_witness_faithful` and
-   requires `faithful` (shipped function; wiring pending).
-3. **Attachment provenance (critical):** verify each matched attachment landed
-   via a human-accepted `verifier.attach` proposal whose reviewer is a non-agent
-   key, OR document this as a hard invariant with a conformance test that an
-   agent cannot self-apply `verifier.attach`. (Today it is excluded from all
-   agent self-apply sets; the gate must enforce or test it, not assume it.)
+2. **Faithfulness (critical) — HARDENED after a third adversarial review.** The
+   command calls `claim_witness_faithful` and requires `faithful`. The check now
+   binds the WHOLE claim to the witness, not just one parsed token: it reads the
+   OEIS order `a(N)` (not only an ambient literal) and binds it to the witness
+   `n` (mandatory for every size/order kind; for GF(2) every element must fit in
+   `2^N`); it rejects equality/optimality claims and dual-bound assertions; and
+   it admits only kinds fully determined by `(kind, n, bound)` — sidon, cap,
+   gf2_sidon, union_free — routing B_h, constant-weight, golomb, and every other
+   kind to review (their extra hardness parameters `h` / `d,w` are not yet
+   bound). See §8 and the `claim_witness_faithful` adversarial regression tests
+   (`faithful_binds_a_of_n_order_to_witness`, `faithful_rejects_dual_bound_headline`,
+   `faithful_gf2_binds_dimension`, `faithful_routes_bh_and_constant_weight_to_review`,
+   `faithful_routes_equality_optimality_to_review`).
+3. **Attachment provenance (critical) — REVISED after a second adversarial
+   review.** The first design verified each matched attachment was "human-
+   vouched" by a non-agent reviewer (an accepted `verifier.attach` proposal, or
+   a registered-reviewer-signed `verifier_attachment.added` event). A five-lens
+   adversarial review found this **forgeable**: actor registration (`vela actor
+   add`) is open self-enrollment, so an agent mints a keypair, registers
+   `reviewer:<name>` (any id lacking the `agent:` prefix) under its own pubkey,
+   and **honestly** signs the vouch with its own key. No private human key is
+   needed; every predicate passes. The vouch authenticated a *key*, not a
+   *human*. **The fix removes the vouch from the admission path.** The exact
+   lane's trust is the FLOOR (guards 1+2: a fresh frozen `vela reproduce` plus
+   `claim_witness_faithful`), which an agent cannot forge — a fabricated witness
+   does not reproduce, and an inflated claim is not faithful to its witness. The
+   floor IS a complete proof of an exact lower-bound/size claim, so matched
+   attachments are non-load-bearing corroboration and **do not gate** admission
+   (mirroring `exact_lane_auto_admit`'s guard #8, which already waives the
+   ≥2-attachment requirement under floor-sufficiency). When the floor does NOT
+   hold (the non-exact / Lean lane, where attachments would be the evidence) the
+   lane **refuses**, because a sound vouch there must bind the reviewer key to an
+   **owner/maintainer-signed roster rooted in the frontier owner key**, which
+   does not yet exist. That roster is the prerequisite for ever enabling the
+   non-floor lane (it stays off until then). See `attachment_vouch_gate`
+   (cli_engine.rs) + its two soundness unit tests.
 4. **Independence (high):** require distinct non-empty `toolchain_hash` across
    matched attachments, not just distinct `implementation_id` strings.
 5. **Non-vacuous FormalismFidelity (high):** require the probe be backed by a
@@ -165,11 +198,36 @@ new tests:
 
 ## 8. Enabled scope (when on)
 
-The narrowest safe start: reproduce-clean exact witnesses where the verifier IS
-frozen `vela-verify` and `claim_witness_faithful` parses the assertion (Sidon /
-Golomb / Cap / Bh / GF(2)-Sidon / constant-weight / union-free lower-bound and
-matched-equality size/order claims). It widens only as the faithfulness parser
-and the §7 checks mature. Everything else routes to human review, unchanged.
+The narrowest safe start: reproduce-clean LOWER-BOUND witnesses where the
+verifier IS frozen `vela-verify` and `claim_witness_faithful` binds the WHOLE
+claim to the witness. After three adversarial review rounds, the floor admits
+ONLY the kinds whose record is fully determined by `(kind, ambient n, lower
+bound)`: **Sidon ({0,1}^n), Cap (F_3^n), GF(2)-Sidon (GF(2)^n), union-free
+({1..n})**. For each, the floor reads the OEIS order `a(N)` (and/or the ambient
+literal), binds it to the witness `n` (for GF(2), requires every element <
+`2^N`), and requires `witness size >= bound`.
+
+Routed to review (NOT floor-admissible) until their extra hardness parameters
+are parsed and bound: **B_h** (the order `h`), **constant-weight A(n,d,w)** (the
+distance `d` and weight `w`), **golomb** (a min-length problem with no `>=`
+witness binding), and every non-size/order kind. Also routed to review:
+**equality / optimality claims** (`= N` / `exactly N`) — a construction witness
+proves only a lower bound, never that no larger object exists — and any
+**dual-bound** assertion (a `= 2500` headline beside an `at least 5` clause).
+
+A fourth adversarial round (5 lenses over the four admissible kinds) found no
+remaining false-bound break: the verifiers constrain each witness to the claimed
+ambient space, struct-`n` cannot diverge from the verified `n`, none of the four
+carries a hidden hardness parameter, and `len()` is the deduplicated size the
+verifier validated.
+
+**Known residual (cosmetic, not a false bound):** the *displayed* assertion
+prose can still puff a TRUE bound ("a(20) >= 5 — a new record!") because the
+floor binds the parsed `>=`/`a(N)` claim, not free prose. No FALSE bound or
+dimension can reach `machine_verified` (every confirmed round-1/2/3 break is
+closed). The complete fix is to DERIVE the displayed/exported headline from the
+witness-verified `(kind, n, bound)` rather than from author prose; that is a
+surface contract for when the lane is enabled.
 
 ## 9. Shipped vs pending
 

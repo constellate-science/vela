@@ -488,7 +488,9 @@ pub fn verify_witness(witness: &Witness) -> VerifyResult {
 pub struct ParsedClaim {
     /// The witness kind keyword found in the assertion (e.g. "sidon").
     pub kind: String,
-    /// The ambient dimension `n` from `{0,1}^n` / `GF(2)^n`, where present.
+    /// The ambient dimension / order `n`, reconciled from the OEIS order
+    /// `a(N)` and/or an ambient literal (`{0,1}^N` / `GF(2)^N` / `F_3^N`).
+    /// `None` only when the assertion states neither.
     pub ambient_n: Option<usize>,
     /// The claimed size / order bound `k`.
     pub bound: usize,
@@ -543,10 +545,43 @@ fn usize_after_any(hay: &str, needles: &[&str]) -> Option<usize> {
     best.map(|(v, _)| v)
 }
 
+/// The `usize` inside the first `a(N)` group (the OEIS order/index form),
+/// e.g. `a(20)` -> `20`. The match requires a literal `a(` so a sequence id
+/// like `a309370` (no paren) is not mistaken for an order.
+fn order_in_a_paren(text: &str) -> Option<usize> {
+    text.find("a(").and_then(|i| leading_usize(&text[i + 2..]))
+}
+
+/// The `usize` of an EQUALITY / optimality marker: `exactly N`, or a standalone
+/// `= N` whose `=` is NOT part of a `>=` / `<=` / `!=` / `==` operator. A
+/// witness establishes a lower bound, never an equality, so any such marker is
+/// a fail-closed signal (and a `= N` headline beside an `at least k` clause is
+/// the dual-bound inflation the exact lane must reject).
+fn equality_bound(text: &str) -> Option<usize> {
+    if let Some(v) = usize_after_any(text, &["exactly "]) {
+        return Some(v);
+    }
+    let mut from = 0;
+    while let Some(rel) = text[from..].find('=') {
+        let idx = from + rel;
+        let prev = text[..idx].chars().last();
+        let compound = matches!(
+            prev,
+            Some('>') | Some('<') | Some('!') | Some('=') | Some('\u{2265}') | Some('\u{2264}')
+        );
+        if !compound && let Some(v) = leading_usize(&text[idx + 1..]) {
+            return Some(v);
+        }
+        from = idx + 1;
+    }
+    None
+}
+
 /// Parse a finding assertion into a [`ParsedClaim`]. Conservative and
-/// fail-closed: recognizes only the exact lower-bound / size forms the
-/// exact lane admits, and returns `None` on any ambiguity (no kind keyword,
-/// no parseable bound, both `>=` and `=` present, etc.).
+/// fail-closed: recognizes only the lower-bound forms the exact lane admits,
+/// and returns `None` on any ambiguity (no kind keyword, no parseable bound,
+/// an equality/optimality marker, two disagreeing dimension signals, or a
+/// lower bound co-occurring with an equality marker).
 pub fn parse_claim(assertion_text: &str) -> Option<ParsedClaim> {
     let text = assertion_text.to_lowercase();
 
@@ -569,17 +604,31 @@ pub fn parse_claim(assertion_text: &str) -> Option<ParsedClaim> {
         return None;
     };
 
-    // Ambient dimension from `{0,1}^n` or `gf(2)^n`.
-    let ambient_n = ["{0,1}^", "gf(2)^"].iter().find_map(|m| {
+    // Dimension / order. Two independent signals: the OEIS order `a(N)` and an
+    // ambient-space literal (`{0,1}^N`, `gf(2)^N`, `f_3^N`). Reading the `a(N)`
+    // order (not only the literal) is what binds an OEIS "a(20)" claim to the
+    // witness even when the prose omits a `{0,1}^20` literal. If BOTH signals
+    // are present and DISAGREE the claim is ambiguous -> fail closed.
+    let order = order_in_a_paren(&text);
+    let literal = ["{0,1}^", "gf(2)^", "f_3^"].iter().find_map(|m| {
         text.find(m)
             .and_then(|i| leading_usize(&text[i + m.len()..]))
     });
+    let ambient_n = match (order, literal) {
+        (Some(a), Some(b)) if a != b => return None,
+        (Some(a), _) => Some(a),
+        (None, Some(b)) => Some(b),
+        (None, None) => None,
+    };
 
-    // Bound: a lower bound (`>=`, `≥`, `at least`) or an equality (`exactly`).
-    // If BOTH a lower bound and an equality marker appear, bail (ambiguous).
+    // Bound: exactly one unambiguous lower bound (`>=`, `≥`, `at least`). An
+    // equality / optimality marker (`exactly N`, or a standalone `= N`) is not
+    // witness-establishable, and a lower bound co-occurring with one is
+    // ambiguous (a `= 2500` headline beside an `at least 5` clause): both fail
+    // closed.
     let lower = usize_after_any(&text, &[">=", "\u{2265}", "at least "]);
-    let exact = usize_after_any(&text, &["exactly "]);
-    let (bound, is_exact) = match (lower, exact) {
+    let equality = equality_bound(&text);
+    let (bound, is_exact) = match (lower, equality) {
         (Some(l), None) => (l, false),
         (None, Some(e)) => (e, true),
         // both present, or neither: ambiguous / unparseable -> fail closed.
@@ -639,15 +688,148 @@ pub fn claim_witness_faithful(assertion_text: &str, witness: &Witness) -> Faithf
         };
     }
 
-    // The witness's size/order and ambient dimension must meet the claim.
-    let (size, wn): (usize, Option<usize>) = match witness {
-        Witness::Sidon { n, points, .. } => (points.len(), Some(*n)),
-        Witness::Cap { n, points, .. } => (points.len(), Some(*n)),
-        Witness::Bh { n, points, .. } => (points.len(), Some(*n)),
-        Witness::ConstantWeight { n, words, .. } => (words.len(), Some(*n)),
-        Witness::UnionFree { n, sets, .. } => (sets.len(), Some(*n)),
-        Witness::Gf2Sidon { elements, .. } => (elements.len(), None),
-        Witness::Golomb { marks } => (marks.len(), None),
+    // A construction witness establishes a LOWER bound (a(n) >= size). An
+    // equality / optimality claim (`=` / `exactly`) additionally asserts that
+    // no larger object exists, which a single witness cannot prove; route it to
+    // review rather than admit it on the witness alone.
+    if parsed.exact {
+        reasons.push(
+            "equality/optimality claim (= / exactly) is not establishable by a construction \
+             witness (which proves only a lower bound); routes to review"
+                .to_string(),
+        );
+        return Faithfulness {
+            faithful: false,
+            reasons,
+            parsed: Some(parsed),
+        };
+    }
+
+    // The witness's size/order must meet the claimed bound AND the claimed
+    // dimension must bind to the witness. Every size/order-bearing kind MUST
+    // carry a parsed dimension (the `a(N)` order or an ambient literal); a
+    // dimensioned claim that omits it is the omit-dimension bypass (a small
+    // witness backing an `a(20)` headline) and routes to review.
+    let dim_n_witness = |n: usize| -> Option<String> {
+        match parsed.ambient_n {
+            None => Some(
+                "dimensioned claim states no ambient dimension (a(N) / {0,1}^N / gf(2)^N); \
+                 routes to review"
+                    .to_string(),
+            ),
+            Some(c) if c != n => Some(format!(
+                "claim ambient dimension n={c} does not match witness n={n}"
+            )),
+            Some(_) => None,
+        }
+    };
+
+    // The floor admits a kind ONLY when its record is fully determined by
+    // (kind, n, bound). Kinds carrying an extra hardness parameter the parser
+    // does not yet bind — B_h's order `h`, constant-weight's `(d, w)` — would
+    // let an EASY witness (h=2, or A(n,2,1)) back a HARD headline (B_3, or
+    // A(n,10,8)); verify_witness only checks the witness against its OWN
+    // author-set h/d/w, never the assertion. Until those are parsed and bound
+    // they route to review, like golomb. (Confirmed by a third adversarial
+    // review: binding ambient `n` alone is necessary but not sufficient.)
+    let size: usize = match witness {
+        Witness::Sidon { n, points, .. } | Witness::Cap { n, points, .. } => {
+            if let Some(r) = dim_n_witness(*n) {
+                reasons.push(r);
+                return Faithfulness {
+                    faithful: false,
+                    reasons,
+                    parsed: Some(parsed),
+                };
+            }
+            points.len()
+        }
+        Witness::UnionFree { n, sets, .. } => {
+            if let Some(r) = dim_n_witness(*n) {
+                reasons.push(r);
+                return Faithfulness {
+                    faithful: false,
+                    reasons,
+                    parsed: Some(parsed),
+                };
+            }
+            sets.len()
+        }
+        Witness::Gf2Sidon { elements, .. } => {
+            // The claimed dimension N is mandatory, and every element must live
+            // in GF(2)^N (no set bit at index >= N). A witness in GF(2)^12 must
+            // NOT establish an a(5) claim; the element-fit check binds it.
+            let Some(claim_n) = parsed.ambient_n else {
+                reasons.push(
+                    "GF(2)-Sidon claim states no dimension N (a(N) / gf(2)^N); routes to review"
+                        .to_string(),
+                );
+                return Faithfulness {
+                    faithful: false,
+                    reasons,
+                    parsed: Some(parsed),
+                };
+            };
+            if claim_n >= 64 || elements.iter().any(|e| (*e >> claim_n) != 0) {
+                reasons.push(format!(
+                    "witness has an element outside GF(2)^{claim_n}; it does not establish a(N) \
+                     at that dimension"
+                ));
+                return Faithfulness {
+                    faithful: false,
+                    reasons,
+                    parsed: Some(parsed),
+                };
+            }
+            elements.len()
+        }
+        Witness::Bh { .. } => {
+            // B_h's record hardness depends on the order h (a B_3 set admits
+            // strictly fewer points than B_2). The floor does not yet parse and
+            // bind h, so an h=2 witness could back a B_3 claim. Route to review
+            // until h-binding lands.
+            reasons.push(
+                "B_h claims are not floor-admissible (the order h is not yet parsed and bound \
+                 to the witness); routes to review"
+                    .to_string(),
+            );
+            return Faithfulness {
+                faithful: false,
+                reasons,
+                parsed: Some(parsed),
+            };
+        }
+        Witness::ConstantWeight { .. } => {
+            // A constant-weight record A(n,d,w) depends on the minimum distance
+            // d and the weight w, which the floor does not yet parse and bind;
+            // a trivial A(n,2,1) witness could back a hard A(n,10,8) claim.
+            // Route to review until (d, w)-binding lands.
+            reasons.push(
+                "constant-weight A(n,d,w) claims are not floor-admissible (d and w are not yet \
+                 parsed and bound to the witness); routes to review"
+                    .to_string(),
+            );
+            return Faithfulness {
+                faithful: false,
+                reasons,
+                parsed: Some(parsed),
+            };
+        }
+        Witness::Golomb { .. } => {
+            // A Golomb claim is a MIN-length problem (a(n) <= length); a ruler
+            // witness does not establish a >= lower bound the same way, and no
+            // sound witness->claim binding is defined here. Route to review.
+            reasons.push(
+                "golomb claims are not floor-admissible (no sound witness->bound binding \
+                 defined); routes to review"
+                    .to_string(),
+            );
+            return Faithfulness {
+                faithful: false,
+                reasons,
+                parsed: Some(parsed),
+            };
+        }
         // Any other variant is outside the size/order-bearing exact lane.
         _ => {
             reasons.push(format!(
@@ -662,28 +844,9 @@ pub fn claim_witness_faithful(assertion_text: &str, witness: &Witness) -> Faithf
         }
     };
 
-    if let (Some(claim_n), Some(witness_n)) = (parsed.ambient_n, wn)
-        && claim_n != witness_n
-    {
+    if size < parsed.bound {
         reasons.push(format!(
-            "claim ambient dimension n={claim_n} does not match witness n={witness_n}"
-        ));
-        return Faithfulness {
-            faithful: false,
-            reasons,
-            parsed: Some(parsed),
-        };
-    }
-
-    let size_ok = if parsed.exact {
-        size == parsed.bound
-    } else {
-        size >= parsed.bound
-    };
-    if !size_ok {
-        reasons.push(format!(
-            "witness size/order {size} does not establish the claimed {} {}",
-            if parsed.exact { "=" } else { ">=" },
+            "witness size/order {size} does not establish the claimed >= {}",
             parsed.bound
         ));
         return Faithfulness {
@@ -2130,17 +2293,164 @@ mod tests {
     }
 
     #[test]
-    fn faithful_exact_equality_requires_exact_size() {
+    fn faithful_routes_equality_optimality_to_review() {
+        // An equality / optimality claim (`= N` / `exactly N`) asserts the
+        // MAXIMUM is N (no larger object exists), which a single construction
+        // witness cannot prove — it establishes only a lower bound. So even a
+        // size-matching witness must NOT auto-admit an `exactly` claim; it
+        // routes to review. (Closes the inflation-via-equality vector: an agent
+        // cannot turn a real `a(n) >= k` witness into an `a(n) = k`/headline
+        // claim the floor never verified.)
         let w = Witness::Sidon {
             n: 3,
             points: small_sidon(), // 4 points
             claimed_size: None,
         };
+        let f = claim_witness_faithful("a Sidon set in {0,1}^3 with exactly 4 elements.", &w);
         assert!(
-            claim_witness_faithful("a Sidon set in {0,1}^3 with exactly 4 elements.", &w).faithful
+            !f.faithful,
+            "equality/optimality is not witness-establishable"
+        );
+        assert!(f.reasons.iter().any(|r| r.contains("equality/optimality")));
+        // a standalone `= N` headline is treated the same way.
+        let f2 = claim_witness_faithful("Sidon a(3) = 4 in {0,1}^3 (new record).", &w);
+        assert!(!f2.faithful, "a `= N` headline also routes to review");
+    }
+
+    // ---- second-adversarial-review regressions (floor as the sole gate) ----
+
+    // ATTACK (inflated-claim / witness-substitution): a genuine small witness
+    // dressed with an `a(20)` headline. Reading the a(N) order and binding it to
+    // the witness n closes both the omit-dimension and the easy-witness-for-
+    // hard-claim bypass.
+    #[test]
+    fn faithful_binds_a_of_n_order_to_witness() {
+        let w = Witness::Sidon {
+            n: 3,
+            points: small_sidon(),
+            claimed_size: None,
+        }; // a valid 4-point Sidon set in {0,1}^3
+        assert!(verify_witness(&w).ok, "the witness itself is valid");
+        // a(20) order vs witness n=3 -> mismatch, even though size 4 >= 4.
+        let f = claim_witness_faithful("Sidon record a(20): at least 4 points.", &w);
+        assert!(
+            !f.faithful,
+            "an a(20) claim cannot ride an n=3 witness: {:?}",
+            f.reasons
+        );
+        // No ambient/order at all -> mandatory-dimension fail closed.
+        let f2 = claim_witness_faithful("A Sidon set, at least 4 points, beats the record.", &w);
+        assert!(
+            !f2.faithful,
+            "a dimensioned claim with no ambient routes to review: {:?}",
+            f2.reasons
+        );
+    }
+
+    // ATTACK (dual-bound headline): a `= 2500` headline beside an `at least 4`
+    // clause. The lower bound co-occurring with an equality marker is ambiguous.
+    #[test]
+    fn faithful_rejects_dual_bound_headline() {
+        let w = Witness::Sidon {
+            n: 3,
+            points: small_sidon(),
+            claimed_size: None,
+        };
+        let f = claim_witness_faithful(
+            "Sidon in {0,1}^3: a(3) = 2500 (beats prior 1989). The witness has at least 4 points.",
+            &w,
         );
         assert!(
-            !claim_witness_faithful("a Sidon set in {0,1}^3 with exactly 5 elements.", &w).faithful
+            !f.faithful,
+            "a `= headline` beside an `at least` clause is ambiguous: {:?}",
+            f.reasons
+        );
+        assert!(
+            f.parsed.is_none(),
+            "the dual lower+equality marker fails parse"
+        );
+    }
+
+    // ATTACK (reproduce-spoof / GF(2) dimension): a GF(2)^5 witness cannot
+    // establish an a(4) claim, because element 16 sits outside GF(2)^4.
+    #[test]
+    fn faithful_gf2_binds_dimension() {
+        let good = Witness::Gf2Sidon {
+            elements: vec![1, 2, 4],
+            claimed_size: None,
+        };
+        assert!(verify_witness(&good).ok);
+        let f = claim_witness_faithful("OEIS A394031 a(3) >= 3: a Sidon set in GF(2)^3.", &good);
+        assert!(f.faithful, "genuine GF(2)^3 claim: {:?}", f.reasons);
+
+        let wide = Witness::Gf2Sidon {
+            elements: vec![1, 2, 4, 8, 16],
+            claimed_size: None,
+        };
+        assert!(
+            verify_witness(&wide).ok,
+            "the wider witness is itself valid"
+        );
+        let f2 = claim_witness_faithful("OEIS A394031 a(4) >= 5: a Sidon set in GF(2)^4.", &wide);
+        assert!(
+            !f2.faithful,
+            "an element outside GF(2)^4 must fail: {:?}",
+            f2.reasons
+        );
+        // dimension omitted -> mandatory fail closed.
+        let f3 = claim_witness_faithful("A GF(2) Sidon set, at least 5 elements.", &wide);
+        assert!(!f3.faithful, "{:?}", f3.reasons);
+    }
+
+    // ATTACK (sub-parameter substitution): an EASY witness (B_2, or A(n,2,1))
+    // dressed with a HARD headline (B_3, or A(n,10,8)). verify_witness checks
+    // the witness only against its OWN author-set h/d/w, so the floor must not
+    // admit these kinds until h / (d,w) are parsed and bound. Route to review.
+    #[test]
+    fn faithful_routes_bh_and_constant_weight_to_review() {
+        let bh = Witness::Bh {
+            n: 3,
+            h: 2,
+            points: small_sidon(),
+            claimed_size: None,
+        };
+        assert!(verify_witness(&bh).ok, "the B_2 witness is itself valid");
+        let f = claim_witness_faithful("a bh set of order three in {0,1}^3: a(3) >= 4.", &bh);
+        assert!(!f.faithful, "B_h is not floor-admissible: {:?}", f.reasons);
+        assert!(f.reasons.iter().any(|r| r.contains("B_h")));
+
+        let cw = Witness::ConstantWeight {
+            n: 4,
+            d: 2,
+            w: 1,
+            words: vec![vec![1, 0, 0, 0], vec![0, 1, 0, 0]],
+            claimed_size: None,
+        };
+        assert!(
+            verify_witness(&cw).ok,
+            "the A(4,2,1) witness is itself valid"
+        );
+        let f2 = claim_witness_faithful("constant weight code A(4,10,8): a(4) >= 2.", &cw);
+        assert!(
+            !f2.faithful,
+            "constant-weight is not floor-admissible: {:?}",
+            f2.reasons
+        );
+        assert!(f2.reasons.iter().any(|r| r.contains("constant-weight")));
+    }
+
+    // Golomb has no sound witness->lower-bound binding defined: route to review.
+    #[test]
+    fn faithful_golomb_routes_to_review() {
+        let w = Witness::Golomb {
+            marks: vec![0, 1, 3],
+        };
+        assert!(verify_witness(&w).ok);
+        let f = claim_witness_faithful("Golomb ruler a(3) >= 3.", &w);
+        assert!(
+            !f.faithful,
+            "golomb is not floor-admissible: {:?}",
+            f.reasons
         );
     }
 
