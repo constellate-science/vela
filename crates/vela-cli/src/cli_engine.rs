@@ -488,6 +488,7 @@ pub(crate) fn cmd_foundry(action: FoundryAction) {
             seeds,
             run_ablation,
             apply,
+            force,
             json,
         } => cmd_foundry_run(
             &frontier,
@@ -500,6 +501,7 @@ pub(crate) fn cmd_foundry(action: FoundryAction) {
             seeds,
             run_ablation,
             apply,
+            force,
             json,
         ),
         FoundryAction::Targets {
@@ -1377,6 +1379,47 @@ fn pick_best_seed(
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Failed-route reuse: has this exact (kind, cell_digest) cell already been
+/// banked in the frontier's attempt ledger? Returns the prior `vat_` id if so.
+/// The cell_digest is the producer config (`n=..;seed=..;restarts=..`), so the
+/// match is the precise search the next turn would otherwise repeat.
+fn find_prior_attempt(frontier: &Path, kind: &str, cell_digest: &str) -> Option<String> {
+    let source = repo::detect(frontier).ok()?;
+    let proj = repo::load(&source).ok()?;
+    proj.events
+        .iter()
+        .rev()
+        .find_map(|ev| match_attempt_cell(ev.kind.as_str(), &ev.payload, kind, cell_digest))
+}
+
+/// Pure matcher: does this event bank an attempt for `(kind, cell_digest)`?
+/// Returns the prior `vat_` id if so. Split out for testability.
+fn match_attempt_cell(
+    ev_kind: &str,
+    payload: &serde_json::Value,
+    kind: &str,
+    cell_digest: &str,
+) -> Option<String> {
+    if ev_kind != "attempt.deposited" {
+        return None;
+    }
+    let a = payload.get("attempt")?;
+    let k = a.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+    let dig = a
+        .get("producer")
+        .and_then(|p| p.get("config_digest"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if k == kind && dig == cell_digest {
+        a.get("attempt_id")
+            .and_then(|v| v.as_str())
+            .map(String::from)
+    } else {
+        None
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn cmd_foundry_run(
     frontier: &Path,
     kind: &str,
@@ -1388,6 +1431,7 @@ fn cmd_foundry_run(
     seeds: u64,
     run_ablation: bool,
     apply: bool,
+    force: bool,
     json_out: bool,
 ) {
     let exe = std::env::current_exe()
@@ -1406,6 +1450,35 @@ fn cmd_foundry_run(
     } else {
         seed
     };
+
+    // 0b. FAILED-ROUTE REUSE (the memo's §19.2): inherited memory must bite. If
+    //     this exact (kind, n, seed, restarts) cell is already in the attempt
+    //     ledger, a prior turn already searched it — skip the re-search (the
+    //     result is deterministic, so re-running wastes the budget). `--force`
+    //     overrides. This is what makes the ledger a memory, not just a log.
+    let cell_digest = format!("n={n};seed={seed};restarts={restarts}");
+    if !force && let Some(prior) = find_prior_attempt(frontier, kind, &cell_digest) {
+        if json_out {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&json!({
+                    "turn": "deduped",
+                    "produced": false,
+                    "reason": "cell already in the attempt ledger (failed-route reuse)",
+                    "prior_attempt": prior,
+                    "cell": cell_digest,
+                    "hint": "pass --force to re-run",
+                }))
+                .unwrap()
+            );
+        } else {
+            println!(
+                "foundry turn: DEDUPED — {kind} {cell_digest} already attempted ({prior}); \
+                 pass --force to re-run"
+            );
+        }
+        return;
+    }
 
     // 1. PRODUCE + PROPOSE via the frozen-verifier campaign (the tested path:
     //    it runs vela-verify on the witness before returning, writes the
@@ -1607,7 +1680,9 @@ fn cmd_foundry_run(
                 producer: vela_protocol::attempt::ProducerRef {
                     system: "vela-foundry".to_string(),
                     version: env!("CARGO_PKG_VERSION").to_string(),
-                    config_digest: format!("seed={seed};restarts={restarts}"),
+                    // n is part of the cell key so the failed-route dedup
+                    // distinguishes (kind, n, seed, restarts) cells.
+                    config_digest: format!("n={n};seed={seed};restarts={restarts}"),
                 },
                 ..Default::default()
             };
@@ -2843,6 +2918,53 @@ pub(crate) fn cmd_carina(action: CarinaAction) {
 #[cfg(test)]
 mod foundry_targets_tests {
     use super::*;
+
+    #[test]
+    fn attempt_cell_match_is_exact_on_kind_and_digest() {
+        // The failed-route dedup key: (kind, config_digest). A matching banked
+        // attempt returns its id; a different kind or cell does not.
+        let ev = serde_json::json!({
+            "attempt": {
+                "attempt_id": "vat_deadbeef",
+                "kind": "sidon",
+                "producer": { "config_digest": "n=40;seed=3;restarts=200" }
+            }
+        });
+        assert_eq!(
+            match_attempt_cell(
+                "attempt.deposited",
+                &ev,
+                "sidon",
+                "n=40;seed=3;restarts=200"
+            ),
+            Some("vat_deadbeef".to_string())
+        );
+        // wrong cell (different seed) -> no match
+        assert_eq!(
+            match_attempt_cell(
+                "attempt.deposited",
+                &ev,
+                "sidon",
+                "n=40;seed=9;restarts=200"
+            ),
+            None
+        );
+        // wrong kind -> no match
+        assert_eq!(
+            match_attempt_cell(
+                "attempt.deposited",
+                &ev,
+                "golomb",
+                "n=40;seed=3;restarts=200"
+            ),
+            None
+        );
+        // wrong event kind -> no match
+        assert_eq!(
+            match_attempt_cell("finding.add", &ev, "sidon", "n=40;seed=3;restarts=200"),
+            None
+        );
+    }
 
     #[test]
     fn read_records_best_reports_deepest_accepted() {

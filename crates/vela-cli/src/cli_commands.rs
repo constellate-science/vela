@@ -1401,6 +1401,11 @@ pub(crate) enum FoundryAction {
         /// Record the admission (else dry-run preview the whole turn).
         #[arg(long)]
         apply: bool,
+        /// Re-run even if this exact (kind, n, seed, restarts) cell is already in
+        /// the attempt ledger. By default the foundry skips a banked cell
+        /// (failed-route reuse: don't re-search what a prior turn already did).
+        #[arg(long)]
+        force: bool,
         #[arg(long)]
         json: bool,
     },
