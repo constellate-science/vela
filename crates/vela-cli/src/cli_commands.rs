@@ -1440,6 +1440,13 @@ pub(crate) enum FoundryAction {
         /// Witness kind to ablate (`sidon`, `golomb`, …).
         #[arg(long)]
         kind: String,
+        /// Optional per-family records catalog (`records/<family>.json` or
+        /// `bounds.json`): the inherited-state count is read from its accepted,
+        /// reproduce-backed bounds instead of the frontier's accepted findings.
+        /// Lets the compounding measurement run on a family WITHOUT a key-custody
+        /// accept ceremony (the records are already frozen-verified).
+        #[arg(long)]
+        records: Option<PathBuf>,
         /// The boundary target `n` (the frontier edge being attacked).
         #[arg(long)]
         n: usize,

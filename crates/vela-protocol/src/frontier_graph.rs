@@ -68,6 +68,13 @@ impl EdgeKind {
             "extends" => Self::Extends,
             "replicates" => Self::Replicates,
             "discharges" => Self::Discharges,
+            // A cross-problem reduction "A implies B" means B's resolution rests
+            // on A (solving A solves B), so it participates in the dependency
+            // blast-radius exactly as `depends`. Mapped onto the existing
+            // `DependsOn` kind (no new variant, so no wire-format change), which
+            // is what makes the `implies` links the ingest already mints become
+            // real typed graph edges instead of being silently dropped.
+            "implies" => Self::DependsOn,
             _ => return None,
         })
     }

@@ -511,12 +511,22 @@ pub(crate) fn cmd_foundry(action: FoundryAction) {
         FoundryAction::Ablate {
             frontier,
             kind,
+            records,
             n,
             h,
             budget,
             seeds,
             json,
-        } => cmd_foundry_ablate(&frontier, &kind, n, h, budget, seeds, json),
+        } => cmd_foundry_ablate(
+            &frontier,
+            &kind,
+            records.as_deref(),
+            n,
+            h,
+            budget,
+            seeds,
+            json,
+        ),
     }
 }
 
@@ -533,24 +543,42 @@ pub(crate) fn cmd_foundry(action: FoundryAction) {
 fn cmd_foundry_ablate(
     frontier: &Path,
     kind: &str,
+    records: Option<&Path>,
     boundary: usize,
     h: usize,
     budget: u64,
     seeds: u64,
     json_out: bool,
 ) {
-    let source = repo::detect(frontier).unwrap_or_else(|e| fail_return(&e));
-    let proj = repo::load(&source).unwrap_or_else(|e| fail_return(&e));
-
-    // The inherited state: how many solved targets of this kind the frontier
-    // already holds (the depth a no-inheritance producer would have to
-    // rediscover). Counted by the kind keyword in the assertion, so it works
-    // for kinds with no `{0,1}^n` ambient dimension (golomb, costas, …) too.
-    let known = proj
-        .findings
-        .iter()
-        .filter(|f| f.assertion.text.to_lowercase().contains(kind))
-        .count();
+    // The inherited state: how many solved targets of this kind are already
+    // banked (the depth a no-inheritance producer would have to rediscover).
+    // Either from a per-family records catalog (accepted, reproduce-backed
+    // bounds — runs without a key-custody accept ceremony) or, by default, from
+    // the frontier's accepted findings (matched by the kind keyword, so it works
+    // for kinds with no `{0,1}^n` ambient dimension like golomb/costas too).
+    let known = if let Some(records_path) = records {
+        let raw = std::fs::read_to_string(records_path)
+            .unwrap_or_else(|e| fail_return(&format!("read {}: {e}", records_path.display())));
+        let v: serde_json::Value = serde_json::from_str(&raw)
+            .unwrap_or_else(|e| fail_return(&format!("parse {}: {e}", records_path.display())));
+        // Accept either the `records/<family>.json` schema (`bounds[].accepted`)
+        // or the producer `bounds.json` (`bounds[].accepted`).
+        v.get("bounds")
+            .and_then(|b| b.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter(|e| e.get("accepted").and_then(|a| a.as_bool()).unwrap_or(false))
+                    .count()
+            })
+            .unwrap_or(0)
+    } else {
+        let source = repo::detect(frontier).unwrap_or_else(|e| fail_return(&e));
+        let proj = repo::load(&source).unwrap_or_else(|e| fail_return(&e));
+        proj.findings
+            .iter()
+            .filter(|f| f.assertion.text.to_lowercase().contains(kind))
+            .count()
+    };
     let range = (known as u64) + 1; // the targets a no-inheritance producer covers
     let control_budget = (budget / range).max(1);
 
