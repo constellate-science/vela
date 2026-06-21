@@ -1528,6 +1528,21 @@ pub(crate) enum FoundryAction {
         #[arg(long)]
         json: bool,
     },
+    /// The decisive lemma-inheritance measurement (the memo's "Compounding B"):
+    /// do accepted Lean lemmas widen the closable boundary? Treatment counts the
+    /// open targets that are one-premise-away WITH the inherited lemmas present;
+    /// control demotes those lemmas to Open. Δ>0 means inherited verified state
+    /// makes the next proof reachable — the formal analogue of skip-known-work.
+    LeanAblate {
+        /// Frontier directory with Lean findings + inter-problem premise edges.
+        frontier: PathBuf,
+        /// Explicit inherited-lemma finding ids (comma-separated). Default: every
+        /// finding whose assertion_type marks a Lean formalization.
+        #[arg(long)]
+        lemmas: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 /// `vela campaign` — the discovery engine over verifier-gated constructions.

@@ -72,7 +72,28 @@ impl Boundary {
     /// Derive the boundary from a project. Pure and deterministic.
     #[must_use]
     pub fn derive(project: &Project) -> Self {
+        Self::derive_with_demoted(project, &BTreeSet::new())
+    }
+
+    /// Derive the boundary treating every finding id in `demoted` as if it were
+    /// `Open` — the control arm of the lemma-inheritance ablation (the memo's
+    /// "Compounding B"). Removing an accepted lemma from the established pool can
+    /// only shrink `one_premise_away` (a target that rested on it is no longer
+    /// one step from done), so `one_premise_away(treatment) - one_premise_away(
+    /// control)` measures the unlock structure inherited verified lemmas provide.
+    /// Pure and deterministic.
+    #[must_use]
+    pub fn derive_with_demoted(project: &Project, demoted: &BTreeSet<String>) -> Self {
         let graph = FrontierGraph::from_project(project);
+        // Effective state: a demoted finding is treated as Open regardless of
+        // its actual review state (the control arm strips the inherited lemma).
+        let eff = |id: &str, actual: FindingState| -> FindingState {
+            if demoted.contains(id) {
+                FindingState::Open
+            } else {
+                actual
+            }
+        };
 
         // Per-node incidence: outgoing premises (depends/derived/discharges),
         // outgoing/incoming support, for the scaffolding and one-premise tests.
@@ -96,7 +117,7 @@ impl Boundary {
 
         for node in graph.nodes() {
             let id = node.id.as_str();
-            match node.state {
+            match eff(id, node.state) {
                 FindingState::Open => {
                     let premises = out_premise.get(id).cloned().unwrap_or_default();
                     let has_support_scaffolding = out_support.contains_key(id)
@@ -119,7 +140,7 @@ impl Boundary {
                     let all_established = premises.iter().all(|t| {
                         graph
                             .node(t)
-                            .is_some_and(|n| n.state == FindingState::Established)
+                            .is_some_and(|n| eff(&n.id, n.state) == FindingState::Established)
                     });
                     if all_established {
                         boundary.one_premise_away.push(BoundaryItem {
@@ -273,6 +294,33 @@ mod tests {
         assert_eq!(boundary.one_premise_away.len(), 1);
         assert_eq!(boundary.one_premise_away[0].finding, b_id);
         assert_eq!(boundary.one_premise_away[0].related, vec![a_id]);
+    }
+
+    #[test]
+    fn demoting_an_inherited_lemma_shrinks_one_premise_away() {
+        // The lemma-inheritance ablation: `a` established, open `b` depends_on a.
+        // Treatment (a inherited) -> b is one-premise-away. Control (a demoted to
+        // Open) -> b is no longer one-premise-away. Δ = 1 = the unlock structure.
+        let mut a = synth_finding(0, vec![]);
+        a.flags.review_state = Some(ReviewState::Accepted);
+        a.confidence.score = 0.9;
+        let b = synth_finding(1, vec![link_typed(&a.id, "depends")]);
+        let a_id = a.id.clone();
+        let mut project = assemble("ablate", vec![], 0, 0, "test");
+        project.findings = vec![a, b];
+
+        let treatment = Boundary::derive(&project).one_premise_away.len();
+        let demoted: BTreeSet<String> = std::iter::once(a_id).collect();
+        let control = Boundary::derive_with_demoted(&project, &demoted)
+            .one_premise_away
+            .len();
+        assert_eq!(treatment, 1);
+        assert_eq!(control, 0);
+        assert!(
+            treatment > control,
+            "inheritance compounds: Δ = {}",
+            treatment - control
+        );
     }
 
     #[test]

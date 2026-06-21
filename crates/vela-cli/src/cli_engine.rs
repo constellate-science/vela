@@ -557,6 +557,74 @@ pub(crate) fn cmd_foundry(action: FoundryAction) {
             out_dir,
             json,
         }),
+        FoundryAction::LeanAblate {
+            frontier,
+            lemmas,
+            json,
+        } => cmd_foundry_lean_ablate(&frontier, lemmas.as_deref(), json),
+    }
+}
+
+/// The decisive lemma-inheritance measurement (the memo's "Compounding B"):
+/// do accepted Lean lemmas widen the closable boundary? Treatment counts the
+/// open targets that are one-premise-away WITH the inherited lemmas present;
+/// control demotes those lemmas to Open. Δ>0 = inherited verified state makes
+/// the next proof reachable (the formal analogue of skip-known-work). Unlike a
+/// search ablation this measures UNLOCK STRUCTURE, not solver yield.
+fn cmd_foundry_lean_ablate(frontier: &Path, lemmas: Option<&str>, json_out: bool) {
+    use std::collections::BTreeSet;
+    use vela_protocol::boundary::Boundary;
+    let source = repo::detect(frontier).unwrap_or_else(|e| fail_return(&e));
+    let proj = repo::load(&source).unwrap_or_else(|e| fail_return(&e));
+    let inherited: BTreeSet<String> = match lemmas {
+        Some(s) => s
+            .split(',')
+            .map(|x| x.trim().to_string())
+            .filter(|x| !x.is_empty())
+            .collect(),
+        None => proj
+            .findings
+            .iter()
+            .filter(|f| f.assertion.assertion_type.to_lowercase().contains("lean"))
+            .map(|f| f.id.clone())
+            .collect(),
+    };
+    let treatment = Boundary::derive(&proj).one_premise_away.len();
+    let control = Boundary::derive_with_demoted(&proj, &inherited)
+        .one_premise_away
+        .len();
+    let delta = treatment as i64 - control as i64;
+    let compounds = delta > 0;
+    if json_out {
+        print_json(&json!({
+            "command": "foundry.lean-ablate",
+            "frontier": frontier.display().to_string(),
+            "inherited_lemmas": inherited.len(),
+            "treatment": treatment,
+            "control": control,
+            "delta": delta,
+            "inheritance_compounds": compounds,
+            "note": "treatment = one-premise-away targets with inherited Lean lemmas present; \
+                     control demotes them to Open. Δ>0 = accepted lemmas widen the closable \
+                     boundary (Compounding B). Requires inter-problem premise edges (WS-C5) to be \
+                     non-zero.",
+        }));
+    } else {
+        println!(
+            "{} inherited_lemmas={} treatment={} control={} Δ={} compounds={}",
+            style::ok("foundry.lean-ablate"),
+            inherited.len(),
+            treatment,
+            control,
+            delta,
+            compounds,
+        );
+        if treatment == 0 && control == 0 {
+            println!(
+                "  (0/0 — no Lean one-premise-away structure yet; the measurement needs \
+                 inter-problem premise edges, i.e. WS-C5 math judgment)"
+            );
+        }
     }
 }
 
