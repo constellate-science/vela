@@ -527,6 +527,586 @@ pub(crate) fn cmd_foundry(action: FoundryAction) {
             seeds,
             json,
         ),
+        FoundryAction::LeanTargets {
+            lean_dir,
+            subdir,
+            all,
+            limit,
+            json,
+        } => cmd_foundry_lean_targets(&lean_dir, &subdir, all, limit, json),
+        FoundryAction::LeanRun {
+            lean_dir,
+            module,
+            decl,
+            frontier,
+            finding,
+            reviewer,
+            actor,
+            key,
+            out_dir,
+            json,
+        } => cmd_foundry_lean_run(LeanRunArgs {
+            lean_dir,
+            module,
+            decl,
+            frontier,
+            finding,
+            reviewer,
+            actor,
+            key,
+            out_dir,
+            json,
+        }),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The prover-in-the-loop Lean lane (Program 1 of the Known->Unknown plan).
+// Known proved lemmas compose into proofs of open theorems. The AI (proof-
+// subagents) is the PRODUCER of a candidate Lean proof; the Lean kernel +
+// `#print axioms` classification is the frozen VERIFIER (the analogue of `splr`
+// producing a SAT assignment that `verify_diff_triangle` checks); a human key
+// ACCEPTS. No model is ever in a trust path.
+// ---------------------------------------------------------------------------
+
+/// One open Lean obligation surfaced by `vela foundry lean-targets`.
+#[derive(serde::Serialize)]
+struct LeanTarget {
+    module: String,
+    /// Fully-qualified decl (`Namespace.decl`) for `#print axioms` / `lean-run`.
+    decl: String,
+    namespace: String,
+    category: String,
+    /// `formalization_gap` (a non-research-open decl still carrying `sorry` — the
+    /// tractable target) or `research_open` (the headline open problem, not
+    /// expected subagent-closable).
+    tractability: String,
+}
+
+/// Read-only worklist: scan a formal-conjectures corpus for OPEN Lean
+/// obligations (decls carrying `sorry`), ranked by a heuristic tractability so
+/// the prove loop attacks the formalization gaps first. The real arbiter of
+/// closability is `lean-run`'s kernel build; this only orders the queue.
+fn cmd_foundry_lean_targets(
+    lean_dir: &Path,
+    subdir: &str,
+    all: bool,
+    limit: usize,
+    json_out: bool,
+) {
+    let root = lean_dir.join(subdir);
+    let mut files: Vec<std::path::PathBuf> = Vec::new();
+    collect_lean_files(&root, &mut files);
+    files.sort();
+
+    let mut targets: Vec<LeanTarget> = Vec::new();
+    for f in &files {
+        let Ok(text) = std::fs::read_to_string(f) else {
+            continue;
+        };
+        let module = f
+            .strip_prefix(lean_dir)
+            .unwrap_or(f)
+            .to_string_lossy()
+            .to_string();
+        targets.extend(scan_lean_decls(&text, &module));
+    }
+    // Tractable gaps first, then by module for determinism.
+    targets.sort_by(|a, b| {
+        let rank = |t: &str| if t == "formalization_gap" { 0 } else { 1 };
+        rank(&a.tractability)
+            .cmp(&rank(&b.tractability))
+            .then(a.module.cmp(&b.module))
+            .then(a.decl.cmp(&b.decl))
+    });
+    let shown: Vec<&LeanTarget> = targets
+        .iter()
+        .filter(|t| all || t.tractability == "formalization_gap")
+        .take(limit)
+        .collect();
+
+    if json_out {
+        print_json(&json!({
+            "command": "foundry.lean-targets",
+            "lean_dir": lean_dir.display().to_string(),
+            "subdir": subdir,
+            "open_total": targets.len(),
+            "shown": shown.len(),
+            "note": "tractability is a heuristic; the kernel build in `lean-run` is the arbiter. \
+                     research_open decls are the headline problems, not expected subagent-closable.",
+            "targets": shown,
+        }));
+    } else {
+        println!(
+            "open Lean obligations in {} — {} ({} tractable gaps surfaced)",
+            root.display(),
+            targets.len(),
+            shown
+                .iter()
+                .filter(|t| t.tractability == "formalization_gap")
+                .count(),
+        );
+        for t in &shown {
+            println!("  [{}] {}  ({})", t.tractability, t.decl, t.module);
+        }
+        if shown.is_empty() {
+            println!(
+                "  (no tractable gaps; pass --all to list the headline research-open problems)"
+            );
+        }
+        println!(
+            "\n  honest: tractability is heuristic; `vela foundry lean-run` (kernel build + \
+             #print axioms) is the arbiter. most research-open Erdős problems are not \
+             subagent-closable."
+        );
+    }
+}
+
+/// Recursively collect `*.lean` files under `dir`.
+fn collect_lean_files(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for e in entries.filter_map(|e| e.ok()) {
+        let p = e.path();
+        if p.is_dir() {
+            collect_lean_files(&p, out);
+        } else if p.extension().and_then(|s| s.to_str()) == Some("lean") {
+            out.push(p);
+        }
+    }
+}
+
+/// Parse a Lean source for open obligations: each `theorem`/`lemma` whose block
+/// (up to the next decl) still contains `sorry`. Captures the opened namespace,
+/// the `@[category ...]` tag, and a tractability heuristic.
+fn scan_lean_decls(text: &str, module: &str) -> Vec<LeanTarget> {
+    let lines: Vec<&str> = text.lines().collect();
+    // Decl positions + the namespace open just before them.
+    let mut namespace = String::new();
+    let mut decl_starts: Vec<(usize, String)> = Vec::new(); // (line idx, short decl)
+    for (i, raw) in lines.iter().enumerate() {
+        let l = raw.trim_start();
+        if let Some(rest) = l.strip_prefix("namespace ") {
+            namespace = rest.split_whitespace().next().unwrap_or("").to_string();
+        }
+        for kw in ["theorem ", "lemma "] {
+            if let Some(rest) = l.strip_prefix(kw) {
+                let name: String = rest
+                    .chars()
+                    .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == '.' || *c == '\'')
+                    .collect();
+                if !name.is_empty() {
+                    decl_starts.push((i, name));
+                }
+                break;
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for (idx, (start, short)) in decl_starts.iter().enumerate() {
+        let end = decl_starts
+            .get(idx + 1)
+            .map(|(j, _)| *j)
+            .unwrap_or(lines.len());
+        let block = lines[*start..end].join("\n");
+        if !block.contains("sorry") {
+            continue; // already proved -> not an open obligation
+        }
+        // The `@[category ...]` tag is on the lines just above the decl.
+        let cat_start = start.saturating_sub(4);
+        let header = lines[cat_start..*start].join(" ");
+        let category = if let Some(i) = header.find("category ") {
+            header[i + "category ".len()..]
+                .split([',', ']'])
+                .next()
+                .unwrap_or("")
+                .trim()
+                .to_string()
+        } else {
+            String::new()
+        };
+        let research_open = header.contains("research open");
+        let tractability = if research_open {
+            "research_open"
+        } else {
+            "formalization_gap"
+        }
+        .to_string();
+        let fq = if namespace.is_empty() {
+            short.clone()
+        } else {
+            format!("{namespace}.{short}")
+        };
+        out.push(LeanTarget {
+            module: module.to_string(),
+            decl: fq,
+            namespace: namespace.clone(),
+            category,
+            tractability,
+        });
+    }
+    out
+}
+
+/// Arguments for `cmd_foundry_lean_run` (grouped to avoid a too-many-args lint).
+struct LeanRunArgs {
+    lean_dir: std::path::PathBuf,
+    module: String,
+    decl: String,
+    frontier: Option<std::path::PathBuf>,
+    finding: Option<String>,
+    reviewer: String,
+    actor: String,
+    key: Option<std::path::PathBuf>,
+    out_dir: Option<std::path::PathBuf>,
+    json: bool,
+}
+
+/// Convert a module path (`FormalConjectures/ErdosProblems/828.lean`) to its
+/// Lean import/build name (`FormalConjectures.ErdosProblems.«828»`), wrapping
+/// numeric-leading components in guillemets.
+fn module_to_import(module_rel: &str) -> String {
+    module_rel
+        .trim_end_matches(".lean")
+        .split('/')
+        .map(|c| {
+            if c.chars()
+                .next()
+                .map(|ch| ch.is_ascii_digit())
+                .unwrap_or(false)
+            {
+                format!("«{c}»")
+            } else {
+                c.to_string()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(".")
+}
+
+/// The non-AI verifier half of the prove loop: build the proof the producer
+/// wrote, classify the target decl's axioms (fail-closed on `sorryAx`), mint a
+/// signed `vlv_`, optionally draft a PENDING `verifier.attach`, and STOP before
+/// any admission (the Lean lane never auto-admits; the accept is Will's key).
+fn cmd_foundry_lean_run(args: LeanRunArgs) {
+    use sha2::Digest;
+    use vela_protocol::lean_verification::KernelRecheck;
+    use vela_protocol::tcb_policy::{
+        DEFAULT_ALLOWED_AXIOMS, FORBIDDEN_AXIOMS, TcbDraft, TcbPolicy,
+    };
+
+    let signing = crate::cli_identity::resolve_signing_key(args.key.as_deref());
+    let lean_import = module_to_import(&args.module);
+
+    // Toolchain + mathlib pins come from the CORPUS (e.g. the FC clone), never
+    // the substrate — the vlv_ provenance must reflect what actually built it.
+    let toolchain = std::fs::read_to_string(args.lean_dir.join("lean-toolchain"))
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|_| "unknown".to_string());
+    let mathlib = mathlib_rev_from_manifest(&args.lean_dir);
+
+    // 1. BUILD the module the producer wrote (incremental over the warm .lake).
+    //    A genuine compile error is a NULL turn; `sorry` is NOT an error (it
+    //    builds with a warning) — the axiom probe catches it next.
+    let build = std::process::Command::new("lake")
+        .arg("build")
+        .arg(&lean_import)
+        .current_dir(&args.lean_dir)
+        .output()
+        .unwrap_or_else(|e| fail_return(&format!("run `lake build`: {e}")));
+    if !build.status.success() {
+        let why = String::from_utf8_lossy(&build.stderr);
+        return null_lean_turn(args.json, &args.decl, "build_failed", why.trim());
+    }
+    let mut voh_hasher = sha2::Sha256::new();
+    sha2::Digest::update(&mut voh_hasher, &build.stdout);
+    sha2::Digest::update(&mut voh_hasher, &build.stderr);
+
+    // 2. CLASSIFY: #print axioms over the target decl (per-decl, fail-closed).
+    let axioms = match crate::cli_lean::lean_axioms_probe(&args.lean_dir, &lean_import, &args.decl)
+    {
+        Ok(a) => a,
+        Err(e) => return null_lean_turn(args.json, &args.decl, "probe_failed", &e),
+    };
+    sha2::Digest::update(
+        &mut voh_hasher,
+        format!("{}|{}", args.decl, axioms.join(",")).as_bytes(),
+    );
+    let verifier_output_hash = hex::encode(voh_hasher.finalize());
+
+    // 3. ANCHOR the source bytes + MINT the signed vlv_ (the producer is NOT in
+    //    this trust path — the kernel + this classification are).
+    let title = format!("{} :: {}", args.module, args.decl);
+    let anchor = vela_edge::lean_anchors::LeanAnchor::anchor_for_parts(
+        0,
+        &title,
+        &args.module,
+        &args.decl,
+        "formal-conjectures prover-lane target",
+        &args.lean_dir,
+    )
+    .unwrap_or_else(|e| fail_return(&format!("anchor: {e}")));
+    let policy = TcbPolicy::build(TcbDraft {
+        allowed_axioms: DEFAULT_ALLOWED_AXIOMS
+            .iter()
+            .map(|s| s.to_string())
+            .collect(),
+        forbidden_axioms: FORBIDDEN_AXIOMS.iter().map(|s| s.to_string()).collect(),
+        kernel_checker: String::new(),
+        kernel_checker_version: String::new(),
+        lean_toolchain: toolchain.clone(),
+        mathlib_revision: mathlib.clone(),
+    })
+    .unwrap_or_else(|e| fail_return(&format!("build tcb policy: {e}")));
+    let axioms_map: std::collections::BTreeMap<String, Vec<String>> =
+        std::iter::once((args.decl.clone(), axioms.clone())).collect();
+    let now = chrono::Utc::now().to_rfc3339();
+    let record = crate::cli_lean::mint_verification(
+        &anchor,
+        &args.decl,
+        Some(&axioms_map),
+        &policy,
+        KernelRecheck::NotRun,
+        &toolchain,
+        &mathlib,
+        &verifier_output_hash,
+        &now,
+        &args.actor,
+        &signing,
+    )
+    .unwrap_or_else(|e| fail_return(&format!("mint verification: {e}")));
+
+    // Persist the anchor + vlv_.
+    let out_dir = args.out_dir.clone().unwrap_or_else(|| {
+        args.frontier
+            .as_ref()
+            .map(|f| f.join("lean-verifications"))
+            .unwrap_or_else(|| std::path::PathBuf::from("lean-verifications"))
+    });
+    if let Err(e) = std::fs::create_dir_all(&out_dir) {
+        fail(&format!("create {}: {e}", out_dir.display()));
+    }
+    let safe = args.decl.replace(['.', ':', '/'], "_");
+    let anchor_path = out_dir.join(format!("{safe}.vla.json"));
+    let vlv_path = out_dir.join(format!("{safe}.vlv.json"));
+    let _ = std::fs::write(
+        &anchor_path,
+        format!(
+            "{}\n",
+            serde_json::to_string_pretty(&anchor).unwrap_or_default()
+        ),
+    );
+    let _ = std::fs::write(
+        &vlv_path,
+        format!(
+            "{}\n",
+            serde_json::to_string_pretty(&record).unwrap_or_default()
+        ),
+    );
+
+    // 4. Only a kernel-CLEAN proof is a real turn. failed_axiom_check (sorryAx /
+    //    forbidden axiom) is an honest NULL turn — never proposed.
+    if record.status != "verified" {
+        return null_lean_turn_with(
+            args.json,
+            &args.decl,
+            &record.status,
+            &format!("axioms: [{}]", axioms.join(", ")),
+            Some(&record.verification_id),
+        );
+    }
+
+    // 5. Draft a PENDING verifier.attach when a frontier + finding is given. The
+    //    Lean lane STOPS here: a truth-bearing accept is human key custody.
+    let mut proposal_id = None;
+    let mut proposal_status = "not_drafted";
+    if let (Some(frontier), Some(finding)) = (args.frontier.as_ref(), args.finding.as_ref()) {
+        let (pid, status) = draft_lean_attachment(
+            frontier,
+            finding,
+            &record,
+            &toolchain,
+            &args.reviewer,
+            &args.actor,
+        );
+        proposal_id = pid;
+        proposal_status = status;
+    }
+
+    if args.json {
+        print_json(&json!({
+            "command": "foundry.lean-run",
+            "turn": "verified",
+            "decl": args.decl,
+            "vlv": record.verification_id,
+            "vla": anchor.anchor_id,
+            "status": record.status,
+            "axioms": axioms,
+            "toolchain": toolchain,
+            "mathlib": mathlib,
+            "structurally_present": anchor.structurally_present,
+            "proposal": proposal_id,
+            "proposal_status": proposal_status,
+            "auto_admitted": false,
+            "note": "Lean lane never auto-admits; acceptance is human key custody.",
+        }));
+    } else {
+        println!(
+            "{} {} -> {} ({}), axioms [{}]",
+            style::ok("foundry.lean-run"),
+            args.decl,
+            record.verification_id,
+            record.status,
+            axioms.join(", "),
+        );
+        match proposal_status {
+            "pending" => println!(
+                "  drafted PENDING verifier.attach {} (awaits human accept)",
+                proposal_id.as_deref().unwrap_or("")
+            ),
+            "applied" => println!(
+                "  applied verifier.attach {}",
+                proposal_id.as_deref().unwrap_or("")
+            ),
+            _ => println!("  (no frontier/finding given — minted vlv_ only)"),
+        }
+        println!("  the Lean lane never auto-admits; acceptance is a human key-custody decision.");
+    }
+}
+
+/// Read the mathlib revision from a `lake-manifest.json` in `lean_dir`.
+fn mathlib_rev_from_manifest(lean_dir: &Path) -> String {
+    let Ok(text) = std::fs::read_to_string(lean_dir.join("lake-manifest.json")) else {
+        return "unknown".to_string();
+    };
+    let Ok(val) = serde_json::from_str::<serde_json::Value>(&text) else {
+        return "unknown".to_string();
+    };
+    val.get("packages")
+        .and_then(|p| p.as_array())
+        .and_then(|arr| {
+            arr.iter()
+                .find(|p| p.get("name").and_then(|n| n.as_str()) == Some("mathlib"))
+        })
+        .and_then(|p| {
+            p.get("rev")
+                .or_else(|| p.get("inputRev"))
+                .and_then(|r| r.as_str())
+        })
+        .unwrap_or("unknown")
+        .to_string()
+}
+
+/// Emit a NULL Lean turn (no candidate verified) and return.
+fn null_lean_turn(json: bool, decl: &str, reason: &str, detail: &str) {
+    null_lean_turn_with(json, decl, reason, detail, None)
+}
+
+fn null_lean_turn_with(json: bool, decl: &str, reason: &str, detail: &str, vlv: Option<&str>) {
+    if json {
+        print_json(&json!({
+            "command": "foundry.lean-run",
+            "turn": "null",
+            "decl": decl,
+            "reason": reason,
+            "detail": detail,
+            "vlv": vlv,
+            "auto_admitted": false,
+        }));
+    } else {
+        println!(
+            "foundry.lean-run turn: NULL ({reason}) — {decl}: {detail}{}",
+            vlv.map(|v| format!(" [{v}]")).unwrap_or_default()
+        );
+    }
+}
+
+/// Draft a `verifier.attach` (PENDING for an agent reviewer, applied for a
+/// human) binding the kernel-clean `vlv_` to the open finding it closes. Returns
+/// `(proposal_id, status)`. Reuses the gate-backfill attachment shape.
+fn draft_lean_attachment(
+    frontier: &Path,
+    finding: &str,
+    record: &vela_protocol::lean_verification::LeanVerification,
+    toolchain: &str,
+    reviewer: &str,
+    actor: &str,
+) -> (Option<String>, &'static str) {
+    use vela_protocol::events::StateTarget;
+    use vela_protocol::verifier_attachment::{
+        AdversarialProbe, AttachmentDraft, AttachmentOutcome, MatchToClaim, ProbeKind, ProbeResult,
+        VerifierAttachment, VerifierMethod, claim_digest,
+    };
+
+    let source = match repo::detect(frontier) {
+        Ok(s) => s,
+        Err(e) => return (Some(e), "error"),
+    };
+    let proj = match repo::load(&source) {
+        Ok(p) => p,
+        Err(e) => return (Some(e), "error"),
+    };
+    let Some(claim) = proj
+        .findings
+        .iter()
+        .find(|f| f.id == finding)
+        .map(|f| f.assertion.text.clone())
+    else {
+        return (Some(format!("finding {finding} not found")), "error");
+    };
+    let digest = claim_digest(&claim);
+    let att = match VerifierAttachment::build(AttachmentDraft {
+        target: finding.to_string(),
+        claim_digest: digest,
+        verifier_method: VerifierMethod::LeanKernel,
+        solver_id: format!("lean:{toolchain}"),
+        independent_of: Vec::new(),
+        match_to_claim: MatchToClaim {
+            matches: true,
+            checker_actor: actor.to_string(),
+        },
+        adversarial_probes: vec![AdversarialProbe {
+            kind: ProbeKind::IndependentReimplementation,
+            result: ProbeResult::Survived,
+            note: "Lean kernel re-elaboration + #print axioms audit".to_string(),
+        }],
+        outcome: AttachmentOutcome::Passed,
+        verifier_actor: actor.to_string(),
+        note: format!(
+            "Lean kernel proof, axiom-clean ({})",
+            record.verification_id
+        ),
+    })
+    .and_then(|a| a.with_method_integrity(record.to_attachment_integrity()))
+    {
+        Ok(a) => a,
+        Err(e) => return (Some(e), "error"),
+    };
+    let att_value = serde_json::to_value(&att).unwrap_or_default();
+    let actor_type = if reviewer.trim().to_ascii_lowercase().starts_with("agent:") {
+        "agent"
+    } else {
+        "human"
+    };
+    let apply = actor_type == "human";
+    let proposal = proposals::new_proposal(
+        "verifier.attach",
+        StateTarget {
+            r#type: "finding".to_string(),
+            id: finding.to_string(),
+        },
+        reviewer,
+        actor_type,
+        "Lean kernel proof (prover-in-the-loop)",
+        json!({ "attachment": att_value }),
+        Vec::new(),
+        Vec::new(),
+    );
+    match proposals::create_or_apply(frontier, proposal, apply) {
+        Ok(res) if res.applied_event_id.is_some() => (Some(res.proposal_id), "applied"),
+        Ok(res) => (Some(res.proposal_id), "pending"),
+        Err(e) => (Some(e), "error"),
     }
 }
 

@@ -299,7 +299,32 @@ pub struct LeanAnchor {
 
 impl LeanAnchor {
     pub fn anchor_for(descriptor: &TheoremDescriptor, lean_dir: &Path) -> Result<Self, String> {
-        let module_path = lean_dir.join(descriptor.module);
+        Self::anchor_for_parts(
+            descriptor.id,
+            descriptor.title,
+            descriptor.module,
+            descriptor.decl,
+            descriptor.substrate_role,
+            lean_dir,
+        )
+    }
+
+    /// Anchor an arbitrary `(module, decl)` using runtime strings — for a target
+    /// OUTSIDE the static `THEOREMS` registry (e.g. a formal-conjectures
+    /// declaration the prover lane is attacking). Byte-for-byte compatible with
+    /// `anchor_for`: the `vla_` id is content-addressed over the same
+    /// `(theorem_id, module, decl, module_sha256)` tuple, so the two paths agree
+    /// on a registry decl. Pass `theorem_id = 0` for a non-registry decl (the id
+    /// is informational; the anchor_id still varies by module+decl+sha256).
+    pub fn anchor_for_parts(
+        theorem_id: u32,
+        title: &str,
+        module: &str,
+        decl: &str,
+        substrate_role: &str,
+        lean_dir: &Path,
+    ) -> Result<Self, String> {
+        let module_path = lean_dir.join(module);
         let bytes =
             fs::read(&module_path).map_err(|e| format!("read {}: {e}", module_path.display()))?;
         let mut hasher = Sha256::new();
@@ -307,15 +332,15 @@ impl LeanAnchor {
         let module_sha256 = hex::encode(hasher.finalize());
 
         let text = String::from_utf8_lossy(&bytes);
-        let structurally_present = check_declaration_present(&text, descriptor.decl);
+        let structurally_present = check_declaration_present(&text, decl);
 
         let mut anchor = LeanAnchor {
             schema: ANCHOR_SCHEMA.to_string(),
-            theorem_id: descriptor.id,
-            title: descriptor.title.to_string(),
-            module: descriptor.module.to_string(),
-            decl: descriptor.decl.to_string(),
-            substrate_role: descriptor.substrate_role.to_string(),
+            theorem_id,
+            title: title.to_string(),
+            module: module.to_string(),
+            decl: decl.to_string(),
+            substrate_role: substrate_role.to_string(),
             module_sha256,
             anchor_id: String::new(),
             structurally_present,
@@ -337,8 +362,27 @@ impl LeanAnchor {
 }
 
 fn check_declaration_present(text: &str, decl: &str) -> bool {
-    let needle = format!("theorem {decl}");
-    text.contains(&needle)
+    // Try the decl as given, and (for a fully-qualified `Namespace.decl` passed
+    // against a source written inside `namespace Namespace`) its progressively
+    // namespace-stripped suffixes. A substrate registry decl matches on the
+    // first form; a formal-conjectures FQ decl matches once the opened namespace
+    // prefix is dropped (the source writes `theorem erdos_828`, the probe needs
+    // `Erdos828.erdos_828`). `theorem` covers our targets; allow the other
+    // proof-bearing binders so the flag is honest for lemmas/instances too.
+    let kinds = ["theorem ", "lemma ", "instance ", "def "];
+    let mut candidate = decl;
+    loop {
+        if kinds
+            .iter()
+            .any(|k| text.contains(&format!("{k}{candidate}")))
+        {
+            return true;
+        }
+        match candidate.split_once('.') {
+            Some((_, rest)) if !rest.is_empty() => candidate = rest,
+            _ => return false,
+        }
+    }
 }
 
 pub fn lean_dir_default() -> PathBuf {
@@ -418,5 +462,50 @@ mod tests {
         let d = &THEOREMS[0];
         let a = LeanAnchor::anchor_for(d, lean).expect("anchor");
         assert!(!a.structurally_present);
+    }
+
+    #[test]
+    fn anchor_for_parts_matches_registry_path() {
+        // The generic runtime-string path must produce the byte-identical anchor
+        // a registry descriptor does over the same source (so a vlv_ minted via
+        // either route agrees).
+        let tmp = TempDir::new().unwrap();
+        let lean = tmp.path();
+        write_lean_module(
+            lean,
+            "Vela/Log.lean",
+            "theorem replay_convergence_same_finite_log : True := trivial\n",
+        );
+        let d = &THEOREMS[0];
+        let via_descriptor = LeanAnchor::anchor_for(d, lean).expect("anchor");
+        let via_parts =
+            LeanAnchor::anchor_for_parts(d.id, d.title, d.module, d.decl, d.substrate_role, lean)
+                .expect("anchor parts");
+        assert_eq!(via_descriptor, via_parts);
+    }
+
+    #[test]
+    fn anchor_for_parts_finds_namespaced_decl() {
+        // A formal-conjectures FQ decl (`Erdos828.erdos_828`) matches a source
+        // written `theorem erdos_828` inside `namespace Erdos828`.
+        let tmp = TempDir::new().unwrap();
+        let lean = tmp.path();
+        write_lean_module(
+            lean,
+            "FC/828.lean",
+            "namespace Erdos828\ntheorem erdos_828 : True := trivial\nend Erdos828\n",
+        );
+        let a = LeanAnchor::anchor_for_parts(
+            0,
+            "Erdos 828",
+            "FC/828.lean",
+            "Erdos828.erdos_828",
+            "formal-conjectures target",
+            lean,
+        )
+        .expect("anchor parts");
+        assert_eq!(a.theorem_id, 0);
+        assert!(a.structurally_present);
+        assert!(a.anchor_id.starts_with("vla_"));
     }
 }

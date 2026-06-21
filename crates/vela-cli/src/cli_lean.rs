@@ -166,9 +166,7 @@ pub(crate) fn cmd_lean(action: LeanAction) {
             out_tcb,
             json,
         } => {
-            use vela_protocol::lean_verification::{
-                KernelRecheck, LeanVerification, VerificationDraft,
-            };
+            use vela_protocol::lean_verification::KernelRecheck;
             use vela_protocol::tcb_policy::{
                 DEFAULT_ALLOWED_AXIOMS, FORBIDDEN_AXIOMS, TcbDraft, TcbPolicy,
             };
@@ -283,77 +281,30 @@ pub(crate) fn cmd_lean(action: LeanAction) {
                 let anchor: vela_edge::lean_anchors::LeanAnchor = serde_json::from_str(&body)
                     .unwrap_or_else(|e| fail_return(&format!("parse {}: {e}", path.display())));
 
-                // Classify the theorem's axioms when a report is present.
-                let (status, axioms, verdict, kernel_recheck, axioms_hash, tcb_id) =
-                    match &axioms_map {
-                        None => (
-                            "verified".to_string(),
-                            Vec::new(),
-                            None,
-                            None,
-                            String::new(),
-                            String::new(),
-                        ),
-                        Some(map) => {
-                            let decl = THEOREMS
-                                .iter()
-                                .find(|d| d.id == anchor.theorem_id)
-                                .map(|d| d.decl.to_string())
-                                .unwrap_or_else(|| {
-                                    fail_return(&format!(
-                                        "anchor T{} is not in the theorem registry",
-                                        anchor.theorem_id
-                                    ))
-                                });
-                            // Fail closed: a report is present but this decl is
-                            // absent. Never silently mint an axiom-unknown
-                            // (and thus possibly `verified`) record.
-                            let axioms = map.get(&decl).cloned().unwrap_or_else(|| {
-                                fail_return(&format!(
-                                    "axioms report has no entry for decl `{decl}` (T{}); \
-                                     refusing to classify it as clean",
-                                    anchor.theorem_id
-                                ))
-                            });
-                            let verdict = policy.classify(&axioms);
-                            let status = axiom_status(verdict, &axioms, recheck).to_string();
-                            let line_digest = {
-                                let mut h = sha2::Sha256::new();
-                                sha2::Digest::update(
-                                    &mut h,
-                                    format!("{decl}|{}", axioms.join(",")).as_bytes(),
-                                );
-                                hex::encode(h.finalize())
-                            };
-                            (
-                                status,
-                                axioms,
-                                Some(verdict),
-                                Some(recheck),
-                                line_digest,
-                                policy.tcb_id.clone(),
-                            )
-                        }
-                    };
-
-                let record = LeanVerification::build(
-                    VerificationDraft {
-                        anchor_id: anchor.anchor_id.clone(),
-                        theorem_id: anchor.theorem_id,
-                        module: anchor.module.clone(),
-                        module_sha256: anchor.module_sha256.clone(),
-                        lean_toolchain: toolchain.clone(),
-                        mathlib_revision: mathlib.clone(),
-                        verifier_output_hash: verifier_output_hash.clone(),
-                        status,
-                        verified_at: now.clone(),
-                        verifier_actor: actor.clone(),
-                        tcb_id,
-                        axioms,
-                        axiom_verdict: verdict,
-                        kernel_recheck,
-                        axioms_output_hash: axioms_hash,
-                    },
+                // The decl this anchor pins (registry theorems are always present
+                // in THEOREMS). `mint_verification` classifies its axioms when a
+                // report is present and fails closed if the report omits the decl.
+                let decl = THEOREMS
+                    .iter()
+                    .find(|d| d.id == anchor.theorem_id)
+                    .map(|d| d.decl.to_string())
+                    .unwrap_or_else(|| {
+                        fail_return(&format!(
+                            "anchor T{} is not in the theorem registry",
+                            anchor.theorem_id
+                        ))
+                    });
+                let record = mint_verification(
+                    &anchor,
+                    &decl,
+                    axioms_map.as_ref(),
+                    &policy,
+                    recheck,
+                    &toolchain,
+                    &mathlib,
+                    &verifier_output_hash,
+                    &now,
+                    &actor,
                     &signing,
                 )
                 .unwrap_or_else(|e| fail_return(&e));
@@ -478,12 +429,164 @@ pub(crate) fn cmd_lean(action: LeanAction) {
     }
 }
 
+/// Mint one signed `vlv_` LeanVerification for an anchored decl. Shared by
+/// `vela lean verify-all` (registry theorems) and `vela foundry lean-run`
+/// (formal-conjectures targets). When `axioms_map` is `Some`, the decl's axioms
+/// are classified against `policy` and the record is FAILED-CLOSED if the report
+/// omits the decl (never silently mint an axiom-unknown `verified`); `None`
+/// mints an axiom-unknown legacy-style attestation. The preimage is byte-
+/// identical to the prior inline path, so existing `vlv_` ids/signatures are
+/// unchanged. The verifier (this code + the Lean kernel) is the trust; the
+/// producer of the proof is never in the trust path.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn mint_verification(
+    anchor: &vela_edge::lean_anchors::LeanAnchor,
+    decl: &str,
+    axioms_map: Option<&std::collections::BTreeMap<String, Vec<String>>>,
+    policy: &vela_protocol::tcb_policy::TcbPolicy,
+    recheck: vela_protocol::lean_verification::KernelRecheck,
+    toolchain: &str,
+    mathlib: &str,
+    verifier_output_hash: &str,
+    verified_at: &str,
+    verifier_actor: &str,
+    signing: &ed25519_dalek::SigningKey,
+) -> Result<vela_protocol::lean_verification::LeanVerification, String> {
+    use vela_protocol::lean_verification::{LeanVerification, VerificationDraft};
+    let (status, axioms, verdict, kernel_recheck, axioms_hash, tcb_id) = match axioms_map {
+        None => (
+            "verified".to_string(),
+            Vec::new(),
+            None,
+            None,
+            String::new(),
+            String::new(),
+        ),
+        Some(map) => {
+            // Fail closed: a report is present but this decl is absent. Never
+            // silently mint an axiom-unknown (and thus possibly `verified`) record.
+            let axioms = map.get(decl).cloned().ok_or_else(|| {
+                format!(
+                    "axioms report has no entry for decl `{decl}`; \
+                     refusing to classify it as clean"
+                )
+            })?;
+            let verdict = policy.classify(&axioms);
+            let status = axiom_status(verdict, &axioms, recheck).to_string();
+            let line_digest = {
+                let mut h = sha2::Sha256::new();
+                sha2::Digest::update(&mut h, format!("{decl}|{}", axioms.join(",")).as_bytes());
+                hex::encode(h.finalize())
+            };
+            (
+                status,
+                axioms,
+                Some(verdict),
+                Some(recheck),
+                line_digest,
+                policy.tcb_id.clone(),
+            )
+        }
+    };
+    LeanVerification::build(
+        VerificationDraft {
+            anchor_id: anchor.anchor_id.clone(),
+            theorem_id: anchor.theorem_id,
+            module: anchor.module.clone(),
+            module_sha256: anchor.module_sha256.clone(),
+            lean_toolchain: toolchain.to_string(),
+            mathlib_revision: mathlib.to_string(),
+            verifier_output_hash: verifier_output_hash.to_string(),
+            status,
+            verified_at: verified_at.to_string(),
+            verifier_actor: verifier_actor.to_string(),
+            tcb_id,
+            axioms,
+            axiom_verdict: verdict,
+            kernel_recheck,
+            axioms_output_hash: axioms_hash,
+        },
+        signing,
+    )
+}
+
+/// Run `#print axioms <fq_decl>` over a built module in `lean_dir` (e.g. the
+/// formal-conjectures clone) via `lake env lean`, returning the sorted, deduped
+/// axiom list. A `sorryAx` entry means the decl still carries a proof hole — the
+/// honest signal the Lean lane fails closed on. `lean_import` is the dotted
+/// import path (numeric components wrapped in guillemets, e.g.
+/// `FormalConjectures.ErdosProblems.«828»`). The probe writes a temporary Lean
+/// file inside the package so the import resolves against the warm `.lake`
+/// build, runs it, and removes it.
+pub(crate) fn lean_axioms_probe(
+    lean_dir: &std::path::Path,
+    lean_import: &str,
+    fq_decl: &str,
+) -> Result<Vec<String>, String> {
+    let stamp = {
+        let mut h = sha2::Sha256::new();
+        sha2::Digest::update(&mut h, fq_decl.as_bytes());
+        hex::encode(h.finalize())[..12].to_string()
+    };
+    let probe_name = format!("VelaFoundryProbe_{stamp}.lean");
+    let probe_path = lean_dir.join(&probe_name);
+    let body = format!("import {lean_import}\n#print axioms {fq_decl}\n");
+    std::fs::write(&probe_path, body)
+        .map_err(|e| format!("write probe {}: {e}", probe_path.display()))?;
+    let out = std::process::Command::new("lake")
+        .arg("env")
+        .arg("lean")
+        .arg(&probe_name)
+        .current_dir(lean_dir)
+        .output();
+    let _ = std::fs::remove_file(&probe_path);
+    let out = out.map_err(|e| format!("run `lake env lean`: {e}"))?;
+    let combined = format!(
+        "{}\n{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    parse_print_axioms(&combined).ok_or_else(|| {
+        format!(
+            "#print axioms produced no axiom line for `{fq_decl}` \
+             (output: {})",
+            combined.trim().chars().take(400).collect::<String>()
+        )
+    })
+}
+
+/// Parse the native `#print axioms <decl>` output. The relevant line is either
+/// `'<decl>' depends on axioms: [a, b, c]` or `... does not depend on any
+/// axioms`. Returns the sorted, deduped axiom list (empty for the latter), or
+/// `None` if no axiom line is present (a build/elaboration error).
+fn parse_print_axioms(text: &str) -> Option<Vec<String>> {
+    for line in text.lines() {
+        let line = line.trim();
+        if line.contains("does not depend on any axioms") {
+            return Some(Vec::new());
+        }
+        if let Some(i) = line.find("depends on axioms:") {
+            let rest = &line[i + "depends on axioms:".len()..];
+            let inside = rest.trim().trim_start_matches('[').trim_end_matches(']');
+            let mut list: Vec<String> = inside
+                .split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            list.sort();
+            list.dedup();
+            return Some(list);
+        }
+    }
+    None
+}
+
 /// Parse the per-decl axiom report emitted by `lean/Vela/AxiomAudit.lean`.
 /// Each relevant line has the form `AXIOMS <decl> | a, b, c` (the axiom list
 /// may be empty). Returns a map `decl -> sorted, deduped axiom names`. Lines
 /// without the `AXIOMS ` prefix are ignored, so the report can carry other
 /// diagnostic output.
-fn parse_axioms_report(text: &str) -> std::collections::BTreeMap<String, Vec<String>> {
+pub(crate) fn parse_axioms_report(text: &str) -> std::collections::BTreeMap<String, Vec<String>> {
     let mut map = std::collections::BTreeMap::new();
     for line in text.lines() {
         let line = line.trim();
@@ -862,6 +965,21 @@ mod tests {
 
     fn policy() -> TcbPolicy {
         TcbPolicy::default_for("leanprover/lean4:v4.29.1", "v4.29.1", "none", "").unwrap()
+    }
+
+    #[test]
+    fn parse_print_axioms_clean_and_sorry() {
+        let clean = "'Erdos828.foo' depends on axioms: [propext, Classical.choice, Quot.sound]";
+        assert_eq!(
+            parse_print_axioms(clean).unwrap(),
+            vec!["Classical.choice", "Quot.sound", "propext"]
+        );
+        let none = "'Foo.bar' does not depend on any axioms";
+        assert!(parse_print_axioms(none).unwrap().is_empty());
+        let sorry = "'Erdos828.erdos_828' depends on axioms: [sorryAx]";
+        assert_eq!(parse_print_axioms(sorry).unwrap(), vec!["sorryAx"]);
+        // No axiom line (an elaboration error) => None, so the caller fails closed.
+        assert!(parse_print_axioms("error: unknown identifier").is_none());
     }
 
     #[test]

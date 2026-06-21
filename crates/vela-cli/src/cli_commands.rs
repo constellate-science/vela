@@ -1462,6 +1462,72 @@ pub(crate) enum FoundryAction {
         #[arg(long)]
         json: bool,
     },
+    /// The prover-in-the-loop work-list: open Lean obligations in a
+    /// formal-conjectures corpus, ranked by tractability. Known proved lemmas
+    /// compose into proofs of open theorems; this surfaces the tractable
+    /// formalization-gap targets (sorry-carrying / `@[category research open]`
+    /// decls) the prove loop attacks. Read-only.
+    LeanTargets {
+        /// The formal-conjectures (or other Lean) corpus root, e.g.
+        /// `/Users/.../formal-conjectures`.
+        #[arg(long)]
+        lean_dir: PathBuf,
+        /// Restrict to a sub-path under the corpus (default: the Erdős problems).
+        #[arg(long, default_value = "FormalConjectures/ErdosProblems")]
+        subdir: String,
+        /// Show every open decl, including the headline research-open problems
+        /// that are not expected to be subagent-closable (off by default).
+        #[arg(long)]
+        all: bool,
+        /// Cap the number of targets emitted.
+        #[arg(long, default_value_t = 40)]
+        limit: usize,
+        #[arg(long)]
+        json: bool,
+    },
+    /// The non-AI verifier half of the prove loop: given a Lean proof already
+    /// written into the corpus (the AI producer's output), build it, classify
+    /// the target decl's axioms (`#print axioms`, fail-closed on `sorryAx`),
+    /// anchor + mint a signed `vlv_`, and — when a frontier is given — draft a
+    /// PENDING `verifier.attach`. STOPS there: the truth-bearing accept is a
+    /// human key-custody decision (the Lean lane never auto-admits). The Lean
+    /// kernel is the trust; the proof's producer is never in the trust path.
+    LeanRun {
+        /// The Lean corpus root (e.g. the formal-conjectures clone). Its
+        /// `lean-toolchain` / `lake-manifest.json` pin the `vlv_`'s provenance.
+        #[arg(long)]
+        lean_dir: PathBuf,
+        /// Module path relative to `--lean-dir`, e.g.
+        /// `FormalConjectures/ErdosProblems/828.lean`.
+        #[arg(long)]
+        module: String,
+        /// Fully-qualified decl name for `#print axioms`, e.g.
+        /// `Erdos828.erdos_828`.
+        #[arg(long)]
+        decl: String,
+        /// Optional Vela frontier to draft the `verifier.attach` into.
+        #[arg(long)]
+        frontier: Option<PathBuf>,
+        /// The open finding this proof closes (required with `--frontier`).
+        #[arg(long)]
+        finding: Option<String>,
+        /// Reviewer/actor (an `agent:` actor drafts PENDING; a human applies).
+        #[arg(long, default_value = "agent:vela-foundry-lean")]
+        reviewer: String,
+        /// Verifier identity stamped on the `vlv_` (a machine key, not a human).
+        #[arg(long, default_value = "agent:vela-foundry-lean")]
+        actor: String,
+        /// Signing key for the `vlv_` (the verifier's machine key). Resolved
+        /// from managed identity when omitted.
+        #[arg(long)]
+        key: Option<PathBuf>,
+        /// Where to write the `vla_`/`vlv_` artifacts (default: alongside the
+        /// frontier under `lean/`, else the current dir).
+        #[arg(long)]
+        out_dir: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 /// `vela campaign` — the discovery engine over verifier-gated constructions.
