@@ -11,6 +11,34 @@ The point of this frontier: **poll the bounds before you search so you never
 repeat banked work, and write a beat back so the next solver doesn't repeat
 yours.**
 
+## Try the whole loop in 60 seconds (no solver of your own needed)
+
+A complete, valid example witness ships next to this file:
+[`witness.example.json`](witness.example.json) — a Sidon set of 15 vectors in
+`{0,1}^6`. Verify it and preview the exact signed submission, writing nothing:
+
+```
+vela reproduce witness.example.json            # frozen verifier: ok
+python3 submit.py witness.example.json --dry-run
+```
+
+`submit.py` first checks that `vela` is the real CLI (a clear error if a
+different `vela` shadows it on your PATH), re-verifies the witness with the
+frozen verifier, reports the delta vs the live record, and prints the signed
+transition it *would* POST. Drop `--dry-run` to actually write it under your key.
+
+To produce your **own** witness with the bundled engine instead of bringing a
+solver, one command emits one in this exact format:
+
+```
+vela campaign search --n 8 --restarts 200 sidon --json \
+  | python3 -c "import json,sys; json.dump(json.load(sys.stdin)['witness'], open('mine.json','w'), indent=2)"
+python3 submit.py mine.json --dry-run
+```
+
+For a real **beat**, poll `bounds.json` (below) and search an `n` where you can
+exceed `best_lower_bound`; the dry-run will print `BEATS ... by k`.
+
 ## 1. Poll the current bounds (skip known work)
 
 The current accepted lower bounds, machine-readable and stable:
@@ -26,10 +54,11 @@ is worth your compute.
 ## 2. Build a witness
 
 A witness is a JSON file: a list of 0/1 vectors of length `n` that form a Sidon
-set.
+set. The shape (copy [`witness.example.json`](witness.example.json) and edit, or
+emit one with the engine command above):
 
 ```json
-{ "kind": "sidon", "n": 20, "points": [[0,1,0,...], [1,0,1,...], ...], "claimed_size": 1990 }
+{ "kind": "sidon", "n": 20, "points": [[0,1,0, ...n entries...], ...], "claimed_size": 1990 }
 ```
 
 `claimed_size` is your asserted bound (it must equal the number of points). The

@@ -66,8 +66,10 @@ def self_check_sidon(points):
 
 
 def current_best(n):
-    """The current accepted lower bound for a(n), from bounds.json (local
-    copy, else the public URL). Returns None if unavailable."""
+    """The current accepted lower bound for a(n). Returns `(best, status)` where
+    status is "ok" (best is the recorded bound), "untracked" (bounds.json was
+    read but has no entry for n — a fresh cell), or "unreadable" (no local copy
+    and the public URL could not be fetched)."""
     data = None
     if os.path.exists(BOUNDS_LOCAL):
         data = json.load(open(BOUNDS_LOCAL))
@@ -76,11 +78,33 @@ def current_best(n):
             with urllib.request.urlopen(BOUNDS_URL, timeout=10) as r:
                 data = json.loads(r.read())
         except Exception:
-            return None
+            return None, "unreadable"
     for b in data.get("bounds", []):
         if b["n"] == n:
-            return b["best_lower_bound"]
-    return None
+            return b["best_lower_bound"], "ok"
+    return None, "untracked"
+
+
+def preflight_vela(vela):
+    """Confirm `vela` resolves to the Rust CLI, not a shadowing binary (a conda
+    `vela` Python package is a common one). Both can exit 0, so we check the
+    OUTPUT shape: the real CLI prints `vela <version>`. Fail fast with an
+    actionable message rather than a misleading "verifier rejected" later."""
+    try:
+        out = subprocess.run([vela, "--version"], capture_output=True, text=True, timeout=20)
+    except FileNotFoundError:
+        die(f"`{vela}` not found on your PATH. Install the Rust CLI\n"
+            "    cargo install --git https://github.com/constellate-science/vela vela-cli\n"
+            "or pass the full path with --vela /path/to/vela")
+    first = (out.stdout + out.stderr).strip().splitlines()
+    first = first[0] if first else ""
+    parts = first.split()
+    if not (len(parts) >= 2 and parts[0] == "vela" and parts[1][:1].isdigit()):
+        die(f"the `{vela}` on your PATH is not the Vela CLI (it printed: {first!r}).\n"
+            "You likely have a different `vela` shadowing it (e.g. a Python package).\n"
+            "Install the Rust CLI and run it by full path, e.g.\n"
+            "    cargo install --git https://github.com/constellate-science/vela vela-cli\n"
+            "    python3 submit.py <witness.json> --vela ~/.cargo/bin/vela")
 
 
 def build_finding(n, size, witness):
@@ -118,6 +142,9 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="verify + build, but do not POST")
     args = ap.parse_args()
 
+    # ── 0. confirm `vela` is the Rust CLI (fail fast, clear message) ─────
+    preflight_vela(args.vela)
+
     # ── 1. read + sanity-check the witness ───────────────────────────────
     try:
         w = json.load(open(args.witness))
@@ -153,9 +180,11 @@ def main():
     print(f"  vela reproduce  ok   {repro.splitlines()[0].strip()}")
 
     # ── 3. is it actually a beat? ────────────────────────────────────────
-    best = current_best(n)
-    if best is None:
-        verdict = "unknown (could not read bounds.json)"
+    best, status = current_best(n)
+    if status == "unreadable":
+        verdict = "unknown (bounds.json not found locally and the public copy could not be fetched)"
+    elif status == "untracked":
+        verdict = f"NEW CELL — a(n={n}) is not yet on the record; this would be its first lower bound"
     elif size > best:
         verdict = f"BEATS the current best a({n}) >= {best} by {size - best}"
     elif size == best:
