@@ -2261,6 +2261,28 @@ pub(crate) enum TransferAction {
     Verify {
         /// Path to a Transfer JSON or a ledger with a `records` array.
         file: PathBuf,
+        /// Re-derive the T1–T5 ADMISSION verdict over real state (the read-time
+        /// `derive_transfer_status`), not just the structural signature check.
+        /// Resolves A's gate from `--frontier`'s accepted attachments, the
+        /// theorem `vlv_` from `--vlv`, and the domain tags.
+        #[arg(long)]
+        admit: bool,
+        /// Source frontier A — its accepted verifier attachments (matching the
+        /// transfer's source_claim_digest) resolve A's gate outcome (T1).
+        #[arg(long)]
+        frontier: Option<PathBuf>,
+        /// The transfer theorem's `vlv_` verification file (the LeanHomomorphism
+        /// T2 witness). Mint it with `vela foundry lean-run` over the theorem.
+        #[arg(long)]
+        vlv: Option<PathBuf>,
+        /// A's actual domain for the T3 type-match (defaults to the
+        /// homomorphism's declared source_type).
+        #[arg(long)]
+        source_domain: Option<String>,
+        /// B's premise domain for the T3 type-match (defaults to the
+        /// homomorphism's declared target_type).
+        #[arg(long)]
+        target_domain: Option<String>,
         #[arg(long)]
         json: bool,
     },

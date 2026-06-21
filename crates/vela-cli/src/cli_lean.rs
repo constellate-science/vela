@@ -785,13 +785,114 @@ pub(crate) fn cmd_attempt(action: AttemptAction) {
     }
 }
 
+/// The read-time T1–T5 admission resolver (`vela transfer verify --admit`): the
+/// pure `derive_transfer_status` made callable over LIVE state. It resolves A's
+/// gate from `frontier`'s accepted attachments (T1), the theorem `vlv_` from
+/// `vlv_path` (T2), and the domain tags (T3), then reports the verdict — never a
+/// stored boolean, recomputed from already-signed objects. This is the moat's
+/// machinery given its caller; the verdict is honest (NeedsVerification until A
+/// is gate-verified and the real `vlv_` is bound, Admitted once T1–T5 hold).
+fn cmd_transfer_admit(
+    records: &[serde_json::Value],
+    frontier: Option<&std::path::Path>,
+    vlv_path: Option<&std::path::Path>,
+    source_domain: Option<&str>,
+    target_domain: Option<&str>,
+    json: bool,
+) {
+    use vela_protocol::lean_verification::LeanVerification;
+    use vela_protocol::transfer::{DomainTags, Transfer, derive_transfer_status};
+    use vela_protocol::verifier_attachment::{GateOutcome, GateStatus, derive_gate_status};
+
+    let rv = records
+        .first()
+        .unwrap_or_else(|| fail_return("no transfer record to admit"));
+    let t: Transfer = serde_json::from_value(rv.clone())
+        .unwrap_or_else(|e| fail_return(&format!("parse transfer: {e}")));
+
+    // T1: A's gate, derived from the source frontier's accepted attachments.
+    let source_gate: GateOutcome = match frontier {
+        Some(fr) => {
+            let source = vela_protocol::repo::detect(fr).unwrap_or_else(|e| fail_return(&e));
+            let proj = vela_protocol::repo::load(&source).unwrap_or_else(|e| fail_return(&e));
+            derive_gate_status(&t.source_claim_digest, &proj.verifier_attachments)
+        }
+        None => GateOutcome {
+            status: GateStatus::NeedsVerification,
+            reasons: vec![
+                "no --frontier given: A's gate could not be resolved from state".to_string(),
+            ],
+        },
+    };
+
+    // T2: the transfer theorem's vlv_ (Mint with `vela foundry lean-run`).
+    let vlv: Option<LeanVerification> = vlv_path.map(|p| {
+        let b = std::fs::read_to_string(p)
+            .unwrap_or_else(|e| fail_return(&format!("read {}: {e}", p.display())));
+        serde_json::from_str(&b)
+            .unwrap_or_else(|e| fail_return(&format!("parse vlv {}: {e}", p.display())))
+    });
+
+    // T3: domain tags (operator may override; default to the declared types).
+    let tags = DomainTags {
+        source: source_domain
+            .unwrap_or(&t.homomorphism.source_type)
+            .to_string(),
+        target: target_domain
+            .unwrap_or(&t.homomorphism.target_type)
+            .to_string(),
+    };
+
+    let outcome = derive_transfer_status(&t, &source_gate, vlv.as_ref(), &tags);
+
+    if json {
+        print_json(&json!({
+            "command": "transfer.verify.admit",
+            "transfer_id": t.transfer_id,
+            "status": format!("{:?}", outcome.status).to_lowercase(),
+            "admitted": outcome.is_admitted(),
+            "source_gate": format!("{:?}", source_gate.status).to_lowercase(),
+            "source_gate_reasons": source_gate.reasons,
+            "reasons": outcome.reasons,
+            "domain_tags": { "source": tags.source, "target": tags.target },
+            "vlv_resolved": vlv.is_some(),
+        }));
+    } else {
+        let mark = if outcome.is_admitted() {
+            style::ok("ADMITTED")
+        } else {
+            style::lost("not admitted")
+        };
+        println!(
+            "{} transfer {} -> {mark}",
+            style::ok("transfer.admit"),
+            t.transfer_id
+        );
+        println!("  source gate (A): {:?}", source_gate.status);
+        if outcome.reasons.is_empty() {
+            println!("  T1–T5 all satisfied; A's claim discharges B's premise.");
+        }
+        for r in &outcome.reasons {
+            println!("    - {r}");
+        }
+    }
+}
+
 /// Structurally verify cross-domain transfers (`vtr_`): id re-derivation +
 /// Ed25519 signature, mirroring `cmd_attempt`. The T1–T5 admission gate
 /// (`derive_transfer_status`) runs in the reducer / on read, not here.
 pub(crate) fn cmd_transfer(action: TransferAction) {
     use vela_protocol::transfer::Transfer;
     match action {
-        TransferAction::Verify { file, json } => {
+        TransferAction::Verify {
+            file,
+            admit,
+            frontier,
+            vlv,
+            source_domain,
+            target_domain,
+            json,
+        } => {
             let body = std::fs::read_to_string(&file)
                 .unwrap_or_else(|e| fail_return(&format!("read {}: {e}", file.display())));
             let val: serde_json::Value = serde_json::from_str(&body)
@@ -801,6 +902,22 @@ pub(crate) fn cmd_transfer(action: TransferAction) {
                 .and_then(|r| r.as_array())
                 .cloned()
                 .unwrap_or_else(|| vec![val.clone()]);
+
+            // --admit: re-derive the T1–T5 admission verdict over real state.
+            // This is the read-time `derive_transfer_status` made callable (the
+            // moat's machinery had no caller resolving live state). A pure
+            // function of already-signed objects, recomputed on read.
+            if admit {
+                cmd_transfer_admit(
+                    &records,
+                    frontier.as_deref(),
+                    vlv.as_deref(),
+                    source_domain.as_deref(),
+                    target_domain.as_deref(),
+                    json,
+                );
+                return;
+            }
 
             let mut verified = 0usize;
             let mut unsigned = 0usize;
