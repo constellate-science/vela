@@ -91,6 +91,47 @@ impl Cnf {
         self.at_most_k(lits, k);
         self.at_least_k(lits, k);
     }
+
+    /// Constrain bit-vector `a` <=_lex `b` (position 0 is the most significant).
+    /// Used to break the row-interchange symmetry of a DTS: the I rows are fully
+    /// permutable, so requiring them in non-decreasing lex order keeps exactly
+    /// one representative per equivalence class (sound for both SAT and UNSAT)
+    /// and removes up to I! redundant copies of every search state.
+    fn lex_leq(&mut self, a: &[i32], b: &[i32]) {
+        debug_assert_eq!(a.len(), b.len());
+        // g[i] == "prefix a[0..=i] equals b[0..=i]". g_prev starts implicitly true.
+        let mut g_prev: Option<i32> = None; // None == constant true
+        for i in 0..a.len() {
+            // At the most significant position with an equal prefix, a <= b.
+            match g_prev {
+                None => self.add(vec![-a[i], b[i]]),
+                Some(g) => self.add(vec![-g, -a[i], b[i]]),
+            }
+            if i + 1 == a.len() {
+                break; // no need to track equality past the last position
+            }
+            // eq <-> (a[i] <-> b[i])
+            let eq = self.fresh();
+            self.add(vec![-eq, -a[i], b[i]]);
+            self.add(vec![-eq, -b[i], a[i]]);
+            self.add(vec![a[i], b[i], eq]);
+            self.add(vec![-a[i], -b[i], eq]);
+            // g[i] <-> g_prev && eq
+            let g = self.fresh();
+            self.add(vec![-g, eq]);
+            match g_prev {
+                None => {
+                    // g_prev is true: g <-> eq.
+                    self.add(vec![-eq, g]);
+                }
+                Some(gp) => {
+                    self.add(vec![-g, gp]);
+                    self.add(vec![-gp, -eq, g]);
+                }
+            }
+            g_prev = Some(g);
+        }
+    }
 }
 
 /// The result of one SAT attack at a fixed scope cap.
@@ -121,10 +162,17 @@ pub fn solve_dts_at_scope(
     let pvar = |r: usize, v: usize| -> i32 { (r * s + v) as i32 };
     let mut cnf = Cnf::new((rows * s) as i32);
 
-    for r in 0..rows {
+    let row_lits: Vec<Vec<i32>> = (0..rows)
+        .map(|r| (1..=s).map(|v| pvar(r, v)).collect())
+        .collect();
+    for lits in &row_lits {
         // exactly j marks among positions 1..=s (the +1 start mark is implicit).
-        let row_lits: Vec<i32> = (1..=s).map(|v| pvar(r, v)).collect();
-        cnf.exactly_k(&row_lits, j);
+        cnf.exactly_k(lits, j);
+    }
+    // Symmetry break: the rows are interchangeable, so order them
+    // lexicographically. Removes up to rows! redundant copies of the search.
+    for r in 1..rows {
+        cnf.lex_leq(&row_lits[r - 1], &row_lits[r]);
     }
 
     // Global distinct differences. For each distance d, collect every
@@ -300,10 +348,10 @@ mod tests {
     #[test]
     #[ignore]
     fn dts_7_5_probe() {
-        for cap in [200usize, 150, 130, 120, 112, 111] {
+        for cap in [130usize, 120, 115, 112, 111, 108] {
             let t = std::time::Instant::now();
-            // ~40s wall-clock per solve via the timeout schedule.
-            let r = solve_dts_at_scope(7, 5, cap, 8_000_000);
+            // ~90s wall-clock per solve via the timeout schedule.
+            let r = solve_dts_at_scope(7, 5, cap, 18_000_000);
             let secs = t.elapsed().as_secs_f64();
             match r {
                 DtsAttempt::Found(grid) => {

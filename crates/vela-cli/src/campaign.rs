@@ -881,7 +881,9 @@ fn search_diff_triangle(rows: usize, j: usize, restarts: u64, rng: &mut Rng) -> 
     // slow, deep lane, so it runs only for a dedicated high-effort attack; the
     // frozen `verify_diff_triangle` re-checks its output like every other method.
     if iterations >= 200 {
-        let per_solve = node_budget.clamp(2_000_000, 8_000_000) as usize;
+        // A dedicated attack gets a deeper per-solve budget (~up to 90s) so the
+        // descending schedule can tighten the scope, not just clear the seed.
+        let per_solve = node_budget.clamp(2_000_000, 18_000_000) as usize;
         if let Some((sat_grid, sat_scope)) =
             crate::solve_diff_triangle::best_dts_via_sat(rows, j, seed_scope as usize, per_solve, 5)
         {
