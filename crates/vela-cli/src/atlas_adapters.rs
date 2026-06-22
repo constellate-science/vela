@@ -410,6 +410,77 @@ pub fn read_formal_corpus(dir: &Path, rev: &str) -> Result<Vec<SourceRecord>, St
     Ok(out)
 }
 
+/// Identity-seed adapter: read a curated HardIdentity map
+/// (`vela.identity-seed.v1`, e.g. `frontiers/identity-seed/seed.v1.json`) of
+/// famous mathematical objects that are the SAME thing under different names
+/// across namespaces (oeis, mathlib, erdos, fc), and yield one BRIDGE record per
+/// object. Each record carries every listed `(namespace, id)` pair as an
+/// `extra_anchor`, so `atlas::project`'s union-find merges the object's separate
+/// cells into one (the cross-source HardIdentity join the spine has been
+/// deferring). The bridge's primary anchor is the command's `--namespace`
+/// (use `identity`). Only unambiguous, hand-reviewed pairings live in the seed;
+/// the speculative tail belongs to `SearchOnly` candidates, never here. A wrong
+/// name is harmless (it fails to join, never a false merge). Deterministic
+/// (sorted by slug); reads a local catalogue, so the result is reproducible.
+pub fn read_identity_seed(input: &Path, _rev: &str) -> Result<Vec<SourceRecord>, String> {
+    let raw =
+        std::fs::read_to_string(input).map_err(|e| format!("read {}: {e}", input.display()))?;
+    let doc: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", input.display()))?;
+    let entries = doc
+        .get("entries")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| format!("{}: missing `entries` array", input.display()))?;
+    let mut out: Vec<SourceRecord> = Vec::new();
+    for e in entries {
+        let slug = e.get("slug").and_then(|v| v.as_str()).unwrap_or("").trim();
+        let label = e.get("label").and_then(|v| v.as_str()).unwrap_or("").trim();
+        let anchors: Vec<(String, String)> = e
+            .get("anchors")
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|p| {
+                        let pair = p.as_array()?;
+                        let ns = pair.first()?.as_str()?.trim();
+                        let id = pair.get(1)?.as_str()?.trim();
+                        if ns.is_empty() || id.is_empty() {
+                            return None;
+                        }
+                        Some((ns.to_string(), id.to_string()))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        // A bridge needs at least two anchors to join anything; one is inert.
+        if slug.is_empty() || anchors.len() < 2 {
+            continue;
+        }
+        let named = anchors
+            .iter()
+            .map(|(ns, id)| format!("{ns}:{id}"))
+            .collect::<Vec<_>>()
+            .join(" = ");
+        out.push(SourceRecord {
+            external_id: slug.to_string(),
+            assertion_text: format!(
+                "Identity: {label} is one object across namespaces ({named})."
+            ),
+            assertion_type: "cross-source-identity".into(),
+            implies: vec![],
+            extra_anchors: anchors,
+        });
+    }
+    out.sort_by(|a, b| a.external_id.cmp(&b.external_id));
+    if out.is_empty() {
+        return Err(format!(
+            "{}: no usable identity entries (each needs a slug + >=2 anchors)",
+            input.display()
+        ));
+    }
+    Ok(out)
+}
+
 /// Dispatch an adapter by name.
 pub fn read_adapter(adapter: &str, input: &Path, rev: &str) -> Result<Vec<SourceRecord>, String> {
     match adapter {
@@ -418,8 +489,9 @@ pub fn read_adapter(adapter: &str, input: &Path, rev: &str) -> Result<Vec<Source
         "alphaproof" => read_alphaproof(input, rev),
         "oeis" => read_oeis(input, rev),
         "horizonmath" => read_horizonmath(input, rev),
+        "identity_seed" => read_identity_seed(input, rev),
         other => Err(format!(
-            "unknown adapter '{other}' (supported: formal | formal_corpus | alphaproof | oeis | horizonmath; tao stays scripts/atlas/ingest_tao.py)"
+            "unknown adapter '{other}' (supported: formal | formal_corpus | alphaproof | oeis | horizonmath | identity_seed; tao stays scripts/atlas/ingest_tao.py)"
         )),
     }
 }
@@ -582,5 +654,39 @@ mod tests {
         assert_eq!(a.id, b.id, "same record → same content-addressed id");
         assert!(a.id.starts_with("vf_"));
         assert_eq!(a.created, "2026-06-16T00:00:00Z", "created is pinned");
+    }
+
+    #[test]
+    fn read_identity_seed_emits_bridge_records_with_all_anchors() {
+        let dir = std::env::temp_dir().join(format!("vela_idseed_test_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("seed.v1.json");
+        std::fs::write(
+            &f,
+            r#"{"object":"vela.identity-seed.v1","entries":[
+              {"slug":"primes","label":"the primes","anchors":[["oeis","A000040"],["mathlib","Nat.Prime"]]},
+              {"slug":"fibonacci","label":"the Fibonacci numbers","anchors":[["oeis","A000045"],["mathlib","Nat.fib"]]},
+              {"slug":"inert","label":"single anchor","anchors":[["oeis","A000001"]]}
+            ]}"#,
+        )
+        .unwrap();
+        let recs = read_identity_seed(&f, "test").unwrap();
+        // The single-anchor entry is dropped (a bridge needs >=2 to join anything).
+        assert_eq!(recs.len(), 2, "single-anchor entry dropped");
+        // Sorted by slug.
+        assert_eq!(recs[0].external_id, "fibonacci");
+        assert_eq!(recs[1].external_id, "primes");
+        assert_eq!(recs[1].assertion_type, "cross-source-identity");
+        // Every listed (namespace, id) pair becomes an extra_anchor — the join key.
+        assert_eq!(
+            recs[1].extra_anchors,
+            vec![
+                ("oeis".to_string(), "A000040".to_string()),
+                ("mathlib".to_string(), "Nat.Prime".to_string())
+            ]
+        );
+        // A bridge finding built from it is content-addressed like any other record.
+        assert!(build_finding(&recs[1], "identity").id.starts_with("vf_"));
+        std::fs::remove_dir_all(&dir).ok();
     }
 }

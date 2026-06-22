@@ -1,0 +1,76 @@
+{
+  "object": "vela.identity-seed.v1",
+  "note": "Curated, hand-reviewed HardIdentity map of famous mathematical objects across namespaces (oeis, mathlib, erdos, fc). One entry = one object that is the SAME thing under different names. Consumed by `vela atlas ingest-source --adapter identity_seed`: each entry becomes one bridge finding whose extra_anchors merge the object's cells under union-find (atlas::project). This is the HardIdentity grade only: every pairing is unambiguous and famous. The speculative tail belongs to SearchOnly candidates, never here. A wrong mathlib name is harmless (it fails to join, never a false merge), but every name here is the canonical Mathlib declaration. Add an entry only when the identity is beyond dispute.",
+  "entries": [
+    {
+      "slug": "primes",
+      "label": "the prime numbers",
+      "anchors": [["oeis", "A000040"], ["mathlib", "Nat.Prime"]]
+    },
+    {
+      "slug": "prime-counting",
+      "label": "the prime-counting function pi(n)",
+      "anchors": [["oeis", "A000720"], ["mathlib", "Nat.primeCounting"]]
+    },
+    {
+      "slug": "number-of-divisors",
+      "label": "the number-of-divisors function d(n) (tau)",
+      "anchors": [["oeis", "A000005"], ["mathlib", "Nat.divisors"]]
+    },
+    {
+      "slug": "sum-of-divisors",
+      "label": "the sum-of-divisors function sigma(n)",
+      "anchors": [["oeis", "A000203"], ["mathlib", "Nat.ArithmeticFunction.sigma"]]
+    },
+    {
+      "slug": "euler-totient",
+      "label": "Euler's totient function phi(n)",
+      "anchors": [["oeis", "A000010"], ["mathlib", "Nat.totient"]]
+    },
+    {
+      "slug": "perfect-numbers",
+      "label": "the perfect numbers",
+      "anchors": [["oeis", "A000396"], ["mathlib", "Nat.Perfect"]]
+    },
+    {
+      "slug": "squarefree-numbers",
+      "label": "the squarefree numbers",
+      "anchors": [["oeis", "A005117"], ["mathlib", "Squarefree"]]
+    },
+    {
+      "slug": "fibonacci",
+      "label": "the Fibonacci numbers",
+      "anchors": [["oeis", "A000045"], ["mathlib", "Nat.fib"]]
+    },
+    {
+      "slug": "factorial",
+      "label": "the factorial n!",
+      "anchors": [["oeis", "A000142"], ["mathlib", "Nat.factorial"]]
+    },
+    {
+      "slug": "binomial-coefficients",
+      "label": "the binomial coefficients",
+      "anchors": [["oeis", "A007318"], ["mathlib", "Nat.choose"]]
+    },
+    {
+      "slug": "central-binomial",
+      "label": "the central binomial coefficients",
+      "anchors": [["oeis", "A000984"], ["mathlib", "Nat.centralBinom"]]
+    },
+    {
+      "slug": "partitions",
+      "label": "the partition function p(n)",
+      "anchors": [["oeis", "A000041"], ["mathlib", "Nat.Partition"]]
+    },
+    {
+      "slug": "catalan-numbers",
+      "label": "the Catalan numbers",
+      "anchors": [["oeis", "A000108"], ["mathlib", "catalan"]]
+    },
+    {
+      "slug": "bernoulli-numbers",
+      "label": "the Bernoulli numbers",
+      "anchors": [["oeis", "A027641"], ["mathlib", "bernoulli"]]
+    }
+  ]
+}

@@ -6,7 +6,7 @@
     "nodes": 809282,
     "known": 317587,
     "known_pct": 39,
-    "frontier": 796,
+    "frontier": 1196,
     "gaps": 491695,
     "gaps_pct": 61
   },
@@ -327,6 +327,20 @@
       "kind": "field-imports",
       "count": 9560,
       "note": "249 cross-field pairs (module dep graph)"
+    },
+    {
+      "a": "mathlib",
+      "b": "mathlib",
+      "kind": "decl-dependency",
+      "count": 14511,
+      "note": "2531 declarations, kernel-extracted premise graph"
+    },
+    {
+      "a": "oeis",
+      "b": "mathlib",
+      "kind": "same-object",
+      "count": 14,
+      "note": "curated HardIdentity seed (famous objects, one identity across namespaces)"
     }
   ],
   "field_links": [
@@ -533,7 +547,7 @@
   ],
   "frontier": {
     "what": "What to push: attackable obligations where an exact verifier admits the loop.",
-    "total": 796,
+    "total": 1196,
     "sources": [
       {
         "source": "formal-conjectures",
@@ -550,8 +564,8 @@
       {
         "source": "vela-frontiers",
         "verifier": "vela-verify (frozen)",
-        "open": 1,
-        "note": "3 live frozen-verifier frontiers"
+        "open": 401,
+        "note": "7 live frozen-verifier frontiers"
       }
     ]
   },

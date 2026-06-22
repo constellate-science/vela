@@ -1126,8 +1126,8 @@ fn anchor_findings(
     anchored
 }
 
-/// `vela atlas ingest-source --adapter <formal|formal_corpus|alphaproof|oeis|horizonmath> --input
-/// <dir|file> --out <frontier.json|repo> [--namespace erdos|oeis|horizonmath|formal_conjectures]
+/// `vela atlas ingest-source --adapter <formal|formal_corpus|alphaproof|oeis|horizonmath|identity_seed> --input
+/// <dir|file> --out <frontier.json|repo> [--namespace erdos|oeis|horizonmath|formal_conjectures|identity]
 /// [--rev <prov>] [--actor <a>] [--key <agentkey>] [--dry-run]` — the native production path that replaces
 /// the synthetic-id Python prototypes. Reads a catalogue via a `SourceAdapter`,
 /// mints real content-addressed finding bundles (genesis remnants), attaches
@@ -1149,7 +1149,7 @@ fn run_ingest_source(args: &[String]) {
             .map(|s| s.to_string())
     };
     let adapter = flag("--adapter").unwrap_or_else(|| {
-        fail("--adapter is required (formal|formal_corpus|alphaproof|oeis|horizonmath)")
+        fail("--adapter is required (formal|formal_corpus|alphaproof|oeis|horizonmath|identity_seed)")
     });
     let input = flag("--input").unwrap_or_else(|| fail("--input <dir> is required"));
     let out = flag("--out").unwrap_or_else(|| fail("--out <frontier.json|repo-dir> is required"));
