@@ -659,7 +659,7 @@ fn is_decl_noise(name: &str) -> bool {
 /// (`{from,to,kind:"uses"}`) or the built `decl-graph.v1.json` artifact, applying
 /// the noise filter + dedup + canonical sort. Deterministic: same input bytes →
 /// same edge list. Returns `(from, to)` pairs (every edge is `from DependsOn to`).
-fn load_decl_edges(path: &str) -> Result<Vec<(String, String)>, String> {
+pub(crate) fn load_decl_edges(path: &str) -> Result<Vec<(String, String)>, String> {
     let raw = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
     let mut set: std::collections::BTreeSet<(String, String)> = std::collections::BTreeSet::new();
     // The built artifact is a single JSON object with an `edges` array (it parses

@@ -2570,6 +2570,23 @@ pub(crate) enum TaskAction {
         #[arg(long)]
         json: bool,
     },
+    /// Compose one root-pinned Frontier Packet for a target: the obligation,
+    /// the accepted state at the root, the minimal kernel-premise slice (the
+    /// decl-graph CodeGraph bridge), failed-route memory, open obligations, the
+    /// attempt ledger, and the submission contract. The producer's entry
+    /// contract, as a CLI verb (was MCP-only).
+    Packet {
+        /// Frontier repo directory (or a `frontier.json`).
+        frontier: PathBuf,
+        /// Target: a `vf_` id, a problem number (`617`), or a text substring.
+        target: String,
+        /// Built Mathlib decl-graph for the premise slice (default:
+        /// `data/mathlib/decl-graph.v1.json` if present).
+        #[arg(long)]
+        decl_graph: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
     /// Claim a task for local review or execution.
     Claim {
         /// Frontier repo directory.

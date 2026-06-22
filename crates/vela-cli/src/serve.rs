@@ -2708,11 +2708,115 @@ fn tool_task_packet(
     frontier: &Project,
     source_path: Option<&std::path::Path>,
 ) -> Result<String, String> {
-    use vela_protocol::verifier_attachment::{claim_digest, derive_gate_status};
     let arg = args["problem"]
         .as_str()
         .or_else(|| args["id"].as_str())
         .ok_or("Missing 'problem' argument")?;
+    let v = build_task_packet(arg, frontier, source_path, default_decl_graph_path().as_deref())?;
+    serde_json::to_string_pretty(&v).map_err(|e| e.to_string())
+}
+
+/// Default location of the built Mathlib decl-dependency graph (regenerable
+/// working data; gitignored). Present only on a worktree that has run the
+/// decl-build pass; absent is fine — the premise slice is then honestly empty.
+pub(crate) fn default_decl_graph_path() -> Option<std::path::PathBuf> {
+    let p = std::path::PathBuf::from("data/mathlib/decl-graph.v1.json");
+    p.exists().then_some(p)
+}
+
+/// The CodeGraph bridge: the minimal KERNEL-CHECKED premise slice for a target,
+/// found by looking up the target's Mathlib declaration anchor(s) in the
+/// `getUsedConstants` decl-dependency graph. This is the first consumer that
+/// joins the decl graph into the finding (`vf_`) id-space. Premises are the
+/// decls this target's proof USES; dependents rest on it. Edges are
+/// kernel-extracted, never asserted, so no fabrication enters the packet. Empty
+/// (honestly) for any target with no Mathlib anchor (e.g. exact combinatorial
+/// witnesses), or when the local decl-graph artifact is absent.
+pub(crate) fn decl_premise_slice(
+    frontier: &Project,
+    target_id: &str,
+    decl_graph: Option<&std::path::Path>,
+    max: usize,
+) -> Value {
+    let decls: Vec<String> = frontier
+        .anchor_links
+        .iter()
+        .filter(|l| l.target == target_id && l.anchor.namespace == "mathlib")
+        .map(|l| l.anchor.id.clone())
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect();
+    if decls.is_empty() {
+        return json!({
+            "decl_anchored": false,
+            "decls": [],
+            "note": "target carries no Mathlib declaration anchor; no kernel-premise slice (most non-Lean targets are honestly empty here).",
+        });
+    }
+    let Some(path) = decl_graph else {
+        return json!({
+            "decl_anchored": true,
+            "graph_present": false,
+            "decls": decls,
+            "note": "target is Mathlib-anchored but the decl-graph artifact (data/mathlib/decl-graph.v1.json) is absent on this worktree; run `vela atlas decl-build`.",
+        });
+    };
+    let edges = match crate::cli_atlas::load_decl_edges(&path.to_string_lossy()) {
+        Ok(e) => e,
+        Err(e) => {
+            return json!({"decl_anchored": true, "graph_present": false, "decls": decls, "error": e});
+        }
+    };
+    let items: Vec<Value> = decls
+        .iter()
+        .map(|d| {
+            let mut premises: Vec<&str> = edges
+                .iter()
+                .filter(|(f, _)| f == d)
+                .map(|(_, t)| t.as_str())
+                .collect();
+            premises.sort_unstable();
+            premises.dedup();
+            let mut dependents: Vec<&str> = edges
+                .iter()
+                .filter(|(_, t)| t == d)
+                .map(|(f, _)| f.as_str())
+                .collect();
+            dependents.sort_unstable();
+            dependents.dedup();
+            json!({
+                "decl": d,
+                "premise_count": premises.len(),
+                "premises": premises.iter().take(max).collect::<Vec<_>>(),
+                "dependent_count": dependents.len(),
+                "dependents": dependents.iter().take(max).collect::<Vec<_>>(),
+            })
+        })
+        .collect();
+    json!({
+        "decl_anchored": true,
+        "graph_present": true,
+        "source": "data/mathlib/decl-graph.v1.json (kernel getUsedConstants, noise-filtered)",
+        "decls": items,
+        "note": "minimal kernel-checked premise slice: premises are decls this target's proof uses; dependents rest on it. Edges are kernel-extracted, never asserted.",
+    })
+}
+
+/// Compose one root-pinned, replayable Frontier Packet for a single target. The
+/// MCP `task_packet` tool and the `vela task packet` CLI verb share this. It
+/// binds: the resolved obligation, the accepted state at (snapshot_hash,
+/// event_log_hash), the gate status, the minimal kernel-premise slice
+/// ([`decl_premise_slice`], the CodeGraph bridge), the failed-route memory and
+/// open obligations from the linked gap findings, the attempt ledger, and the
+/// submission contract. Compact and complete: small enough to read, but every
+/// authoritative line replays from the named root.
+pub(crate) fn build_task_packet(
+    arg: &str,
+    frontier: &Project,
+    source_path: Option<&std::path::Path>,
+    decl_graph: Option<&std::path::Path>,
+) -> Result<Value, String> {
+    use vela_protocol::verifier_attachment::{claim_digest, derive_gate_status};
     let target = resolve_problem(arg, frontier)
         .ok_or_else(|| format!("No finding resolves problem '{arg}'"))?;
 
@@ -2881,7 +2985,7 @@ fn tool_task_packet(
         _ => "unverified",
     };
 
-    serde_json::to_string_pretty(&json!({
+    Ok(json!({
         "tool": "task_packet",
         "resolved": {"id": target.id, "problem": problem_number, "from": arg},
         "statement": target.assertion.text,
@@ -2889,6 +2993,7 @@ fn tool_task_packet(
             "snapshot_hash": vela_protocol::events::snapshot_hash(frontier),
             "event_log_hash": vela_protocol::events::event_log_hash(&frontier.events),
         },
+        "premise_slice": decl_premise_slice(frontier, &target.id, decl_graph, 12),
         "gate_status": {
             "status": format!("{:?}", gate.status),
             "reasons": gate.reasons,
@@ -2924,7 +3029,6 @@ fn tool_task_packet(
         },
         "caveat": "Allowed outputs are the only state-changing submissions; strategy prose without an artifact does not move the frontier.",
     }))
-    .map_err(|e| e.to_string())
 }
 
 fn tool_frontier_explore(args: &Value, frontier: &Project) -> Result<String, String> {
@@ -3835,5 +3939,63 @@ mod list_dependents_tests {
             v["contradictions"]["edges"][0]["direction"],
             "contradicted_by"
         );
+    }
+
+    #[test]
+    fn premise_slice_bridges_mathlib_anchor_into_the_kernel_graph() {
+        use vela_protocol::anchor::{Anchor, AnchorKind, AnchorLink, JoinPolicy};
+        let target = synth_finding(1, vec![]);
+        let plain = synth_finding(2, vec![]);
+        let (tid, pid) = (target.id.clone(), plain.id.clone());
+
+        let mut project = assemble("premise", vec![], 0, 0, "test");
+        project.findings = vec![target, plain];
+        // The target carries a Mathlib declaration anchor; the plain finding does not.
+        project.anchor_links = vec![AnchorLink {
+            schema: "vela.anchor_link.v1".into(),
+            id: "val_test".into(),
+            target: tid.clone(),
+            anchor: Anchor {
+                namespace: "mathlib".into(),
+                id: "Nat.Perfect".into(),
+                role: "formal-decl".into(),
+                kind: AnchorKind::FormalDeclaration,
+                join_policy: JoinPolicy::HardIdentity,
+                namespace_version: None,
+                source_revision: None,
+                statement_fingerprint: None,
+            },
+            attached_by: "agent:test".into(),
+            attached_at: "2026-06-22T00:00:00Z".into(),
+            signature: "x".into(),
+            signer_pubkey_hex: "x".into(),
+        }];
+
+        // A tiny decl-graph: Nat.Perfect USES Nat.properDivisors; Foo rests on it.
+        let dir = std::env::temp_dir().join(format!("vela_premise_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let dg = dir.join("decl-graph.v1.json");
+        std::fs::write(
+            &dg,
+            r#"{"edges":[{"from":"Nat.Perfect","to":"Nat.properDivisors"},{"from":"Foo.usesPerfect","to":"Nat.Perfect"}]}"#,
+        )
+        .unwrap();
+
+        // Anchored target: the slice is the real kernel premise neighborhood.
+        let s = decl_premise_slice(&project, &tid, Some(dg.as_path()), 12);
+        assert_eq!(s["decl_anchored"], true);
+        assert_eq!(s["graph_present"], true);
+        assert_eq!(s["decls"][0]["decl"], "Nat.Perfect");
+        assert_eq!(s["decls"][0]["premise_count"], 1);
+        assert_eq!(s["decls"][0]["premises"][0], "Nat.properDivisors");
+        assert_eq!(s["decls"][0]["dependent_count"], 1);
+        assert_eq!(s["decls"][0]["dependents"][0], "Foo.usesPerfect");
+
+        // Un-anchored target: honestly empty (no fabricated premises).
+        let e = decl_premise_slice(&project, &pid, Some(dg.as_path()), 12);
+        assert_eq!(e["decl_anchored"], false);
+        assert_eq!(e["decls"].as_array().unwrap().len(), 0);
+
+        std::fs::remove_dir_all(&dir).ok();
     }
 }
