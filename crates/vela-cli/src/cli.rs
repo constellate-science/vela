@@ -235,6 +235,7 @@ pub async fn run_command() {
         Commands::Agents { action } => crate::cli_agents::cmd_agents(action),
         Commands::Campaign { action } => crate::cli_campaign::cmd_campaign(action),
         Commands::Foundry { action } => crate::cli_engine::cmd_foundry(action),
+        Commands::Experiment { action } => crate::cli_experiment::cmd_experiment(action),
         Commands::Onboard { frontier, json } => {
             let project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
             let name = project.project.name.clone();
@@ -5337,6 +5338,7 @@ Verification:
   correct       Record repair: dependency blast radius of a correction/retraction
   campaign      Discovery engine: search verifier-gated constructions, verify, propose
   foundry       One unattended compounding turn: produce -> frozen-verify -> auto-admit
+  experiment    Experiment receipts: run-manifest, cohort obligation-status, author obligation
   sidon         Sidon Producer Profile (A309370): submit, observe, export, frontier-map, support
   attach        Bind a verifier attachment to a finding (propose -> accept in one step)
   attempt       Verify banked attempts (vat_): id re-derivation + signature + claim digest

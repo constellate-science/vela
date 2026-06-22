@@ -368,6 +368,14 @@ pub(crate) enum Commands {
         #[command(subcommand)]
         action: FoundryAction,
     },
+    /// Experiment-plane receipts (Inevitability Program Phase 0): assemble a
+    /// content-addressed run-manifest over an experiment's turns, and project the
+    /// discharge status of a typed cohort over accepted state. Non-authoritative;
+    /// no event, no wire change.
+    Experiment {
+        #[command(subcommand)]
+        action: ExperimentAction,
+    },
     /// Show version information
     Version,
     /// Optional signing and signature verification
@@ -1356,6 +1364,56 @@ pub(crate) enum SignAction {
         /// Number of unique valid signatures required (>= 1).
         #[arg(long)]
         to: u32,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+/// `vela experiment` — experiment-plane receipts (Inevitability Program Phase 0).
+#[derive(Subcommand)]
+pub(crate) enum ExperimentAction {
+    /// Assemble a content-addressed run-manifest over an experiment's `vac_`
+    /// activity turns (ordered, immutable, complete) so a run can be replayed and
+    /// no turn can be silently dropped.
+    Manifest {
+        /// Frontier directory whose `activity/` holds the run's `vac_` envelopes.
+        frontier: PathBuf,
+        /// Experiment id; filters turns tagged `experiment:<id>`. Use `*` for all.
+        #[arg(long, default_value = "*")]
+        experiment: String,
+        /// Optional path to write the manifest JSON.
+        #[arg(long)]
+        out: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Project the discharge status of a typed cohort (open / discharged /
+    /// blocked) over the frontier's accepted findings — mechanical, not asserted.
+    Status {
+        /// Cohort JSON: an array of obligations, or `{ "obligations": [...] }`.
+        cohort: PathBuf,
+        /// Frontier directory whose accepted findings discharge obligations.
+        frontier: PathBuf,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Author a content-addressed (`vxo_`) cohort obligation from its fields.
+    Obligation {
+        /// Cohort id this obligation belongs to.
+        #[arg(long)]
+        cohort: String,
+        /// The `vf_` finding id whose acceptance discharges this obligation.
+        #[arg(long)]
+        target: String,
+        /// The exact statement (pins `statement_digest`).
+        #[arg(long)]
+        statement: String,
+        /// Prior accepted judgment ids this obligation depends on (repeatable).
+        #[arg(long = "dep")]
+        deps: Vec<String>,
+        /// How discharge is checked: `lean_kernel` | `vela_verify` | other.
+        #[arg(long, default_value = "lean_kernel")]
+        discharge_kind: String,
         #[arg(long)]
         json: bool,
     },

@@ -21,6 +21,7 @@ mod cli_check;
 mod cli_claim;
 mod cli_commands;
 mod cli_engine;
+mod cli_experiment;
 mod cli_export;
 mod cli_finding;
 mod cli_frontier;
