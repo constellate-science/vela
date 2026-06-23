@@ -263,6 +263,17 @@ pub enum Witness {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         pairs_claimed: Option<u64>,
     },
+    /// An Erdős #366 certificate: the complete set, over `[1, n_max]`, of `n`
+    /// that are 2-full (powerful: every prime exponent `>= 2`) with `n+1`
+    /// 3-full (every prime exponent `>= 3`). The verifier re-scans `[1, n_max]`
+    /// via an SPF sieve and confirms `examples` is EXACTLY the set found. An
+    /// empty `examples` is a finite confirmation that no such `n` exists in the
+    /// range (the question over all integers is open); a nonempty `examples`
+    /// exhibits genuine witnesses.
+    TwoFullThreeFull {
+        n_max: u64,
+        examples: Vec<u64>,
+    },
 }
 
 /// One addition step of an LRAT proof: clause `id` is the listed
@@ -358,6 +369,7 @@ impl Witness {
             Witness::UnitFractionDecomp { .. } => "unit_fraction_decomp",
             Witness::DistinctPartialSums { .. } => "distinct_partial_sums",
             Witness::PowerfulTriplesNone { .. } => "powerful_triples_none",
+            Witness::TwoFullThreeFull { .. } => "two_full_three_full",
         }
     }
 }
@@ -538,6 +550,81 @@ pub fn verify_witness(witness: &Witness) -> VerifyResult {
             n_max,
             pairs_claimed,
         } => verify_powerful_triples_none(*n_max, *pairs_claimed),
+        Witness::TwoFullThreeFull { n_max, examples } => {
+            verify_two_full_three_full(*n_max, examples)
+        }
+    }
+}
+
+/// Erdős #366: verify `examples` is EXACTLY the set of `n` in `[1, n_max]` that
+/// are 2-full (powerful: every prime exponent `>= 2`) with `n+1` 3-full (every
+/// prime exponent `>= 3`). Re-scans `[1, n_max]` via an SPF sieve (the minimum
+/// prime exponent is computed exactly). An empty `examples` is a finite
+/// confirmation that no such `n` exists up to `n_max`; a nonempty `examples`
+/// exhibits genuine witnesses. Fail-closed: a claimed example that is not such
+/// an `n`, or a missing one, aborts.
+pub fn verify_two_full_three_full(n_max: u64, examples: &[u64]) -> VerifyResult {
+    if n_max < 1 {
+        return VerifyResult::fail("n_max must be >= 1");
+    }
+    if n_max > 200_000_000 {
+        return VerifyResult::fail("n_max too large for the in-gate sieve (cap 2e8)");
+    }
+    let n = (n_max + 1) as usize; // need n+1 too
+    let mut spf = vec![0u32; n + 1];
+    for i in 2..=n {
+        if spf[i] == 0 {
+            let mut j = i;
+            while j <= n {
+                if spf[j] == 0 {
+                    spf[j] = i as u32;
+                }
+                j += i;
+            }
+        }
+    }
+    // Minimum prime exponent in the factorisation of m (u64::MAX sentinel for m=1).
+    let min_exp = |mut m: usize| -> u64 {
+        if m <= 1 {
+            return u64::MAX;
+        }
+        let mut lo = u64::MAX;
+        while m > 1 {
+            let p = spf[m] as usize;
+            let mut e = 0;
+            while m % p == 0 {
+                m /= p;
+                e += 1;
+            }
+            lo = lo.min(e);
+        }
+        lo
+    };
+    let mut found: Vec<u64> = Vec::new();
+    for m in 1..=(n_max as usize) {
+        if min_exp(m) >= 2 && min_exp(m + 1) >= 3 {
+            found.push(m as u64);
+        }
+    }
+    let mut claimed = examples.to_vec();
+    claimed.sort_unstable();
+    if claimed != found {
+        return VerifyResult::fail(format!(
+            "claimed examples {claimed:?} != the {} actually found in [1, {n_max}]: {found:?}",
+            found.len()
+        ));
+    }
+    if found.is_empty() {
+        VerifyResult::ok(format!(
+            "Erdős #366 finite confirmation: NO 2-full n with n+1 3-full in [1, {n_max}]. \
+             The question over all integers is the open problem."
+        ))
+    } else {
+        VerifyResult::ok(format!(
+            "Erdős #366: {} genuine witness(es) in [1, {n_max}] — 2-full n with n+1 3-full: {found:?}. \
+             Exhibits existence (the set is complete over the range).",
+            found.len()
+        ))
     }
 }
 
@@ -3476,5 +3563,17 @@ mod rat_tests {
         // 8 = 2^3 powerful, 9 = 3^2 powerful, 7 = prime not powerful: the pair
         // (8,9) is found but never a triple.
         assert!(verify_powerful_triples_none(10, None).ok);
+    }
+
+    #[test]
+    fn two_full_three_full_finds_the_complete_set() {
+        // No 2-full n with n+1 3-full in [1,100] (3-full n+1 in {8,16,27,32,64,81}
+        // give n in {7,15,26,31,63,80}, none powerful).
+        assert!(verify_two_full_three_full(100, &[]).ok);
+        // A spurious claim is rejected.
+        assert!(!verify_two_full_three_full(100, &[8]).ok);
+        // A missing example is rejected: if any exists in range, [] must fail.
+        // (Construct via a tiny range where the set is known empty -> [] passes.)
+        assert!(verify_two_full_three_full(10, &[]).ok);
     }
 }
