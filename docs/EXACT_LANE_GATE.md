@@ -51,9 +51,16 @@ A naive design auto-admits when the verifier-attachment gate
 forgeable by the agent producing the claim.** A `VerifierAttachment` is
 unsigned, self-asserted data. The same agent that produces a finding can
 hand-author two attachments over a *single* run with cosmetic-distinct
-`solver_id` / `implementation_id`, self-assert mutual `independent_of`, a
-`Survived` FormalismFidelity probe, and `MethodIntegrity::Sound`. All five
-attachment-shape guards then pass. Distinct strings are not distinct verifiers.
+`solver_id` / `implementation_id`, a one-directional `independent_of`, a
+`Survived` FormalismFidelity probe, and `MethodIntegrity::Sound`. The
+attachment-shape guards then pass. Distinct strings are not distinct verifiers —
+independence and implementation diversity here are *declared, auditable*
+properties, not cryptographic ones. (Two things that previously made this attack
+*easier* are now closed: a forged mutual `independent_of` 2-cycle is
+unconstructable because the `vva_` id content-addresses `independent_of`, and
+gate G4 re-derives `derive_id() == id` so a hand-set forged id never enters the
+matched set. The residual self-assertion is why the human accept of the
+attachments stays the backstop.)
 
 Worse, `verify_witness` only confirms a witness is *internally* valid (a
 genuine Sidon set of size `points.len()`); it never reads the assertion. So an
@@ -83,14 +90,19 @@ These two are the trust. Everything below is secondary.
 ## 4. Secondary corroboration (defense in depth, not the trust)
 
 `vela_protocol::verifier_attachment::exact_lane_attachment_admit` (shipped,
-red-team-tested 9/9) is strictly stronger than `derive_gate_status == Verified`:
+red-team-tested 10/10) is strictly stronger than `derive_gate_status == Verified`:
 
-1. gate `Verified` (inherits G1-G5),
+1. gate `Verified` (inherits G1-G5, including G4 id-integrity: every matched
+   attachment re-derives `derive_id() == id`, so a forged-id attachment is
+   excluded before the lane reasons over it),
 2. every matched attachment `MethodIntegrity::Sound` (reject the legacy
    `Unattested` default the gate tolerates),
 3. a `FormalismFidelity` probe PRESENT and `Survived` (gate G3 accepts any
    survived probe),
-4. mutual independence (gate G1 accepts one-directional),
+4. declared independence — ≥1 matched attachment names another in
+   `independent_of` (one-directional; mutual is a hash circularity over the
+   content-addressed id, so the diversity teeth are guard 5 + gate G1, not a
+   bidirectional handshake — do NOT re-tighten to mutual),
 5. no implementation monoculture.
 
 This is corroboration metadata. Because it is self-assertable, it is layered
@@ -241,7 +253,7 @@ not the prose. (Surfaces beyond the CLI gate — web/atlas/hub — should displa
 ## 9. Shipped vs pending
 
 - Shipped: `policy.auto_admitted` event kind (all three reducers, no-op);
-  `exact_lane_attachment_admit` + 9 red-team tests; `claim_witness_faithful` +
+  `exact_lane_attachment_admit` + 10 red-team tests; `claim_witness_faithful` +
   `parse_claim` + 9 adversarial tests. All gate-green, byte-parity preserved.
 - Pending (the lane stays off until done): the §7 checklist, the
   `exact_lane_auto_admit` proposal wrapper, the admit command that runs

@@ -893,6 +893,12 @@ fn apply_verifier_attachment_added(state: &mut Project, event: &StateEvent) -> R
         .ok_or("reducer: verifier_attachment.added missing payload.attachment")?;
     let att: crate::verifier_attachment::VerifierAttachment = serde_json::from_value(value.clone())
         .map_err(|e| format!("reducer: invalid verifier_attachment.added payload: {e}"))?;
+    // Re-verify the embedded object's content-addressed id on apply, exactly as
+    // every sibling object reducer does (this arm previously skipped it, leaving
+    // a forged-id attachment landable). The gate's G4 id-integrity check is the
+    // second line of defense; this is the first.
+    att.verify()
+        .map_err(|e| format!("reducer: verifier_attachment.added failed id-integrity: {e}"))?;
     if state.verifier_attachments.iter().any(|a| a.id == att.id) {
         return Ok(());
     }

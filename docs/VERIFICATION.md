@@ -43,8 +43,10 @@ rule as the Python reference). It records:
 verified.
 
 - **G1 independence** — at least two *matched* attachments by different
-  `(verifier_method, solver_id)`, mutually declaring `independent_of`. One run,
-  or two runs of the same method, never suffices.
+  `(verifier_method, solver_id)`, with at least one declaring `independent_of`
+  another in the set (one-directional; a mutual 2-cycle is unconstructable since
+  the `vva_` id content-addresses `independent_of`). One run, or two runs of the
+  same method, never suffices.
 - **G2 claim-match** — every passing attachment is bound to the current claim
   digest with `match_to_claim.matches`. A passing attachment bound to a
   different claim is `passed_but_unmatched` and counts for nothing.

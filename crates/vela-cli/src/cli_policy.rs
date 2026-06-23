@@ -114,17 +114,19 @@ fn classify(text: &str) -> &'static str {
 
 /// Derive the bounded policy context for a finding from FROZEN evidence (the gate),
 /// not self-assertion. Assurance: A3 if the exact-lane admit passes (gate Verified +
-/// independent + sound + faithful), A2 if the gate is merely Verified, A1 if any
-/// matched attachment exists, else A0.
+/// all Sound + a surviving FormalismFidelity probe + >=1 one-directional independence
+/// declaration + >=2 distinct implementations), A2 if the gate is merely Verified,
+/// else A0.
 fn build_context(project: &Project, finding: &FindingBundle) -> PolicyContext {
     let digest = claim_digest(&finding.assertion.text);
     let atts = &project.verifier_attachments;
     let gate = derive_gate_status(&digest, atts);
     let (admit, _) = exact_lane_attachment_admit(&digest, atts);
     // Assurance derived from the frozen gate (never self-asserted): A3 when the
-    // exact-lane admit clears (Verified + mutual independence + sound + faithful),
-    // A2 when the gate reaches Verified (>=2 independent verifiers, claim-bound,
-    // a surviving probe, no compromised method), else A0.
+    // exact-lane admit clears (Verified + all Sound + faithful + one-directional
+    // independence + distinct implementations), A2 when the gate reaches Verified
+    // (>=2 independent verifiers, claim-bound, a surviving probe, no compromised
+    // method), else A0.
     let assurance_level = if admit {
         3
     } else if gate.is_verified() {
@@ -149,8 +151,10 @@ fn build_context(project: &Project, finding: &FindingBundle) -> PolicyContext {
     let all_sound =
         !matched.is_empty() && matched.iter().all(|a| a.method_integrity == MethodIntegrity::Sound);
     // The gate reaching Verified already proves G1 independence (>=2 matched
-    // verifiers with >=1 declared `independent_of`); the exact lane adds mutual
-    // declaration. Either way independence is real, not self-asserted.
+    // verifiers with >=1 one-directional `independent_of` declaration); the exact
+    // lane adds the distinct-implementation guard (Guard 5) and all-Sound, not a
+    // mutual declaration (a vva_ id content-addresses independent_of, so a mutual
+    // 2-cycle is a hash circularity). Independence is declared, not self-asserted-away.
     let method_integrity_sound = admit || all_sound;
     PolicyContext {
         claim_class: classify(&finding.assertion.text).to_string(),

@@ -31,16 +31,27 @@
 //! attachments that satisfy four conditions:
 //!
 //! - **G1 independence** — ≥2 matched attachments by *different*
-//!   `(verifier_method, solver_id)`, each naming the others in
-//!   `independent_of`. One self-confirmed run never suffices.
+//!   `(verifier_method, solver_id)`, with at least one naming another in
+//!   `independent_of`. The declaration is one-directional by necessity:
+//!   the `vva_` id content-addresses the whole body *including*
+//!   `independent_of`, so a mutual 2-cycle (A names B, B names A) is a
+//!   hash circularity and cannot be constructed. Independence is a
+//!   *declared, auditable* property, not a cryptographic one — a single
+//!   producer controls every field; the real diversity signal is
+//!   distinct `(method, solver)` here and distinct `implementation_id`
+//!   in the exact lane. One self-confirmed run never suffices.
 //! - **G2 claim-match** — every passing attachment is bound to the
 //!   *current* claim digest and declares `match_to_claim.matches`. A
 //!   proof that checks a *different* statement is `passed_but_unmatched`
 //!   and counts for nothing.
 //! - **G3 adversarial** — at least one adversarial probe present and
 //!   *none* refuted. A refuted probe drives the status to `Refuted`.
-//! - **G4 well-formed** — attachments are structurally valid (`vva_`
-//!   ids, parseable methods).
+//! - **G4 well-formed + id-integrity** — attachments are structurally
+//!   valid (`vva_` ids, parseable methods) AND their stored id
+//!   content-addresses their body (`derive_id() == id`). An attachment
+//!   whose id is forged or has drifted from its body is excluded from
+//!   the matched set: admission re-derives integrity from frozen
+//!   content, it never trusts a self-asserted id.
 //!
 //! Like Belnap status, the gate is orthogonal to the human review
 //! verdict ([`crate::bundle::ReviewState`]) and to Bayesian confidence
@@ -262,7 +273,10 @@ pub struct VerifierAttachment {
     /// keys on `(verifier_method, solver_id)`.
     pub solver_id: String,
     /// Ids of *other* attachments this one declares itself independent
-    /// of. G1 requires the matched set to mutually declare independence.
+    /// of. G1 requires the matched set to declare independence one-
+    /// directionally (>=1 declaration); a mutual 2-cycle is unconstructable
+    /// because the id content-addresses this field. Reference EARLIER-built
+    /// attachments only, so the referenced id is final before this one is built.
     #[serde(default)]
     pub independent_of: Vec<String>,
     pub match_to_claim: MatchToClaim,
@@ -369,6 +383,19 @@ impl VerifierAttachment {
         Ok(self)
     }
 
+    /// Set the implementation id and re-derive the content-addressed id.
+    /// `implementation_id` is part of the canonical body, so a producer that
+    /// records which implementation ran (the exact-lane monoculture guard reads
+    /// it) must set it through this builder rather than by field assignment, or
+    /// the stored id would no longer content-address the body and the gate's G4
+    /// id-integrity check would exclude the attachment. Apply it AFTER
+    /// `with_method_integrity` (it is the last mutation) so the id is final.
+    pub fn with_implementation_id(mut self, implementation_id: &str) -> Result<Self, String> {
+        self.implementation_id = implementation_id.to_string();
+        self.id = self.derive_id()?;
+        Ok(self)
+    }
+
     /// Re-derive the content-addressed id from the canonical body with
     /// the id field zeroed.
     pub fn derive_id(&self) -> Result<String, String> {
@@ -411,14 +438,30 @@ impl VerifierAttachment {
         self.is_base_match(current_digest) && self.method_integrity != MethodIntegrity::Compromised
     }
 
-    /// Well-formed, passed, claim-matched — everything but the integrity check.
-    /// The integrity check is the only thing distinguishing a passing match
-    /// (G5 ok) from a compromised one (G5 excluded).
-    fn is_base_match(&self, current_digest: &str) -> bool {
+    /// True iff the stored id content-addresses the body (`derive_id() == id`).
+    /// The gate re-derives this for every matched attachment so admission rests
+    /// on frozen content, never on a forgeable self-asserted id. (No production
+    /// path called `verify()` before; the gate now closes that hole itself.)
+    fn has_valid_id(&self) -> bool {
+        self.derive_id().is_ok_and(|d| d == self.id)
+    }
+
+    /// Passed, claim-matched, well-prefixed — the *claim binding*, before the
+    /// id-integrity (G4) and method-integrity (G5) checks. Used to surface a
+    /// forged-id or compromised attachment with a precise reason rather than
+    /// silently dropping it into `passed_but_unmatched` (G2).
+    fn is_claim_bound(&self, current_digest: &str) -> bool {
         self.id.starts_with("vva_")
             && self.outcome == AttachmentOutcome::Passed
             && self.claim_digest == current_digest
             && self.match_to_claim.matches
+    }
+
+    /// Well-formed, passed, claim-matched, AND id-integral (G4) — everything but
+    /// the method-integrity check. The integrity check is the only thing
+    /// distinguishing a passing match (G5 ok) from a compromised one (G5 excluded).
+    fn is_base_match(&self, current_digest: &str) -> bool {
+        self.is_claim_bound(current_digest) && self.has_valid_id()
     }
 
     /// Whether this attachment would have matched the claim but is excluded
@@ -485,10 +528,11 @@ pub fn derive_gate_status(
         .filter(|a| a.is_passing_match(current_claim_digest))
         .collect();
 
-    // Monoculture observation (informational, never demotes in v1):
-    // when the matched set agrees but every run names the SAME
-    // implementation, say so — N runs of one binary are replication,
-    // not implementation diversity.
+    // Monoculture observation: when the matched set agrees but every run
+    // names the SAME implementation, say so — N runs of one binary are
+    // replication, not implementation diversity. NB: pushing a reason here
+    // DOES demote (status is Verified iff `reasons` is empty), so a single-
+    // implementation matched set derives `NeedsVerification`.
     {
         let impls: std::collections::HashSet<&str> = matched
             .iter()
@@ -520,9 +564,25 @@ pub fn derive_gate_status(
         ));
     }
 
-    // Genuine claim mismatch: passed, but neither matched nor merely
-    // compromised (wrong claim digest, or match_to_claim=false).
-    if passed.len() > matched.len() + compromised {
+    // G4 id-integrity: an attachment that *would* match the claim but whose
+    // stored id does not content-address its body (forged or drifted) is
+    // excluded from the matched set. `verify()` was never called on the
+    // write path, so the gate re-derives integrity here — a self-asserted
+    // `vva_` id can never push a finding to Verified on its own say-so.
+    let id_invalid = attachments
+        .iter()
+        .filter(|a| a.is_claim_bound(current_claim_digest) && !a.has_valid_id())
+        .count();
+    if id_invalid > 0 {
+        reasons.push(format!(
+            "G4: {id_invalid} attachment(s) excluded — id does not content-address the body \
+             (forged or drifted; derive_id() != id)"
+        ));
+    }
+
+    // Genuine claim mismatch: passed, but neither matched, compromised, nor
+    // id-invalid (wrong claim digest, or match_to_claim=false).
+    if passed.len() > matched.len() + compromised + id_invalid {
         reasons.push(
             "G2: an attachment passed but is unmatched to the current claim (passed_but_unmatched)"
                 .to_string(),
@@ -530,7 +590,8 @@ pub fn derive_gate_status(
     }
 
     // G1 independence: ≥2 matched attachments by different method/solver,
-    // mutually declaring independence.
+    // with at least one declaring independence (one-directional; mutual is a
+    // hash circularity over the content-addressed id).
     if matched.len() < 2 {
         reasons.push(format!(
             "G1: need >=2 matched independent attachments, have {}",
@@ -617,12 +678,22 @@ pub fn derive_gate_status(
 ///      surviving probe, so a vacuous or misformalized statement with only a
 ///      `CounterexampleSearch` probe passes it. Auto-admit demands the
 ///      faithfulness probe explicitly (absent != safe).
-///   4. **mutual independence**: at least one pair of matched attachments each
-///      declares `independent_of` the other (the gate's G1 accepts a single
-///      one-directional declaration). Closes the collusion / one-voice attack.
+///   4. **declared independence**: at least one matched attachment names
+///      another matched attachment in `independent_of` (one-directional). This
+///      cannot be mutual: the `vva_` id content-addresses the body *including*
+///      `independent_of`, so a 2-cycle is a hash circularity (the prior "mutual"
+///      rule made this lane unreachable for every honestly-built pair). The
+///      declaration is a consistency/audit signal, not cryptographic
+///      independence — a single producer controls every field; the real
+///      diversity teeth are guards 5 (distinct implementations) and the gate's
+///      G1 (distinct method/solver). Do NOT re-tighten this to mutual.
 ///   5. **not an implementation monoculture**: the matched set carries >=2
 ///      distinct non-empty `implementation_id`s. N runs of one binary are
 ///      replication, not independent verification; the gate only *warns*.
+///
+/// Every matched attachment is also id-integral (G4: `derive_id() == id`),
+/// inherited from the gate's `is_base_match`, so a forged-id attachment can
+/// never enter the matched set this predicate reasons over.
 ///
 /// Proposal-level guards (synthetic-source signal, live frontier
 /// contradiction, proposal kind) are applied by the caller in `proposals.rs`,
@@ -695,23 +766,22 @@ pub fn exact_lane_attachment_admit(
         return (false, reasons);
     }
 
-    // Guard 4: mutual independence — some pair each names the other in
-    // `independent_of` (not a single one-directional declaration).
+    // Guard 4: declared independence — at least one matched attachment names
+    // another matched attachment in `independent_of` (one-directional, the same
+    // form the gate's G1 accepts). Mutual is impossible: the vva_ id
+    // content-addresses the body INCLUDING independent_of, so a 2-cycle is a
+    // hash circularity; requiring it (as this guard once did) made the whole
+    // lane unreachable for every honestly-built pair. The teeth are guard 5
+    // (distinct implementations) and G1 (distinct method/solver), not this
+    // declaration. Re-derived from the same `matched` set the gate verified.
     let ids: std::collections::BTreeSet<&str> = matched.iter().map(|a| a.id.as_str()).collect();
-    let mutual = matched.iter().any(|a| {
-        a.independent_of.iter().any(|other| {
-            other != &a.id
-                && ids.contains(other.as_str())
-                && matched
-                    .iter()
-                    .find(|b| b.id == *other)
-                    .is_some_and(|b| b.independent_of.iter().any(|back| back == &a.id))
-        })
-    });
-    if !mutual {
+    let declares_independence = matched
+        .iter()
+        .any(|a| a.independent_of.iter().any(|other| other != &a.id && ids.contains(other.as_str())));
+    if !declares_independence {
         reasons.push(
-            "exact-lane: no mutually-declared-independent pair (one-directional independence is \
-             insufficient for auto-admit)"
+            "exact-lane: no matched attachment declares independent_of another (need >=1 \
+             one-directional declaration)"
                 .to_string(),
         );
         return (false, reasons);
@@ -784,32 +854,57 @@ mod tests {
         }
     }
 
+    /// Build a fully-specified attachment with a GENUINELY VALID id: every
+    /// id-bearing field (integrity, implementation_id) is set through the
+    /// re-deriving builders, never by post-build mutation, so `verify()` holds.
+    /// `independent_of` is set at build time, so reference EARLIER-built ids.
+    #[allow(clippy::too_many_arguments)]
+    fn attach_full(
+        digest: &str,
+        method: VerifierMethod,
+        solver: &str,
+        independent_of: Vec<String>,
+        probes: Vec<AdversarialProbe>,
+        integrity: MethodIntegrity,
+        impl_id: &str,
+    ) -> VerifierAttachment {
+        let mut a = attach(digest, method, solver, independent_of, probes);
+        if integrity != MethodIntegrity::Unattested {
+            a = a.with_method_integrity(integrity).unwrap();
+        }
+        if !impl_id.is_empty() {
+            a = a.with_implementation_id(impl_id).unwrap();
+        }
+        a
+    }
+
     /// A pair of attachments that SHOULD pass exact-lane auto-admit: two
-    /// matched, mutually-independent, `Sound`, distinct-implementation runs,
-    /// each carrying a Survived FormalismFidelity probe. Each red-team test
-    /// below degrades exactly one of these properties and asserts the
-    /// predicate refuses while the bare gate often still says Verified.
+    /// matched, `Sound`, distinct-implementation runs, each carrying a Survived
+    /// FormalismFidelity probe, with ONE-DIRECTIONAL declared independence (a2
+    /// names a1 — mutual is a hash circularity, see Guard 4). Both ids are
+    /// genuinely content-valid. Each red-team test below degrades exactly one
+    /// property and asserts the predicate refuses while the bare gate often
+    /// still says Verified.
     fn admit_pair(digest: &str) -> (VerifierAttachment, VerifierAttachment) {
-        let mut a1 = attach(
+        // a1 is built first so its id is final before a2 references it.
+        let a1 = attach_full(
             digest,
             VerifierMethod::ComputationalSearch,
             "cp-sat",
             vec![],
             vec![ff_survived()],
+            MethodIntegrity::Sound,
+            "impl-cp-sat",
         );
-        let mut a2 = attach(
+        let a2 = attach_full(
             digest,
             VerifierMethod::ExactArithmeticRecompute,
             "pari-gp",
-            vec![],
+            vec![a1.id.clone()],
             vec![ff_survived()],
+            MethodIntegrity::Sound,
+            "impl-pari",
         );
-        a1.independent_of = vec![a2.id.clone()];
-        a2.independent_of = vec![a1.id.clone()];
-        a1.method_integrity = MethodIntegrity::Sound;
-        a2.method_integrity = MethodIntegrity::Sound;
-        a1.implementation_id = "impl-cp-sat".to_string();
-        a2.implementation_id = "impl-pari".to_string();
         (a1, a2)
     }
 
@@ -817,6 +912,10 @@ mod tests {
     fn exact_lane_happy_path_admits() {
         let digest = claim_digest("claim X");
         let (a1, a2) = admit_pair(&digest);
+        // The admitting pair is GENUINELY id-valid — built through build() +
+        // the re-deriving builders, not by mutating ids in memory.
+        a1.verify().expect("a1 content-addresses its body");
+        a2.verify().expect("a2 content-addresses its body");
         assert_eq!(
             derive_gate_status(&digest, &[a1.clone(), a2.clone()]).status,
             GateStatus::Verified
@@ -826,15 +925,65 @@ mod tests {
         assert!(reasons.is_empty());
     }
 
+    // The forged-id attack the relaxed Guard 4 must not open: a single actor
+    // hand-authors two attachments whose ids do NOT content-address their
+    // bodies (here, mutual independence declarations added without re-deriving,
+    // exactly the unconstructable-honestly 2-cycle). G4 id-integrity excludes
+    // them from the matched set, so the gate never reaches Verified and the
+    // exact lane refuses. Without the id-integrity check this pair would admit.
+    #[test]
+    fn exact_lane_refuses_forged_id_pair() {
+        let digest = claim_digest("claim X");
+        let (mut a1, mut a2) = admit_pair(&digest);
+        // Hand-author a mutual 2-cycle with arbitrary `vva_` ids — the form an
+        // attacker writes directly as JSON, which build() can never mint (the id
+        // content-addresses independent_of). Neither id matches its body.
+        a1.id = "vva_forged00000a1".to_string();
+        a2.id = "vva_forged00000a2".to_string();
+        a1.independent_of = vec![a2.id.clone()];
+        a2.independent_of = vec![a1.id.clone()];
+        assert!(a1.verify().is_err(), "forged a1 must fail id-integrity");
+        assert!(a2.verify().is_err(), "forged a2 must fail id-integrity");
+        assert_eq!(
+            derive_gate_status(&digest, &[a1.clone(), a2.clone()]).status,
+            GateStatus::NeedsVerification,
+            "forged-id attachments must not reach Verified"
+        );
+        let (admit, reasons) = exact_lane_attachment_admit(&digest, &[a1, a2]);
+        assert!(!admit, "forged-id pair must never auto-admit");
+        assert!(
+            reasons
+                .iter()
+                .any(|r| r.contains("G4") || r.contains("content-address") || r.contains("not Verified"))
+        );
+    }
+
     // Attack 1: a vacuous / misformalized statement whose only probe is a
     // CounterexampleSearch. The gate's G3 accepts any survived probe, so it
     // says Verified; auto-admit demands the FormalismFidelity probe.
     #[test]
     fn exact_lane_refuses_without_formalism_fidelity_probe() {
         let digest = claim_digest("claim X");
-        let (mut a1, mut a2) = admit_pair(&digest);
-        a1.adversarial_probes = vec![surviving_probe()];
-        a2.adversarial_probes = vec![surviving_probe()];
+        // A vacuous/misformalized statement whose only probe is a
+        // CounterexampleSearch — built id-valid, no FormalismFidelity probe.
+        let a1 = attach_full(
+            &digest,
+            VerifierMethod::ComputationalSearch,
+            "cp-sat",
+            vec![],
+            vec![surviving_probe()],
+            MethodIntegrity::Sound,
+            "impl-cp-sat",
+        );
+        let a2 = attach_full(
+            &digest,
+            VerifierMethod::ExactArithmeticRecompute,
+            "pari-gp",
+            vec![a1.id.clone()],
+            vec![surviving_probe()],
+            MethodIntegrity::Sound,
+            "impl-pari",
+        );
         assert_eq!(
             derive_gate_status(&digest, &[a1.clone(), a2.clone()]).status,
             GateStatus::Verified,
@@ -845,16 +994,33 @@ mod tests {
         assert!(reasons.iter().any(|r| r.contains("FormalismFidelity")));
     }
 
-    // Attack 2: a Refuted fidelity probe must never auto-admit.
+    // Attack 2: a Refuted fidelity probe must never auto-admit (it also drives
+    // the gate itself to Refuted).
     #[test]
     fn exact_lane_refuses_refuted_formalism_fidelity() {
         let digest = claim_digest("claim X");
-        let (mut a1, a2) = admit_pair(&digest);
-        a1.adversarial_probes = vec![AdversarialProbe {
-            kind: ProbeKind::FormalismFidelity,
-            result: ProbeResult::Refuted,
-            note: String::new(),
-        }];
+        let a1 = attach_full(
+            &digest,
+            VerifierMethod::ComputationalSearch,
+            "cp-sat",
+            vec![],
+            vec![AdversarialProbe {
+                kind: ProbeKind::FormalismFidelity,
+                result: ProbeResult::Refuted,
+                note: String::new(),
+            }],
+            MethodIntegrity::Sound,
+            "impl-cp-sat",
+        );
+        let a2 = attach_full(
+            &digest,
+            VerifierMethod::ExactArithmeticRecompute,
+            "pari-gp",
+            vec![a1.id.clone()],
+            vec![ff_survived()],
+            MethodIntegrity::Sound,
+            "impl-pari",
+        );
         let (admit, reasons) = exact_lane_attachment_admit(&digest, &[a1, a2]);
         assert!(!admit);
         assert!(
@@ -865,12 +1031,29 @@ mod tests {
     }
 
     // Attack 3: the legacy Unattested integrity default. The gate's G5 only
-    // excludes Compromised, so Unattested still drives Verified.
+    // excludes Compromised, so Unattested still drives Verified; auto-admit
+    // demands Sound on every matched attachment.
     #[test]
     fn exact_lane_refuses_unattested_integrity() {
         let digest = claim_digest("claim X");
-        let (mut a1, a2) = admit_pair(&digest);
-        a1.method_integrity = MethodIntegrity::Unattested;
+        let a1 = attach_full(
+            &digest,
+            VerifierMethod::ComputationalSearch,
+            "cp-sat",
+            vec![],
+            vec![ff_survived()],
+            MethodIntegrity::Unattested,
+            "impl-cp-sat",
+        );
+        let a2 = attach_full(
+            &digest,
+            VerifierMethod::ExactArithmeticRecompute,
+            "pari-gp",
+            vec![a1.id.clone()],
+            vec![ff_survived()],
+            MethodIntegrity::Sound,
+            "impl-pari",
+        );
         assert_eq!(
             derive_gate_status(&digest, &[a1.clone(), a2.clone()]).status,
             GateStatus::Verified,
@@ -885,42 +1068,91 @@ mod tests {
     #[test]
     fn exact_lane_refuses_compromised_method() {
         let digest = claim_digest("claim X");
-        let (mut a1, a2) = admit_pair(&digest);
-        a1.method_integrity = MethodIntegrity::Compromised;
+        let a1 = attach_full(
+            &digest,
+            VerifierMethod::ComputationalSearch,
+            "cp-sat",
+            vec![],
+            vec![ff_survived()],
+            MethodIntegrity::Compromised,
+            "impl-cp-sat",
+        );
+        let a2 = attach_full(
+            &digest,
+            VerifierMethod::ExactArithmeticRecompute,
+            "pari-gp",
+            vec![a1.id.clone()],
+            vec![ff_survived()],
+            MethodIntegrity::Sound,
+            "impl-pari",
+        );
         let (admit, _r) = exact_lane_attachment_admit(&digest, &[a1, a2]);
         assert!(!admit);
     }
 
-    // Attack 5: one-directional independence. G1 accepts a single declaration;
-    // auto-admit requires a mutually-declared-independent pair.
+    // Attack 5: NO declared independence at all. One-directional is now the
+    // accepted (and only constructable) form, so the refusal case is the
+    // absence of any declaration — caught by the gate's G1, inherited via
+    // Guard 1. (Mutual independence is a hash circularity; see Guard 4.)
     #[test]
-    fn exact_lane_refuses_one_directional_independence() {
+    fn exact_lane_refuses_when_no_independence_declared() {
         let digest = claim_digest("claim X");
-        let (mut a1, mut a2) = admit_pair(&digest);
-        a1.independent_of = vec![a2.id.clone()];
-        a2.independent_of = vec![];
+        let a1 = attach_full(
+            &digest,
+            VerifierMethod::ComputationalSearch,
+            "cp-sat",
+            vec![],
+            vec![ff_survived()],
+            MethodIntegrity::Sound,
+            "impl-cp-sat",
+        );
+        let a2 = attach_full(
+            &digest,
+            VerifierMethod::ExactArithmeticRecompute,
+            "pari-gp",
+            vec![], // neither names the other
+            vec![ff_survived()],
+            MethodIntegrity::Sound,
+            "impl-pari",
+        );
         assert_eq!(
             derive_gate_status(&digest, &[a1.clone(), a2.clone()]).status,
-            GateStatus::Verified,
-            "the bare gate accepts one-directional independence"
+            GateStatus::NeedsVerification,
+            "no declaration fails the gate's G1"
         );
         let (admit, reasons) = exact_lane_attachment_admit(&digest, &[a1, a2]);
         assert!(!admit);
         assert!(reasons.iter().any(|r| r.contains("independ")));
     }
 
-    // Attack 6: implementation monoculture (N runs of one binary). The gate
-    // only warns; auto-admit requires >=2 distinct implementation_ids.
+    // Attack 6: implementation monoculture (N runs of one binary). With
+    // genuinely id-valid attachments, a single shared implementation_id trips
+    // the gate's own monoculture observation, which (any reason => not Verified)
+    // demotes to NeedsVerification — so the refusal arrives via Guard 1 (gate
+    // not Verified) carrying the "monoculture" reason, before exact-lane Guard 5
+    // is reached. Guard 5 remains as defense-in-depth for any future gate that
+    // stops demoting on monoculture.
     #[test]
     fn exact_lane_refuses_implementation_monoculture() {
         let digest = claim_digest("claim X");
-        let (mut a1, mut a2) = admit_pair(&digest);
-        a1.implementation_id = "same-binary".to_string();
-        a2.implementation_id = "same-binary".to_string();
-        // The gate's monoculture observation lands in `reasons`, so today it
-        // already demotes (its "never demotes in v1" comment is stale).
-        // Guard 5 keeps auto-admit's monoculture rejection independent of that
-        // mutable observational policy regardless.
+        let a1 = attach_full(
+            &digest,
+            VerifierMethod::ComputationalSearch,
+            "cp-sat",
+            vec![],
+            vec![ff_survived()],
+            MethodIntegrity::Sound,
+            "same-binary",
+        );
+        let a2 = attach_full(
+            &digest,
+            VerifierMethod::ExactArithmeticRecompute,
+            "pari-gp",
+            vec![a1.id.clone()],
+            vec![ff_survived()],
+            MethodIntegrity::Sound,
+            "same-binary",
+        );
         let (admit, reasons) = exact_lane_attachment_admit(&digest, &[a1, a2]);
         assert!(!admit);
         assert!(reasons.iter().any(|r| r.contains("monoculture")));

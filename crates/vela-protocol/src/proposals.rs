@@ -5071,13 +5071,18 @@ mod tests {
         finding.id =
             crate::bundle::FindingBundle::content_address(&finding.assertion, &finding.provenance);
         let cd = crate::verifier_attachment::claim_digest(&finding.assertion.text);
-        let mk = |method: VerifierMethod, solver: &str, impl_id: &str| {
-            let mut a = VerifierAttachment::build(AttachmentDraft {
+        // Build genuinely id-valid attachments: integrity and implementation_id
+        // are set through the re-deriving builders (post-build field mutation
+        // would leave the stored id no longer content-addressing the body, which
+        // the gate's G4 id-integrity check now excludes). Independence is
+        // one-directional (a2 names a1); a mutual 2-cycle is unconstructable.
+        let mk = |method: VerifierMethod, solver: &str, impl_id: &str, independent_of: Vec<String>| {
+            VerifierAttachment::build(AttachmentDraft {
                 target: finding.id.clone(),
                 claim_digest: cd.clone(),
                 verifier_method: method,
                 solver_id: solver.to_string(),
-                independent_of: vec![],
+                independent_of,
                 match_to_claim: MatchToClaim {
                     matches: true,
                     checker_actor: "checker".to_string(),
@@ -5091,15 +5096,20 @@ mod tests {
                 verifier_actor: "verifier:vela-verify".to_string(),
                 note: String::new(),
             })
-            .unwrap();
-            a.method_integrity = MethodIntegrity::Sound;
-            a.implementation_id = impl_id.to_string();
-            a
+            .unwrap()
+            .with_method_integrity(MethodIntegrity::Sound)
+            .unwrap()
+            .with_implementation_id(impl_id)
+            .unwrap()
         };
-        let mut a1 = mk(VerifierMethod::ComputationalSearch, "cp-sat", "impl-a");
-        let mut a2 = mk(VerifierMethod::ExactArithmeticRecompute, "pari", "impl-b");
-        a1.independent_of = vec![a2.id.clone()];
-        a2.independent_of = vec![a1.id.clone()];
+        // a1 is built first so its id is final before a2 references it.
+        let a1 = mk(VerifierMethod::ComputationalSearch, "cp-sat", "impl-a", vec![]);
+        let a2 = mk(
+            VerifierMethod::ExactArithmeticRecompute,
+            "pari",
+            "impl-b",
+            vec![a1.id.clone()],
+        );
         let proposal = new_proposal(
             "finding.add",
             StateTarget {

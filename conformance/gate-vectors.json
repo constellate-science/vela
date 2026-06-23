@@ -1,6 +1,6 @@
 {
   "schema": "vela.gate-conformance.v1",
-  "doctrine": "The verification gate is fail-closed: a claim derives `verified` ONLY from >=2 independent matched verifier attachments (different method/solver, mutually declaring independent_of) plus a surviving adversarial probe; a refuted probe forces `refuted`; everything else is `needs_verification`. A self-reported `accepted` with no attachments is needs_verification, never verified. These vectors pin that contract for any implementation of derive_gate_status. attachments[].independent_of lists EARLIER indices in this vector's array.",
+  "doctrine": "The verification gate is fail-closed: a claim derives `verified` ONLY from >=2 independent matched verifier attachments (different method/solver, with >=1 declaring independent_of another in the set; the declaration is one-directional by necessity because the vva_ id content-addresses independent_of, so a mutual 2-cycle is unconstructable) plus a surviving adversarial probe; a refuted probe forces `refuted`; everything else is `needs_verification`. A self-reported `accepted` with no attachments is needs_verification, never verified. These vectors pin that contract for any implementation of derive_gate_status. attachments[].independent_of lists EARLIER indices in this vector's array.",
   "gate_status_vectors": [
     {
       "name": "zero attachments fails closed",
