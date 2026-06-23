@@ -23,7 +23,8 @@ use vela_protocol::bundle::FindingBundle;
 use vela_protocol::project::Project;
 use vela_protocol::repo;
 use vela_protocol::verifier_attachment::{
-    claim_digest, derive_gate_status, exact_lane_attachment_admit,
+    AttachmentOutcome, MethodIntegrity, claim_digest, derive_gate_status,
+    exact_lane_attachment_admit,
 };
 
 use crate::cli::{fail, print_json};
@@ -121,8 +122,9 @@ fn build_context(project: &Project, finding: &FindingBundle) -> PolicyContext {
     let gate = derive_gate_status(&digest, atts);
     let (admit, _) = exact_lane_attachment_admit(&digest, atts);
     // Assurance derived from the frozen gate (never self-asserted): A3 when the
-    // exact-lane admit clears (Verified + independent + sound + faithful), A2 when
-    // merely Verified, else A0.
+    // exact-lane admit clears (Verified + mutual independence + sound + faithful),
+    // A2 when the gate reaches Verified (>=2 independent verifiers, claim-bound,
+    // a surviving probe, no compromised method), else A0.
     let assurance_level = if admit {
         3
     } else if gate.is_verified() {
@@ -130,9 +132,26 @@ fn build_context(project: &Project, finding: &FindingBundle) -> PolicyContext {
     } else {
         0
     };
-    // The exact-lane admit already requires MethodIntegrity::Sound + failure-domain
-    // independence among the matched attachments, so it is the honest source for both.
-    let method_integrity_sound = admit;
+    // The set the gate counts toward Verified (the public fields of the G2/G4/G5
+    // checks). `Sound`-on-all is stronger than the gate's non-Compromised floor,
+    // so we report it explicitly for the policy's method-integrity constraint.
+    let matched: Vec<_> = atts
+        .iter()
+        .filter(|a| {
+            a.target == finding.id
+                && a.claim_digest == digest
+                && a.outcome == AttachmentOutcome::Passed
+                && a.match_to_claim.matches
+                && a.id.starts_with("vva_")
+                && a.method_integrity != MethodIntegrity::Compromised
+        })
+        .collect();
+    let all_sound =
+        !matched.is_empty() && matched.iter().all(|a| a.method_integrity == MethodIntegrity::Sound);
+    // The gate reaching Verified already proves G1 independence (>=2 matched
+    // verifiers with >=1 declared `independent_of`); the exact lane adds mutual
+    // declaration. Either way independence is real, not self-asserted.
+    let method_integrity_sound = admit || all_sound;
     PolicyContext {
         claim_class: classify(&finding.assertion.text).to_string(),
         assurance_level,
@@ -147,7 +166,7 @@ fn build_context(project: &Project, finding: &FindingBundle) -> PolicyContext {
         assertion_text_mutated: false,
         target_contested: false,
         governance_mutation: false,
-        independence_satisfied: admit,
+        independence_satisfied: gate.is_verified(),
         method_integrity_sound,
         // Shadow: the actor/credential layer (passkey/keyless) is Phase 1; treat the
         // local operator as valid so the routing logic is exercised honestly.
