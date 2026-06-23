@@ -225,6 +225,18 @@ pub enum Witness {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         claimed_scope: Option<usize>,
     },
+    /// An Erdős #242 (Erdős–Straus, distinct variant) certificate: for every
+    /// `n` in `[3, n_max]`, distinct integers `1 <= x < y < z` with
+    /// `4/n = 1/x + 1/y + 1/z`. The verifier confirms the table is COMPLETE
+    /// over `[3, n_max]` (no gaps) and every case is exact (`4 x y z = n (yz +
+    /// xz + xy)`) with `x < y < z`. This certifies the conjecture for all
+    /// `3 <= n <= n_max` — a FINITE confirmation, not the uniform proof (which
+    /// is the open problem). Pure integer arithmetic; `cases` may be in any
+    /// order (the verifier sorts/checks coverage).
+    UnitFractionDecomp {
+        n_max: u64,
+        cases: Vec<UnitFractionCase>,
+    },
 }
 
 /// One addition step of an LRAT proof: clause `id` is the listed
@@ -271,6 +283,16 @@ pub struct MinGcdCase {
     pub f: u64,
 }
 
+/// One `(n, x, y, z)` case of an Erdős #242 (Erdős–Straus) certificate:
+/// `4/n = 1/x + 1/y + 1/z` with `1 <= x < y < z`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct UnitFractionCase {
+    pub n: u64,
+    pub x: u64,
+    pub y: u64,
+    pub z: u64,
+}
+
 /// One `(k, N, delta, slots)` entry of an Erdős #1093 deficiency
 /// certificate. `n` is a decimal string (up to 38 digits / u128);
 /// `slots` is optional — when absent only the count is checked.
@@ -307,6 +329,7 @@ impl Witness {
             Witness::BinomExceptionEnum { .. } => "binom_exception_enum",
             Witness::UnsatCert { .. } => "unsat_cert",
             Witness::DiffTriangle { .. } => "diff_triangle",
+            Witness::UnitFractionDecomp { .. } => "unit_fraction_decomp",
         }
     }
 }
@@ -477,7 +500,61 @@ pub fn verify_witness(witness: &Witness) -> VerifyResult {
             rows,
             claimed_scope,
         } => verify_diff_triangle(rows, *claimed_scope),
+        Witness::UnitFractionDecomp { n_max, cases } => {
+            verify_unit_fraction_decomp(*n_max, cases)
+        }
     }
+}
+
+/// Erdős #242 (Erdős–Straus, distinct variant): verify that `cases` give, for
+/// EVERY `n` in `[3, n_max]`, distinct `1 <= x < y < z` with
+/// `4/n = 1/x + 1/y + 1/z`. Fail-closed: a gap in `[3, n_max]`, a non-ordered
+/// triple, or an inexact equation aborts. Certifies the conjecture for all
+/// `3 <= n <= n_max` (a FINITE confirmation; the uniform proof over all `n` is
+/// the open problem). Exact `u128` integer arithmetic, no floating point.
+pub fn verify_unit_fraction_decomp(n_max: u64, cases: &[UnitFractionCase]) -> VerifyResult {
+    if n_max < 3 {
+        return VerifyResult::fail("n_max must be >= 3 (the conjecture is stated for n > 2)");
+    }
+    // Coverage: exactly one case per n in [3, n_max], no gaps, no duplicates.
+    let mut seen: HashSet<u64> = HashSet::new();
+    for c in cases {
+        if c.n < 3 || c.n > n_max {
+            return VerifyResult::fail(format!("case n={} is outside [3, {n_max}]", c.n));
+        }
+        if !seen.insert(c.n) {
+            return VerifyResult::fail(format!("duplicate case for n={}", c.n));
+        }
+        // Distinct, ordered, positive: 1 <= x < y < z.
+        if !(1 <= c.x && c.x < c.y && c.y < c.z) {
+            return VerifyResult::fail(format!(
+                "n={}: triple ({},{},{}) is not 1 <= x < y < z",
+                c.n, c.x, c.y, c.z
+            ));
+        }
+        // Exact: 4/n = 1/x + 1/y + 1/z  <=>  4*x*y*z = n*(y*z + x*z + x*y).
+        let (n, x, y, z) = (c.n as u128, c.x as u128, c.y as u128, c.z as u128);
+        let lhs = 4u128 * x * y * z;
+        let rhs = n * (y * z + x * z + x * y);
+        if lhs != rhs {
+            return VerifyResult::fail(format!(
+                "n={}: 4/{} != 1/{}+1/{}+1/{} (exact check failed)",
+                c.n, c.n, c.x, c.y, c.z
+            ));
+        }
+    }
+    let expected = (n_max - 3 + 1) as usize;
+    if seen.len() != expected {
+        return VerifyResult::fail(format!(
+            "incomplete: covered {} of {expected} values in [3, {n_max}]",
+            seen.len()
+        ));
+    }
+    VerifyResult::ok(format!(
+        "Erdős–Straus (#242, distinct variant) verified for all 3 <= n <= {n_max}: \
+         {expected} exact decompositions 4/n = 1/x+1/y+1/z with x < y < z. \
+         Finite confirmation; the uniform proof over all n is the open problem."
+    ))
 }
 
 /// A claim parsed from a finding's free-text assertion into the structured,
@@ -3168,5 +3245,21 @@ mod rat_tests {
         proof[1].id = 7;
         let r = verify_unsat_cert(&cnf, &proof);
         assert!(r.ok, "{}", r.message);
+    }
+
+    #[test]
+    fn unit_fraction_decomp_checks_exactness_coverage_and_ordering() {
+        let c = |n, x, y, z| UnitFractionCase { n, x, y, z };
+        // 4/3 = 1/1+1/4+1/12, 4/4 = 1/2+1/3+1/6, 4/5 = 1/2+1/4+1/20 (all exact, x<y<z).
+        let good = vec![c(3, 1, 4, 12), c(4, 2, 3, 6), c(5, 2, 4, 20)];
+        assert!(verify_unit_fraction_decomp(5, &good).ok);
+        // A gap (missing n=4) fails coverage.
+        assert!(!verify_unit_fraction_decomp(5, &[c(3, 1, 4, 12), c(5, 2, 4, 20)]).ok);
+        // Inexact arithmetic fails (1/1+1/4+1/13 != 4/3).
+        assert!(!verify_unit_fraction_decomp(3, &[c(3, 1, 4, 13)]).ok);
+        // Non-distinct / non-ordered fails (y == z).
+        assert!(!verify_unit_fraction_decomp(4, &[c(3, 1, 4, 12), c(4, 2, 6, 6)]).ok);
+        // Out-of-range n fails.
+        assert!(!verify_unit_fraction_decomp(3, &[c(3, 1, 4, 12), c(7, 2, 4, 28)]).ok);
     }
 }
