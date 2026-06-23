@@ -16,7 +16,7 @@ use std::path::Path;
 
 use serde_json::json;
 use vela_protocol::acceptance_policy::{
-    AcceptancePolicy, AuthorityMode, DecisionCertificate, PolicyContext, EVALUATOR_VERSION,
+    AcceptancePolicy, AuthorityMode, DecisionCertificate, EVALUATOR_VERSION, PolicyContext,
     evaluate,
 };
 use vela_protocol::bundle::FindingBundle;
@@ -47,7 +47,10 @@ fn load_policy(path: &str) -> AcceptancePolicy {
 }
 
 fn cmd_show(args: &[String]) {
-    let path = args.get(3).map(String::as_str).unwrap_or_else(|| fail("usage: vela policy show <policy.json>"));
+    let path = args
+        .get(3)
+        .map(String::as_str)
+        .unwrap_or_else(|| fail("usage: vela policy show <policy.json>"));
     let p = load_policy(path);
     print_json(&json!({
         "policy_id": p.id,
@@ -85,11 +88,18 @@ fn cmd_seal(args: &[String]) {
 }
 
 fn cmd_test(args: &[String]) {
-    let pol = args.get(3).map(String::as_str).unwrap_or_else(|| fail("usage: vela policy test <policy.json> <context.json>"));
-    let ctxp = args.get(4).map(String::as_str).unwrap_or_else(|| fail("usage: vela policy test <policy.json> <context.json>"));
+    let pol = args
+        .get(3)
+        .map(String::as_str)
+        .unwrap_or_else(|| fail("usage: vela policy test <policy.json> <context.json>"));
+    let ctxp = args
+        .get(4)
+        .map(String::as_str)
+        .unwrap_or_else(|| fail("usage: vela policy test <policy.json> <context.json>"));
     let policy = load_policy(pol);
     let raw = std::fs::read_to_string(ctxp).unwrap_or_else(|e| fail(&format!("read {ctxp}: {e}")));
-    let ctx: PolicyContext = serde_json::from_str(&raw).unwrap_or_else(|e| fail(&format!("parse {ctxp}: {e}")));
+    let ctx: PolicyContext =
+        serde_json::from_str(&raw).unwrap_or_else(|e| fail(&format!("parse {ctxp}: {e}")));
     let now = chrono::Utc::now().to_rfc3339();
     let d = evaluate(&policy, &ctx, &now);
     print_json(&serde_json::to_value(&d).unwrap_or_else(|e| fail(&format!("serialize: {e}"))));
@@ -148,8 +158,10 @@ fn build_context(project: &Project, finding: &FindingBundle) -> PolicyContext {
                 && a.method_integrity != MethodIntegrity::Compromised
         })
         .collect();
-    let all_sound =
-        !matched.is_empty() && matched.iter().all(|a| a.method_integrity == MethodIntegrity::Sound);
+    let all_sound = !matched.is_empty()
+        && matched
+            .iter()
+            .all(|a| a.method_integrity == MethodIntegrity::Sound);
     // The gate reaching Verified already proves G1 independence (>=2 matched
     // verifiers with >=1 one-directional `independent_of` declaration); the exact
     // lane adds the distinct-implementation guard (Guard 5) and all-Sound, not a
@@ -181,7 +193,10 @@ fn build_context(project: &Project, finding: &FindingBundle) -> PolicyContext {
 
 fn cmd_evaluate(args: &[String]) {
     let flag = |name: &str| -> Option<String> {
-        args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned()
+        args.iter()
+            .position(|a| a == name)
+            .and_then(|i| args.get(i + 1))
+            .cloned()
     };
     let frontier = args
         .iter()
@@ -262,7 +277,8 @@ fn cmd_evaluate(args: &[String]) {
     }
     println!(
         "· policy shadow-eval over {frontier} (policy {}) — {} findings: {permit} permit, {defer} defer, {deny} deny",
-        policy.id, rows.len()
+        policy.id,
+        rows.len()
     );
     for r in rows.iter().take(20) {
         println!(
@@ -278,5 +294,7 @@ fn cmd_evaluate(args: &[String]) {
             }
         );
     }
-    println!("\nSHADOW: nothing applied. A human signs the policy once; the engine would route the rest.");
+    println!(
+        "\nSHADOW: nothing applied. A human signs the policy once; the engine would route the rest."
+    );
 }

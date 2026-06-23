@@ -775,9 +775,11 @@ pub fn exact_lane_attachment_admit(
     // (distinct implementations) and G1 (distinct method/solver), not this
     // declaration. Re-derived from the same `matched` set the gate verified.
     let ids: std::collections::BTreeSet<&str> = matched.iter().map(|a| a.id.as_str()).collect();
-    let declares_independence = matched
-        .iter()
-        .any(|a| a.independent_of.iter().any(|other| other != &a.id && ids.contains(other.as_str())));
+    let declares_independence = matched.iter().any(|a| {
+        a.independent_of
+            .iter()
+            .any(|other| other != &a.id && ids.contains(other.as_str()))
+    });
     if !declares_independence {
         reasons.push(
             "exact-lane: no matched attachment declares independent_of another (need >=1 \
@@ -951,11 +953,9 @@ mod tests {
         );
         let (admit, reasons) = exact_lane_attachment_admit(&digest, &[a1, a2]);
         assert!(!admit, "forged-id pair must never auto-admit");
-        assert!(
-            reasons
-                .iter()
-                .any(|r| r.contains("G4") || r.contains("content-address") || r.contains("not Verified"))
-        );
+        assert!(reasons.iter().any(|r| r.contains("G4")
+            || r.contains("content-address")
+            || r.contains("not Verified")));
     }
 
     // Attack 1: a vacuous / misformalized statement whose only probe is a
