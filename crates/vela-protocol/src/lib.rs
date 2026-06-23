@@ -1,3 +1,4 @@
+pub mod acceptance_policy;
 pub mod access_tier;
 pub mod activity;
 pub mod anchor;
