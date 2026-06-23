@@ -24,6 +24,7 @@ mod cli_engine;
 mod cli_experiment;
 mod cli_export;
 mod cli_finding;
+mod cli_policy;
 mod cli_frontier;
 mod cli_identity;
 mod cli_lean;

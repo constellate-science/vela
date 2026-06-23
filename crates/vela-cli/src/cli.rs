@@ -5701,6 +5701,10 @@ pub fn run_from_args() {
             println!("vela {}", env!("CARGO_PKG_VERSION"));
             return;
         }
+        Some("policy") => {
+            crate::cli_policy::run(&args);
+            return;
+        }
         Some("proof") if args.get(2).map(String::as_str) == Some("verify") => {
             let json = args.iter().any(|arg| arg == "--json");
             let frontier = args
