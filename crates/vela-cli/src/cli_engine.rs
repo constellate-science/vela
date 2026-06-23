@@ -185,7 +185,7 @@ pub(crate) fn cmd_gate(action: GateAction) {
 /// (2) the frozen `claim_witness_faithful` binding the parsed assertion to the
 /// witness structure. Then the proposal-level guards + the attachment
 /// corroboration predicate. The `policy.auto_admitted` emit is held off pending
-/// the acceptance checklist (docs/EXACT_LANE_GATE.md).
+/// the acceptance checklist (docs/VERIFICATION.md).
 fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, apply: bool, json_output: bool) {
     use std::collections::BTreeSet;
 
@@ -217,7 +217,7 @@ fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, apply: bool, json_outp
     // The canonical, WITNESS-DERIVED verified claim: exactly what an admit
     // establishes, independent of the author's prose. Surfaces should display
     // THIS (not the assertion text) as the machine_verified claim so prose
-    // cannot puff a true bound. (docs/EXACT_LANE_GATE.md §8 residual.)
+    // cannot puff a true bound. (docs/VERIFICATION.md §8 residual.)
     let canonical_claim = witness.as_ref().and_then(vela_verify::canonical_claim);
 
     // Proposal-level guard inputs, derived live (never trusted from a field).
@@ -313,9 +313,9 @@ fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, apply: bool, json_outp
             "newly_emitted": emitted.as_ref().map(|(_, n)| *n),
             "tier": emitted.as_ref().map(|_| "machine_verified"),
             "note": if apply {
-                "policy.auto_admitted is unsigned + idempotent; machine_verified is distinct from human accepted and is NOT landed in canonical findings (docs/EXACT_LANE_GATE.md)."
+                "policy.auto_admitted is unsigned + idempotent; machine_verified is distinct from human accepted and is NOT landed in canonical findings (docs/VERIFICATION.md)."
             } else {
-                "READ-ONLY preview; pass --apply to record the (idempotent, unsigned) policy.auto_admitted audit event when the verdict is YES (docs/EXACT_LANE_GATE.md)."
+                "READ-ONLY preview; pass --apply to record the (idempotent, unsigned) policy.auto_admitted audit event when the verdict is YES (docs/VERIFICATION.md)."
             },
         });
         println!("{}", serde_json::to_string_pretty(&out).unwrap());
@@ -371,7 +371,7 @@ fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, apply: bool, json_outp
             None if apply => {} // would_admit false; the exit below reports it
             None => println!(
                 "  (read-only preview; pass --apply to record the unsigned, idempotent \
-                 policy.auto_admitted event when the verdict is YES — docs/EXACT_LANE_GATE.md)"
+                 policy.auto_admitted event when the verdict is YES — docs/VERIFICATION.md)"
             ),
         }
     }
@@ -444,7 +444,7 @@ fn is_synthetic_source(source_type: &str) -> bool {
 /// `reviewer:` id, then honestly signed with (an adversarial review confirmed
 /// this self-enrollment bypass). Until the vouch binds to an owner/maintainer-
 /// signed roster rooted in the frontier owner key, the non-floor lane REFUSES,
-/// in the safe direction. (docs/EXACT_LANE_GATE.md §7 guard #3.)
+/// in the safe direction. (docs/VERIFICATION.md §7 guard #3.)
 fn attachment_vouch_gate(floor_ok: bool, matched_len: usize) -> (bool, String) {
     if floor_ok {
         if matched_len == 0 {

@@ -4,7 +4,7 @@
 //! Each `vtr_` ([`Transfer`]) is one signed verifier-preserving link A → B.
 //! Scattered as witness files they are hard to read as a whole; this folds them
 //! into one map: the lanes (certified / target-checked / exploratory, per
-//! `docs/TRANSFER_CALCULUS.md`), the domain pairs they connect, and per link the
+//! `docs/THEORY.md Appendix C §7`), the domain pairs they connect, and per link the
 //! proof roots and the structural check. It is a pure projection (the
 //! loader=reducer doctrine, like the frontier map): it RECORDS and INDEXES what
 //! exists. It does NOT re-verify the link (that is [`Transfer::verify`]) and
@@ -20,7 +20,7 @@ use crate::transfer::{Transfer, TransferKind};
 
 pub const TRANSFER_REGISTRY_SCHEMA: &str = "vela.transfer-registry.v0.1";
 
-/// The transfer-calculus lane (`docs/TRANSFER_CALCULUS.md`).
+/// The transfer-calculus lane (`docs/THEORY.md Appendix C §7`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TransferLane {

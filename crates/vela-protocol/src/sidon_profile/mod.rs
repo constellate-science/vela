@@ -6,7 +6,7 @@
 //! (Rust / Python / TypeScript). The Python reference and the deterministic
 //! fixtures live under `research/sidon-producer-profile/`; this port must agree
 //! with them byte for byte on packet IDs, signatures, and the committed roots.
-//! See `docs/SIDON_PRODUCER_PROFILE_V1.md` for the profile specification and
+//! See `docs/PUBLISHING.md` for the profile specification and
 //! `docs/RUST_VERTICAL_SLICE.md` for the production path this realizes.
 //!
 //! The scheme is built up in verified layers:

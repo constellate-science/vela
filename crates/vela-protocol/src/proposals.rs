@@ -2551,7 +2551,7 @@ fn replication_attestation_passes(payload: &Value) -> bool {
 /// function adds the protocol-level guards a human reviewer applies and then
 /// delegates to the attachment corroboration predicate
 /// [`crate::verifier_attachment::exact_lane_attachment_admit`]. See
-/// `docs/EXACT_LANE_GATE.md` for why the corroboration predicate alone is
+/// `docs/VERIFICATION.md` for why the corroboration predicate alone is
 /// insufficient (a `VerifierAttachment` is unsigned self-asserted data the
 /// producing agent can author).
 ///

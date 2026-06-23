@@ -235,7 +235,7 @@ substrate questions:
   gowers.wordpress.com, 2026-05-08.
 - `docs/PROTOCOL.md`. Normative event semantics.
 - `docs/CARINA.md` §v0.3. The Proof primitive.
-- `docs/EVENT_LOG.md`. The canonical event log walkthrough.
+- `docs/PROTOCOL.md`. The canonical event log walkthrough.
 - `docs/RELAY.md`. The four adapter shapes that produce
   AI-drafted proposals.
 - `examples/early-ad/`. The first reference chain.

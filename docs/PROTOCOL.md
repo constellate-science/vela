@@ -38,6 +38,20 @@ review -> accepted event -> deterministic replay path. Derived answer pages,
 graph views, benchmark tables, and source dashboards are projections over
 replayed frontier state, not separate truth stores.
 
+## Contents
+
+- §1–§14: the v0 language kernel (design principles, primitives, content
+  addressing, confidence, links, proposal/event protocol, storage, proof,
+  signals, conformance, access tiers, changelog, integrity).
+- §The minimal core: six primitives of mathematical state change (the frozen
+  producer-facing surface).
+- §Vela invariants: the operational invariants every implementation must hold.
+- §ID prefix registry: the authoritative meaning of every live `v*_` prefix.
+- §Status planes: the four-plane vocabulary map.
+- §The canonical event log: the concrete walkthrough of `.vela/events/`.
+- §Conformance: how a third party proves agreement with the reference.
+- §Appendix — Signed checkpoints (deferred).
+
 ## 1. design principles
 
 1. **Narrow waist.** The substrate solves persistent, correctable scientific
@@ -287,7 +301,7 @@ Source records use `vs_...`, evidence atoms use `vea_...`, condition records use
 `vcnd_...`, artifacts use `va_...`, proposals use `vpr_...`, and canonical
 events use `vev_...`. The full prefix registry — the authoritative meaning of
 every live `v*_` prefix, including the known `vat_` and `vtr_` collisions —
-lives in [`PREFIXES.md`](PREFIXES.md).
+lives in §ID prefix registry below.
 
 ## 4. confidence
 
@@ -801,7 +815,7 @@ Earlier releases are documented inline in the sections above.
 - **v0.70**: `replication.deposited` and `prediction.deposited` events (§6.6); `vela federation push-resolution` cross-hub path (§6.8).
 - **v0.71**: Workbench review surfaces `/review/replication-add/{finding_id}` and `/review/prediction-add/{finding_id}` for the v0.70 deposit events.
 - **v0.72**: cross-impl fixture coverage for v0.67 to v0.71 events; `docs/PROTOCOL.md` backfill; `CONTRIBUTING.md` and `clients/python/README.md` added.
-- **v0.73**: `bridge.reviewed` validator gains `validate_bridge_reviewed_against_state` for state-aware tightening (§6.5); cross-impl JSON fixture export extended to cover v0.67 to v0.71 event kinds; `docs/EVENT_LOG.md` developer walkthrough.
+- **v0.73**: `bridge.reviewed` validator gains `validate_bridge_reviewed_against_state` for state-aware tightening (§6.5); cross-impl JSON fixture export extended to cover v0.67 to v0.71 event kinds; developer walkthrough of the event log (now §The canonical event log).
 
 ## 7. storage layout
 
@@ -918,6 +932,10 @@ A conforming v0 implementation must:
 
 A conforming implementation should expose machine-readable check/proof/serve
 contracts and keep candidate signals caveated.
+
+The full third-party conformance procedure (what is public, how to run the
+suite, what a conformant report does and does not assert) is in §Conformance
+below.
 
 ## 11. Non-Normative roadmap boundary
 
@@ -1142,6 +1160,987 @@ source locator or content hash.
 non-mutating and does not change confidence.
 
 *Vela Protocol Specification v0.105.0 - May 2026*
+
+---
+
+## The minimal core: six primitives of mathematical state change
+
+The six generic primitives below constitute the mechanics of accepted
+mathematical state. A second producer reads exactly these. This was the doc of
+record for Workstream 0 (the aggressive minimal core).
+
+> Freeze means two things only: a stable identity + wire contract, and a conformance test that
+> fails if the contract moves. It does not mean new abstraction. Promotion of a domain noun to a
+> generic type happens when a live consumer forces it, never speculatively. The Attempt Packet and
+> ProducerRef below were promoted because the H1 ablation (Workstream A) needed a producer-agnostic
+> attempt; that is the pattern.
+
+### The six
+
+#### 1. Frontier
+- **Is:** a unit of governed accepted state, identified by `frontier_id`, whose accepted content
+  is a pure function of its signed event log. `roots` / `snapshot_hash` address the materialized
+  view. (`project.rs`, `frontier_repo.rs`.)
+- **Frozen contract:** the `frontier_id` and the genesis-rooted log identify the frontier; the
+  materialized view is reproducible from the log alone; no field of the accepted view is authored
+  out of band.
+- **Pinned by:** `vela reproduce` + `vela frontier materialize` byte-identical on every committed
+  frontier; the executable no-hidden-state law (`conformance/vela_no_hidden_state_check.py`); the
+  finite-ranked kernel fixture (`conformance/vela_v09_sidon_kernel_fixture.py`).
+
+#### 2. StateTransition
+- **Is:** a single signed event appended to a frontier's log and applied by the reducer. This is
+  the ONLY way accepted state changes. (`events.rs`, `reducer.rs`.)
+- **Frozen contract:** the reducer is a pure left fold over the event sequence; an event's `id`
+  hashes its `after_hash`; canonical JSON is presence-sensitive, so the wire shape is part of the
+  contract. Two independent reducer implementations must agree bit-for-bit on the derived state.
+- **Pinned by:** the cross-implementation reducer fixtures (`conformance/fixtures/`, Rust ==
+  Python finding-state digest, gate step `gate-conformance-py-rust`); canonical hashing vectors
+  (`conformance/canonical-hashing.json`, `verify_canonical_hashing.py`).
+
+#### 3. Receipt
+- **Is:** a content-addressed witness that a verification or retrieval happened: a
+  `VerifierAttachment`, a signed manifest, a witness blob under `vela-verify`. Provenance, not a
+  verdict; registering a receipt never accepts a claim.
+- **Frozen contract:** a receipt addresses exact bytes (the witness / manifest), and re-checking
+  those bytes under the frozen verifier reproduces the same pass/fail. A receipt carries no trust
+  weight on its own; acceptance is a separate key-custody event.
+- **Pinned by:** `vela reproduce` (every witness re-checks under the frozen `vela-verify`);
+  canonical hashing vectors for the content addresses.
+
+#### 4. Replay
+- **Is:** loading a frontier IS replaying its log IS reducing it. `reducer::replay_from_genesis`
+  + `verify_replay`. (`reducer.rs`.)
+- **Frozen contract:** loader == reducer (no separate read path that could drop state);
+  deterministic across runs and implementations; the determinism guarantee is the frozen one the
+  rest of the core rests on.
+- **Pinned by:** `conformance/vela_no_hidden_state_check.py` (the executable Conformance Law);
+  `vela reproduce`; `verify_replay` tests.
+
+#### 5. Task
+- **Is:** a unit of producible work: a target obligation on a base frontier root. Today it is
+  realized for one profile (`vtk_` in `sidon_profile/producer.rs`); the Attempt Packet (below)
+  carries `target_obligation_id`, `statement_variant_id`, `base_frontier_root` generically.
+- **Frozen contract (for the Sidon profile; generic Task packet promotion deferred to Workstream
+  B):** a task names a target on a specific base frontier root, so what a producer is asked to do
+  is pinned to the state it consumed.
+- **Pinned by:** the Sidon producer profile + kernel fixture. The generic Task type is promoted
+  when a second producer class needs it (the forcing-function discipline), not before.
+
+#### 6. Producer
+- **Is:** the agent that reads a frontier root and emits an Attempt. Identified by
+  `ProducerRef { system, version, config_digest }`. The Attempt Packet (`base_frontier_root`,
+  `target_obligation_id`, `statement_variant_id`, `method_families`, `remaining_obligations`,
+  `named_obstructions`, `producer`) is the normalized output. (`attempt.rs`, promoted in WS-A1.)
+- **Frozen contract:** an Attempt is content-addressed (`vat_`) and key-independent (the id does
+  not depend on who signed it); the packet fields are additive and `skip_serializing_if` empty, so
+  a legacy attempt's `vat_` is unchanged (byte-safe promotion); `base_frontier_root` pins the
+  attempt to the state it consumed, which is the spine of the retained-producer loop and the H1
+  ablation.
+- **Pinned by:** `conformance/attempt-id.json` + `verify_attempt_id.py` (cross-impl `vat_`);
+  the `packet_fields_round_trip_and_legacy_id_is_stable` unit test.
+
+### Deliberately NOT promoted (domain vocabulary stays local)
+
+`Problem`, `StatementVariant`, `Formalization`, `Obstruction`, `Bridge` remain domain nouns in
+the Sidon profile and the Erdős data. They are promoted to generic types only when the ablation
+or a second producer forces it (Workstream B/C). Promoting them now would be the founder
+abstraction trap: refining the description ahead of a consumer. The bar for promotion is a live
+second consumer, the same bar that promoted ProducerRef and the Attempt Packet.
+
+### Why this is enough
+
+The six primitives are what a producer must understand to read state, do work, and submit it:
+a Frontier to read, a Task to attempt, a Producer identity to attempt as, an Attempt that becomes
+a StateTransition once accepted, a Receipt as the evidence, and Replay as the guarantee that what
+they read is exactly what is true. Each is pinned by a test that fails if its contract moves. No
+AI sits in any trust path: a Receipt is provenance, acceptance of a StateTransition is a
+key-custody human decision, and replay determinism is what makes both checkable by anyone.
+
+---
+
+## Vela invariants
+
+The substrate invariants below matter for implementation. They are narrower than
+`docs/THEORY.md` and more operational.
+
+Vela is not a new branch of mathematics. It is a protocol discipline:
+scientific activity becomes durable only when it is converted into reviewed,
+attested, replayable frontier state.
+
+The implementation center is:
+
+```text
+source artifact / agent run / lab result / review comment
+-> proposal
+-> diff
+-> review
+-> accepted event
+-> deterministic replay
+-> changed frontier state
+-> changed answer, graph, benchmark, or proof packet
+```
+
+The primitive is not a paper. The primitive is not a standalone claim. The
+primitive is a reviewed state transition over scoped frontier state.
+
+### Invariant 1. Replay convergence
+
+If two replicas have the same valid accepted events, schemas, reducer, and
+referenced artifacts, replay must produce the same frontier state.
+
+```text
+same valid events + same reducer + same schemas + same artifacts
+=> same frontier state
+```
+
+Product obligation:
+
+- accepted events are append-only history
+- canonical replay order is deterministic
+- proof packets record event-log and snapshot hashes
+- stale proof state is visible after accepted events
+
+Current implementation:
+
+- canonical events live in frontier state and split `.vela/events`
+- `vela integrity` checks replay consistency and proof freshness
+- proof packets include replay and snapshot commitments
+
+### Invariant 2. Activity is not state
+
+Papers, notes, datasets, benchmark outputs, agent traces, lab runs, and review
+comments are source material. They do not mutate trusted frontier state by
+being present.
+
+```text
+artifact != state
+agent output != truth
+accepted event = state transition
+```
+
+Product obligation:
+
+- agent outputs compile into proposals or source records
+- truth-changing writes require review
+- source lake records remain upstream until accepted events land
+
+Current implementation:
+
+- research traces, source-lake records, benchmark outputs, and source packets
+  are source artifacts or projections
+- trusted updates move through readiness, event return, materialization, and
+  canonicalization packets before mutating frontier state
+
+### Invariant 3. Context preservation
+
+A finding is incomplete without the context that bounds it.
+
+```text
+assertion alone is invalid state
+finding = assertion + evidence + conditions + confidence + provenance + review
+```
+
+Narrow support does not automatically generalize.
+
+```text
+supported(mouse, dose, assay) does not imply supported(human treatment)
+```
+
+Product obligation:
+
+- condition records must remain visible
+- high confidence with weak scope is a quality risk
+- translation claims must name model system, endpoint, and comparator limits
+
+Current implementation:
+
+- finding bundles carry conditions, evidence, confidence, provenance, links,
+  flags, and annotations
+- proof packets include condition and evidence projections
+- strict checks and review packets surface source and condition debt
+
+### Invariant 4. Contradiction preservation
+
+Contradiction is frontier signal. It must not be averaged away into one score.
+
+```text
+support(q, c) and refute(q, c) => discord(q, c)
+```
+
+Product obligation:
+
+- conflicting evidence remains inspectable
+- counterweight findings stay in answer paths
+- graph views show load-bearing claims and tensions
+
+Current implementation:
+
+- typed links, contested flags, caveats, candidate tensions, and graph
+  neighborhoods preserve disagreement
+- full Belnap and discord semantics are substrate direction, not the whole
+  current public product contract
+
+### Invariant 5. Provenance cannot be invented
+
+Restriction, filtering, or retraction may remove support. It must not create
+new support.
+
+```text
+support(after restriction) is a subset of support(before restriction)
+```
+
+Product obligation:
+
+- every accepted state transition must name why it stands
+- retractions and source repair events preserve history
+- downstream impact is computed from declared dependencies
+
+Theory direction:
+
+- provenance semirings model alternative and joint support paths
+- a retraction substitutes killed support variables with zero
+- if every support path dies, the finding cannot remain supported
+
+Current implementation:
+
+- events carry before and after hashes
+- proof packets carry source, evidence, review, and replay projections
+- retraction impact exists as simulated dependency propagation
+
+### Invariant 6. Projections are not canonical state
+
+Search, graph views, dashboards, summaries, rankings, benchmark tables, and
+answer pages are projections over replayed frontier state.
+
+```text
+canonical state = deterministic replay of accepted events
+projection = rebuildable view over canonical state
+```
+
+Product obligation:
+
+- dashboards must point back to findings, evidence, events, and proof state
+- graph and answer pages cannot become hidden truth stores
+- benchmark results must name their source and scoring boundary
+
+Current implementation:
+
+- site pages read frontier-owned JSON packets and proof artifacts
+- release packets include machine-reader paths to projection artifacts
+- benchmark ledgers separate local scoring from broad outperformance claims
+
+### Invariant 7. Usefulness is an empirical claim
+
+The substrate theory is only useful if it improves work on a real frontier.
+
+For the Erdős/Sidon frontier, the near-term proof is:
+
+```text
+hard open-problem question
+-> Vela answer
+-> evidence/source trail
+-> caveats and counterweights
+-> graph neighborhood
+-> accepted state-transition history
+-> benchmark comparison
+-> proof packet
+```
+
+Product obligation:
+
+- flagship answer paths must be understandable without reading raw JSON
+- benchmark rows must compare against a named baseline
+- at least one answer path should show how accepted state transitions changed
+  what the frontier says
+
+Current implementation:
+
+- the Sidon/Erdős frontier has verifier-checked witness paths, current-bound
+  synthesis against the OEIS baseline, graph explanation, benchmark packets,
+  source readiness packets, accepted trusted-update events, canonical caveat
+  events, and fresh proof state
+- the remaining work is to make this loop impossible to miss in the product
+  and to strengthen the benchmark with live or outsider-scored comparisons
+
+---
+
+## ID prefix registry
+
+Every content-addressed object in the substrate carries a short
+`v*_` prefix in front of its hex digest. This section is the authoritative
+meaning of each live prefix. Prefixes are load-bearing: they appear
+inside signed preimages and stored event logs, so **live prefixes are
+never renamed** — collisions are documented here as known debt instead.
+
+The naming dictionary in the frontier-calculus writeup defers to this
+table.
+
+### Protocol objects (canonical state)
+
+| prefix | object | Rust home |
+|---|---|---|
+| `vf_` | finding | `bundle.rs`, replayed in `reducer.rs` |
+| `vfr_` | frontier | `project.rs` |
+| `vev_` | signed canonical event | `events.rs` |
+| `vpr_` | proposal | `proposals.rs` |
+| `vat_` | **attempt** (banked attempt deposit) | `attempt.rs` |
+| `vre_` | attempt resolution event | `attempt.rs` |
+| `vtr_` | **cross-domain transfer** | `transfer.rs` |
+| `vsa_` | statement attestation (faithfulness) | `statement_attestation.rs` |
+| `vatt_` | reviewer attestation (identity) | `reviewer_identity.rs` (vela-edge) |
+| `vva_` | verifier attachment | `verifier_attachment.rs` |
+| `vpf_` | Carina Proof primitive | `state.rs` / `events.rs` |
+| `vpv_` | proof-verification record | `proof_verification.rs` |
+| `vlv_` | Lean verification record | `lean_verification.rs` |
+| `vtcb_` | Lean trusted-computing-base policy | `tcb_policy.rs` |
+| `vla_` | Lean theorem anchor | `lean_anchors.rs` (vela-edge) |
+| `vsd_` | scientific diff pack | `released_diff_pack.rs` |
+| `vfrr_` | frontier release | `frontier_template.rs` / releases |
+| `vnr_` | negative result | retired v0.700 (historical logs only) |
+| `vrep_` | replication | retired v0.700 (historical logs only) |
+| `vpred_` | prediction | retired v0.700 (historical logs only) |
+| `vres_` | prediction resolution | retired v0.700 (historical logs only) |
+| `va_` | content-addressed artifact | `state.rs` |
+| `vd_` | dataset artifact | `state.rs` |
+| `vc_` | code artifact | `state.rs` |
+| `vea_` | evidence atom | `sources.rs` / `reducer.rs` |
+| `vbr_` | bridge (cross-frontier hypothesis) | retired v0.700 (historical logs only) |
+| `vcx_` | contradiction (T7 object) | `contradiction.rs` |
+| `vdc_` | verdict conflict | `verdict_conflict.rs` |
+| `ven_` | endorsement | `endorsement.rs` |
+| `vib_` | producer identity binding | `identity.rs` |
+| `vir_` | identity revocation | `identity.rs` |
+| `vrt_` | research trace | `research_trace.rs` (vela-edge) |
+| `vtri_` | trial outcome record | `carina_validate.rs` (vela-edge) |
+| `vtd_` | tool descriptor | `tool_registry.rs` (vela-edge) |
+| `vaa_` | agent attestation | `bundle.rs` / `scientific_diff.rs` |
+| `vtask_` | local frontier task | `frontier_task.rs` (vela-edge) |
+| `vsrcin_` | source-inbox record (legacy writer removed; ids still replay) | `source_inbox.rs` (vela-edge) |
+| `vrm_` | review-thread message (legacy writer removed) | historical logs only |
+| `vrs_` | review session (legacy writer removed) | historical logs only |
+| `vrp_` | review packet | `reviewer_identity.rs` (role-scoped target) |
+| `vaf_` | friction record (legacy writer removed) | historical logs only |
+| `vinc_` | incident record (legacy writer removed) | historical logs only |
+| `vex_` | experiment (Carina primitive) | `attempt.rs` references |
+| `vsx_` | hub untrusted scratch entry (`vela stash`) | vela-hub scratch tier |
+| `vhs_` | federated-hub spec | `hub_spec.rs` |
+
+### Registry / governance objects
+
+| prefix | object |
+|---|---|
+| `vgp_` | registry governance policy |
+| `vop_` | owner-rotate proposal |
+| `vab_` | owner-rotate attestation bundle |
+| `vrc_` | registry checkpoint |
+| `vac_` | actor handle |
+| `vsi_` | search index |
+
+### Composition handles (Carina spec tier)
+
+| prefix | object |
+|---|---|
+| `vat_` | Carina **atlas** primitive (see collision below) |
+| `vct_` / `vco_` | Carina constellation primitive (`vct_` in the handle resolver, `vco_` in the schema) |
+
+### Known collisions (documented debt — do not rename)
+
+1. **`vat_` — attempt vs. Carina atlas.** The authoritative protocol
+   sense is the *attempt* (`attempt.rs`, signed deposits verified by
+   `vela attempt`). The Carina spec tier reuses `vat_` for the atlas
+   primitive (`embedded/carina-schemas/atlas.schema.json`,
+   `vela carina validate --primitive atlas`), and the handle resolver
+   (`resolver.rs`) still maps bare `vat_<hex>` handles to atlas URLs.
+   Both are live (attempts in the event log; atlas in the shipped
+   Carina schema set), so neither side can be renamed without breaking
+   stored ids. Treat bare-`vat_` handle resolution as ambiguous.
+
+2. **`vtr_` — transfer vs. trajectory.** The authoritative (and now
+   only live) sense is the *cross-domain transfer* (`transfer.rs`,
+   verified by `vela transfer`). The trajectory object was fully retired
+   in v0.700 (its type, `trajectory.*` event kinds, schema, and MCP tool
+   are all gone), but historical logs still contain `vtr_` trajectory
+   ids minted before the cut, so the prefix cannot be cleanly reclaimed.
+   Any newly-minted `vtr_` is a transfer; a `vtr_` inside a legacy
+   `.vela/trajectories/` file or an old `trajectory.*` event is a
+   retired trajectory id.
+
+3. **`vsa_` vs. `vatt_` — two attestations.** Not an id collision but a
+   recurring vocabulary trap: `vsa_` is the *statement* attestation
+   (does the formal statement faithfully encode the informal problem),
+   `vatt_` is the *reviewer identity* attestation. The bare word
+   "attestation" is banned in spec prose; always qualify as
+   "statement attestation (`vsa_`)" or "reviewer attestation
+   (`vatt_`)". (`vaa_` agent attestations and `vab_` owner-rotate
+   bundles are further, distinct attestation-shaped objects.)
+
+---
+
+## Status planes — the canonical vocabulary map
+
+Vela speaks about a record on **four distinct planes**. Each is a separate,
+legitimate projection over the same replayed state. They share some words
+("open", "contested", "disproved"/"refuted"), and that overlap is the single
+biggest source of vocabulary drift. This section is the canonical map: what
+each plane means, what type carries it, which surface shows it, and the rule
+that governs how they relate.
+
+**The governing rule:** the planes are projections, not synonyms. They can
+disagree by design, and Vela never collapses them into one scalar "confidence"
+(memo §8, §16.5). A surface must always make clear *which plane* it is showing.
+
+### Plane 1 — Resolution (descriptive, cross-source)
+
+What the **source databases declare** about a problem. This is a join over what
+others say, not a Vela verdict.
+
+- Words: `open` · `proved` · `solved` · `disproved` · `contested` · `undeclared`
+- Type: `atlas::AtlasCell.status` (substrate), `AtlasStatus` (web `lib/atlas.ts`)
+- Surfaced on: the **Map** (state lens, labelled "cross-database resolution"),
+  the **Concordance**
+- Authority: none. `contested` here means the sources disagree on the
+  resolution word; it is a reconciliation queue, not an adjudication.
+
+### Plane 2 — Finding state (product, per-finding, derived)
+
+The **platform's own read of a single finding**, derived from its review verdict
+plus its recomputed verifier gate. This is the product vocabulary (memo §6) —
+what the UI says *about a finding*.
+
+- Words: `open` · `established` · `refuted` · `contested` · `fragile`
+- Type: `frontier_graph::FindingState`
+- Surfaced on: the **Boundary** tab, the per-frontier claim **graph**
+- Authority: derived, recomputed on read. `established` = reviewer-accepted OR
+  a passing verifier-gate attachment; `fragile` = established but thin;
+  `refuted` = a rejected verdict or a gate refutation; `contested` = a contested
+  verdict or a recorded contradiction. Orthogonal to Plane 1: a problem can be
+  Resolution=`disproved` (a source says so) while its Finding state is `open`
+  (Vela holds no review verdict or attachment for it yet). That is not a
+  contradiction; it is two planes.
+
+### Plane 3 — Epistemic support (formal, provenance)
+
+The **bilattice/Belnap status** computed from the support and refute provenance
+polynomials and their exact κ coordinates. The formal trust calculus underneath
+the product words.
+
+- Words: `True` · `False` · `Both` · `None` (Belnap corners) + support κ /
+  refutation κ (exact rationals)
+- Type: `status_provenance::BelnapStatus`, `frontier_calculus::BilatticePoint`
+- Surfaced on: `vela claim state`; the trust internals
+- Authority: a pure function of the recorded support/refute monomials
+  (Theorem 3). Never persisted. `Both` here is the formal join of support and
+  refutation, which is *not* the same event as a Plane-2 `contested` review
+  verdict.
+
+### Plane 4 — Review lifecycle / protocol signals (process)
+
+Where a **change** sits in the propose → review → accept → seal pipeline, and the
+protocol event signals. About the *process*, not the claim's truth.
+
+- Words: `raw` · `proposed` · `reviewed` · `accepted` · `banked` · `sealed` ·
+  `contested` · `retracted` · `leased` · `replayed` (and the rest of
+  `lib/signal-code.ts`)
+- Type: web `signal-code` / `StateChip`; substrate `review.*` events,
+  `StateProposal.status`
+- Authority: the signed event log. `contested` here is a review *event*, the
+  upstream of a Plane-2 contested finding.
+
+### Shared-word table (always qualify by plane)
+
+| word | Plane 1 Resolution | Plane 2 Finding state | Plane 3 Epistemic | Plane 4 Lifecycle |
+|---|---|---|---|---|
+| open | sources record no resolution | no verdict/gate yet | — | — |
+| contested | sources disagree | contested verdict / contradiction | `Both` corner | a review event |
+| disproved / refuted | a source recorded a refutation | rejected verdict or gate refutation | `False` corner | — |
+| proved / solved / established | a source recorded a proof/solution | reviewer-accepted or gate-verified | `True` corner | `accepted`/`sealed` |
+
+When writing copy or a label, name the plane: "cross-database resolution"
+(Plane 1), "finding state" (Plane 2), "support" (Plane 3), "review" (Plane 4).
+Never let a bare word imply all four.
+
+### Domain terms that are NOT status words
+
+- **"Erdős Problem #N"** is a domain proper noun (the problem's name). It stays
+  in finding *content*; it is not the Plane-1 word "problem".
+- **Product nav/chrome** uses the memo §1 nouns: Finding · Frontier · Evidence ·
+  Attempt · Submission · Review · Workspace · Run · Registry · Atlas. "problems"
+  is retired from product chrome (the catalogue is **Frontiers**).
+
+### "claim" vs "finding" — the resolved rule
+
+These are **not** synonyms, and the apparent doubling was web-only drift (now
+fixed: the product surfaces say *finding* for the record and *assertion* for the
+proposition it carries).
+
+- **Finding** = the *record*: the deposited `FindingBundle` (`vf_`) with its
+  assertion, evidence, provenance, confidence, and links. This is the product
+  noun, used everywhere a person reads about the unit.
+- **claim** is retained ONLY where it is not a finding-synonym:
+  1. the **formal claim-context cell** `z = (q, c)` and the **Claim-State Cell**
+     projection (`frontier_calculus`, `vela claim state`) — a proposition under
+     a scope, a defined object distinct from a bundle;
+  2. the **verb "to claim"**: `vela claim <frontier> <obligation>` leases an open
+     obligation. You claim (lease) an obligation; you do not "find" one.
+  3. `verifier_attachment::claim_digest` — the sha256 of an assertion string,
+     byte-matched to Python's `canopus_trust.py::claim_digest`. Renaming it
+     would break cross-implementation content-addressing.
+
+`vela finding` and `vela claim` are deliberately distinct CLI commands (the
+finding record vs. the lease verb / cell projection), not duplicates.
+
+See `frontier_graph::FindingState` for Plane 2 and `frontier_calculus` for
+Plane 3.
+
+---
+
+## The canonical event log
+
+A guided tour of `.vela/events/`. By the end of this section you will be
+able to open a frontier cold, read its event log, and verify its integrity
+against the materialized state.
+
+The authoritative spec is this document. The kernel spec is
+`docs/CARINA.md`. `CONTRIBUTING.md` walks through adding a new event
+kind. This section is the concrete walkthrough that none of those is.
+
+### 1. What the event log is
+
+Every reviewer action that changes frontier state lands as exactly one
+canonical event in `.vela/events/<vev_id>.json`. The directory is the
+substrate's source of truth. The materialized `frontier.json` and the
+sidecar files under `.vela/findings/`, `.vela/proposals/`, etc. are
+projections. A fresh replay of the event log over an empty `Project`
+re-derives them byte-for-byte.
+
+This inversion is the core of the substrate's doctrine. Most research
+tooling treats the materialized artifact as primary and the audit log
+as a debugging aid. Vela treats the event log as primary and the
+artifact as a cache. Two consequences:
+
+- A reviewer cannot mutate state silently. There is no path to
+  `frontier.json` that does not go through a signed canonical event.
+- Anyone with the substrate binary and the `.vela/events/` directory
+  can reconstruct the same frontier and detect tampering. The audit
+  trail is the protocol, not a wrapper around it.
+
+The reducer is at `crates/vela-protocol/src/reducer.rs`. Its top
+comment puts it precisely:
+
+> `apply_event` is the deterministic state-transition function:
+> given a `Project` and a `StateEvent`, it produces the next
+> `Project`. It does not construct events, validate proposals, or
+> call into network code.
+
+The canonical event kinds are declared in
+`crates/vela-protocol/src/events.rs`. There are roughly three dozen
+of them. Lifecycle kinds for findings, negative results, trajectories,
+artifacts, replications, predictions, bridges, plus governance kinds
+(`tier.set`, `key.revoke`) and federation kinds
+(`frontier.synced_with_peer`, `frontier.conflict_detected`,
+`frontier.conflict_resolved`).
+
+Two replayability invariants the reducer enforces:
+
+- The dispatch table in `apply_event` and the
+  `REDUCER_MUTATION_KINDS` constant must agree. CI fails if they do
+  not.
+- Every reducer arm is idempotent under identical re-application.
+  Running the same event twice produces the same state as running it
+  once. v0.66 hardened this for span repairs; v0.71 hardened it for
+  frontier materialization.
+
+### 2. The shape of an event
+
+Here is an illustrative `finding.reviewed` event, in full. Each event is
+stored as `<frontier>/.vela/events/<vev_id>.json`:
+
+```json
+{
+  "schema": "vela.event.v0.1",
+  "id": "vev_85621cac7ca02583",
+  "kind": "finding.reviewed",
+  "target": {
+    "type": "finding",
+    "id": "vf_8b47d4846c86bc8f"
+  },
+  "actor": {
+    "id": "agent:vela-curation-bot-2026-05-09",
+    "type": "human"
+  },
+  "timestamp": "2026-05-08T23:26:34.327816+00:00",
+  "reason": "Evidence span verbatim backs the assertion: the witness is a 505-point Sidon set in {0,1}^16 (all pairwise sums distinct) and the cited source states the improved bound a(16) >= 505. Frozen-verifier receipt attached.",
+  "before_hash": "sha256:c30bc9bf0237a6dc23311d1f48fa024ec65e46547b69130b68fec296795d9f5d",
+  "after_hash": "sha256:11244dc98f9be54fdc0b4e0b45c5162e6493d21687266433774bed8835d25a85",
+  "payload": {
+    "proposal_id": "vpr_1239df3e9393e02c",
+    "status": "accepted"
+  },
+  "caveats": []
+}
+```
+
+Field by field:
+
+- `schema` is `vela.event.v0.1`. The constant lives at
+  `events.rs:18`. Bumping the schema is a protocol change; the v0.1
+  shape has been stable since v0.3 when the reducer was extracted.
+- `id` is content-addressed. The id is
+  `vev_<first 16 hex chars of sha256(canonical bytes)>`, where the
+  canonical bytes are the JSON object containing every other field
+  in this list. The function is `compute_event_id` at
+  `events.rs:1350`. Two events with byte-identical content produce
+  the same id; the directory cannot hold a duplicate.
+- `kind` is one of the canonical event kinds declared in
+  `events.rs`. The reducer dispatches on this string. Unknown kinds
+  are an error; the substrate refuses to load an event log
+  containing a kind it does not recognize.
+- `target` names the object the event acts on. `type` is the kernel
+  object class (`finding`, `negative_result`, `trajectory`,
+  `artifact`, `bridge`, etc.). `id` is the object's stable id. The
+  reducer uses `target.id` to locate the object inside `Project`.
+- `actor` is who emitted the event. The `id` follows the
+  `agent:<actor-key>` or `human:<handle>` convention; `type` is
+  `human` or `agent`. v0.49 added `key.revoke` so a compromised
+  actor key can be retired without invalidating prior history. The
+  full actor list lives at `.vela/actors.json`.
+- `timestamp` is RFC 3339 with microsecond precision and an explicit
+  timezone offset. The reducer does not require monotonic time, but
+  the integrity check warns on out-of-order timestamps within a
+  single object's chain.
+- `reason` is free text. It is the reviewer's argument for why the
+  event should land. Empty reasons fail validation on
+  `finding.reviewed`. The reason is part of the canonical bytes, so
+  it is hashed into the event id and signed alongside everything
+  else.
+- `before_hash` and `after_hash` are sha256 commitments to the
+  target object's serialized state immediately before and after the
+  reducer applies this event. `before_hash` is `sha256:null` for
+  genesis events (the first event on a fresh target). The chain is
+  the integrity invariant: replaying the log must reproduce each
+  `after_hash`.
+- `payload` is kind-specific. For `finding.reviewed` it carries the
+  proposal id and the verdict (`accepted`, `needs_revision`,
+  `rejected`). For `finding.span_repaired` it carries the section
+  and the repaired span text inline so replay does not need to
+  re-resolve a sidecar.
+- `caveats` is the list of reviewer-attached qualifications.
+  `finding.asserted` events emitted from manual entry carry the
+  caveat `"Manual findings require evidence review before scientific
+  use."` automatically.
+- `signature` (not present on this event) is the optional Ed25519
+  signature over the canonical bytes minus the signature field
+  itself. Signatures are stored at the frontier root in
+  `.vela/signatures.json`, keyed by event id. A working-draft frontier
+  may be unsigned; the Sidon and Erdős frontiers are signed end-to-end.
+
+### 3. Walking a real reviewer flow
+
+Trace an illustrative finding `vf_8f2d8f546976dcb3` — a Sidon lower-bound
+finding — through its full chain. Four events, in canonical order.
+
+#### Event 1: `finding.asserted` (genesis)
+
+`<frontier>/.vela/events/vev_b4908222150d4693.json`:
+
+```json
+{
+  "schema": "vela.event.v0.1",
+  "id": "vev_b4908222150d4693",
+  "kind": "finding.asserted",
+  "target": { "type": "finding", "id": "vf_8f2d8f546976dcb3" },
+  "actor": { "id": "agent:vela-curation-bot-2026-05-09", "type": "human" },
+  "timestamp": "2026-05-08T21:47:18.101136+00:00",
+  "reason": "Manual finding added to frontier state",
+  "before_hash": "sha256:null",
+  "after_hash": "sha256:07429d20ff95dc946cc1c8598d40b103e9cf13986e3806ddb4c576a6c1e31d30",
+  "payload": { "proposal_id": "vpr_0481441a4da6f6b0" },
+  "caveats": ["Manual findings require evidence review before scientific use."]
+}
+```
+
+`before_hash` is `sha256:null`. This is the first event on the
+finding. The reducer creates the finding object from the proposal
+referenced by `payload.proposal_id`, applies the manual-findings
+caveat, and produces the post-state whose serialized form hashes to
+`after_hash`.
+
+#### Event 2: `finding.reviewed` (needs_revision)
+
+`vev_8cb9b3daa9db5064.json`, six hours later:
+
+```json
+{
+  "kind": "finding.reviewed",
+  "target": { "type": "finding", "id": "vf_8f2d8f546976dcb3" },
+  "timestamp": "2026-05-08T23:33:32.623559+00:00",
+  "reason": "Span is the construction paragraph. It does not state the verified bound a(16) >= 505 or the distinct-pairwise-sums property. The construction is sound, but the attached span does not carry the claim. Needs a span from the body that names the bound and the witness size.",
+  "before_hash": "sha256:07429d20ff95dc946cc1c8598d40b103e9cf13986e3806ddb4c576a6c1e31d30",
+  "after_hash": "sha256:d92a580353cbd02f3f74ea59fdacac6b92d679c0e96832e4358cda26364c78f1",
+  "payload": { "proposal_id": "vpr_8093eb8a5018cacb", "status": "needs_revision" }
+}
+```
+
+Two things to notice. First, `before_hash` is exactly the previous
+event's `after_hash`. The chain is welded. Second, the reviewer
+rejected the evidence span without retracting the finding. The
+`needs_revision` verdict is not a draft state; it is a recorded
+disagreement that flows downstream into the
+`status="needs_revision"` filter on verified-grade surfaces.
+
+#### Event 3: `finding.span_repaired` (v0.66 mechanical repair)
+
+`vev_3790dc7f05c5f13a.json`, the next day:
+
+```json
+{
+  "kind": "finding.span_repaired",
+  "target": { "type": "finding", "id": "vf_8f2d8f546976dcb3" },
+  "timestamp": "2026-05-09T00:41:43.985878+00:00",
+  "reason": "W2.1 synonym + stem seed-span repair: the v0.66 picker now resolves the bound phrasings (a(16) vs B2({0,1}^16), 'Sidon set' vs 'B2 set', 'distinct pairwise sums' vs 'distinct sums') and clears the 0.30 floor against the cached source, replacing the prior construction-paragraph span with a result-bearing sentence.",
+  "before_hash": "sha256:d92a580353cbd02f3f74ea59fdacac6b92d679c0e96832e4358cda26364c78f1",
+  "after_hash": "sha256:9f6ad5875ba2b0910f0e031a9f6d90e93137de63e64b1af06700fbbb5df017c0",
+  "payload": {
+    "proposal_id": "vpr_78c0a6d122f7883d",
+    "section": "abstract",
+    "text": "We exhibit a Sidon set of 505 points in {0,1}^16, with all C(506,2) pairwise sums distinct, improving the previous lower bound from a(16) >= 503 to a(16) >= 505."
+  }
+}
+```
+
+The span text is carried inline on `payload.text`. The reducer
+appends it to `state.findings[i].evidence.evidence_spans` and is
+idempotent: re-applying the same event is a no-op because the span
+is already present. The repair carries its full input on the event
+so a fresh replay does not need to re-fetch the source PDF.
+
+#### Event 4: `finding.reviewed` (accepted)
+
+`vev_50ecd1186170042f.json`, twenty-eight milliseconds later:
+
+```json
+{
+  "kind": "finding.reviewed",
+  "target": { "type": "finding", "id": "vf_8f2d8f546976dcb3" },
+  "timestamp": "2026-05-09T00:41:44.013451+00:00",
+  "reason": "Evidence span repaired by the synonym-aware seed-span extractor; the assertion is grounded in the source's result-bearing sentence.",
+  "before_hash": "sha256:9f6ad5875ba2b0910f0e031a9f6d90e93137de63e64b1af06700fbbb5df017c0",
+  "after_hash": "sha256:decf61cc60f424e605662ae3af6c4d5205d9ebdd2c30ccfef41e177434cc2f9e",
+  "payload": { "proposal_id": "vpr_c1a01170baa92fab", "status": "accepted" }
+}
+```
+
+`before_hash` matches the repair's `after_hash`. The chain holds.
+The finding is now accepted on the frontier and surfaces on
+verified-grade reads.
+
+#### Why content addressing matters
+
+The id `vev_50ecd1186170042f` is a sha256 prefix over the canonical
+bytes of every other field, computed by `compute_event_id` in
+`events.rs:1350`. This means:
+
+- An event cannot be edited in place. Any change produces a different
+  id and breaks the next event's `before_hash` reference.
+- Two implementations that emit the same logical event produce
+  byte-identical files. The cross-impl reducer fixtures at
+  `crates/vela-protocol/tests/cross_impl_reducer_fixtures.rs` rely on
+  this.
+- Reordering events does not silently corrupt history, because the
+  `before_hash` chain pins the order.
+
+### 4. Verifying integrity yourself
+
+Run the substrate's integrity checker on a frontier:
+
+```
+$ vela integrity examples/sidon-sets --json
+```
+
+Output (illustrative):
+
+```json
+{
+  "schema": "vela.state_integrity_report.v0.1",
+  "status": "fail",
+  "structural_errors": [
+    { "rule_id": "stale_proof_packet",
+      "message": "Recorded proof packet is stale relative to accepted events." }
+  ],
+  "warnings": [],
+  "proof_freshness": "stale",
+  "replay": {
+    "ok": true,
+    "status": "ok",
+    "event_log": {
+      "count": 29,
+      "kinds": {
+        "finding.asserted": 9,
+        "finding.reviewed": 15,
+        "finding.span_repaired": 5
+      },
+      "first_timestamp": "2026-05-08T20:45:26.713195+00:00",
+      "last_timestamp": "2026-05-09T01:24:56.592081+00:00",
+      "duplicate_ids": [],
+      "orphan_targets": []
+    },
+    "source_hash": "959ab2a422e6c3b7d292c6ccdd831308a32a48adbe8d59c6c72197366344631c",
+    "event_log_hash": "13de6c2230ca2ea3b81760cf71c9afb0a8c8afeacf989c300c5a2cc25b98fa73",
+    "replayed_hash": "959ab2a422e6c3b7d292c6ccdd831308a32a48adbe8d59c6c72197366344631c",
+    "current_hash": "959ab2a422e6c3b7d292c6ccdd831308a32a48adbe8d59c6c72197366344631c",
+    "conflicts": []
+  },
+  "summary": { "events": 29, "proposals": 29, "structural_errors": 1, "warnings": 0 }
+}
+```
+
+What each part checks:
+
+- `replay.event_log.count` and `replay.event_log.kinds` are a tally
+  of `.vela/events/`. The `duplicate_ids` and `orphan_targets`
+  arrays are empty when every event id is unique and every
+  `target.id` resolves to a known object.
+- `replay.source_hash` is the hash of the materialized
+  `frontier.json` after canonicalization. `replay.replayed_hash` is
+  the hash of the `Project` produced by replaying the log from
+  genesis. They must agree. If they diverge, the substrate refuses
+  the frontier.
+- `replay.current_hash` is what the loaded in-memory state hashes
+  to. The three-way agreement (source, replayed, current) is the
+  invariant that no silent edit has slipped past the reducer.
+- `replay.event_log_hash` is the hash of the canonical event log
+  itself. It is what the proof packet pins; federation peers compare
+  this digest before diffing.
+- `proof_freshness` is one of `fresh`, `stale`, `missing`. The
+  frontier shown is `stale` because a `finding.reviewed` event
+  landed after the most recent proof packet was generated. The
+  `stale_reason` in `.vela/proof-state.json` names the offending
+  proposal. Running `vela proof export` on the frontier returns it
+  to `fresh`.
+
+This frontier reports `status: fail` for exactly that
+reason. A fresh frontier passes; a frontier with a stale proof
+packet fails until the packet is regenerated. Replay itself is
+green: `replay.ok: true` confirms the materialized state matches
+the event log byte-for-byte.
+
+The same three digests (`source_hash`, `event_log_hash`,
+`packet_manifest_hash`) are rendered on each frontier's page on the
+public site, read from the published proof manifest at build time.
+They match the digests this command prints, by construction.
+
+### 5. Federation: same event log, two hubs
+
+When a peer hub serves a copy of an event log, the consumer fetches
+the manifest, verifies the hub's signature on it, and diffs the
+manifest's event ids against the local `.vela/events/` directory.
+The full sequence is documented at `docs/FEDERATION.md`.
+
+The diff is recorded as canonical events. `vela federation sync
+--via-hub` appends one `frontier.synced_with_peer` event per call
+plus one `frontier.conflict_detected` event per disagreement. A
+`conflict_detected` event names the local event id, the peer's
+event id, and the field that diverges.
+
+A reviewer resolves a conflict by emitting
+`frontier.conflict_resolved` (introduced in v0.59), which links
+back to the original `conflict_detected` event id and records the
+verdict. The v0.70 `vela federation push-resolution` command
+propagates that resolution back to the originating hub so the
+peer's substrate can pick it up on its next sync.
+
+The doctrine is symmetric: the diff itself is part of the event log,
+not metadata about it. A reviewer cannot resolve a federation
+conflict silently, the same way they cannot edit a finding silently.
+
+### 6. Doctrine recap
+
+- No silent edits. Every reviewer action is one canonical event in
+  `.vela/events/`. The materialized `frontier.json` is a projection
+  the reducer re-derives.
+- The audit trail is the protocol. Event ids are content-addressed
+  sha256 prefixes; `before_hash` and `after_hash` weld the chain;
+  signatures cover the canonical bytes.
+- Drafts and `needs_revision` findings are excluded from
+  verified-grade surfaces by filter, not by deletion. The events
+  remain in the log.
+- Reproducible from any working tree. `vela integrity <frontier>`
+  replays from genesis, hashes the result, and compares against the
+  materialized state. Two implementations that share the protocol
+  produce byte-identical replays.
+
+The substrate's promise is that any reader, with the binary and the
+`.vela/` directory, can rederive the frontier and decide for
+themselves whether the chain holds. The walk above is what doing
+that looks like.
+
+---
+
+## Conformance
+
+The Vela protocol is only open if an independent implementation can
+prove it agrees with the reference. This section is how a third party
+does that. (The normative requirement list for a conforming v0
+implementation is §10.)
+
+### What is public
+
+- `conformance/` — the public conformance contract: fixtures, a
+  human-readable `README.md` describing the
+  `(genesis_findings, event_log, expected_states)` replay contract,
+  and `verify.py`, a thin reference runner over the canonical Python
+  reducer.
+- `tests/conformance/` — the protocol vector set the reference Rust
+  implementation runs via `vela conformance`.
+
+Both directories are tracked in the repository. Nothing about running
+them depends on private state.
+
+### Running the suite
+
+Against this repository's implementations:
+
+```bash
+./scripts/run-conformance-suite.sh --out dist/conformance
+```
+
+This runs the reference Rust implementation (`vela conformance`) and
+the reference Python reducer (`conformance/verify.py`), then writes a
+content-addressed `conformance-report.json`
+(schema `vela.conformance_report.v0.1`): per-implementation
+total/passed/failed, the implementation id, the SHA-256 of the vector
+set, and a report digest over the substantive body. Two runs over the
+same vectors produce the same `report_sha256`; a divergent
+implementation produces a different report.
+
+An independent implementation runs the same vectors against its own
+reducer (mirroring `conformance/verify.py`'s contract) and emits a
+report in the same shape. Comparing the two reports' per-kind results
+and `vector_set_sha256` is the conformance check.
+
+### What a conformant report asserts
+
+That the implementation agrees with the reference reducer on per-kind
+state-transition mutation across the public vector set: finding,
+negative-result, trajectory, and artifact effects after replaying the
+event log.
+
+### What it does not assert
+
+It does not assert that any frontier's science is correct, that the
+substrate is feature-complete, that proof packets are validated, or
+that the implementation is safe for production. It is a replay-contract
+agreement check and nothing more. Scientific truth stays a reviewer
+judgment; conformance is only about deterministic replay.
+
+### Boundary
+
+Conformance is a property of an implementation against the public
+vectors. It does not certify an implementation, confer membership in
+any organization, or imply a governing entity exists. The institutional
+structure that would steward the spec is described, as a proposal, in
+`docs/GOVERNANCE.md`.
 
 ---
 

@@ -1807,7 +1807,7 @@ pub(crate) enum GateAction {
     /// predicate — and prints whether the finding WOULD auto-admit to
     /// `machine_verified`, with every guard's verdict. It never writes; the
     /// `policy.auto_admitted` emit is held off pending the acceptance checklist
-    /// (see docs/EXACT_LANE_GATE.md).
+    /// (see docs/VERIFICATION.md).
     AutoAdmit {
         /// Frontier directory (e.g. `examples/sidon-sets`).
         frontier: PathBuf,

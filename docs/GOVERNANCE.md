@@ -1,6 +1,6 @@
 # Governance and incentives
 
-> Roadmap Workstream F. The structure that keeps the protocol neutral while the operation can
+> The structure that keeps the protocol neutral while the operation can
 > sustain itself, and the incentives that make a producer want to leave verified state behind. This
 > states the model and maps each element to what already exists in the substrate versus what is
 > future. It does not claim future parts are built.
@@ -36,17 +36,16 @@ A governance promise is only as good as its enforcement. Here it is mechanical:
   that diverges from the log is detectable by anyone who replays.
 - A receipt is provenance, never a verdict. Registering a witness does not accept a claim.
 
-These are the frozen primitives (see `MINIMAL_CORE.md`); governance is their consequence, not a
+These are the frozen primitives (see `PROTOCOL.md`); governance is their consequence, not a
 separate layer.
 
-## Incentive design (Workstream F3)
+## Incentive design
 
 What makes a producer leave verified state behind instead of keeping a private result:
 
 - **Venue-native export.** A verified result should leave Vela in the form the producer's venue
   already accepts: an OEIS comment, an arXiv-ready statement, a GitHub or mathlib contribution. The
-  OEIS bridge and the release/DOI archive exist; per-venue export adapters are partial and continue
-  under Workstream C/E.
+  OEIS bridge and the release/DOI archive exist; per-venue export adapters are partial.
 - **Automatic attribution for partial contributions.** A producer who discharges one obligation, or
   contributes one reusable lemma or a verified bound, is credited for exactly that, because the
   dependency structure is mechanical (`Attempt.depends_on`, `Transfer`, the dependency oracle). What

@@ -16,7 +16,7 @@ into the conformance gate via `scripts/full-conformance.sh`).*
 | The protocol-correctness guarantees (replay, hash-DAG, signatures, merge, quorum) | **Part I**, §1–§16 |
 | The epistemic calculus (provenance algebra, Belnap/bilattice status, κ, admission, transfers) | **Part II**, §17–§39 |
 | The narrative companion | `docs/THEORY_NARRATIVE.md` |
-| The implementation-facing invariants that must survive product changes | `docs/INVARIANTS.md` |
+| The implementation-facing invariants that must survive product changes | `docs/PROTOCOL.md` |
 
 Citation convention: Part I theorems are **Core Theorem N**, Part II's are
 **Calculus Theorem N**. Where the two coincide (replay convergence, retraction
@@ -70,7 +70,7 @@ diffs, accepted events, and replayed state.
 
 For the narrative companion to this document, see
 `docs/THEORY_NARRATIVE.md`. For the implementation-facing invariants that must
-survive product and protocol changes, see `docs/INVARIANTS.md`. The frontier
+survive product and protocol changes, see `docs/PROTOCOL.md`. The frontier
 calculus that this formal core carries is Part II below.
 
 ---
@@ -303,204 +303,200 @@ current implementation. See Section 13.
 
 ---
 
-# 4. Discord and frontiers
+# 4. Obligations and frontiers
 
-Let `K` be a finite set of discord kinds:
+The **frontier** is the set of active, typed **obligations** derived
+from state: the structured, unresolved work that would move the
+Atlas. Not every unknown is a frontier. An obligation is an unknown
+made *actionable* — bound to a target, a discharge condition, and the
+verifier that would close it.
+
+An obligation (the production object, `sidon_profile/frontier.rs`) is
 
 ```text
-K = {
-  Conflict,
-  ConflictingConfidence,
-  MissingOverlap,
-  TranslationFail,
-  EvidenceGap,
-  ReplicationFail,
-  ProvenanceFragile,
-  StatusDivergent,
-  MethodMismatch
-}
+o = (target_cell, kind, dependencies, discharge_evaluator, verifier_profile, context)
 ```
 
-Let `L = P(K)` ordered by subset inclusion.
+with a status **derived** from state, not stored:
 
-The powerset lattice is chosen because discord kinds are initially
-treated as independent. A context can have `Conflict` without
-`TranslationFail`, or both. The lattice can be refined later if some
-discord kinds are operationally known to subsume others.
+```text
+latent      pre-conditions not yet met (a blocking dependency is open)
+open        actionable now: pre-conditions met, not yet discharged
+discharged  a certificate satisfying its discharge condition exists
+```
 
-A **discord assignment** for Atlas `A` is a monotone map
-`D_A : C -> L`, where `D_A(c)` is the set of discord kinds detected
-at context `c`.
+The frontier of an Atlas is the support of its non-discharged
+obligations:
 
-The intended monotonicity is upward propagation:
+```text
+Frontier(A) = { o : status_A(o) in {latent, open} }
+```
+
+The **actionable edge** of the frontier is the boundary projection
+(`boundary.rs`), which ranks the open obligations by how close they
+are to discharge:
+
+```text
+one_premise_away   a single missing premise/certificate would close it
+fragile / brittle  it rests on thin or single-source provenance
+contested          a contradiction or verdict-conflict touches it
+stale_open         long-open with no recent attempt
+```
+
+This ranked edge is what `vela attack` surfaces and what a producer
+(human or agent) pulls work from.
+
+## 4.1 Discord is one detector, not the definition
+
+Earlier versions of this document defined the frontier as the support
+of *discord*. Discord is now one **detector** that can populate
+obligations, not the frontier itself. It survives only as a derived
+signal in the edge layer (`crates/vela-edge/src/discord.rs`); the word
+does not appear in the protocol crate, and the reducer mints no discord
+object (§5.4).
+
+A discord detector assigns kinds from a finite set
+
+```text
+K = { Conflict, ConflictingConfidence, MissingOverlap, TranslationFail,
+      EvidenceGap, ReplicationFail, ProvenanceFragile, StatusDivergent,
+      MethodMismatch }
+```
+
+as a monotone map `D_A : C -> P(K)` ordered by subset inclusion.
+Its monotonicity is upward propagation:
 
 ```text
 c' -> c  and  D_A(c') is nonempty  =>  D_A(c) is nonempty
 ```
 
 A refined-context conflict makes the broader context unstable unless
-resolved or scoped away.
-
-The **frontier** of an Atlas is
-
-```text
-Frontier(A) = supp(D_A) = { c in C | D_A(c) is nonempty }
-```
-
-A frontier is the support of unresolved discord in an Atlas. Not
-every unknown is a frontier. A frontier is an actionable instability
-in scientific state.
+resolved or scoped away. Theorem 4 (§10) proves this upward closure as
+a property of the detector — it characterizes how a discord signal
+propagates to populate obligations at coarser contexts, not what the
+frontier *is*.
 
 ---
 
 # 5. Vela event log
 
-Vela is an operation-based replicated datatype with causal delivery
-through a content-addressed hash-DAG. It is not a pure state-based
-CRDT. Operations are events. State is computed by deterministic
-replay.
+A frontier's history is a **single-writer, append-only, linear hash
+chain** of signed events. State is not stored; it is computed by a
+deterministic left-fold of the reducer over the chain (the
+**loader = reducer**: there is exactly one code path that turns a log
+into state, `reducer::replay_from_genesis`, and the loader calls it).
+This is the shipped substrate. A multi-writer, merge-convergent DAG
+(an operation-based CRDT over a content-addressed hash-DAG) is a
+**target** for cross-hub federation; it is described as such in §5.6,
+not as current behaviour.
 
 ## 5.1 Events
 
-An event is
+A `StateEvent` (`crates/vela-protocol/src/events.rs`) is
 
 ```text
-e = (id, parents, payload, attestations, policy, schema, timestamp, signature)
+e = (schema, id, kind, target, actor, timestamp, reason,
+     before_hash, after_hash, payload, caveats, signature,
+     schema_artifact_id)
 ```
 
 where
 
 ```text
-id           = H(canonical(e without id))
-parents      = finite set of parent event ids
-payload      = typed Carina transition
-attestations = signed review objects
-policy       = review or merge policy
-schema       = content-addressed schema and reducer reference
-timestamp    = declared event timestamp
-signature    = actor signature
+schema             = the event schema id (vela.event.v0.1)
+id                 = H(canonical(e without id))
+kind               = the typed reducer transition (e.g. finding.asserted)
+target             = the object the transition acts on
+actor              = the signing actor id
+timestamp          = declared event timestamp
+reason             = human-readable rationale
+before_hash        = the chain hash of the prior event (genesis = empty)
+after_hash         = the chain hash after applying this event
+payload            = typed transition body
+caveats            = declared scope limitations
+signature          = the actor's Ed25519 signature over the canonical bytes
+schema_artifact_id = content-addressed schema/reducer reference
 ```
 
-The hash function `H` is assumed collision-resistant. Schema and
-reducer artifacts are content-addressed and may themselves be
-introduced or updated by governance events. Therefore the event set
-commits to its replay semantics.
+`H` is assumed collision-resistant. `before_hash`/`after_hash` form
+the linear chain: each event commits to the exact prior state, so a
+tamper anywhere breaks every downstream hash (Theorem 5). There is no
+`parents` set, no `attestations` field, and no `policy` field on the
+event itself — attestations are separate `attestation.recorded`
+events, and admission policy is evaluated by the gate and the
+acceptance policy (§35, and Part II), not carried on the event.
 
-## 5.2 Valid event sets
+## 5.2 Valid event logs
 
-An event set `E` is **causally down-closed** if
+A log is **valid** if it is a chain from genesis: each event's
+`before_hash` equals its predecessor's `after_hash`, every signature
+verifies over the canonical bytes, and every `kind` is a declared
+reducer transition. `reducer::verify_replay` checks that re-folding
+the chain reproduces the materialized state byte-for-byte; a broken
+chain still loads (cache-only, with empty side tables) so it can be
+repaired, and `vela check` surfaces the failure.
+
+## 5.3 Replay
+
+Let `R(L)` be the state obtained by folding the deterministic reducer
+over the linear log `L` from genesis:
 
 ```text
-e in E  =>  parents(e) is a subset of E
+A = R(L) = foldl(apply_event, genesis_state, L)
 ```
 
-Only down-closed event sets are valid replay inputs.
+`apply_event` is pure and total over declared kinds; a cross-impl
+conformance suite pins the Rust reducer against the Python reference
+(`clients/python/vela_reducer.py`) over shared fixtures, so `R` is
+deterministic across implementations (this discharges the determinism
+premise of Theorem 1 rather than assuming it).
 
-If a hub receives an event without ancestors, merge is undefined
-until missing ancestors are fetched or an explicit fork policy is
-invoked.
+## 5.4 Disagreement is a derived read, not a minted object
 
-## 5.3 Merge
+Replay does **not** emit a `discord` object. Evidence polarity is
+recomputed on every read from the support and refutation provenance
+polynomials (`status_provenance.rs`, `evidence_diff.rs`): a
+claim-context pair with both supporting and refuting accepted
+provenance reads as Belnap `B`. Nothing is persisted; the status is a
+projection of the log (§7), which is why retraction can move it back
+without a compensating event (Theorem 3, "no zombie status").
 
-For valid down-closed event sets
+Genuine disagreement that the substrate *does* materialize is carried
+by two first-class, content-addressed objects, neither auto-resolved:
 
 ```text
-E1 join E2 = E1 union E2
+Contradiction (vcx_)   contradiction.rs — derived from a `contradicts`
+                       edge; default status Candidate; resolution is a
+                       key-custody human decision, never automatic.
+VerdictConflict (vdc_) verdict_conflict.rs — two accepted reviews that
+                       disagree on a proposal's disposition.
 ```
 
-Since both sets are down-closed, their union is down-closed. For
-incomplete received sets, merge is undefined until ancestor closure
-is restored.
+## 5.5 Discord as a derived signal
 
-## 5.4 Canonical replay order
+"Discord" survives only as a *derived detector signal* in the edge
+layer (`crates/vela-edge/src/discord.rs`), used to populate the
+boundary/obligation queue (§4). It is not a reducer-minted object and
+the word does not appear in the protocol crate. The discord-kind
+lattice and its upward-closure property are retained as a property of
+that detector in §4 and Theorem 4, not as the definition of the
+frontier.
 
-The event DAG induces a partial order
+## 5.6 Target: multi-frontier merge (not current substrate)
 
-```text
-e_i < e_j   if   e_i is an ancestor of e_j
-```
-
-Replay uses the canonical topological ordering of this DAG, with
-ties in causal antichains broken lexicographically by event id.
-Since event ids are content hashes, this tie-break is deterministic
-across hubs.
-
-## 5.5 Replay
-
-Let `R(E)` be the Atlas state obtained by folding the deterministic
-reducer over the canonical order of `E`. Thus
-
-```text
-A = R(E)
-```
-
-## 5.6 Concurrent payload interactions
-
-Suppose two events `e1, e2` are causally concurrent. Replay does not
-resolve payload interactions by arrival order. It classifies the
-interaction and derives state deterministically.
-
-### 5.6.1 Polarity disagreement
-
-If `e1` contributes supporting provenance and `e2` contributes
-refuting provenance for the same claim-context pair `(q, c)`, replay
-derives
-
-```text
-sigma(q, c) = B
-```
-
-and creates derived discord state:
-
-```text
-discord(
-  kind   = Conflict,
-  target = (q, c),
-  causes = [e1.id, e2.id]
-)
-```
-
-Belnap `B` is the deterministic resolution rule for polarity
-disagreement.
-
-### 5.6.2 Confidence disagreement
-
-If `e1` and `e2` update `kappa(q, c)` incompatibly without changing
-evidence polarity, replay does not promote `sigma(q, c)` to `B`.
-Instead, replay creates derived discord:
-
-```text
-discord(
-  kind   = ConflictingConfidence,
-  target = (q, c),
-  causes = [e1.id, e2.id]
-)
-```
-
-The confidence state `kappa(q, c)` is then handled by the
-schema-specific reducer: mixture, interval widening, model-set
-expansion, or policy-required review. The formal core only requires
-deterministic handling.
-
-### 5.6.3 Commuting field updates
-
-If `e1` and `e2` affect disjoint fields, or one changes provenance
-while the other adds unrelated metadata, replay applies both in
-canonical order and does not create discord.
-
-### 5.6.4 Policy-level resolution
-
-A derived discord object is computed state, not a new log event. A
-policy layer may later append:
-
-```text
-contest event
-fork event
-resolution event
-supersession event
-```
-
-The formal core remains deterministic.
+Cross-hub federation of *independent* frontiers, and any future
+multi-writer convergence within a single frontier, is the place where
+the op-CRDT / hash-DAG model applies: down-closed event sets, union
+merge, canonical topological order with content-hash tie-break, and
+deterministic classification of concurrent payload interactions
+(polarity disagreement → `B` + a contradiction; commuting field
+updates → apply both). This is a **roadmap object**, not shipped: the
+current substrate is one linear chain per frontier with a single
+writer, and federation today is hub-level distribution of whole
+frontiers (signed manifests, `registry.rs`), not event-DAG merge.
+When multi-writer merge lands it must preserve replay convergence
+(Theorem 12 already proves commutativity for disjoint concurrent
+events as the seed of that result).
 
 ---
 
@@ -1270,7 +1266,8 @@ v0.129 `vela registry witness-check` primitive (A11 cross-hub
 divergence detector) implicitly assumes: when two hubs agree on
 the canonical bytes for a given `vfr_*`, they agree on the
 frontier's underlying state. The Rust implementation lives at
-`crates/vela-protocol/src/repo.rs::frontier_id`, which composes
+`crates/vela-protocol/src/project.rs::frontier_id` (line 431),
+with `frontier_id_from_genesis` (line 293) composing
 canonical-bytes with sha256.
 
 **Out of scope.** Cryptographic collision resistance of sha256 is
@@ -1373,22 +1370,34 @@ policy-monitoring reasoning where one wants to bound the
 upper or lower confidence independently). Verifies with
 `lake build Vela.ConfidenceUpdate`.
 
-**Substrate role.** The Rust substrate's
-`crates/vela-protocol/src/state.rs::revise_confidence`
-implements the bounded-update rule: a
-`finding.confidence_revise` event whose proposed delta
-magnitude exceeds the reviewer-policy cap is either rejected
-at the apply step or saturated at the cap. Theorem 15 names
-that bound algebraically.
+**Substrate role (HONEST STATUS: the hypothesis is NOT yet
+enforced).** Theorem 15 is a *conditional*: it bounds the move
+*if* the substrate enforces `|revise c δ - c| ≤ cap`. The
+current reducer does **not** enforce it. `apply_finding_confidence_revised`
+(`crates/vela-protocol/src/reducer.rs:709`) writes
+`state.findings[idx].confidence.score = new_score`
+*unconditionally* (line 734), and the event constructor
+`state.rs::revise_confidence` validates only that the new score
+is a well-formed probability, not that the delta is within any
+cap. There is no `cap` field in the reviewer policy today. So
+the bounded-update rule is a **specification the substrate does
+not currently satisfy**, not a shipped defense. Do not read
+Theorem 15 as a live security guarantee.
+
+What the substrate *does* provide is auditability, not a bound:
+each `finding.confidence_revised` event records the prior and
+new score on the canonical, immutable event, so an auditor can
+reconstruct every move and the cumulative drift after the fact.
+Bounding (rather than only recording) drift would require adding
+a per-policy `cap` and a saturate-or-reject check at the apply
+step; until then T15's hypothesis is unrealized and it is listed
+among the conditional/unenforced theorems in Appendix A.
 
 **Out of scope.** The N-event drift bound (linear in event
-count) follows from Theorem 15 by induction; the substrate
-records the per-event delta on the canonical event so audits
-can reconstruct the cumulative move. The Lean module proves
-the single-event bound; the inductive extension is left as a
-substrate-side reasoning step rather than a separate theorem.
-Multi-reviewer attestation as a long-horizon defense against
-cumulative drift is a separate threat surface.
+count) would follow from Theorem 15 by induction *once the
+single-event hypothesis is enforced*. Multi-reviewer attestation
+as a long-horizon defense against cumulative drift is a separate
+threat surface.
 
 ## Theorem 16: Governed-quorum soundness
 
@@ -1428,11 +1437,17 @@ predicate split follows from Boolean conjunction unfolding.
 uniqueness), and Theorem 13 (frontier-id determinism — gives a
 unique proposal preimage per frontier + epoch).
 
-**Substrate role.** The Rust substrate's
-`crates/vela-protocol/src/governance.rs::verify_quorum`
-implements the same rule: distinct-signer counting, eligibility
-check, revocation check, Ed25519 signature check. Theorem 16
-makes the rule algebraic.
+**Substrate role.** The distinct-signer / eligibility /
+revocation / Ed25519 quorum rule is implemented in
+`crates/vela-edge/src/governance.rs::verify_quorum` (line 482);
+the protocol crate's owner-rotation path is single-signer today
+(`crates/vela-protocol/src/registry.rs::verify_rotation`, line
+196). The newer `crates/vela-protocol/src/acceptance_policy.rs`
+`Quorum { threshold, eligible_roles }` is the policy-engine form
+of the same threshold rule (see §35). Theorem 16 makes the rule
+algebraic; note the full quorum check lives in `vela-edge`, not
+the protocol crate, so T16 describes the edge implementation, not
+a protocol-crate guarantee.
 
 **Out of scope.** The full security argument against an
 attacker who controls the *threshold* set of governance keys
@@ -4245,3 +4260,352 @@ others (silently); (4) treats retractions as appended events, never deletions; (
 scientific disagreement as Belnap `B` / discord, never as a forced merge. The Rust reference and the
 Python reducer both satisfy (1)–(5); a third implementation is conformant exactly when it joins them on
 the vectors.
+
+# Appendix C — Frontier Fabric
+
+*Folded from the former FRONTIER_FABRIC.md (which consolidated the FRONTIER_FABRIC_* /
+adapter / transfer docs). Reference architecture; the production trust path is the Sidon
+profile + Part II.*
+
+
+The Frontier Fabric is the architecture for extending Vela beyond the exact-math
+wedge: typed domain adapters, an obligation/frontier-map layer, a three-lane
+transfer calculus, and a state-neutral role for learned systems. **Most of it is
+a reference, not production.** The production trust path is the Sidon producer
+profile plus the kernel in [THEORY.md](THEORY.md) Part II; the broader fabric is
+admitted only when a named producer with an in-software verifier requires it.
+This doc consolidates the former `FRONTIER_FABRIC_*`, `FRONTIER_MAP`,
+`DOMAIN_ADAPTER_STANDARD`, `MODEL_AND_OPERATOR_ADAPTERS`, and `TRANSFER_CALCULUS`
+docs into one place; the executable reference + conformance live at
+`research/frontier-fabric-v2/` (gated by `scripts/check-frontier-fabric-v2.sh`).
+
+## 1. Realization status
+
+**One canonical scheme.** There is exactly one production canonical scheme:
+`vela.canonical-json-subset.v1` (NFC, float-free, domain-prefixed sha256). The
+shipped `sidon_profile` and the OEIS-referenced bounds use it, so the production
+record, packets, observations, and frontier-map roots all derive from it. The
+research artifact at `research/frontier-fabric-v2/` uses its own domain tag
+(`vela.scientific-state-fabric.canonical.v1`) for its own fixtures and is **not**
+in the production trust path. The architecture (record/map/extend, typed
+evidence classes, no-silent-upgrade bridges) is adopted; its canonical tag is not.
+
+**Realized in production Rust** (the `record -> map -> extend` loop is real in the
+shipped binary for the exact Sidon profile):
+
+| Layer | Where | Conformance |
+|---|---|---|
+| Record: canonical + signed packets | `sidon_profile::{canonical,packets}` | recompute 25 fixture ids + sigs |
+| Record: kernel `Γ_P`, four roots, environments | `sidon_profile::kernel` | replay every snapshot |
+| Record: evaluator + observation replay | `sidon_profile::evaluator` | best-bound output + digests |
+| Record: producer constructors | `sidon_profile::producer` | regenerate genesis byte-for-byte |
+| Map: obligations + frontier map | `sidon_profile::frontier` | latent/open/discharged over live cells; positive-gap monotonicity |
+| Surface | `vela sidon observe / submit / frontier-map` | cross-verified by the Python reference |
+
+**Reference / contract only** (no production Rust until a named producer needs it):
+the eight `DomainAdapter` manifests, the certified / target-checked / exploratory
+transfer lanes, the model and operator adapters, the trace/estimate profiles, and
+the sharded query backend. Models stay outside accepted state in every case.
+
+## 2. Mathematical core
+
+State is a finite positive ranked presentation `P = (H, X, R, rank)` with clauses
+`h <- a_1 … a_m · h_1 … h_n` where `rank(h_i) < rank(h)`, and accepted lineage
+`Γ_P(h) = Σ_{r:head=h} α(r) · Π_{b in body(r)} Γ_P(b)` in `N[X]`. Existence,
+uniqueness, initiality, view functoriality, environment semantics, correction,
+and observation determinism for this core are Lean-checked in the v0.9 Scientific
+State Kernel (THEORY.md Part II); the results below are the fabric-specific
+extensions over that kernel.
+
+A domain adapter `A` declares an obligation generator `Ω_A : (P, ν) -> finite set
+of obligations`, each with a target cell and a deterministic discharge predicate
+`D_o`. `Gap_A(P,ν) = { o ∈ Ω_A(P,ν) | D_o(ρ_ν Γ_P) = false }`.
+
+- **T1 (relative gap determinacy).** For fixed `P, ν, A` and deterministic
+  obligation/discharge evaluators, `Gap_A(P,ν)` is unique and replayable. (`Γ_P`
+  unique; view substitution deterministic; `Ω_A`, `D_o` content-addressed.)
+- **T2 (gap unidentifiability without a universe).** Accepted state alone does not
+  determine its missing obligations: two worlds with the same `P` and lineage but
+  different declared universes have different gap sets. *No completeness claim is
+  meaningful without a declared obligation universe* (see Law 6).
+- **T3 (conservative adapter extension).** For disjoint-namespace `P_A`, `P_B`,
+  lineage in `P_A ⊔ P_B` equals lineage in `P_A` for every `A` cell (rank
+  induction). Installing a new adapter cannot alter existing state; cross-domain
+  influence begins only at an accepted bridge clause.
+- **T4 (certified transfer soundness + composition).** A certified transfer
+  `T = (f, sound: ∀o, V_A(o) -> V_B(f(o)))` carries verification across frontiers
+  and composes associatively with identities. The route records source lineage,
+  transfer object, certificate, context license, and acceptance, so restricting
+  any atom removes the route.
+- **T5 (extension locality).** Appending clauses with heads in `S` can change only
+  cells in the forward dependency cone of `S` (rank induction) — the incremental
+  recomputation boundary.
+- **T6 (fixed-universe gap monotonicity).** Under a fixed view, fixed obligation
+  universe, and discharge predicates monotone in positive support, a discharged
+  obligation stays discharged under positive extension. (This does not freeze the
+  *visible* frontier; see T7.)
+- **T7 (successor exposure).** If `o_2` depends on `o_1`'s target, `o_1` is open,
+  `o_2` is latent, and an extension discharges `o_1` but not `o_2`, then `o_2`
+  becomes open — the frontier *migrates* outward.
+- **T8 (hitting-set kill) / T9 (route repair).** A restriction set `Y` kills
+  support for `h` iff `Y` meets every active environment of `h`; support is
+  restored when an append or accepted view-update makes some environment fully
+  active. (T8 is the v0.9 machine-checked correction theorem.)
+
+**Model non-interference (Conformance Law, not a semiring theorem).** A model
+candidate is not in the accepted presentation; its weights/prompt/output cannot
+alter `Γ_P` unless a target receipt and human acceptance append a clause. The
+executable gate rejects model packets that claim a state effect.
+
+Proof status: T6/T7/T5/T3 are rank-induction properties with executable
+fixtures; T1/T2 require deterministic adapter definitions; T8/T9 and the kernel
+results are Lean-checked; certified-transfer composition uses the existing Lean
+transfer contract.
+
+## 3. Conformance laws
+
+Implementation obligations (not theorems about the carrier):
+
+1. **No hidden state** — no authoritative status/confidence/trust/cost/frontier/
+   gap/rank/transfer value without a binding observation packet (presentation +
+   lineage + view roots, adapter/evaluator ids, inputs, canonical output, replay receipt).
+2. **No model authority** — a model/agent packet has `state_effect=none`,
+   `authority_claim=proposal_only`, and no accepted-event id.
+3. **No silent transfer** — every context movement names lane, source/target,
+   assumptions, preserved/lost coordinates, certificate/receipt requirements, human acceptance.
+4. **No silent evidence upgrade** — a target evidence class appears only from a
+   target-domain receipt.
+5. **Gap provenance** — every gap names adapter id, obligation-generator id,
+   coverage-model root, discharge evaluator, presentation/view roots.
+6. **No completeness claim without a universe** — "open under adapter A and
+   coverage model C", never "all unknowns in this field" absent a proof relative
+   to a finite declared universe.
+7. **Ranking non-interference** — opportunity/leverage/novelty/score may *order*
+   work; they may not alter accepted support, evidence class, confidence, or trust.
+8. **Target-check binding** — a target receipt binds candidate id, target claim/
+   context, artifact digest, verifier id + executable digest, config/tolerance, output digest.
+9. **Human acceptance** — every accepted clause and view restriction has an
+   eligible human signature; models may draft review material, never supply the key.
+10. **Failure memory** — a failed candidate affects state only through an accepted
+    failure event naming the obligation, method, inputs, cost, and reason.
+11. **Adapter immutability** — historical state cites content-addressed adapter
+    versions; an update cannot reinterpret earlier packets silently.
+12. **Query completeness labeling** — support/environment/hitting-set packets state
+    whether the result is complete-exact, bounded-exact, approximate, or one-witness.
+
+## 4. Frontier maps and dark matter
+
+"Knowledge dark matter" is operational only as a typed open obligation. An
+obligation carries: id, adapter/generator ids, target cell + context, gap kind,
+discharge evaluator, required verifier profile, dependencies, rationale, base
+presentation + view roots — so the system can answer *what is missing, why it
+believes it is missing, what would discharge it, and from which accepted state*.
+
+**Gap classes** (small, shared vocabulary; adapters may add subtypes, not redefine
+state semantics):
+
+| Class | Meaning |
+|---|---|
+| `coverage` | a declared parameter/context/case/benchmark cell lacks support |
+| `dependency` | an accepted route is blocked by an unsupported premise |
+| `discord` | support and refutation (or incompatible confidence) coexist |
+| `replication` | a policy requires an additional independent route |
+| `robustness` | active support rests on too few or too fragile environments |
+| `failure_memory` | a search region has tried routes with no accepted discharge |
+
+(The retired `translation` and `model_residual` classes remain in the taxonomy
+but are not minted by the current math-wedge frontiers.)
+
+A frontier map requires a **declared coverage model** (e.g. all `n` in a Sidon
+interval; all proof obligations of a Lean declaration; all tests in a frozen
+suite). Coverage models are versioned scientific commitments: the map must show
+the chosen boundary. No system can infer a complete set of unknown-unknowns from
+accepted state alone (T2); the frontier expands only by admitting adapters/
+coverage schemas, mining contradictions, importing programs, or accepting
+expert-declared dimensions — none of which prove completeness.
+
+**Migration.** Obligations are `latent` (prerequisites inactive) → `open`
+(prerequisites active, target unsupported) → `discharged` (target supported).
+Under a fixed view and positive append a discharged monotone-support obligation
+cannot reopen (T6); an append may instead expose a successor (T7); a restriction
+can reverse the movement without erasing historical lineage.
+
+## 5. DomainAdapter standard
+
+A DomainAdapter connects a domain to the kernel and frontier map while preserving
+local semantics. A *profile* is declarative policy; an *adapter* is its executable
+realization. Required interface (human acceptance is **not** an adapter method):
+
+```text
+compile(activity, profile)              -> proposal packets
+verify(candidate, verifier_profile)     -> receipt packets
+obligations(state, view, coverage_model)-> obligation packets
+transfer(source_state, target_context, lane) -> transfer or candidate packets
+observe(state, view, evaluator)         -> observation packets
+```
+
+The content-addressed manifest names the adapter id + schema version, profile +
+evidence class, context dimensions, compiler id, verifier profiles + receipt
+kinds, obligation/candidate generators, allowed transfer lanes, observation
+evaluators, and capabilities. **Every candidate generator declares
+`state_effect=none`.** Conformant adapters preserve: identity (content-addressed
+artifacts/receipts/contexts), receipt-to-claim binding, explicit context
+movement, finite strict rank, positive core lineage, an evidence ceiling at the
+profile, human-accepted extensions, root-bound replayable outputs, and gap
+provenance.
+
+Evidence classes: `exact`, `replay`, `trace`, `estimate`, `attestation` (a domain
+may refine within a class; cross-class bridges create candidates until the target
+class supplies a receipt). Lifecycle: `draft → conformance → admitted → versioned
+→ deprecated`; an incompatible update gets a new id and old packets stay
+replayable. The reference package ships eight example adapters (formal math, exact
+combinatorics, software validation, numerical simulation, model evaluation,
+experimental trace, observational estimate, human attestation) to demonstrate
+extensibility — not to claim those production systems are integrated.
+
+## 6. Model and operator adapters
+
+Learned systems extend the *search* frontier; they never define accepted state.
+Every model adapter emits a `CandidatePacket` (model class/id, weights/code/
+training-data roots, base observation + frontier-map roots, source/target cells,
+proposed artifact, assumptions + domain of validity, calibration/OOD receipts,
+known failure modes, required target receipts, `state_effect=none`).
+
+This covers neural operators (PDE surrogates — record function spaces, parameter
+measure, discretizations, held-out error, stability diagnostics, OOD support),
+natural-law models, symbolic regression / SINDy (gap generators: residual →
+candidate term → law obligation → held-out test), graph models over the frontier
+graph (candidate relations/bridges/duplicates), language models (extraction,
+hypothesis, proof search, review — never a verifier or acceptance authority), and
+generative design (each validation rung is a distinct cell + evidence class). In
+all cases Vela records model lineage and target outcome; the model does not
+certify its own output. The record also supports three training exports
+(accepted-state, correction, search) without making predictions authoritative.
+
+## 7. Transfer calculus
+
+Scientific transfer is not one operation; the fabric uses three lanes:
+
+- **Lane 1 — certified.** Carries a verifier-preservation proof / exact checker:
+  `verified_A(o) -> verified_B(T(o))` (e.g. translating a Sidon set by a vector,
+  transporting a Lean theorem through a proved equivalence). After human
+  acceptance the target route may inherit source verification; the transfer +
+  certificate atoms stay in lineage so restriction propagates. Certified
+  transfers compose in the verifier-preserving category (T4).
+- **Lane 2 — target-checked.** Source knowledge proposes a target artifact but
+  source verification does not imply target verification (a neural operator in a
+  new regime; a model-generated material checked by DFT/experiment). The target
+  adapter names required receipts; the target cell gets its evidence class only
+  after those pass and a human accepts.
+- **Lane 3 — exploratory.** Hypotheses, analogies, candidate bridges, search
+  heuristics — `state_effect=none`. The default lane for LM analogies and graph
+  embeddings until a target check occurs.
+
+Target-checked and exploratory transfers compose only as candidate paths; a chain
+cannot skip an intermediate check by citing a strong source. `transfer_leverage =
+expected downstream obligations discharged / target verification cost` is a
+*decision* metric computed from a root-bound frontier map, never a trust
+coordinate. A representation can look invariant while the task-relevant
+conditional relation shifts, so the protocol never reads "transferable embedding"
+as "preserved scientific truth" (Law 3, Law 4).
+
+# Appendix D — Object model
+
+*Folded from the former OBJECT_MODEL.md: the node / edge / finding / frontier / anchor
+vocabulary and the authoritative-vs-derived split.*
+
+
+*What the words mean. A node, an edge, a finding, a frontier, an anchor, a
+transfer, the atlas. Written once because the question keeps coming back: what is
+a finding versus a node versus all the other stuff.*
+
+## The one line
+
+A node is a dot someone else drew. A finding is a result Vela personally checked.
+
+Everything below is that distinction, made precise.
+
+## The six words
+
+**node** — a pin on the map. A known object, ingested from a source: an OEIS
+sequence, a Mathlib declaration, an Erdős problem. Cheap to make, so there are
+many (about 809k). A node is a *claim of existence*, nothing more. When a node is
+labeled "verified" it usually means the source it came from was already checked
+(Mathlib's kernel proved that declaration), not that Vela did anything. Ingesting
+a node copies a fact. It does not vouch for it.
+
+**edge** — a wire between two pins. `A depends on B`, `A implies B`, `A reduces to
+B`. This is the connective tissue: the Mathlib declaration-dependency graph, the
+module import graph, the cross-source identity joins, the cross-problem
+reductions. Edges are what make "mapping the frontier" real rather than a field of
+unconnected dots. An edge between two Lean declarations is admissible only if the
+proof actually invokes the premise (kernel-checkable, never asserted).
+
+**finding** (`vf_`) — a result Vela itself ran through a frozen verifier and a
+human key-custody accept, with full provenance and a deterministic replay. This is
+the trusted layer, and it is deliberately small (about 2,541) because each one
+costs a verification anyone can re-run. A finding is not a node that got promoted.
+It is a different kind of object: a node is "this exists in a corpus"; a finding
+is "Vela re-checked this and will stand behind it."
+
+**frontier** (`vfr_`) — a governed domain. A question (Sidon sets, the Erdős
+corpus, the formal-conjectures Lean repo) together with its findings, its open
+obligations, and its append-only signed event log. The frontier is the unit of
+governance: state changes only through accepted events on its log.
+
+**anchor** (`val_`) — a signed cross-namespace identity link. The join key. When
+an OEIS sequence and an Erdős problem are the same mathematical object, an anchor
+says so, and the atlas merges them into one cell. Two grades: `HardIdentity` (the
+same object, merge them) and `SearchOnly` (a candidate, surface it, never
+auto-merge). The hard grade is reserved for the unambiguous cases.
+
+**transfer** (`vtr_`) — a verifier-homomorphism. A result proved in one domain
+discharging a premise of an open problem in another, checked by a kernel theorem,
+not asserted. Six exist; lighting them up is the moat work.
+
+## The derived layer
+
+**atlas** — the projection over all of it. `atlas::project` runs union-find over
+the anchors plus context and produces the cells, the cross-source joins, the
+field rollups, the blast-radius cascades. The atlas is **derived**: it is
+regenerated from the authoritative log, never edited by hand, never the source of
+truth. If the atlas and the event log disagree, the log wins and the atlas is
+rebuilt.
+
+## Authoritative versus derived
+
+The single most important split. Two of these you can never lose without losing
+truth; the rest you can throw away and rebuild from them.
+
+| layer | objects | status |
+|---|---|---|
+| **authoritative** | the event log, finding bundles (`vf_`), signed anchors (`val_`), signed transfers (`vtr_`) | the source of truth; signed; append-only; replayable byte-for-byte |
+| **derived** | atlas cells, edges, blast-radius, Belnap status, the κ provenance weight | regenerable projections; a pure function of the authoritative layer |
+
+A node is mostly the cheap end of this table: an ingested pin whose trust, if any,
+is borrowed from its source. A finding is the expensive end: a result that carries
+its own verification.
+
+## Why the map looked small
+
+The honest diagnosis (2026-06-22): about 809k nodes but, for a long time, only
+about 1,624 edges and about 2,541 findings. The map was almost all pins and almost
+no wires, and the one question a producer actually asks ("what is the most
+attackable open target?") had no command. The fix was never "ingest more nodes."
+Nodes are cheap and already plentiful. The work is edges (the connective graph),
+queryability (`vela attack`, `vela explore`), and wiring what is already ingested
+into the view. The trusted finding layer stays small on purpose: it is the part
+Vela personally checked.
+
+## One-primitive discipline
+
+Findings, links, and anchors only. Do not invent a new object type per source (the
+founder-abstraction-trap). A new science is a new frontier with the same three
+states (known / attackable / dark) and the same join kinds, not a new schema. The
+atlas stays a pure derived projection. No fabricated edges.
+
+## See also
+
+- [PROTOCOL.md](PROTOCOL.md) — the normative wire spec: events, bundles, ids.
+- [THEORY.md](THEORY.md) — the formal core and the frontier calculus.
+- [CANON.md](../../../docs/CANON.md) — the front door and the canonical set.
