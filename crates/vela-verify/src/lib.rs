@@ -250,6 +250,19 @@ pub enum Witness {
         p: u64,
         orderings: Vec<Vec<u64>>,
     },
+    /// An Erdős #364 certificate: there are no three CONSECUTIVE powerful
+    /// integers `n, n+1, n+2` in `[1, n_max]` (a number is powerful iff every
+    /// prime in its factorisation appears to exponent `>= 2`). The verifier
+    /// re-scans `[2, n_max]` from scratch via a smallest-prime-factor sieve and
+    /// confirms no such triple exists. A finite confirmation (the question over
+    /// all integers is the open problem). `pairs_seen` is an optional sanity
+    /// echo of how many consecutive powerful PAIRS were found (e.g. (8,9)); it
+    /// does not gate the verdict.
+    PowerfulTriplesNone {
+        n_max: u64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pairs_claimed: Option<u64>,
+    },
 }
 
 /// One addition step of an LRAT proof: clause `id` is the listed
@@ -344,6 +357,7 @@ impl Witness {
             Witness::DiffTriangle { .. } => "diff_triangle",
             Witness::UnitFractionDecomp { .. } => "unit_fraction_decomp",
             Witness::DistinctPartialSums { .. } => "distinct_partial_sums",
+            Witness::PowerfulTriplesNone { .. } => "powerful_triples_none",
         }
     }
 }
@@ -520,7 +534,86 @@ pub fn verify_witness(witness: &Witness) -> VerifyResult {
         Witness::DistinctPartialSums { p, orderings } => {
             verify_distinct_partial_sums(*p, orderings)
         }
+        Witness::PowerfulTriplesNone {
+            n_max,
+            pairs_claimed,
+        } => verify_powerful_triples_none(*n_max, *pairs_claimed),
     }
+}
+
+/// Erdős #364: verify there are NO three consecutive powerful integers in
+/// `[1, n_max]`. A smallest-prime-factor sieve over `[2, n_max]` makes the
+/// powerful test O(log n); the scan is fail-closed (any triple aborts). Finite
+/// confirmation (the question over all integers is open). `pairs_claimed`, if
+/// present, must equal the count of consecutive powerful pairs found.
+pub fn verify_powerful_triples_none(n_max: u64, pairs_claimed: Option<u64>) -> VerifyResult {
+    if n_max < 3 {
+        return VerifyResult::fail("n_max must be >= 3");
+    }
+    if n_max > 200_000_000 {
+        // Bound the sieve memory/time so the gate stays fast and safe.
+        return VerifyResult::fail("n_max too large for the in-gate sieve (cap 2e8)");
+    }
+    let n = n_max as usize;
+    // Smallest-prime-factor sieve.
+    let mut spf = vec![0u32; n + 1];
+    for i in 2..=n {
+        if spf[i] == 0 {
+            let mut j = i;
+            while j <= n {
+                if spf[j] == 0 {
+                    spf[j] = i as u32;
+                }
+                j += i;
+            }
+        }
+    }
+    // m is powerful iff every prime in its factorisation has exponent >= 2.
+    let is_powerful = |mut m: usize| -> bool {
+        if m == 1 {
+            return true;
+        }
+        while m > 1 {
+            let p = spf[m] as usize;
+            let mut e = 0;
+            while m % p == 0 {
+                m /= p;
+                e += 1;
+            }
+            if e < 2 {
+                return false;
+            }
+        }
+        true
+    };
+    let mut pairs = 0u64;
+    let mut prev = is_powerful(1);
+    let mut prev2 = false;
+    for m in 2..=n {
+        let cur = is_powerful(m);
+        if cur && prev {
+            pairs += 1;
+        }
+        if cur && prev && prev2 {
+            return VerifyResult::fail(format!(
+                "found three consecutive powerful integers ending at {m} (#364 would be FALSIFIED)"
+            ));
+        }
+        prev2 = prev;
+        prev = cur;
+    }
+    if let Some(claimed) = pairs_claimed
+        && claimed != pairs
+    {
+        return VerifyResult::fail(format!(
+            "pairs_claimed {claimed} != {pairs} consecutive powerful pairs actually found"
+        ));
+    }
+    VerifyResult::ok(format!(
+        "Erdős #364 verified for [1, {n_max}]: no three consecutive powerful integers \
+         ({pairs} consecutive powerful pairs exist, e.g. 8,9). Finite confirmation; the \
+         question over all integers is the open problem."
+    ))
 }
 
 /// Erdős #475 (Graham distinct-partial-sums): for a fixed prime `p`, verify that
@@ -3369,5 +3462,19 @@ mod rat_tests {
         assert!(!verify_distinct_partial_sums(3, &[vec![1u64], vec![2], vec![1, 5]]).ok);
         // Non-prime p fails.
         assert!(!verify_distinct_partial_sums(4, &[vec![1u64]]).ok);
+    }
+
+    #[test]
+    fn powerful_triples_none_confirms_no_triple_and_counts_pairs() {
+        // No three consecutive powerful integers up to 1000 (true).
+        let r = verify_powerful_triples_none(1000, None);
+        assert!(r.ok, "{}", r.message);
+        // (8,9) is a consecutive powerful pair, so at least one exists.
+        assert!(r.message.contains("pairs exist"));
+        // A wrong pairs_claimed is rejected.
+        assert!(!verify_powerful_triples_none(1000, Some(0)).ok);
+        // 8 = 2^3 powerful, 9 = 3^2 powerful, 7 = prime not powerful: the pair
+        // (8,9) is found but never a triple.
+        assert!(verify_powerful_triples_none(10, None).ok);
     }
 }
