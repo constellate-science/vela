@@ -501,8 +501,9 @@ pub(crate) fn cmd_task(action: TaskAction) {
             decl_graph,
             json,
         } => {
-            let project = repo::load_from_path(&frontier)
-                .unwrap_or_else(|e| fail_return(&format!("task packet: load {}: {e}", frontier.display())));
+            let project = repo::load_from_path(&frontier).unwrap_or_else(|e| {
+                fail_return(&format!("task packet: load {}: {e}", frontier.display()))
+            });
             // The premise slice reads the built decl-graph: the flag, else the
             // default working-data path if present (absent is fine — empty slice).
             let dg = decl_graph.or_else(crate::serve::default_decl_graph_path);
@@ -516,7 +517,10 @@ pub(crate) fn cmd_task(action: TaskAction) {
             if json {
                 println!("{}", serde_json::to_string(&packet).unwrap_or_default());
             } else {
-                println!("{}", serde_json::to_string_pretty(&packet).unwrap_or_default());
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&packet).unwrap_or_default()
+                );
             }
         }
         TaskAction::Claim {

@@ -286,6 +286,22 @@ pub(crate) fn run_attack(frontier: &Path, top: usize, json: bool) {
             it.reason.clone(),
         ));
     }
+    // A problem whose declared math-status is solved/proved/disproved is RESOLVED,
+    // not an attackable open target — drop it from the queue even if its finding
+    // lifecycle state still reads active (the deep Erdős ingest carries the real
+    // status in the assertion text; see `read_erdos_deep`).
+    let resolved: std::collections::HashSet<String> = project
+        .findings
+        .iter()
+        .filter(|f| {
+            matches!(
+                declared_status(&f.assertion.text),
+                Some("solved") | Some("proved") | Some("disproved")
+            )
+        })
+        .map(|f| f.id.clone())
+        .collect();
+    rows.retain(|(_, fid, _, _)| !resolved.contains(fid));
     let total = rows.len();
     let shown: Vec<_> = rows.into_iter().take(top).collect();
     if json {

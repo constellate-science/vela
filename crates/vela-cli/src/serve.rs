@@ -2712,7 +2712,12 @@ fn tool_task_packet(
         .as_str()
         .or_else(|| args["id"].as_str())
         .ok_or("Missing 'problem' argument")?;
-    let v = build_task_packet(arg, frontier, source_path, default_decl_graph_path().as_deref())?;
+    let v = build_task_packet(
+        arg,
+        frontier,
+        source_path,
+        default_decl_graph_path().as_deref(),
+    )?;
     serde_json::to_string_pretty(&v).map_err(|e| e.to_string())
 }
 

@@ -463,9 +463,7 @@ pub fn read_identity_seed(input: &Path, _rev: &str) -> Result<Vec<SourceRecord>,
             .join(" = ");
         out.push(SourceRecord {
             external_id: slug.to_string(),
-            assertion_text: format!(
-                "Identity: {label} is one object across namespaces ({named})."
-            ),
+            assertion_text: format!("Identity: {label} is one object across namespaces ({named})."),
             assertion_type: "cross-source-identity".into(),
             implies: vec![],
             extra_anchors: anchors,
@@ -482,6 +480,129 @@ pub fn read_identity_seed(input: &Path, _rev: &str) -> Result<Vec<SourceRecord>,
 }
 
 /// Dispatch an adapter by name.
+/// Deep Erdős adapter: read the staged `erdos-deep.v1.json` (the offline,
+/// deterministic join of erdosproblems `problems.yaml` — status / oeis / prize /
+/// tags — with gpt-erdos `unsolved.jsonl` — statement + comments + current-best
+/// bound; produced by `scripts/atlas/stage_erdos_deep.py`). One record per problem
+/// carrying the FULL statement, declared status + formalization flag, the
+/// current-best bound/record prose (the attackable "value to beat" the foundry /
+/// `vela attack` / boundary queue read), prize, and tags in the assertion text. The
+/// REAL OEIS references — only genuine `A\d{6}` ids, the staging step having dropped
+/// the raw field's junk `possible`/`N/A` tokens — become `extra_anchors`
+/// HardIdentity joins into the `oeis` namespace. This is the honest replacement for
+/// the prior erdos→oeis "bridges" that were text mentions, never real anchors.
+/// Deterministic (sorted by problem number); offline (reads one local staged file).
+pub fn read_erdos_deep(input: &Path, _rev: &str) -> Result<Vec<SourceRecord>, String> {
+    let raw =
+        std::fs::read_to_string(input).map_err(|e| format!("read {}: {e}", input.display()))?;
+    let doc: serde_json::Value =
+        serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", input.display()))?;
+    let problems = doc
+        .get("problems")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| format!("{}: missing `problems` array", input.display()))?;
+    let str_field = |p: &serde_json::Value, k: &str| -> String {
+        p.get(k)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string()
+    };
+    let str_list = |p: &serde_json::Value, k: &str| -> Vec<String> {
+        p.get(k)
+            .and_then(|v| v.as_array())
+            .map(|a| {
+                a.iter()
+                    .filter_map(|t| t.as_str())
+                    .map(|s| s.to_string())
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let mut out: Vec<SourceRecord> = Vec::new();
+    for p in problems {
+        let num = str_field(p, "number");
+        if num.is_empty() {
+            continue;
+        }
+        let statement = str_field(p, "statement");
+        let status = {
+            let s = str_field(p, "status");
+            if s.is_empty() {
+                "unknown".to_string()
+            } else {
+                s
+            }
+        };
+        let formalized = {
+            let s = str_field(p, "formalized");
+            if s.is_empty() { "no".to_string() } else { s }
+        };
+        let prize = str_field(p, "prize");
+        let current_best = str_field(p, "current_best");
+        let tags = str_list(p, "tags");
+        let oeis = str_list(p, "oeis");
+
+        // Emit the canonical `declared status 'X'` form (normalized to
+        // open|solved|proved|disproved) so the boundary/attack consumer
+        // (`cli_atlas::declared_status`) parses it; pass unknown states through
+        // without the magic phrase (they read as undeclared, which is honest).
+        // First token folds the "(Lean)" variants (e.g. "proved (Lean)" -> "proved").
+        let status_norm = match status.split_whitespace().next().unwrap_or("") {
+            "open" => Some("open"),
+            "solved" => Some("solved"),
+            "proved" => Some("proved"),
+            "disproved" => Some("disproved"),
+            _ => None,
+        };
+        let mut text = match status_norm {
+            Some(s) => {
+                format!("Erdős Problem #{num}: declared status '{s}'. Formalized: {formalized}.")
+            }
+            None => format!("Erdős Problem #{num} [status: {status}; formalized: {formalized}]."),
+        };
+        if !statement.is_empty() {
+            text.push(' ');
+            text.push_str(&statement);
+        }
+        if !current_best.is_empty() {
+            text.push_str(&format!(" Current best: {current_best}"));
+        }
+        if !prize.is_empty() {
+            text.push_str(&format!(" Prize: {prize}."));
+        }
+        if !oeis.is_empty() {
+            text.push_str(&format!(" OEIS: {}.", oeis.join(", ")));
+        }
+        if !tags.is_empty() {
+            text.push_str(&format!(" Tags: {}.", tags.join(", ")));
+        }
+
+        // Only the real A-numbers become HardIdentity anchors into `oeis`.
+        let extra_anchors: Vec<(String, String)> = oeis
+            .iter()
+            .map(|a| ("oeis".to_string(), a.clone()))
+            .collect();
+        out.push(SourceRecord {
+            external_id: num,
+            assertion_text: text,
+            assertion_type: "erdos-problem".into(),
+            implies: Vec::new(),
+            extra_anchors,
+        });
+    }
+    // Numeric-by-problem-number determinism.
+    out.sort_by(|a, b| {
+        let pa = a.external_id.parse::<u64>().unwrap_or(u64::MAX);
+        let pb = b.external_id.parse::<u64>().unwrap_or(u64::MAX);
+        pa.cmp(&pb).then_with(|| a.external_id.cmp(&b.external_id))
+    });
+    if out.is_empty() {
+        return Err(format!("{}: no usable problems", input.display()));
+    }
+    Ok(out)
+}
+
 pub fn read_adapter(adapter: &str, input: &Path, rev: &str) -> Result<Vec<SourceRecord>, String> {
     match adapter {
         "formal" => read_formal(input, rev),
@@ -490,8 +611,9 @@ pub fn read_adapter(adapter: &str, input: &Path, rev: &str) -> Result<Vec<Source
         "oeis" => read_oeis(input, rev),
         "horizonmath" => read_horizonmath(input, rev),
         "identity_seed" => read_identity_seed(input, rev),
+        "erdos_deep" => read_erdos_deep(input, rev),
         other => Err(format!(
-            "unknown adapter '{other}' (supported: formal | formal_corpus | alphaproof | oeis | horizonmath | identity_seed; tao stays scripts/atlas/ingest_tao.py)"
+            "unknown adapter '{other}' (supported: formal | formal_corpus | alphaproof | oeis | horizonmath | identity_seed | erdos_deep; tao stays scripts/atlas/ingest_tao.py)"
         )),
     }
 }
@@ -687,6 +809,42 @@ mod tests {
         );
         // A bridge finding built from it is content-addressed like any other record.
         assert!(build_finding(&recs[1], "identity").id.starts_with("vf_"));
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn read_erdos_deep_carries_status_bound_and_real_oeis_anchors() {
+        let dir = std::env::temp_dir().join(format!("vela_erdos_deep_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let f = dir.join("erdos-deep.v1.json");
+        std::fs::write(
+            &f,
+            r#"{"source":"erdos-deep","schema":"v1","problems":[
+              {"number":"40","statement":"S(40).","status":"open","formalized":"yes",
+               "prize":"$100","tags":["b","a"],"oeis":["A000045"],"current_best":"best known >= 7"},
+              {"number":"2","statement":"S(2).","status":"solved","formalized":"no",
+               "prize":"","tags":[],"oeis":[],"current_best":""}
+            ]}"#,
+        )
+        .unwrap();
+        let recs = read_erdos_deep(&f, "test").unwrap();
+        assert_eq!(recs.len(), 2);
+        // Sorted by numeric problem id.
+        assert_eq!(recs[0].external_id, "2");
+        assert_eq!(recs[1].external_id, "40");
+        assert_eq!(recs[1].assertion_type, "erdos-problem");
+        // The rich assertion carries status, statement, current-best bound, prize, oeis.
+        let t = &recs[1].assertion_text;
+        assert!(t.contains("declared status 'open'"));
+        assert!(t.contains("Current best: best known >= 7"));
+        assert!(t.contains("Prize: $100"));
+        // The real A-number becomes a HardIdentity anchor into `oeis`.
+        assert_eq!(
+            recs[1].extra_anchors,
+            vec![("oeis".to_string(), "A000045".to_string())]
+        );
+        // A problem with no real oeis carries no anchor (no fake bridge).
+        assert!(recs[0].extra_anchors.is_empty());
         std::fs::remove_dir_all(&dir).ok();
     }
 }
