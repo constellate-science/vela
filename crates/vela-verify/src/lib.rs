@@ -246,10 +246,7 @@ pub enum Witness {
     /// subsets appear exactly once). Certifies #475 for this `p` — a finite
     /// confirmation (the question over all primes is the open problem). Pure
     /// integer arithmetic.
-    DistinctPartialSums {
-        p: u64,
-        orderings: Vec<Vec<u64>>,
-    },
+    DistinctPartialSums { p: u64, orderings: Vec<Vec<u64>> },
     /// An Erdős #364 certificate: there are no three CONSECUTIVE powerful
     /// integers `n, n+1, n+2` in `[1, n_max]` (a number is powerful iff every
     /// prime in its factorisation appears to exponent `>= 2`). The verifier
@@ -270,10 +267,27 @@ pub enum Witness {
     /// empty `examples` is a finite confirmation that no such `n` exists in the
     /// range (the question over all integers is open); a nonempty `examples`
     /// exhibits genuine witnesses.
-    TwoFullThreeFull {
+    TwoFullThreeFull { n_max: u64, examples: Vec<u64> },
+    /// An Erdős #398 (Brocard / Brocard–Ramanujan) finite-confirmation
+    /// certificate: over `[n_min, n_max]`, `n! + 1` is a perfect square for
+    /// exactly the known `n ∈ {4,5,7}` and for no other `n`. Each non-exception
+    /// `n` carries a witnessing prime `p > n` such that `n! + 1` is a quadratic
+    /// non-residue mod `p` (recomputed from scratch with pure modular integer
+    /// arithmetic — no bignum, `n!` is never materialised). A finite confirmation
+    /// (the conjecture over all `n` is the open problem).
+    BrocardNoSquare {
+        n_min: u64,
         n_max: u64,
-        examples: Vec<u64>,
+        cases: Vec<BrocardCase>,
     },
+    /// An Erdős #306 certificate: each listed reduced `a/b` (with `b`
+    /// squarefree) is exhibited as an Egyptian expansion whose denominators are
+    /// all products of two distinct primes (squarefree semiprimes), strictly
+    /// increasing. The verifier re-checks every expansion with exact integer
+    /// arithmetic and confirms the cases are distinct rationals. A per-instance
+    /// finite confirmation (the question over all positive rationals is open);
+    /// it EXHIBITS genuine decompositions rather than claiming completeness.
+    SemiprimeEgyptian { cases: Vec<SemiprimeEgyptianCase> },
 }
 
 /// One addition step of an LRAT proof: clause `id` is the listed
@@ -330,6 +344,31 @@ pub struct UnitFractionCase {
     pub z: u64,
 }
 
+/// One `(n, p)` case of an Erdős #398 (Brocard) finite-confirmation certificate.
+/// For `n ∉ {4,5,7}`, `p` is a prime `> n` that WITNESSES that `n! + 1` is not a
+/// perfect square: the verifier recomputes `r = (n! + 1) mod p` and confirms `r`
+/// is a quadratic NON-residue mod `p` (Euler's criterion), which forces `n! + 1`
+/// to be a non-square (a perfect square is a residue, or `0`, mod every prime).
+/// For the three known solutions `n ∈ {4,5,7}`, `p` is ignored and the verifier
+/// confirms `n! + 1` IS the recorded perfect square (`25, 121, 5041`).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct BrocardCase {
+    pub n: u64,
+    #[serde(default)]
+    pub p: u64,
+}
+
+/// One `(a, b, denominators)` case of an Erdős #306 certificate: an Egyptian
+/// expansion `a/b = 1/n_1 + ... + 1/n_k` in which every `n_i` is a product of two
+/// DISTINCT primes (a squarefree semiprime), with `b` squarefree and the `n_i`
+/// strictly increasing. Verified with exact integer arithmetic.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SemiprimeEgyptianCase {
+    pub a: u64,
+    pub b: u64,
+    pub denominators: Vec<u64>,
+}
+
 /// One `(k, N, delta, slots)` entry of an Erdős #1093 deficiency
 /// certificate. `n` is a decimal string (up to 38 digits / u128);
 /// `slots` is optional — when absent only the count is checked.
@@ -370,6 +409,8 @@ impl Witness {
             Witness::DistinctPartialSums { .. } => "distinct_partial_sums",
             Witness::PowerfulTriplesNone { .. } => "powerful_triples_none",
             Witness::TwoFullThreeFull { .. } => "two_full_three_full",
+            Witness::BrocardNoSquare { .. } => "brocard_no_square",
+            Witness::SemiprimeEgyptian { .. } => "semiprime_egyptian",
         }
     }
 }
@@ -540,9 +581,7 @@ pub fn verify_witness(witness: &Witness) -> VerifyResult {
             rows,
             claimed_scope,
         } => verify_diff_triangle(rows, *claimed_scope),
-        Witness::UnitFractionDecomp { n_max, cases } => {
-            verify_unit_fraction_decomp(*n_max, cases)
-        }
+        Witness::UnitFractionDecomp { n_max, cases } => verify_unit_fraction_decomp(*n_max, cases),
         Witness::DistinctPartialSums { p, orderings } => {
             verify_distinct_partial_sums(*p, orderings)
         }
@@ -553,6 +592,12 @@ pub fn verify_witness(witness: &Witness) -> VerifyResult {
         Witness::TwoFullThreeFull { n_max, examples } => {
             verify_two_full_three_full(*n_max, examples)
         }
+        Witness::BrocardNoSquare {
+            n_min,
+            n_max,
+            cases,
+        } => verify_brocard_no_square(*n_min, *n_max, cases),
+        Witness::SemiprimeEgyptian { cases } => verify_semiprime_egyptian(cases),
     }
 }
 
@@ -824,6 +869,287 @@ pub fn verify_unit_fraction_decomp(n_max: u64, cases: &[UnitFractionCase]) -> Ve
         "Erdős–Straus (#242, distinct variant) verified for all 3 <= n <= {n_max}: \
          {expected} exact decompositions 4/n = 1/x+1/y+1/z with x < y < z. \
          Finite confirmation; the uniform proof over all n is the open problem."
+    ))
+}
+
+/// Erdős #398 (Brocard's problem, `n! + 1 = m^2`): over `[n_min, n_max]`, confirm
+/// `n! + 1` is a perfect square for exactly the known `n ∈ {4,5,7}` and for no
+/// other `n`. Each non-exception `n` carries a witnessing prime `p > n` and the
+/// verifier recomputes `r = (n! + 1) mod p` (iterated modular product — `n!` is
+/// never materialised, so no bignum) and confirms via Euler's criterion that `r`
+/// is a quadratic NON-residue mod `p`, which forces `n! + 1` to be a non-square.
+/// Fail-closed: a non-prime / too-small `p`, a residue `r`, `r = 0`, a wrong
+/// known-solution, or incomplete coverage of `[n_min, n_max]` aborts. A finite
+/// confirmation (the conjecture over all `n` is the open problem).
+pub fn verify_brocard_no_square(n_min: u64, n_max: u64, cases: &[BrocardCase]) -> VerifyResult {
+    if n_min < 1 || n_max < n_min {
+        return VerifyResult::fail("require 1 <= n_min <= n_max");
+    }
+    if n_max > 5_000_000 {
+        return VerifyResult::fail("n_max too large for the in-gate certificate (cap 5e6)");
+    }
+    let is_prime = |n: u64| -> bool {
+        if n < 2 {
+            return false;
+        }
+        if n % 2 == 0 {
+            return n == 2;
+        }
+        let mut d = 3u64;
+        while d * d <= n {
+            if n % d == 0 {
+                return false;
+            }
+            d += 2;
+        }
+        true
+    };
+    // Modular exponentiation in u128 (base, exp already reduced sensibly).
+    let mod_pow = |mut base: u128, mut exp: u128, modulus: u128| -> u128 {
+        if modulus == 1 {
+            return 0;
+        }
+        let mut result = 1u128;
+        base %= modulus;
+        while exp > 0 {
+            if exp & 1 == 1 {
+                result = result * base % modulus;
+            }
+            exp >>= 1;
+            base = base * base % modulus;
+        }
+        result
+    };
+    // The three known Brocard solutions: 4!+1=25, 5!+1=121, 7!+1=5041.
+    let known: [u64; 3] = [4, 5, 7];
+    let mut seen: HashSet<u64> = HashSet::new();
+    for c in cases {
+        if c.n < n_min || c.n > n_max {
+            return VerifyResult::fail(format!("case n={} outside [{n_min}, {n_max}]", c.n));
+        }
+        if !seen.insert(c.n) {
+            return VerifyResult::fail(format!("duplicate case for n={}", c.n));
+        }
+        if known.contains(&c.n) {
+            // Confirm n!+1 IS a perfect square (n <= 7, so n! fits easily).
+            let mut fact: u128 = 1;
+            for k in 1..=c.n as u128 {
+                fact *= k;
+            }
+            let val = fact + 1;
+            let root = (val as f64).sqrt() as u128;
+            let mut is_sq = false;
+            for m in root.saturating_sub(2)..=root + 2 {
+                if m * m == val {
+                    is_sq = true;
+                    break;
+                }
+            }
+            if !is_sq {
+                return VerifyResult::fail(format!(
+                    "n={}: {}!+1 = {val} is not a perfect square (expected a known solution)",
+                    c.n, c.n
+                ));
+            }
+        } else {
+            // Non-exception: a witnessing prime p > n with n!+1 a non-residue mod p.
+            let p = c.p;
+            if p <= c.n {
+                return VerifyResult::fail(format!(
+                    "n={}: witnessing prime p={p} must exceed n",
+                    c.n
+                ));
+            }
+            if !is_prime(p) {
+                return VerifyResult::fail(format!("n={}: p={p} is not prime", c.n));
+            }
+            let pm = p as u128;
+            let mut fact = 1u128;
+            for k in 1..=c.n {
+                fact = fact * (k as u128) % pm;
+            }
+            let r = (fact + 1) % pm;
+            if r == 0 {
+                return VerifyResult::fail(format!(
+                    "n={}: n!+1 ≡ 0 (mod {p}); that does not prove a non-square",
+                    c.n
+                ));
+            }
+            // Euler's criterion: r is a non-residue iff r^((p-1)/2) ≡ -1 (mod p).
+            let legendre = mod_pow(r, (pm - 1) / 2, pm);
+            if legendre != pm - 1 {
+                return VerifyResult::fail(format!(
+                    "n={}: r={r} is a quadratic residue mod {p} \
+                     (r^((p-1)/2) mod p = {legendre}, need {}); n!+1 not shown non-square",
+                    c.n,
+                    pm - 1
+                ));
+            }
+        }
+    }
+    let expected = (n_max - n_min + 1) as usize;
+    if seen.len() != expected {
+        return VerifyResult::fail(format!(
+            "incomplete: covered {} of {expected} values in [{n_min}, {n_max}]",
+            seen.len()
+        ));
+    }
+    let exceptions: Vec<u64> = known
+        .iter()
+        .copied()
+        .filter(|&n| n >= n_min && n <= n_max)
+        .collect();
+    VerifyResult::ok(format!(
+        "Erdős #398 (Brocard) verified for all {n_min} <= n <= {n_max}: n!+1 is a perfect \
+         square exactly for n in {exceptions:?}, and a non-square (quadratic-non-residue \
+         certificate mod a witnessing prime) for every other n. Finite confirmation; the \
+         conjecture over all n is the open problem."
+    ))
+}
+
+/// Erdős #306: verify each listed reduced `a/b` (with `b` squarefree) is exhibited
+/// as an Egyptian expansion `a/b = sum 1/n_i` whose denominators `n_i` are all
+/// products of two DISTINCT primes (squarefree semiprimes), strictly increasing.
+/// Exact integer arithmetic (reduced-fraction accumulation, no floats). Fail-closed:
+/// a non-squarefree `b`, a denominator that is not a distinct-prime product, a
+/// non-increasing list, a mismatched sum, or a duplicated rational aborts. A
+/// per-instance finite confirmation (the question over all positive rationals is open).
+pub fn verify_semiprime_egyptian(cases: &[SemiprimeEgyptianCase]) -> VerifyResult {
+    if cases.is_empty() {
+        return VerifyResult::fail("no cases supplied");
+    }
+    let gcd = |mut a: u64, mut b: u64| -> u64 {
+        while b != 0 {
+            let t = a % b;
+            a = b;
+            b = t;
+        }
+        a
+    };
+    let gcd128 = |mut a: u128, mut b: u128| -> u128 {
+        while b != 0 {
+            let t = a % b;
+            a = b;
+            b = t;
+        }
+        a
+    };
+    // n is a squarefree semiprime iff it factors as p*q with p<q both prime
+    // (exactly two distinct prime factors, each to exponent 1).
+    let is_squarefree_semiprime = |n: u64| -> bool {
+        if n < 6 {
+            return false;
+        }
+        let mut m = n;
+        let mut factors = 0u32;
+        let mut d = 2u64;
+        while d * d <= m {
+            if m % d == 0 {
+                let mut e = 0u32;
+                while m % d == 0 {
+                    m /= d;
+                    e += 1;
+                }
+                if e != 1 {
+                    return false; // a repeated prime => not squarefree
+                }
+                factors += 1;
+            }
+            d += 1;
+        }
+        if m > 1 {
+            factors += 1;
+        }
+        factors == 2
+    };
+    let is_squarefree = |mut n: u64| -> bool {
+        let mut d = 2u64;
+        while d * d <= n {
+            if n % d == 0 {
+                n /= d;
+                if n % d == 0 {
+                    return false;
+                }
+            } else {
+                d += 1;
+            }
+        }
+        true
+    };
+    let mut seen: HashSet<(u64, u64)> = HashSet::new();
+    for c in cases {
+        if c.a == 0 || c.b == 0 {
+            return VerifyResult::fail("a and b must be positive");
+        }
+        let g = gcd(c.a, c.b);
+        let (ar, br) = (c.a / g, c.b / g);
+        if !is_squarefree(br) {
+            return VerifyResult::fail(format!(
+                "{}/{}: reduced denominator {br} is not squarefree",
+                c.a, c.b
+            ));
+        }
+        if !seen.insert((ar, br)) {
+            return VerifyResult::fail(format!("duplicate rational {ar}/{br}"));
+        }
+        let d = &c.denominators;
+        if d.is_empty() {
+            return VerifyResult::fail(format!("{ar}/{br}: empty denominator list"));
+        }
+        for w in d.windows(2) {
+            if w[0] >= w[1] {
+                return VerifyResult::fail(format!(
+                    "{ar}/{br}: denominators must be strictly increasing"
+                ));
+            }
+        }
+        for &ni in d {
+            if !is_squarefree_semiprime(ni) {
+                return VerifyResult::fail(format!(
+                    "{ar}/{br}: denominator {ni} is not a product of two distinct primes"
+                ));
+            }
+        }
+        // Exact sum 1/n_i via reduced-fraction accumulation (u128, gcd each step).
+        let mut sn: u128 = 0;
+        let mut sd: u128 = 1;
+        for &ni in d {
+            let ni = ni as u128;
+            let nn = sn.checked_mul(ni).and_then(|v| v.checked_add(sd));
+            let nd = sd.checked_mul(ni);
+            match (nn, nd) {
+                (Some(nn), Some(nd)) => {
+                    let g = gcd128(nn, nd).max(1);
+                    sn = nn / g;
+                    sd = nd / g;
+                }
+                _ => {
+                    return VerifyResult::fail(format!(
+                        "{ar}/{br}: denominator product overflow (expansion too long/large)"
+                    ));
+                }
+            }
+        }
+        // Compare sn/sd to ar/br exactly via cross-multiplication (checked).
+        let lhs = sn.checked_mul(br as u128);
+        let rhs = (ar as u128).checked_mul(sd);
+        match (lhs, rhs) {
+            (Some(l), Some(r)) if l == r => {}
+            (Some(_), Some(_)) => {
+                return VerifyResult::fail(format!(
+                    "{ar}/{br}: sum of 1/n_i = {sn}/{sd} != {ar}/{br}"
+                ));
+            }
+            _ => {
+                return VerifyResult::fail(format!("{ar}/{br}: overflow comparing the exact sum"));
+            }
+        }
+    }
+    VerifyResult::ok(format!(
+        "Erdős #306 verified: {} reduced a/b (b squarefree) each exhibited as an Egyptian \
+         expansion into distinct squarefree-semiprime unit fractions. Per-instance finite \
+         confirmation; the question over all positive rationals is the open problem.",
+        cases.len()
     ))
 }
 
@@ -3575,5 +3901,205 @@ mod rat_tests {
         // A missing example is rejected: if any exists in range, [] must fail.
         // (Construct via a tiny range where the set is known empty -> [] passes.)
         assert!(verify_two_full_three_full(10, &[]).ok);
+    }
+
+    // Smallest prime p > n for which (n!+1) is a non-residue mod p (mirrors the
+    // #398 generator); used to build a valid certificate inside the test.
+    fn brocard_witness(n: u64) -> u64 {
+        fn is_prime(n: u64) -> bool {
+            if n < 2 {
+                return false;
+            }
+            let mut d = 2;
+            while d * d <= n {
+                if n % d == 0 {
+                    return false;
+                }
+                d += 1;
+            }
+            true
+        }
+        fn modpow(mut b: u128, mut e: u128, m: u128) -> u128 {
+            let mut r = 1u128;
+            b %= m;
+            while e > 0 {
+                if e & 1 == 1 {
+                    r = r * b % m;
+                }
+                e >>= 1;
+                b = b * b % m;
+            }
+            r
+        }
+        let mut p = n + 1;
+        loop {
+            if is_prime(p) {
+                let pm = p as u128;
+                let mut f = 1u128;
+                for k in 1..=n {
+                    f = f * (k as u128) % pm;
+                }
+                let r = (f + 1) % pm;
+                if r != 0 && modpow(r, (pm - 1) / 2, pm) == pm - 1 {
+                    return p;
+                }
+            }
+            p += 1;
+        }
+    }
+
+    #[test]
+    fn brocard_no_square_certifies_a_range_and_rejects_tampering() {
+        // [8,40]: all non-exceptions, each with a generated witnessing prime.
+        let (n_min, n_max) = (8u64, 40u64);
+        let cases: Vec<BrocardCase> = (n_min..=n_max)
+            .map(|n| BrocardCase {
+                n,
+                p: brocard_witness(n),
+            })
+            .collect();
+        let w = Witness::BrocardNoSquare {
+            n_min,
+            n_max,
+            cases: cases.clone(),
+        };
+        let r = verify_witness(&w);
+        assert!(r.ok, "should certify [{n_min},{n_max}]: {}", r.message);
+
+        // The known-solution branch: [4,7] has squares at 4,5,7 and a non-square at 6.
+        let known = Witness::BrocardNoSquare {
+            n_min: 4,
+            n_max: 7,
+            cases: vec![
+                BrocardCase { n: 4, p: 0 },
+                BrocardCase { n: 5, p: 0 },
+                BrocardCase {
+                    n: 6,
+                    p: brocard_witness(6),
+                },
+                BrocardCase { n: 7, p: 0 },
+            ],
+        };
+        assert!(
+            verify_witness(&known).ok,
+            "4,5,7 are the known squares; 6 is not"
+        );
+
+        // Tamper 1: a composite "witnessing prime" must be rejected.
+        let mut bad = cases.clone();
+        bad[0].p = bad[0].n * (bad[0].n + 1); // composite, > n
+        assert!(
+            !verify_witness(&Witness::BrocardNoSquare {
+                n_min,
+                n_max,
+                cases: bad,
+            })
+            .ok,
+            "a non-prime witness must fail"
+        );
+        // Tamper 2: dropping a case breaks coverage.
+        let short: Vec<BrocardCase> = cases[1..].to_vec();
+        assert!(
+            !verify_witness(&Witness::BrocardNoSquare {
+                n_min,
+                n_max,
+                cases: short,
+            })
+            .ok,
+            "incomplete coverage must fail"
+        );
+        // Tamper 3: claiming a non-exception n is a known square fails (n=8 not in {4,5,7}).
+        assert!(
+            !verify_witness(&Witness::BrocardNoSquare {
+                n_min: 8,
+                n_max: 8,
+                cases: vec![BrocardCase { n: 8, p: 0 }],
+            })
+            .ok,
+            "n=8 with no witnessing prime must fail (8 is not a known square and p=0 invalid)"
+        );
+    }
+
+    #[test]
+    fn semiprime_egyptian_checks_decompositions_and_rejections() {
+        // Hand-verified distinct-semiprime Egyptian expansions:
+        //   1/6 = [6];  4/15 = 1/6+1/10;  7/30 = 1/6+1/15;  1/3 = 1/6+1/10+1/15.
+        let good = Witness::SemiprimeEgyptian {
+            cases: vec![
+                SemiprimeEgyptianCase {
+                    a: 1,
+                    b: 6,
+                    denominators: vec![6],
+                },
+                SemiprimeEgyptianCase {
+                    a: 4,
+                    b: 15,
+                    denominators: vec![6, 10],
+                },
+                SemiprimeEgyptianCase {
+                    a: 7,
+                    b: 30,
+                    denominators: vec![6, 15],
+                },
+                SemiprimeEgyptianCase {
+                    a: 1,
+                    b: 3,
+                    denominators: vec![6, 10, 15],
+                },
+            ],
+        };
+        let r = verify_witness(&good);
+        assert!(r.ok, "valid semiprime-Egyptian cases: {}", r.message);
+
+        // A non-semiprime denominator (12 = 2^2*3, not squarefree) is rejected.
+        assert!(
+            !verify_semiprime_egyptian(&[SemiprimeEgyptianCase {
+                a: 1,
+                b: 12,
+                denominators: vec![12],
+            }])
+            .ok,
+            "12 is not a squarefree semiprime"
+        );
+        // 30 = 2*3*5 has THREE prime factors -> rejected.
+        assert!(
+            !verify_semiprime_egyptian(&[SemiprimeEgyptianCase {
+                a: 1,
+                b: 30,
+                denominators: vec![30],
+            }])
+            .ok,
+            "30 has three prime factors"
+        );
+        // A sum that does not equal a/b is rejected (1/6 != 1/5).
+        assert!(
+            !verify_semiprime_egyptian(&[SemiprimeEgyptianCase {
+                a: 1,
+                b: 5,
+                denominators: vec![6],
+            }])
+            .ok,
+            "1/6 != 1/5"
+        );
+        // Non-increasing denominators are rejected.
+        assert!(
+            !verify_semiprime_egyptian(&[SemiprimeEgyptianCase {
+                a: 4,
+                b: 15,
+                denominators: vec![10, 6],
+            }])
+            .ok,
+            "denominators must be strictly increasing"
+        );
+        // A non-squarefree target denominator b is rejected (b=12).
+        assert!(
+            !verify_semiprime_egyptian(&[SemiprimeEgyptianCase {
+                a: 1,
+                b: 12,
+                denominators: vec![14, 21],
+            }])
+            .ok,
+            "b=12 is not squarefree"
+        );
     }
 }
