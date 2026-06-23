@@ -100,6 +100,13 @@ cargo build --release
 vela completions zsh > ~/.zfunc/_vela   # shell completions (bash/zsh/fish)
 ```
 
+Or install a prebuilt binary (macOS now; Linux x86_64 once the release CI
+publishes; falls back to building from source for other platforms):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/constellate-science/vela/main/install.sh | bash
+```
+
 ## The working loop
 
 ```sh

@@ -1,0 +1,81 @@
+name: release
+
+# Build the `vela` binary for the three platforms install.sh knows about
+# and attach each one (plus a .sha256 companion) to the GitHub release for
+# the pushed tag.
+#
+# Asset names MUST match install.sh's case arms exactly:
+#   darwin-arm64|darwin-aarch64 -> vela-macos-aarch64
+#   darwin-x86_64               -> vela-macos-x86_64
+#   linux-x86_64                -> vela-linux-x86_64
+#
+# install.sh downloads "<asset>.sha256" but saves the binary locally as
+# "vela" and runs `cd "$TMP"; shasum -a 256 -c vela.sha256`, so the checksum
+# file's content must reference the filename "vela" (a line of the form
+# "<hash>  vela"), NOT the asset name. We produce it by renaming the built
+# binary to "vela" and running `shasum -a 256 vela > vela-<target>.sha256`.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build ${{ matrix.asset }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - asset: vela-macos-aarch64
+            runner: macos-14
+            target: aarch64-apple-darwin
+          - asset: vela-macos-x86_64
+            runner: macos-13
+            target: x86_64-apple-darwin
+          - asset: vela-linux-x86_64
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build vela (release)
+        run: cargo build --release --bin vela --target ${{ matrix.target }}
+
+      - name: Stage asset + checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          # Rename the built binary to "vela" so the checksum line reads
+          # "<hash>  vela" — exactly what install.sh verifies in its tmp dir.
+          cp "target/${{ matrix.target }}/release/vela" "vela"
+          chmod +x "vela"
+          shasum -a 256 "vela" > "${{ matrix.asset }}.sha256"
+          mv "vela" "dist/${{ matrix.asset }}"
+          mv "${{ matrix.asset }}.sha256" "dist/${{ matrix.asset }}.sha256"
+          echo "--- ${{ matrix.asset }}.sha256 ---"
+          cat "dist/${{ matrix.asset }}.sha256"
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          files: |
+            dist/${{ matrix.asset }}
+            dist/${{ matrix.asset }}.sha256
