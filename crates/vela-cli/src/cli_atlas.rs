@@ -485,7 +485,8 @@ fn run_decl_blast(args: &[String]) {
             .and_then(|i| args.get(i + 1))
             .cloned()
     };
-    let edges_path = flag("--edges").unwrap_or_else(|| "data/mathlib/decl-edges.jsonl".to_string());
+    let edges_path =
+        flag("--edges").unwrap_or_else(|| "data/mathlib/decl-edges-wide.jsonl".to_string());
     let top: usize = flag("--top").and_then(|s| s.parse().ok()).unwrap_or(15);
     let json_out = args.iter().any(|a| a == "--json");
 
@@ -734,7 +735,7 @@ fn run_decl_build(args: &[String]) {
             .and_then(|i| args.get(i + 1))
             .cloned()
     };
-    let in_path = flag("--in").unwrap_or_else(|| "data/mathlib/decl-edges.jsonl".to_string());
+    let in_path = flag("--in").unwrap_or_else(|| "data/mathlib/decl-edges-wide.jsonl".to_string());
     let out_path = flag("--out").unwrap_or_else(|| "data/mathlib/decl-graph.v1.json".to_string());
     let json_out = args.iter().any(|a| a == "--json");
 

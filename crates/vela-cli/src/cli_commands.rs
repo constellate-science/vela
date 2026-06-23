@@ -1512,6 +1512,13 @@ pub(crate) enum FoundryAction {
         /// Only show targets a `vela campaign` kind can attack (an engine kind).
         #[arg(long)]
         attackable_only: bool,
+        /// Optional typed Erdős bounds sidecar (`examples/erdos-problems/bounds.json`,
+        /// the `vela.frontier-bounds.v1` doc emitted by the erdos-deep adapter).
+        /// When present, each problem's typed current-best bound is surfaced as a
+        /// `value_to_beat` row in the portfolio, so the foundry / attack ranking
+        /// sees the Erdős value-to-beat alongside the catalog's incumbents.
+        #[arg(long)]
+        erdos_bounds: Option<PathBuf>,
         #[arg(long)]
         json: bool,
     },
@@ -1628,6 +1635,26 @@ pub(crate) enum FoundryAction {
         /// finding whose assertion_type marks a Lean formalization.
         #[arg(long)]
         lemmas: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Project the typed current-best bounds (value-to-beat) from the erdos-deep
+    /// source into a `vela.frontier-bounds.v1` sidecar. ADDITIVE — it reads the
+    /// staged source the erdos adapter already ingests and writes a NEW
+    /// `bounds.json`; it never touches accepted findings or the frontier
+    /// canonical root, so `vela reproduce` is unaffected. Every bound is
+    /// unattested (`accepted: false`). Deterministic. `foundry targets
+    /// --erdos-bounds <out>` then reads it back as value-to-beat rows.
+    ErdosBounds {
+        /// The staged erdos-deep source (the `read_erdos_deep` adapter input).
+        #[arg(
+            long,
+            default_value = "examples/erdos-problems/sources/erdos-deep.v1.json"
+        )]
+        input: PathBuf,
+        /// Where to write the typed bounds sidecar.
+        #[arg(long, default_value = "examples/erdos-problems/bounds.json")]
+        out: PathBuf,
         #[arg(long)]
         json: bool,
     },

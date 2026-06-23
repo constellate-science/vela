@@ -37,6 +37,13 @@ pub struct SourceRecord {
     /// formalization and the canonical Erdős problem merge into one atlas cell
     /// (the HardIdentity statement-variant join). Empty for most records.
     pub extra_anchors: Vec<(String, String)>,
+    /// The typed current-best bound (value-to-beat), when this record carries a
+    /// non-empty `current_best`. Emitted ALONGSIDE the prose in `assertion_text`
+    /// (additive — the text form is unchanged), so a foundry / attack consumer
+    /// can read the bound as a typed value instead of re-parsing free text. The
+    /// bound is always unattested (`accepted: false`). `None` for records with
+    /// no current-best record.
+    pub bound: Option<vela_protocol::frontier_bound::FrontierBound>,
 }
 
 /// Build a real, content-addressed finding bundle from a source record. The id
@@ -164,6 +171,7 @@ pub fn read_formal(dir: &Path, rev: &str) -> Result<Vec<SourceRecord>, String> {
                  declared status '{status}'."
             ),
             assertion_type: "lean-formalization".into(),
+            bound: None,
             implies: implied_problems(&text, stem),
             extra_anchors: Vec::new(),
         });
@@ -190,6 +198,7 @@ pub fn read_alphaproof(dir: &Path, rev: &str) -> Result<Vec<SourceRecord>, Strin
             assertion_type: "lean-formalization".into(),
             implies: Vec::new(),
             extra_anchors: Vec::new(),
+            bound: None,
         });
     }
     Ok(out)
@@ -226,6 +235,7 @@ pub fn read_oeis(input: &Path, _rev: &str) -> Result<Vec<SourceRecord>, String> 
             assertion_type: "oeis-sequence".into(),
             implies: vec![],
             extra_anchors: Vec::new(),
+            bound: None,
         });
     }
     // BTreeMap-style determinism: serde_json object iteration is already sorted,
@@ -303,6 +313,7 @@ pub fn read_horizonmath(input: &Path, _rev: &str) -> Result<Vec<SourceRecord>, S
             assertion_type: "horizonmath-problem".into(),
             implies: Vec::new(),
             extra_anchors: Vec::new(),
+            bound: None,
         });
     }
     out.sort_by(|a, b| a.external_id.cmp(&b.external_id));
@@ -398,6 +409,7 @@ pub fn read_formal_corpus(dir: &Path, rev: &str) -> Result<Vec<SourceRecord>, St
                 .iter()
                 .map(|e| ("erdos".to_string(), e.clone()))
                 .collect(),
+            bound: None,
         });
     }
     out.sort_by(|a, b| a.external_id.cmp(&b.external_id));
@@ -467,6 +479,7 @@ pub fn read_identity_seed(input: &Path, _rev: &str) -> Result<Vec<SourceRecord>,
             assertion_type: "cross-source-identity".into(),
             implies: vec![],
             extra_anchors: anchors,
+            bound: None,
         });
     }
     out.sort_by(|a, b| a.external_id.cmp(&b.external_id));
@@ -583,12 +596,25 @@ pub fn read_erdos_deep(input: &Path, _rev: &str) -> Result<Vec<SourceRecord>, St
             .iter()
             .map(|a| ("oeis".to_string(), a.clone()))
             .collect();
+        // ALSO emit the current-best record as a TYPED bound (value-to-beat),
+        // alongside the prose already folded into `text` above. Additive — the
+        // assertion text is unchanged; this just lets a foundry / attack consumer
+        // read the bound without re-parsing free text. Always unattested.
+        let bound = if current_best.is_empty() {
+            None
+        } else {
+            Some(vela_protocol::frontier_bound::FrontierBound::from_prose(
+                format!("erdos/{num}"),
+                &current_best,
+            ))
+        };
         out.push(SourceRecord {
             external_id: num,
             assertion_text: text,
             assertion_type: "erdos-problem".into(),
             implies: Vec::new(),
             extra_anchors,
+            bound,
         });
     }
     // Numeric-by-problem-number determinism.
@@ -601,6 +627,29 @@ pub fn read_erdos_deep(input: &Path, _rev: &str) -> Result<Vec<SourceRecord>, St
         return Err(format!("{}: no usable problems", input.display()));
     }
     Ok(out)
+}
+
+/// Build the typed bounds sidecar (`examples/erdos-problems/bounds.json`) from
+/// the Erdős deep records — the ADDITIVE companion to the prose-bearing
+/// findings. Every bound is unattested (`accepted: false`) until a human key
+/// holder attests it. Deterministic: records arrive sorted by problem number,
+/// the doc re-sorts by the `erdos/<id>` problem ref. This is a pure projection
+/// of the source records; it never touches the accepted findings or the
+/// frontier canonical root, so `vela reproduce` is unaffected.
+pub fn erdos_deep_bounds(
+    records: &[SourceRecord],
+) -> vela_protocol::frontier_bound::FrontierBoundsDoc {
+    let bounds: Vec<vela_protocol::frontier_bound::FrontierBound> =
+        records.iter().filter_map(|r| r.bound.clone()).collect();
+    vela_protocol::frontier_bound::FrontierBoundsDoc::new(
+        "erdos-problems",
+        "Typed current-best bounds projected from the erdos-deep adapter \
+         (problem `current_best` prose). value/direction are a best-effort parse; \
+         source_text is authoritative. Every bound is UNATTESTED (accepted=false) \
+         until a human key holder attests it; this sidecar is additive and does not \
+         affect any accepted finding or `vela reproduce`.",
+        bounds,
+    )
 }
 
 pub fn read_adapter(adapter: &str, input: &Path, rev: &str) -> Result<Vec<SourceRecord>, String> {
@@ -845,6 +894,33 @@ mod tests {
         );
         // A problem with no real oeis carries no anchor (no fake bridge).
         assert!(recs[0].extra_anchors.is_empty());
+
+        // The current-best record is ALSO carried as a TYPED bound (the
+        // value-to-beat) — additive to the prose, unattested, parse best-effort.
+        use vela_protocol::frontier_bound::BoundDirection;
+        let b = recs[1]
+            .bound
+            .as_ref()
+            .expect("problem 40 has a typed bound");
+        assert_eq!(b.problem, "erdos/40");
+        assert_eq!(b.value, Some(7.0));
+        assert_eq!(b.direction, BoundDirection::Lower);
+        assert_eq!(b.source_text, "best known >= 7");
+        assert!(!b.accepted, "an adapter never attests its own bound");
+        // A problem with empty current_best carries no typed bound.
+        assert!(recs[0].bound.is_none());
+
+        // The bounds-doc projection round-trips and is sidecar-shaped.
+        let doc = erdos_deep_bounds(&recs);
+        assert_eq!(doc.schema, "vela.frontier-bounds.v1");
+        assert_eq!(doc.bounds.len(), 1);
+        assert_eq!(doc.bounds[0].problem, "erdos/40");
+        assert!(doc.bounds.iter().all(|b| !b.accepted));
+        let s = serde_json::to_string(&doc).unwrap();
+        let back: vela_protocol::frontier_bound::FrontierBoundsDoc =
+            serde_json::from_str(&s).unwrap();
+        assert_eq!(doc, back);
+
         std::fs::remove_dir_all(&dir).ok();
     }
 }

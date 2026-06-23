@@ -2,7 +2,7 @@
 
 > **CLI-surface note (v0.700).** The command surface was cut to a ~70-command
 > core in v0.700. Event kinds and reducer semantics in this spec remain
-> normative — the reducer still replays every historical event — but some CLI
+> normative (the reducer still replays every historical event) but some CLI
 > invocations referenced below (`vela trace`, `vela bridge`, `vela federation`,
 > `vela discord`, `vela impact`) describe commands that were removed from the
 > binary. The events they minted are still valid state.
@@ -50,7 +50,7 @@ replayed frontier state, not separate truth stores.
 - §Status planes: the four-plane vocabulary map.
 - §The canonical event log: the concrete walkthrough of `.vela/events/`.
 - §Conformance: how a third party proves agreement with the reference.
-- §Appendix — Signed checkpoints (deferred).
+- §Appendix: Signed checkpoints (deferred).
 
 ## 1. design principles
 
@@ -299,8 +299,8 @@ the first 16 hex characters of the hash.
 
 Source records use `vs_...`, evidence atoms use `vea_...`, condition records use
 `vcnd_...`, artifacts use `va_...`, proposals use `vpr_...`, and canonical
-events use `vev_...`. The full prefix registry — the authoritative meaning of
-every live `v*_` prefix, including the known `vat_` and `vtr_` collisions —
+events use `vev_...`. The full prefix registry, the authoritative meaning of
+every live `v*_` prefix, including the known `vat_` and `vtr_` collisions,
 lives in §ID prefix registry below.
 
 ## 4. confidence
@@ -345,14 +345,14 @@ Links may include confidence, notes, evidence spans, conditional text, and
 inference provenance. Link-derived outputs are review surfaces unless accepted
 through normal frontier review.
 
-### v0.10 — domain-neutral enum extensions
+### v0.10: domain-neutral enum extensions
 
 The first non-bio frontier published to the public hub (a particle-astrophysics
 WIMP direct-detection frontier) surfaced that the v0 enum sets were
-biology-leaning. v0.10 added domain-neutral entries — additively — without
+biology-leaning. v0.10 added domain-neutral entries, additively, without
 changing content addressing for pre-v0.10 frontiers:
 
-- **Entity type:** `particle` (WIMPs, photons), `instrument` (XENONnT, JWST —
+- **Entity type:** `particle` (WIMPs, photons), `instrument` (XENONnT and JWST,
   capital objects that run measurements), `dataset` (instrument data releases
   distinct from the paper that reports them), `quantity` (named numerical
   values with units, e.g. `28 GeV/c^2`). The pre-v0.10 entries (`gene`,
@@ -367,12 +367,12 @@ Schema URL bumps `v0.8.0 → v0.10.0` for new frontiers; the validator accepts
 both URLs so pre-v0.10 frontiers (BBB, BBB-extension, the v0.8 cross-frontier
 conformance vector) replay byte-identically under a v0.10 binary.
 
-### v0.8 — cross-frontier link targets
+### v0.8: cross-frontier link targets
 
 `Link.target` may take two shapes:
 
-- `vf_<16hex>` — references a finding in this same frontier.
-- `vf_<16hex>@vfr_<16hex>` — references a finding in a different frontier
+- `vf_<16hex>`: references a finding in this same frontier.
+- `vf_<16hex>@vfr_<16hex>`: references a finding in a different frontier
   (the trailing `vfr_` is the target frontier's content-addressed id).
 
 Cross-frontier targets are valid only if the dependent frontier declares a
@@ -592,7 +592,7 @@ artifact, finding, and review-note proposals.
 ### 6.3 Trajectory lifecycle (v0.50)
 
 A `Trajectory` is the search path that produced (or did not
-produce) a finding — hypotheses considered, branches tried,
+produce) a finding: hypotheses considered, branches tried,
 branches ruled out and why. Identified by `vtr_<16hex>`, with steps
 identified by `vts_<16hex>`. Steps are append-only, idempotent on
 content-address. Full schema: [`schema/trajectory.v0.1.0.json`](../schema/trajectory.v0.1.0.json).
@@ -607,8 +607,8 @@ so appending steps does not mint a new id.
 Step fields: `id` (content-addressed
 `SHA-256(parent_trajectory_id | kind.canonical() | normalize(description) | at | actor)`),
 `kind` (`hypothesis | tried | ruled_out | observed | refined`),
-`description`, `at`, `actor`, optional `references` (any kernel id
-— `vf_*`, `vnr_*`, `vrep_*`, `vpred_*`, `vd_*`, `vc_*`).
+`description`, `at`, `actor`, optional `references` (any kernel id:
+`vf_*`, `vnr_*`, `vrep_*`, `vpred_*`, `vd_*`, `vc_*`).
 
 **`trajectory.created` payload**:
 
@@ -911,8 +911,8 @@ Signals are not standalone scientific facts.
 
 ## 10. conformance
 
-> The guarantee ⇄ proof ⇄ conformance triangle — every load-bearing invariant mapped to its
-> normative clause here, its machine-checked Lean theorem, and its conformance vector — is in
+> The guarantee ⇄ proof ⇄ conformance triangle (every load-bearing invariant mapped to its
+> normative clause here, its machine-checked Lean theorem, and its conformance vector) is in
 > [`THEORY.md`](THEORY.md) Appendix B. Two interoperating implementations
 > (Rust reference + Python reducer) agree on the vectors.
 
@@ -949,12 +949,12 @@ writeback, proof/export, review, and merge semantics first.
 The dual-use deposition channel. Three read-side tiers, ordered by
 sensitivity:
 
-- `public` (default) — open read.
-- `restricted` — readers need an `ActorRecord` with
+- `public` (default): open read.
+- `restricted`: readers need an `ActorRecord` with
   `access_clearance >= restricted`. The IBC review level: dual-use
   research that the host institution has declared subject to
   incident-response review but not capability-gated.
-- `classified` — readers need
+- `classified`: readers need
   `access_clearance == classified`. Aligned with the federal DURC
   framework and the capability gates frontier AI labs already
   publish under their own safety frameworks (Anthropic's Responsible
@@ -964,8 +964,8 @@ sensitivity:
   substrate's openness default fails closed on ambiguous cases,
   with the operational cost borne by depositors.
 
-The composition risk — capability uplift from aggregation across the
-dependency graph rather than any single deposit — is the harder
+The composition risk, capability uplift from aggregation across the
+dependency graph rather than any single deposit, is the harder
 problem and v0.51 does not claim to solve it. Treating it as solved
 would be the wrong move. v0.51 carries the per-object tier; the
 composition graph is a follow-up.
@@ -980,7 +980,7 @@ Each of the three load-bearing claim objects carries an
 - `Trajectory.access_tier`
 
 Default is `public`. The field is **NOT** part of the
-content-address preimage — re-classifying an object does not mint
+content-address preimage; re-classifying an object does not mint
 a new id. Pre-v0.51 frontiers load with the default and round-trip
 byte-identically (skip-if-public).
 
@@ -1017,14 +1017,14 @@ before serializing.
 - Anonymous reads (header absent) get `None`, equivalent to
   public-only.
 - `GET /api/finding/<id>` returns `404` when the finding's tier
-  exceeds the actor's clearance — the existence of the object is
+  exceeds the actor's clearance; the existence of the object is
   itself part of the tiered content.
 - `GET /api/frontier` and `GET /api/findings` return a redacted
   `Project` view: above-clearance findings, negative_results,
   trajectories, and any events targeting them are dropped from the
   response.
 
-This is a deliberately thin authentication surface for v0.51 — a
+This is a deliberately thin authentication surface for v0.51: a
 real deployment terminates TLS and validates actor signatures at a
 reverse proxy, then forwards `X-Vela-Actor` only when verified.
 v0.52+ can tighten this to require a signed bearer token end-to-end.
@@ -1471,7 +1471,7 @@ Every content-addressed object in the substrate carries a short
 `v*_` prefix in front of its hex digest. This section is the authoritative
 meaning of each live prefix. Prefixes are load-bearing: they appear
 inside signed preimages and stored event logs, so **live prefixes are
-never renamed** — collisions are documented here as known debt instead.
+never renamed**; collisions are documented here as known debt instead.
 
 The naming dictionary in the frontier-calculus writeup defers to this
 table.
@@ -1544,9 +1544,9 @@ table.
 | `vat_` | Carina **atlas** primitive (see collision below) |
 | `vct_` / `vco_` | Carina constellation primitive (`vct_` in the handle resolver, `vco_` in the schema) |
 
-### Known collisions (documented debt — do not rename)
+### Known collisions (documented debt, do not rename)
 
-1. **`vat_` — attempt vs. Carina atlas.** The authoritative protocol
+1. **`vat_`, attempt vs. Carina atlas.** The authoritative protocol
    sense is the *attempt* (`attempt.rs`, signed deposits verified by
    `vela attempt`). The Carina spec tier reuses `vat_` for the atlas
    primitive (`embedded/carina-schemas/atlas.schema.json`,
@@ -1556,7 +1556,7 @@ table.
    Carina schema set), so neither side can be renamed without breaking
    stored ids. Treat bare-`vat_` handle resolution as ambiguous.
 
-2. **`vtr_` — transfer vs. trajectory.** The authoritative (and now
+2. **`vtr_`, transfer vs. trajectory.** The authoritative (and now
    only live) sense is the *cross-domain transfer* (`transfer.rs`,
    verified by `vela transfer`). The trajectory object was fully retired
    in v0.700 (its type, `trajectory.*` event kinds, schema, and MCP tool
@@ -1566,7 +1566,7 @@ table.
    `.vela/trajectories/` file or an old `trajectory.*` event is a
    retired trajectory id.
 
-3. **`vsa_` vs. `vatt_` — two attestations.** Not an id collision but a
+3. **`vsa_` vs. `vatt_`, two attestations.** Not an id collision but a
    recurring vocabulary trap: `vsa_` is the *statement* attestation
    (does the formal statement faithfully encode the informal problem),
    `vatt_` is the *reviewer identity* attestation. The bare word
@@ -1577,7 +1577,7 @@ table.
 
 ---
 
-## Status planes — the canonical vocabulary map
+## Status planes: the canonical vocabulary map
 
 Vela speaks about a record on **four distinct planes**. Each is a separate,
 legitimate projection over the same replayed state. They share some words
@@ -1590,7 +1590,7 @@ that governs how they relate.
 disagree by design, and Vela never collapses them into one scalar "confidence"
 (memo §8, §16.5). A surface must always make clear *which plane* it is showing.
 
-### Plane 1 — Resolution (descriptive, cross-source)
+### Plane 1: Resolution (descriptive, cross-source)
 
 What the **source databases declare** about a problem. This is a join over what
 others say, not a Vela verdict.
@@ -1602,10 +1602,10 @@ others say, not a Vela verdict.
 - Authority: none. `contested` here means the sources disagree on the
   resolution word; it is a reconciliation queue, not an adjudication.
 
-### Plane 2 — Finding state (product, per-finding, derived)
+### Plane 2: Finding state (product, per-finding, derived)
 
 The **platform's own read of a single finding**, derived from its review verdict
-plus its recomputed verifier gate. This is the product vocabulary (memo §6) —
+plus its recomputed verifier gate. This is the product vocabulary (memo §6):
 what the UI says *about a finding*.
 
 - Words: `open` · `established` · `refuted` · `contested` · `fragile`
@@ -1619,7 +1619,7 @@ what the UI says *about a finding*.
   (Vela holds no review verdict or attachment for it yet). That is not a
   contradiction; it is two planes.
 
-### Plane 3 — Epistemic support (formal, provenance)
+### Plane 3: Epistemic support (formal, provenance)
 
 The **bilattice/Belnap status** computed from the support and refute provenance
 polynomials and their exact κ coordinates. The formal trust calculus underneath
@@ -1634,7 +1634,7 @@ the product words.
   refutation, which is *not* the same event as a Plane-2 `contested` review
   verdict.
 
-### Plane 4 — Review lifecycle / protocol signals (process)
+### Plane 4: Review lifecycle / protocol signals (process)
 
 Where a **change** sits in the propose → review → accept → seal pipeline, and the
 protocol event signals. About the *process*, not the claim's truth.
@@ -1668,7 +1668,7 @@ Never let a bare word imply all four.
   Attempt · Submission · Review · Workspace · Run · Registry · Atlas. "problems"
   is retired from product chrome (the catalogue is **Frontiers**).
 
-### "claim" vs "finding" — the resolved rule
+### "claim" vs "finding": the resolved rule
 
 These are **not** synonyms, and the apparent doubling was web-only drift (now
 fixed: the product surfaces say *finding* for the record and *assertion* for the
@@ -1679,11 +1679,11 @@ proposition it carries).
   noun, used everywhere a person reads about the unit.
 - **claim** is retained ONLY where it is not a finding-synonym:
   1. the **formal claim-context cell** `z = (q, c)` and the **Claim-State Cell**
-     projection (`frontier_calculus`, `vela claim state`) — a proposition under
+     projection (`frontier_calculus`, `vela claim state`): a proposition under
      a scope, a defined object distinct from a bundle;
   2. the **verb "to claim"**: `vela claim <frontier> <obligation>` leases an open
      obligation. You claim (lease) an obligation; you do not "find" one.
-  3. `verifier_attachment::claim_digest` — the sha256 of an assertion string,
+  3. `verifier_attachment::claim_digest`, the sha256 of an assertion string,
      byte-matched to Python's `canopus_trust.py::claim_digest`. Renaming it
      would break cross-implementation content-addressing.
 
@@ -1837,8 +1837,8 @@ Field by field:
 
 ### 3. Walking a real reviewer flow
 
-Trace an illustrative finding `vf_8f2d8f546976dcb3` — a Sidon lower-bound
-finding — through its full chain. Four events, in canonical order.
+Trace an illustrative finding `vf_8f2d8f546976dcb3` (a Sidon lower-bound
+finding) through its full chain. Four events, in canonical order.
 
 #### Event 1: `finding.asserted` (genesis)
 
@@ -2086,12 +2086,12 @@ implementation is §10.)
 
 ### What is public
 
-- `conformance/` — the public conformance contract: fixtures, a
+- `conformance/`: the public conformance contract: fixtures, a
   human-readable `README.md` describing the
   `(genesis_findings, event_log, expected_states)` replay contract,
   and `verify.py`, a thin reference runner over the canonical Python
   reducer.
-- `tests/conformance/` — the protocol vector set the reference Rust
+- `tests/conformance/`: the protocol vector set the reference Rust
   implementation runs via `vela conformance`.
 
 Both directories are tracked in the repository. Nothing about running
@@ -2144,7 +2144,7 @@ structure that would steward the spec is described, as a proposal, in
 
 ---
 
-## Appendix — Signed checkpoints (deferred)
+## Appendix: Signed checkpoints (deferred)
 
 *Folded from the former CHECKPOINTS.md.*
 
@@ -2185,7 +2185,7 @@ Every field is already computable with existing kernel functions:
 `events::event_log_hash`, `events::snapshot_hash`, and the canonical-JSON
 content-address rule used by every other `v*_` id. The `vela.lock`
 fields (`snapshot_hash`, `event_log_hash`) are precisely a checkpoint
-without the signature or the chain — the lock is the degenerate latest
+without the signature or the chain: the lock is the degenerate latest
 checkpoint, which is why this design adds no new hash semantics.
 
 ## Semantics
@@ -2194,7 +2194,7 @@ checkpoint, which is why this design adds no new hash semantics.
   loads the materialized state whose `snapshot_hash` matches, then
   replays only `events[n..]`. Trust is explicit: you trust the OWNER KEY
   that signed the checkpoint, exactly as you trust a registry manifest.
-  Full replay from genesis remains available to anyone, always — a
+  Full replay from genesis remains available to anyone, always: a
   checkpoint accelerates verification, it never replaces it.
 - **The chain.** `prev_checkpoint` forms a hash-linked chain back to
   genesis. Verifying a checkpoint chain = verifying each link's
@@ -2208,14 +2208,14 @@ checkpoint, which is why this design adds no new hash semantics.
   byte-stable and reversible since events are content-addressed.
 - **Earliest-wins discipline.** Checkpoints are append-only; a
   checkpoint is never edited or replaced. A bad checkpoint is abandoned
-  (the chain forks past it), never rewritten — same rule as every other
+  (the chain forks past it), never rewritten: same rule as every other
   signed record in the protocol.
 
 ## Non-goals
 
 - No checkpoint authority other than the frontier owner key (a second
   producer signs their OWN checkpoints over the same log).
-- No compression/dedup cleverness in v0.1 — JSONL segments are plain.
+- No compression/dedup cleverness in v0.1: JSONL segments are plain.
 - No change to event ids, event signing, or the reducer. A checkpoint
   is derived state; the log remains the only source of truth.
 

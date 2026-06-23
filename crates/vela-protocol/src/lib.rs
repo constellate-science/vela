@@ -17,6 +17,7 @@ pub mod endorsement;
 pub mod events;
 pub mod evidence_ci;
 pub mod evidence_diff;
+pub mod frontier_bound;
 pub mod frontier_calculus;
 pub mod frontier_graph;
 pub mod frontier_policy;

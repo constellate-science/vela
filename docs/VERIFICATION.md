@@ -26,24 +26,24 @@ satisfy four conditions.
 ## Verifier attachments (`vva_`)
 
 A `VerifierAttachment` (`crate::verifier_attachment`) is a standalone,
-content-addressed object — the `Replication` (`vrep_`) precedent, not a mutable
+content-addressed object (the `Replication` (`vrep_`) precedent), not a mutable
 field on the finding. Each attachment is one verifier's judgment, bound to the
 exact claim it checked by `claim_digest` (`sha256(trimmed claim)[..16]`, the same
 rule as the Python reference). It records:
 
-- `verifier_method` — one of the closed set (`computational_search`,
+- `verifier_method`: one of the closed set (`computational_search`,
   `lp_dual_recompute`, `sat_unsat_cert`, `lean_kernel`,
   `exact_arithmetic_recompute`, `literature_corroboration`, `manual_referee`).
   `proof_verification` and `lean_verification` are instances of `lean_kernel`.
-- `solver_id` — the independent tool that produced the check (`cp-sat`,
+- `solver_id`: the independent tool that produced the check (`cp-sat`,
   `pulp-cbc`, `lean4@4.29.1`).
-- `independent_of` — ids of other attachments this one declares independence
+- `independent_of`: ids of other attachments this one declares independence
   from.
-- `match_to_claim` — the verifier's assertion that it checked the target claim
+- `match_to_claim`: the verifier's assertion that it checked the target claim
   verbatim, not a weaker statement.
-- `adversarial_probes` — probes run against the claim, each surviving or
+- `adversarial_probes`: probes run against the claim, each surviving or
   refuting.
-- `outcome` — `passed` or `failed`.
+- `outcome`: `passed` or `failed`.
 
 ## The four conditions
 
@@ -51,17 +51,17 @@ rule as the Python reference). It records:
 `needs_verification`, `verified`, or `refuted`, with the reasons it is not
 verified.
 
-- **G1 independence** — at least two *matched* attachments by different
+- **G1 independence**: at least two *matched* attachments by different
   `(verifier_method, solver_id)`, with at least one declaring `independent_of`
   another in the set (one-directional; a mutual 2-cycle is unconstructable since
   the `vva_` id content-addresses `independent_of`). One run, or two runs of the
   same method, never suffices.
-- **G2 claim-match** — every passing attachment is bound to the current claim
+- **G2 claim-match**: every passing attachment is bound to the current claim
   digest with `match_to_claim.matches`. A passing attachment bound to a
   different claim is `passed_but_unmatched` and counts for nothing.
-- **G3 adversarial** — at least one probe present across the matched set and
+- **G3 adversarial**: at least one probe present across the matched set and
   none refuted. A single refuting probe drives the whole gate to `refuted`.
-- **G4 well-formed** — matched attachments are structurally valid, content-
+- **G4 well-formed**: matched attachments are structurally valid, content-
   addressed (`vva_…`), and verify their own id.
 
 A claim with zero attachments derives to `needs_verification`, even if a
@@ -94,7 +94,7 @@ vela gate check --claim "<exact claim>" --attachments attachments.json
 `vela gate check` reads a JSON array of `VerifierAttachment`, verifies each is
 well-formed, derives the status against the claim digest, and exits non-zero
 unless the status is `verified`. It is distinct from `vela verify`, which checks
-that a proof packet is byte-for-byte what was signed — the log guarantee, not
+that a proof packet is byte-for-byte what was signed: the log guarantee, not
 the claim guarantee.
 
 ---
@@ -241,7 +241,7 @@ mechanically.
 
 **Decision SLA: accept or reject with a written reason within 14 days.**
 A rejection names the failed criterion; resubmission resets the clock.
-Silence past the SLA is a process bug — escalate by opening an issue
+Silence past the SLA is a process bug: escalate by opening an issue
 titled "RFC SLA breach".
 
 ### What is never accepted
@@ -266,9 +266,9 @@ kernel-clean admit while keeping the human for significance and release.
 > `vela gate auto-admit <frontier> --finding <vf>` previews read-only;
 > `--apply` records the unsigned, idempotent `policy.auto_admitted` ONLY on a
 > YES verdict, in the narrow enabled scope (§Enabled scope). It never auto-fires
-> — an unattended producer/foundry driving it is Phase 2. Of the §Acceptance
+> (an unattended producer/foundry driving it is Phase 2). Of the §Acceptance
 > checklist: **done** = 1 (reproduce-binding, the command re-runs the frozen
-> verifier), 2 (faithfulness), 3 (attachment provenance — REVISED: a second
+> verifier), 2 (faithfulness), 3 (attachment provenance, REVISED: a second
 > adversarial review found the human-vouch forgeable via open actor
 > self-enrollment, so the vouch is removed from the admission path; the
 > un-forgeable floor is the trust and attachments are non-gating corroboration;
@@ -276,9 +276,9 @@ kernel-clean admit while keeping the human for significance and release.
 > (producer != verifier), 7 (lifecycle), 9 (idempotent emit), 10 (payload
 > validation), 11 (tier honesty), 12 (surface separation, terminal + the
 > `finding_context` data layer serve reads); **deferred with rationale** = 4
-> (toolchain_hash distinctness — needs the attachment-creation path to populate
+> (toolchain_hash distinctness, needs the attachment-creation path to populate
 > real build hashes first; enforcing it now blocks the lane with no data to
-> satisfy it), 5 (a frozen re-runnable FormalismFidelity probe — superseded for
+> satisfy it), 5 (a frozen re-runnable FormalismFidelity probe, superseded for
 > the exact lane by the floor's `claim_witness_faithful`, which IS the frozen
 > faithfulness re-check); **remaining** = the web (`apps/web`) render half of
 > #12. This is the design + safety record.
@@ -294,10 +294,10 @@ The fix is to remove the human from the **rote, kernel-clean** admit while
 keeping the human for **significance and release**. The trust model becomes
 two distinct tiers:
 
-- **`machine_verified`** — deterministic, unsigned, reproducible. Materialized
+- **`machine_verified`**: deterministic, unsigned, reproducible. Materialized
   by a frozen audited predicate over frozen verifier evidence. No human, no
   key, no model.
-- **`accepted`** — human, signed, key-custody. Significance and consequential
+- **`accepted`**: human, signed, key-custody. Significance and consequential
   release. Strictly above `machine_verified`; the machine never reaches it.
 
 "No AI in the trust path" stays literally true: the trust is the frozen
@@ -313,7 +313,7 @@ unsigned, self-asserted data. The same agent that produces a finding can
 hand-author two attachments over a *single* run with cosmetic-distinct
 `solver_id` / `implementation_id`, a one-directional `independent_of`, a
 `Survived` FormalismFidelity probe, and `MethodIntegrity::Sound`. The
-attachment-shape guards then pass. Distinct strings are not distinct verifiers —
+attachment-shape guards then pass. Distinct strings are not distinct verifiers:
 independence and implementation diversity here are *declared, auditable*
 properties, not cryptographic ones. (Two things that previously made this attack
 *easier* are now closed: a forged mutual `independent_of` 2-cycle is
@@ -359,10 +359,10 @@ red-team-tested 10/10) is strictly stronger than `derive_gate_status == Verified
    `Unattested` default the gate tolerates),
 3. a `FormalismFidelity` probe PRESENT and `Survived` (gate G3 accepts any
    survived probe),
-4. declared independence — ≥1 matched attachment names another in
+4. declared independence: ≥1 matched attachment names another in
    `independent_of` (one-directional; mutual is a hash circularity over the
    content-addressed id, so the diversity teeth are guard 5 + gate G1, not a
-   bidirectional handshake — do NOT re-tighten to mutual),
+   bidirectional handshake, so do NOT re-tighten to mutual),
 5. no implementation monoculture.
 
 This is corroboration metadata. Because it is self-assertable, it is layered
@@ -382,7 +382,7 @@ is mechanically un-signable (no signing step on the path); the human `accepted`
 tier is the only signed one. The tier is a **projection** over the log
 (`review.accepted` => accepted; else `policy.auto_admitted` + live recomputed
 `Verified` => machine_verified), never a stored field, so a forged audit event
-cannot by itself raise the tier — the projection recomputes from live evidence.
+cannot by itself raise the tier: the projection recomputes from live evidence.
 
 ### Charter reconciliation
 
@@ -402,15 +402,15 @@ new tests:
 1. **Reproduce-binding (critical):** the admit command runs `vela reproduce`
    over the witness itself at admit time and requires PASS; it never trusts a
    recorded result field.
-2. **Faithfulness (critical) — HARDENED after a third adversarial review.** The
+2. **Faithfulness (critical), HARDENED after a third adversarial review.** The
    command calls `claim_witness_faithful` and requires `faithful`. The check now
    binds the WHOLE claim to the witness, not just one parsed token: it reads the
    OEIS order `a(N)` (not only an ambient literal) and binds it to the witness
    `n` (mandatory for every size/order kind; for GF(2) every element must fit in
    `2^N`); it rejects equality/optimality claims and dual-bound assertions; and
-   it binds EVERY record-defining parameter — `(kind, n, bound)` for sidon, cap,
+   it binds EVERY record-defining parameter (`(kind, n, bound)` for sidon, cap,
    gf2_sidon, union_free, plus the order `h` for B_h and the `(d, w)` for
-   constant-weight — routing golomb and every non-size/order kind to review. The
+   constant-weight), routing golomb and every non-size/order kind to review. The
    gate also surfaces `canonical_claim` (the witness-derived verified claim) so
    prose cannot puff a true bound. See §Enabled scope and the
    `claim_witness_faithful` adversarial regression tests
@@ -418,7 +418,7 @@ new tests:
    `faithful_rejects_dual_bound_headline`, `faithful_gf2_binds_dimension`,
    `faithful_binds_bh_order_and_constant_weight_params`,
    `faithful_routes_equality_optimality_to_review`, `canonical_claim_is_witness_derived`).
-3. **Attachment provenance (critical) — REVISED after a second adversarial
+3. **Attachment provenance (critical), REVISED after a second adversarial
    review.** The first design verified each matched attachment was "human-
    vouched" by a non-agent reviewer (an accepted `verifier.attach` proposal, or
    a registered-reviewer-signed `verifier_attachment.added` event). A five-lens
@@ -429,7 +429,7 @@ new tests:
    needed; every predicate passes. The vouch authenticated a *key*, not a
    *human*. **The fix removes the vouch from the admission path.** The exact
    lane's trust is the FLOOR (guards 1+2: a fresh frozen `vela reproduce` plus
-   `claim_witness_faithful`), which an agent cannot forge — a fabricated witness
+   `claim_witness_faithful`), which an agent cannot forge: a fabricated witness
    does not reproduce, and an inflated claim is not faithful to its witness. The
    floor IS a complete proof of an exact lower-bound/size claim, so matched
    attachments are non-load-bearing corroboration and **do not gate** admission
@@ -479,13 +479,13 @@ record-defining parameter to the witness. After five adversarial review rounds,
 the floor admits a kind only when every parameter that changes its record
 hardness is parsed from the assertion and bound to the witness:
 
-- **Sidon ({0,1}^n), Cap (F_3^n), GF(2)-Sidon (GF(2)^n), union-free ({1..n})** —
+- **Sidon ({0,1}^n), Cap (F_3^n), GF(2)-Sidon (GF(2)^n), union-free ({1..n})**:
   fully determined by `(kind, n, bound)`. The floor reads the OEIS order `a(N)`
   (and/or the ambient literal), binds it to the witness `n` (for GF(2), every
   element `< 2^N`), and requires `witness size >= bound`.
-- **B_h ({0,1}^n, order h)** — additionally parses `h` (from `B_<h>` / `<h>-fold`)
+- **B_h ({0,1}^n, order h)**: additionally parses `h` (from `B_<h>` / `<h>-fold`)
   and binds `h == witness.h`. Unstated `h` routes to review.
-- **constant-weight A(n,d,w)** — additionally parses `(d, w)` from the `A(n,d,w)`
+- **constant-weight A(n,d,w)**: additionally parses `(d, w)` from the `A(n,d,w)`
   signature and binds both to the witness. Unstated `(d,w)` routes to review.
 
 Routed to review (NOT floor-admissible): **golomb** (a min-length problem with no
@@ -501,14 +501,14 @@ space, struct parameters cannot diverge from the verified ones, no admissible
 kind carries an unbound hardness parameter, and `len()` is the deduplicated size
 the verifier validated.
 
-**Residual closed — the canonical claim.** Author prose could once puff a TRUE
+**Residual closed: the canonical claim.** Author prose could once puff a TRUE
 bound ("a(20) >= 5, a new record!"). The gate now derives the verified claim
-PURELY from the witness (`vela_verify::canonical_claim`) — e.g. "Sidon set:
-a(20) >= 1989 (a Sidon set of 1989 points in {0,1}^20)" — and surfaces it as the
+PURELY from the witness (`vela_verify::canonical_claim`), e.g. "Sidon set:
+a(20) >= 1989 (a Sidon set of 1989 points in {0,1}^20)", and surfaces it as the
 authoritative `machine_verified` claim, with the author prose demoted to an
 unverified description. No FALSE bound, dimension, or hardness parameter can
 reach `machine_verified`, and the displayed claim is the witness-verified one,
-not the prose. (Surfaces beyond the CLI gate — web/atlas/hub — should display
+not the prose. (Surfaces beyond the CLI gate, web/atlas/hub, should display
 `canonical_claim` when the lane is enabled and live records exist.)
 
 ### Shipped vs pending
@@ -540,7 +540,7 @@ legitimate re-signing and reproducible byte-for-byte by any independent
 implementation that can produce `vela.canonical-json/v1`.
 
 This is the load-bearing minimal core: a signed tree head, inclusion proofs, and
-consistency proofs — everything a client needs to verify membership and
+consistency proofs: everything a client needs to verify membership and
 append-only growth without trusting the hub. Witness co-signing (defeating
 split-view) is the documented next phase (§Witness co-signing).
 
@@ -551,7 +551,7 @@ All read-only, cacheable, served by `vela-hub` over the existing
 `consistency_proof`, and their verifiers live in
 `crates/vela-protocol/src/merkle.rs` (RFC 6962 §2.1; exhaustive property tests).
 
-#### `GET /entries/{vfr}/log/sth` — signed tree head
+#### `GET /entries/{vfr}/log/sth`: signed tree head
 
 ```json
 {
@@ -577,19 +577,19 @@ The signature is Ed25519 (pure) over `to_canonical_bytes(sth)`. When the hub has
 no signing key, `mode` is `"unsigned"` and `signature` is null. The hub publishes
 its public key at `/.well-known/vela` for first-use pinning.
 
-#### `GET /entries/{vfr}/log/proof/{event_id}` — inclusion proof
+#### `GET /entries/{vfr}/log/proof/{event_id}`: inclusion proof
 
 Returns `{leaf_index, tree_size, root_hash, audit_path: [hex…]}`. The verifier
 rebuilds the leaf preimage from event content, then reconstructs the root from
 the leaf + audit path alone (`verify_inclusion`) and checks it equals the signed
 STH root.
 
-#### `GET /entries/{vfr}/log/consistency?first={m}&second={n}` — consistency proof
+#### `GET /entries/{vfr}/log/consistency?first={m}&second={n}`: consistency proof
 
 `second` defaults to the current length. Returns `{first_size, second_size,
 first_root, second_root, consistency_proof: [hex…]}`. Lets a verifier holding an
-older signed STH (size `m`) confirm the log only **grew** — never forked or
-rewrote history — before trusting a newer STH (size `n`). `verify_consistency`
+older signed STH (size `m`) confirm the log only **grew**, never forked or
+rewrote history, before trusting a newer STH (size `n`). `verify_consistency`
 reconstructs both roots from the proof alone.
 
 ### Independent verifier
@@ -631,14 +631,14 @@ pinned key correctly **fails**.
   consistent-but-divergent logs to different clients. Only independent witnesses
   co-signing STHs close this.
 
-### Witness co-signing — designed, not yet built (recruitment-gated)
+### Witness co-signing: designed, not yet built (recruitment-gated)
 
 A witness is an independent party that periodically fetches a hub's STH,
 verifies it (and consistency vs. the last STH it saw), and **co-signs** it. A
 verifier that pins a set of witness keys and requires ≥k co-signatures cannot be
 shown a split view, because the witnesses would have to collude.
 
-Design (deliberately not deployed until a real second signer exists — shipping a
+Design (deliberately not deployed until a real second signer exists, since shipping a
 write-accepting endpoint nothing exercises is dead, risky surface):
 
 - **Table** `sth_witness_cosignatures(vfr_id, tree_size, root_hash,
@@ -651,7 +651,7 @@ write-accepting endpoint nothing exercises is dead, risky surface):
   STH is one it actually issued by recomputing the size-`tree_size` root and
   checking it equals `sth.root_hash`; then stores it. The cosignature binds the
   STH **timestamp** because the timestamp is inside the canonical `sth` the
-  witness signs — so a cosignature is pinned to a specific issuance.
+  witness signs, so a cosignature is pinned to a specific issuance.
 - **`GET /entries/{vfr}/log/witnesses?tree_size=&root_hash=`** returns the
   stored cosignatures with enough fields (`log_id, tree_size, root_hash,
   timestamp`) for a verifier to rebuild each `sth` and check each cosignature
@@ -666,6 +666,6 @@ handler patterns.
 ### Not in scope here
 
 - STH anchoring to a public chain/log for independent timestamping (P4).
-- Chunk-dedup of bulk objects (P3 — measure first; the CAS stub breaks the typed
+- Chunk-dedup of bulk objects (P3: measure first; the CAS stub breaks the typed
   materializer).
 - Proof-Carrying-Knowledge / constant-size DAG verification (research, P4+).

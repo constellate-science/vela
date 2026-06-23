@@ -2721,12 +2721,27 @@ fn tool_task_packet(
     serde_json::to_string_pretty(&v).map_err(|e| e.to_string())
 }
 
-/// Default location of the built Mathlib decl-dependency graph (regenerable
-/// working data; gitignored). Present only on a worktree that has run the
-/// decl-build pass; absent is fine — the premise slice is then honestly empty.
+/// Default location of the Mathlib decl-dependency graph (regenerable working
+/// data; `data/` is gitignored, so this is present only on a worktree that has
+/// run the decl-build / Lean pass — absent is fine, the premise slice is then
+/// honestly empty). Prefers the WIDE slice (`decl-edges-wide.jsonl`, ~37k
+/// kernel premise edges) so the live atlas defaults to the wide graph; the
+/// `load_decl_edges` reader accepts either the raw `.jsonl` or the built
+/// `decl-graph.v1.json`. Falls back to a built `decl-graph.v1.json` artifact
+/// (which `vela atlas decl-build` now regenerates from the wide edges by
+/// default), then the legacy narrow slice, so an older worktree still resolves.
 pub(crate) fn default_decl_graph_path() -> Option<std::path::PathBuf> {
-    let p = std::path::PathBuf::from("data/mathlib/decl-graph.v1.json");
-    p.exists().then_some(p)
+    for cand in [
+        "data/mathlib/decl-edges-wide.jsonl",
+        "data/mathlib/decl-graph.v1.json",
+        "data/mathlib/decl-edges.jsonl",
+    ] {
+        let p = std::path::PathBuf::from(cand);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    None
 }
 
 /// The CodeGraph bridge: the minimal KERNEL-CHECKED premise slice for a target,

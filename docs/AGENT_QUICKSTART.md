@@ -26,13 +26,13 @@ vela agent init <slug> --framework <name>
 
 Where `<slug>` is a lowercase-alphanumeric-hyphens name and `<name>` is one of:
 
-- `claude-code` — agent running inside Claude Code CLI
-- `claude-api` — agent driving the Anthropic API directly
-- `langchain` — LangChain-shaped agent
-- `openai` — OpenAI Assistants / function-calling shape
-- `agent4science` — Agent4Science review-packet emitter
-- `scienceclaw` — ScienceClaw artifact-packet emitter
-- `custom` — none of the above
+- `claude-code`: agent running inside Claude Code CLI
+- `claude-api`: agent driving the Anthropic API directly
+- `langchain`: LangChain-shaped agent
+- `openai`: OpenAI Assistants / function-calling shape
+- `agent4science`: Agent4Science review-packet emitter
+- `scienceclaw`: ScienceClaw artifact-packet emitter
+- `custom`: none of the above
 
 This produces a portable kit under `agents/<slug>/`:
 
@@ -84,10 +84,10 @@ vela serve <frontier> --http 3848    # HTTP variant
 
 The MCP server exposes a 19-tool catalog covering:
 
-- `frontier_stats` — counts, replay state, signals, proof readiness
-- `search_findings` — text / entity / assertion-type query
-- `get_finding` — single-finding detail incl. evidence + lineage
-- `list_events` — cursor-paginated canonical event log
+- `frontier_stats`: counts, replay state, signals, proof readiness
+- `search_findings`: text / entity / assertion-type query
+- `get_finding`: single-finding detail incl. evidence + lineage
+- `list_events`: cursor-paginated canonical event log
 - … plus 15 others. See "§MCP server" for the full table.
 
 The agent's existing MCP client (Claude Code, Claude Desktop, etc.) configures the connection per `vela serve --setup`.
@@ -116,7 +116,7 @@ The proposal sits in `vela inbox <frontier>` until a reviewer adjudicates. Accep
 
 ## Produce a witness with the discovery engine
 
-For verifier-gated construction kinds, you do not need to hand-write a witness — the discovery engine searches for one and verifies it in the same step:
+For verifier-gated construction kinds, you do not need to hand-write a witness; the discovery engine searches for one and verifies it in the same step:
 
 ```bash
 # search and report (writes nothing)
@@ -125,7 +125,7 @@ vela campaign search rook_directions --n 16
 vela campaign run gf2_sidon --n 12 --frontier <frontier> --propose --reviewer <agent-id>
 ```
 
-Searchable kinds: `gf2_sidon`, `union_free`, `rook_directions`, `sidon`, `bh` (with `--h`), `golomb`, `costas`. The search is deterministic — the same `--seed` reproduces the same witness — and every find is re-checked by the frozen `vela-verify` before it is reported, so a reported find always passes `vela reproduce`. `--propose` lands a key-free `finding.add` that waits for a human verdict (step 4); it does not promote the claim. The engine certifies lower bounds: it extends the less-explored ranges and will under-perform the algebraic optima behind the largest records, which is exactly where a stronger search wins.
+Searchable kinds: `gf2_sidon`, `union_free`, `rook_directions`, `sidon`, `bh` (with `--h`), `golomb`, `costas`. The search is deterministic (the same `--seed` reproduces the same witness), and every find is re-checked by the frozen `vela-verify` before it is reported, so a reported find always passes `vela reproduce`. `--propose` lands a key-free `finding.add` that waits for a human verdict (step 4); it does not promote the claim. The engine certifies lower bounds: it extends the less-explored ranges and will under-perform the algebraic optima behind the largest records, which is exactly where a stronger search wins.
 
 ## Key management for the agent
 
@@ -171,7 +171,7 @@ vela status examples/erdos-problems         # one-screen truth
 1. **Read the frontier.** `vela status` shows replay health, pending proposals, live leases, and signed judgment counts. Problem pages render the same state at app.constellate.science/erdos/617 (append `/packet.json` for the machine twin).
 2. **Pull a task packet.** `vela serve examples/erdos-problems` exposes MCP tools; `task_packet` for a problem number returns the statement, allowed outputs mapped to verifiers, banked do-not-regrind routes, and open targets ranked by what rests on them.
 3. **Lease before long work.** `vela claim <frontier> <obligation-id> --ttl 86400 --by <actor> --key <key>` so other producers route around you.
-4. **Produce a state transition.** A witness that passes `vela reproduce`, a finding proposed via `vela propose`, or a signed attempt (failures included — they are ledger entries, not noise).
+4. **Produce a state transition.** A witness that passes `vela reproduce`, a finding proposed via `vela propose`, or a signed attempt (failures included: they are ledger entries, not noise).
 5. **Authority is custody.** An agent may propose; only a key-holding human accepts (`vela accept --key`). Statement faithfulness is a separate signed verdict (`vela attest-statement`): the kernel proves the formal statement follows; only a human attests it is the problem anyone meant.
 
 ### The objects
@@ -350,7 +350,7 @@ For agents that want to emit signed substrate artifacts directly from Python, po
 
 Status: v0.196. Composes the [v0.193 Scientific Diff Pack](../crates/vela-protocol/src/scientific_diff.rs), [v0.194 Trajectory taxonomy](../crates/vela-protocol/src/bundle.rs), and [v0.195 Agent Attestation envelope](../crates/vela-protocol/src/agent_attestation.rs).
 
-The SDK lets any LLM agent (Claude, Codex, a Python-orchestrated bench tool) submit a coherent change-set to a Vela frontier in roughly five lines. Mirrors the substrate's canonical-bytes id derivation and Ed25519 signing exactly, so a Python-emitted `vsd_*` or `vaa_*` verifies byte-for-byte under the Rust `vela` CLI — there is a regression test (`test-agent-sdk.sh`) that builds a pack with the Python SDK and verifies it with the Rust binary on every cycle.
+The SDK lets any LLM agent (Claude, Codex, a Python-orchestrated bench tool) submit a coherent change-set to a Vela frontier in roughly five lines. Mirrors the substrate's canonical-bytes id derivation and Ed25519 signing exactly, so a Python-emitted `vsd_*` or `vaa_*` verifies byte-for-byte under the Rust `vela` CLI; there is a regression test (`test-agent-sdk.sh`) that builds a pack with the Python SDK and verifies it with the Rust binary on every cycle.
 
 ### Install
 
@@ -403,7 +403,7 @@ Substrate-honesty: every claim runnable or rejected.
 - **The SDK does not vouch for correctness.** It packages, signs, and writes. A reviewer still reads the Diff Pack and accepts or rejects through the same keyed accept path a human-authored proposal flows through.
 - **Proposal stubs are not canonical proposals yet.** They carry an SDK-derived `vpr_*` id and the original payload. The Diff Pack references them by id; the actual reducer-side `proposal.submitted` event is emitted when a downstream tool (a future `vela propose --from-sdk-stub` arm) walks the stub directory.
 - **No auto-acceptance.** v0.196 ships the producer side. The reviewer side remains the v0.174 review-thread surface plus the v0.198 (next cycle) `/diff-packs/[id]` detail page.
-- **No agent-runtime integration.** The SDK is harness-agnostic — it does not run Claude or wire up MCP servers. You orchestrate the model; the SDK records what happened.
+- **No agent-runtime integration.** The SDK is harness-agnostic: it does not run Claude or wire up MCP servers. You orchestrate the model; the SDK records what happened.
 
 ### Trajectory helpers
 
@@ -427,9 +427,9 @@ The `references` field on a step can hold any kernel-object id; the SDK does not
 
 All three are runnable as `python -m vela_agent.examples.<name> <frontier_path> --frontier-id vfr_...`:
 
-- **literature_scout** — proposes a new finding from a sample arxiv abstract. Records two tool calls + opens a small trajectory citing both the `vaa_*` and the `vsd_*`.
-- **replication_checker** — opens a trajectory with the full Question / Protocol / Data / Tool / Output / Review path and submits an `evidence.refresh` Diff Pack.
-- **correction_proposer** — submits a `correction.batch` pack with two proposals: a confidence revision and a contradicting-evidence pointer.
+- **literature_scout**: proposes a new finding from a sample arxiv abstract. Records two tool calls + opens a small trajectory citing both the `vaa_*` and the `vsd_*`.
+- **replication_checker**: opens a trajectory with the full Question / Protocol / Data / Tool / Output / Review path and submits an `evidence.refresh` Diff Pack.
+- **correction_proposer**: submits a `correction.batch` pack with two proposals: a confidence revision and a contradicting-evidence pointer.
 
 ### Cross-impl pin
 
@@ -1192,10 +1192,10 @@ Release tests should assert field presence and types, not exact pretty-printing.
 
 ## See also
 
-- `docs/AI_ATTRIBUTION.md` — full agent-vs-human-reviewer doctrine (Gowers-shaped).
-- "§MCP server" (above) — the full tool catalog.
-- "§Frontier Context Protocol (FCP)" (above) — the LSP-shaped query surface.
-- "§Python SDK (vela-agent)" (above) — the five-line producer SDK.
-- "§CLI JSON contracts" (above) — the stable `--json` envelopes.
-- `docs/RELAY.md` — the four-adapter shape contract; agents typically work through `paper-to-vela` / `hypothesis-to-vela` / `review-to-vela`.
-- `scripts/test-agent-init.sh` — the regression gate this on-ramp is pinned against.
+- `docs/AI_ATTRIBUTION.md`: full agent-vs-human-reviewer doctrine (Gowers-shaped).
+- "§MCP server" (above): the full tool catalog.
+- "§Frontier Context Protocol (FCP)" (above): the LSP-shaped query surface.
+- "§Python SDK (vela-agent)" (above): the five-line producer SDK.
+- "§CLI JSON contracts" (above): the stable `--json` envelopes.
+- `docs/RELAY.md`: the four-adapter shape contract; agents typically work through `paper-to-vela` / `hypothesis-to-vela` / `review-to-vela`.
+- `scripts/test-agent-init.sh`: the regression gate this on-ramp is pinned against.

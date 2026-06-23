@@ -637,7 +637,7 @@ pub fn verify_two_full_three_full(n_max: u64, examples: &[u64]) -> VerifyResult 
         while m > 1 {
             let p = spf[m] as usize;
             let mut e = 0;
-            while m % p == 0 {
+            while m.is_multiple_of(p) {
                 m /= p;
                 e += 1;
             }
@@ -708,7 +708,7 @@ pub fn verify_powerful_triples_none(n_max: u64, pairs_claimed: Option<u64>) -> V
         while m > 1 {
             let p = spf[m] as usize;
             let mut e = 0;
-            while m % p == 0 {
+            while m.is_multiple_of(p) {
                 m /= p;
                 e += 1;
             }
@@ -761,7 +761,7 @@ pub fn verify_distinct_partial_sums(p: u64, orderings: &[Vec<u64>]) -> VerifyRes
         }
         let mut d = 2;
         while d * d <= n {
-            if n % d == 0 {
+            if n.is_multiple_of(d) {
                 return false;
             }
             d += 1;
@@ -892,12 +892,12 @@ pub fn verify_brocard_no_square(n_min: u64, n_max: u64, cases: &[BrocardCase]) -
         if n < 2 {
             return false;
         }
-        if n % 2 == 0 {
+        if n.is_multiple_of(2) {
             return n == 2;
         }
         let mut d = 3u64;
         while d * d <= n {
-            if n % d == 0 {
+            if n.is_multiple_of(d) {
                 return false;
             }
             d += 2;
@@ -1044,9 +1044,9 @@ pub fn verify_semiprime_egyptian(cases: &[SemiprimeEgyptianCase]) -> VerifyResul
         let mut factors = 0u32;
         let mut d = 2u64;
         while d * d <= m {
-            if m % d == 0 {
+            if m.is_multiple_of(d) {
                 let mut e = 0u32;
-                while m % d == 0 {
+                while m.is_multiple_of(d) {
                     m /= d;
                     e += 1;
                 }
@@ -1065,9 +1065,9 @@ pub fn verify_semiprime_egyptian(cases: &[SemiprimeEgyptianCase]) -> VerifyResul
     let is_squarefree = |mut n: u64| -> bool {
         let mut d = 2u64;
         while d * d <= n {
-            if n % d == 0 {
+            if n.is_multiple_of(d) {
                 n /= d;
-                if n % d == 0 {
+                if n.is_multiple_of(d) {
                     return false;
                 }
             } else {
@@ -3912,7 +3912,7 @@ mod rat_tests {
             }
             let mut d = 2;
             while d * d <= n {
-                if n % d == 0 {
+                if n.is_multiple_of(d) {
                     return false;
                 }
                 d += 1;

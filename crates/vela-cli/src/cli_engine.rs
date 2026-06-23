@@ -508,8 +508,15 @@ pub(crate) fn cmd_foundry(action: FoundryAction) {
             catalog,
             records,
             attackable_only,
+            erdos_bounds,
             json,
-        } => cmd_foundry_targets(&catalog, &records, attackable_only, json),
+        } => cmd_foundry_targets(
+            &catalog,
+            &records,
+            attackable_only,
+            erdos_bounds.as_deref(),
+            json,
+        ),
         FoundryAction::Ablate {
             frontier,
             kind,
@@ -564,6 +571,43 @@ pub(crate) fn cmd_foundry(action: FoundryAction) {
             lemmas,
             json,
         } => cmd_foundry_lean_ablate(&frontier, lemmas.as_deref(), json),
+        FoundryAction::ErdosBounds { input, out, json } => {
+            cmd_foundry_erdos_bounds(&input, &out, json)
+        }
+    }
+}
+
+/// Project the typed current-best bounds from the staged erdos-deep source into
+/// a `vela.frontier-bounds.v1` sidecar. Reads the SAME source the erdos adapter
+/// ingests, runs it through the adapter's typed-bound projection, and writes a
+/// new `bounds.json`. Additive: it never reads or writes any accepted finding
+/// or the frontier canonical root, so `vela reproduce` is unaffected. Every
+/// bound is unattested (`accepted: false`). Deterministic (sorted output).
+fn cmd_foundry_erdos_bounds(input: &Path, out: &Path, json_out: bool) {
+    let records = crate::atlas_adapters::read_erdos_deep(input, "erdos-bounds")
+        .unwrap_or_else(|e| fail_return(&e));
+    let doc = crate::atlas_adapters::erdos_deep_bounds(&records);
+    let body = serde_json::to_string_pretty(&doc).unwrap() + "\n";
+    std::fs::write(out, &body)
+        .unwrap_or_else(|e| fail_return(&format!("write {}: {e}", out.display())));
+    let attackable = doc.bounds.iter().filter(|b| b.value.is_some()).count();
+    if json_out {
+        print_json(&json!({
+            "command": "foundry.erdos-bounds",
+            "input": input.display().to_string(),
+            "out": out.display().to_string(),
+            "schema": doc.schema,
+            "bounds": doc.bounds.len(),
+            "parsed_value": attackable,
+            "all_unattested": doc.bounds.iter().all(|b| !b.accepted),
+        }));
+    } else {
+        eprintln!(
+            "wrote {} ({} typed bounds, {} with a parsed value; all unattested)",
+            out.display(),
+            doc.bounds.len(),
+            attackable
+        );
     }
 }
 
@@ -1825,7 +1869,13 @@ fn read_records_best(path: &Path) -> Option<Value> {
 /// attackable portfolio with each value-to-beat (and the current accepted best
 /// where Vela holds records). This replaces the web/script JSON as the foundry's
 /// portfolio source; `foundry run` selects a cell from it.
-fn cmd_foundry_targets(catalog: &Path, records: &Path, attackable_only: bool, json_out: bool) {
+fn cmd_foundry_targets(
+    catalog: &Path,
+    records: &Path,
+    attackable_only: bool,
+    erdos_bounds: Option<&Path>,
+    json_out: bool,
+) {
     let raw = std::fs::read_to_string(catalog)
         .unwrap_or_else(|e| fail_return(&format!("read {}: {e}", catalog.display())));
     let doc: Value = serde_json::from_str(&raw)
@@ -1893,6 +1943,43 @@ fn cmd_foundry_targets(catalog: &Path, records: &Path, attackable_only: bool, js
             "accepted_best": accepted_best,
             "records_source": records_source,
         }));
+    }
+
+    // Optionally fold in the typed Erdős current-best bounds (the value-to-beat
+    // the erdos-deep adapter now emits into a `vela.frontier-bounds.v1` sidecar).
+    // This is the consumer that READS the typed bound — it surfaces each Erdős
+    // problem's value-to-beat in the same portfolio as the catalog incumbents,
+    // so the foundry / attack ranking sees it. Unattested bounds are honestly
+    // labeled (status "bound-unattested"); non-engine kind (no campaign attacks
+    // an arbitrary Erdős problem yet) keeps them ranked after the engine cells.
+    if let Some(bp) = erdos_bounds {
+        match std::fs::read_to_string(bp) {
+            Ok(braw) => {
+                match serde_json::from_str::<vela_protocol::frontier_bound::FrontierBoundsDoc>(
+                    &braw,
+                ) {
+                    Ok(doc) => {
+                        for b in &doc.bounds {
+                            rows.push(json!({
+                            "id": b.problem,
+                            "domain": "erdos",
+                            "verifier_kind": "",
+                            "attackable": false,
+                            "value_to_beat": b.value,
+                            "direction": b.direction.as_str(),
+                            "basis": b.source_text,
+                            "status": if b.accepted { "bound-attested" } else { "bound-unattested" },
+                            "source": bp.display().to_string(),
+                            "accepted_best": Value::Null,
+                            "records_source": Value::Null,
+                        }));
+                        }
+                    }
+                    Err(e) => fail_return(&format!("parse {}: {e}", bp.display())),
+                }
+            }
+            Err(e) => fail_return(&format!("read {}: {e}", bp.display())),
+        }
     }
 
     // Sort: attackable+open first; non-engine kinds and showcases last.
