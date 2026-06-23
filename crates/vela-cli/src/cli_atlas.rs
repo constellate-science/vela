@@ -63,6 +63,10 @@ pub(crate) fn run(args: &[String]) {
         run_contradictions(args);
         return;
     }
+    if args.get(2).map(String::as_str) == Some("gluing") {
+        run_gluing(args);
+        return;
+    }
     if args.get(2).map(String::as_str) == Some("domains") {
         run_domains(args);
         return;
@@ -922,6 +926,158 @@ fn run_contradictions(args: &[String]) {
     } else {
         println!(
             "\ncandidates only — never auto-adjudicated; surfaced for human review (the doctrine)."
+        );
+    }
+}
+
+/// `vela atlas gluing <frontier>... [--json]` — the presheaf-with-discord view
+/// (plan B2 / THEORY §11.1). An atlas cell is the GLUING of local domain states
+/// (the `vf_` members sharing a HardIdentity anchor across sources/contexts). The
+/// cell glues into a coherent global frontier only where its members AGREE; a cell
+/// whose members disagree is a GLUING OBSTRUCTION — the Belnap "both" (B) point,
+/// already computed per cell as `AtlasCell.belnap`. There is no sheaf (unique
+/// gluing fails, §11.1); the honest object is a presheaf with a discord `D_A`, and
+/// `Frontier = supp(D_A)` is exactly the set of obstructed cells. Two discord
+/// kinds: `verifier_discord` (belnap B — one member supported, another refuted, the
+/// strong form) and `status_discord` (declared status conflict, open vs resolved,
+/// the weak form `run_contradictions` finds). Read-side projection over
+/// `atlas::project` + the bilattice; never auto-adjudicated (a discord links a
+/// candidate `Contradiction`, a signal for key-custody review).
+fn run_gluing(args: &[String]) {
+    use vela_protocol::bundle::bare_finding_id;
+    use vela_protocol::contradiction::Contradiction;
+
+    let frontiers: Vec<&str> = args
+        .iter()
+        .skip(3)
+        .filter(|a| !a.starts_with('-'))
+        .map(String::as_str)
+        .collect();
+    let json_out = args.iter().any(|a| a == "--json");
+    if frontiers.is_empty() {
+        fail("usage: vela atlas gluing <frontier> [<frontier> ...] [--json]");
+    }
+    let projects: Vec<_> = frontiers
+        .iter()
+        .map(|f| {
+            repo::load_from_path(Path::new(f)).unwrap_or_else(|e| fail(&format!("load {f}: {e}")))
+        })
+        .collect();
+    let mut status_of: std::collections::HashMap<String, &'static str> =
+        std::collections::HashMap::new();
+    for p in &projects {
+        for f in &p.findings {
+            if let Some(s) = declared_status(&f.assertion.text) {
+                status_of.insert(f.id.clone(), s);
+            }
+        }
+    }
+    let refs: Vec<&_> = projects.iter().collect();
+    let out = atlas::project(&refs);
+
+    // The discord support: multi-member cells that fail to glue. A cell's joined
+    // Belnap "B" is verifier-backed disagreement; a declared open-vs-resolved split
+    // is the weaker declared-status discord.
+    let mut obstructions: Vec<serde_json::Value> = Vec::new();
+    let mut glued = 0usize;
+    let mut multi = 0usize;
+    for cell in &out.cells {
+        if cell.members.len() < 2 {
+            continue; // a singleton cell glues vacuously
+        }
+        multi += 1;
+        // declared-status discord within the cell
+        let mut by_status: std::collections::BTreeMap<&str, String> =
+            std::collections::BTreeMap::new();
+        for m in &cell.members {
+            if let Some(s) = status_of.get(bare_finding_id(m)) {
+                by_status
+                    .entry(*s)
+                    .or_insert_with(|| bare_finding_id(m).to_string());
+            }
+        }
+        let open = by_status.get("open").cloned();
+        let resolved = by_status
+            .iter()
+            .find(|(s, _)| **s != "open")
+            .map(|(s, id)| (*s, id.clone()));
+        let status_discord = matches!((&open, &resolved), (Some(_), Some(_)));
+        let verifier_discord = cell.belnap == "B";
+        if !verifier_discord && !status_discord {
+            glued += 1;
+            continue;
+        }
+        let anchor = cell
+            .anchors
+            .first()
+            .map(|an| format!("{}:{}", an.namespace, an.id))
+            .unwrap_or_else(|| "spine".to_string());
+        let kind = if verifier_discord {
+            "verifier_discord"
+        } else {
+            "status_discord"
+        };
+        // link a candidate contradiction (never auto-adjudicated)
+        let (wa, wb) = match (&open, &resolved) {
+            (Some(a), Some((_, b))) => (a.clone(), b.clone()),
+            _ => {
+                let mut it = cell.members.iter();
+                (
+                    it.next()
+                        .map(|m| bare_finding_id(m).to_string())
+                        .unwrap_or_default(),
+                    it.next()
+                        .map(|m| bare_finding_id(m).to_string())
+                        .unwrap_or_default(),
+                )
+            }
+        };
+        let cx = Contradiction::candidate(&anchor, &wa, &wb, kind);
+        obstructions.push(json!({
+            "anchor": anchor,
+            "label": cell.label.chars().take(80).collect::<String>(),
+            "belnap": cell.belnap,
+            "discord_kind": kind,
+            "members": cell.members.iter().map(|m| bare_finding_id(m).to_string()).collect::<Vec<_>>(),
+            "contradiction_id": cx.contradiction_id,
+            "status": "candidate",
+        }));
+    }
+
+    if json_out {
+        print_json(&json!({
+            "object": "vela.gluing_obstruction.v1",
+            "frontiers": frontiers,
+            "cells": out.cells.len(),
+            "multi_member_cells": multi,
+            "glued": glued,
+            "discord_support": obstructions.len(),
+            "doctrine": "Frontier = supp(D_A); a presheaf with discord, not a sheaf (no unique gluing, THEORY §11.1). Discords are candidates — never auto-adjudicated.",
+            "obstructions": obstructions,
+        }));
+        return;
+    }
+    println!(
+        "presheaf-with-discord — {} cells, {} multi-member, {} glue cleanly, {} in the discord support (Frontier = supp(D_A))",
+        out.cells.len(),
+        multi,
+        glued,
+        obstructions.len()
+    );
+    for o in &obstructions {
+        println!(
+            "  [{}] {} ({}) : {}",
+            o["discord_kind"].as_str().unwrap_or(""),
+            o["anchor"].as_str().unwrap_or(""),
+            o["belnap"].as_str().unwrap_or(""),
+            o["label"].as_str().unwrap_or("")
+        );
+    }
+    if obstructions.is_empty() {
+        println!("  (every multi-member cell glues — no discord; local states agree on overlaps)");
+    } else {
+        println!(
+            "\ndiscords are candidates — never auto-adjudicated; resolution is key-custody review."
         );
     }
 }
