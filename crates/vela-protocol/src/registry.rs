@@ -380,15 +380,32 @@ pub fn resolve_local(locator: &str) -> Result<PathBuf, String> {
 /// HTTP fetch returns the same `Registry` shape; the hub serves the
 /// canonical-JSON manifest verbatim, so signature verification works
 /// byte-for-byte without re-canonicalization.
+/// Run a blocking reqwest call on a dedicated OS thread (so it never blocks
+/// inside an async runtime), with a pre-built client carrying the standard
+/// user-agent + timeout. Consolidates the client-build + thread-spawn + join
+/// boilerplate shared by every registry HTTP call; each caller keeps its own
+/// request/response logic in `f`.
+fn run_blocking_http<T, F>(timeout_secs: u64, f: F) -> Result<T, String>
+where
+    F: FnOnce(&reqwest::blocking::Client) -> Result<T, String> + Send + 'static,
+    T: Send + 'static,
+{
+    std::thread::spawn(move || -> Result<T, String> {
+        let client = reqwest::blocking::Client::builder()
+            .user_agent(concat!("vela/", env!("CARGO_PKG_VERSION")))
+            .timeout(std::time::Duration::from_secs(timeout_secs))
+            .build()
+            .map_err(|e| format!("build http client: {e}"))?;
+        f(&client)
+    })
+    .join()
+    .map_err(|_| "http worker thread panicked".to_string())?
+}
+
 pub fn load_any(locator: &str) -> Result<Registry, String> {
     if locator.starts_with("http://") || locator.starts_with("https://") {
         let url = registry_listing_url(locator);
-        std::thread::spawn(move || {
-            let client = reqwest::blocking::Client::builder()
-                .user_agent(concat!("vela/", env!("CARGO_PKG_VERSION")))
-                .timeout(std::time::Duration::from_secs(30))
-                .build()
-                .map_err(|e| format!("build http client: {e}"))?;
+        run_blocking_http(30, move |client| {
             let resp = client
                 .get(&url)
                 .send()
@@ -401,8 +418,6 @@ pub fn load_any(locator: &str) -> Result<Registry, String> {
                 .map_err(|e| format!("read response body: {e}"))?;
             serde_json::from_str(&text).map_err(|e| format!("parse remote registry {url}: {e}"))
         })
-        .join()
-        .map_err(|_| "remote registry fetch worker panicked".to_string())?
     } else {
         let path = resolve_local(locator)?;
         load_local(&path)
@@ -625,15 +640,9 @@ pub fn publish_remote(
         }
     };
 
-    std::thread::spawn(move || {
-        let client = reqwest::blocking::Client::builder()
-            .user_agent(concat!("vela/", env!("CARGO_PKG_VERSION")))
-            // Substrate can be tens of MB on broad frontiers (the BBB-superset
-            // ALZ corpus is ~21 MB). Allow generous time on the upload + hub
-            // hash verification + DB insert.
-            .timeout(std::time::Duration::from_secs(120))
-            .build()
-            .map_err(|e| format!("build http client: {e}"))?;
+    // Substrate can be tens of MB on broad frontiers; allow generous time on
+    // the upload + hub hash verification + DB insert.
+    run_blocking_http(120, move |client| {
         let resp = client
             .post(&url)
             .header("content-type", "application/json")
@@ -654,8 +663,6 @@ pub fn publish_remote(
         }
         serde_json::from_str(&text).map_err(|e| format!("parse publish response: {e}"))
     })
-    .join()
-    .map_err(|_| "remote publish worker panicked".to_string())?
 }
 
 /// Strip a trailing `/entries` (and slashes) so `/blobs/<hash>` composes
@@ -745,12 +752,7 @@ pub fn upload_artifact_blobs(
         return Ok(report);
     }
     let pubkey = pubkey_hex.to_string();
-    let (uploaded, duplicate) = std::thread::spawn(move || -> Result<(usize, usize), String> {
-        let client = reqwest::blocking::Client::builder()
-            .user_agent(concat!("vela/", env!("CARGO_PKG_VERSION")))
-            .timeout(std::time::Duration::from_secs(120))
-            .build()
-            .map_err(|e| format!("build http client: {e}"))?;
+    let (uploaded, duplicate) = run_blocking_http(120, move |client| {
         let mut up = 0usize;
         let mut dup = 0usize;
         for (hash, bytes) in jobs {
@@ -782,9 +784,7 @@ pub fn upload_artifact_blobs(
             }
         }
         Ok((up, dup))
-    })
-    .join()
-    .map_err(|_| "blob upload worker panicked".to_string())??;
+    })?;
     report.uploaded = uploaded;
     report.duplicate = duplicate;
     Ok(report)
@@ -799,12 +799,7 @@ pub fn fetch_blob(hub_url: &str, hash_hex: &str) -> Result<Vec<u8>, String> {
     let hub_root = hub_root_of(hub_url);
     let url = format!("{hub_root}/blobs/{hash_hex}");
     let hash = hash_hex.to_string();
-    std::thread::spawn(move || -> Result<Vec<u8>, String> {
-        let client = reqwest::blocking::Client::builder()
-            .user_agent(concat!("vela/", env!("CARGO_PKG_VERSION")))
-            .timeout(std::time::Duration::from_secs(120))
-            .build()
-            .map_err(|e| format!("build http client: {e}"))?;
+    run_blocking_http(120, move |client| {
         let resp = client
             .get(&url)
             .send()
@@ -816,8 +811,88 @@ pub fn fetch_blob(hub_url: &str, hash_hex: &str) -> Result<Vec<u8>, String> {
         let bytes = resp.bytes().map_err(|e| format!("read blob {hash}: {e}"))?;
         Ok(bytes.to_vec())
     })
-    .join()
-    .map_err(|_| "blob fetch worker panicked".to_string())?
+}
+
+/// Deliver a signed proposal-acceptance to a hub
+/// (`POST {hub}/entries/{vfr}/proposals/{pid}/accept`). The detached signature
+/// is over the canonical accept preimage (vfr, proposal, reviewer, reason);
+/// the hub re-derives the same preimage and verifies it against the signer's
+/// registered, non-revoked reviewer key. Key-custody: the human signs; this
+/// only transports their signature. Returns `(http_status, body)`.
+pub fn post_accept_to_hub(
+    hub_url: &str,
+    vfr_id: &str,
+    proposal_id: &str,
+    reason: &str,
+    signer_pubkey_hex: &str,
+    signature_hex: &str,
+) -> Result<(u16, String), String> {
+    let hub_root = hub_root_of(hub_url);
+    let url = format!("{hub_root}/entries/{vfr_id}/proposals/{proposal_id}/accept");
+    let body = serde_json::json!({ "reason": reason });
+    let pk = signer_pubkey_hex.to_string();
+    let sig = signature_hex.to_string();
+    run_blocking_http(60, move |client| {
+        let resp = client
+            .post(&url)
+            .header("X-Vela-Signer-Pubkey", &pk)
+            .header("X-Vela-Signature", &sig)
+            .json(&body)
+            .send()
+            .map_err(|e| format!("POST {url}: {e}"))?;
+        let status = resp.status().as_u16();
+        let text = resp.text().unwrap_or_default();
+        Ok((status, text))
+    })
+}
+
+/// Fetch the FULL set of event ids of a frontier's log from a hub
+/// (`GET {hub}/entries/{vfr}/events`), used by `vela pull` to classify the
+/// relationship (fast-forward / ahead / diverged) between local and remote.
+/// The hub clamps page size server-side (~500), so this paginates via the
+/// `since=<last id>` cursor until the log is exhausted — never truncating.
+/// Returned order is the hub's append order; callers must NOT rely on it for
+/// ancestry (compare by set membership: ids are content-addressed).
+pub fn fetch_event_ids(hub_url: &str, vfr_id: &str) -> Result<Vec<String>, String> {
+    let hub_root = hub_root_of(hub_url);
+    let mut ids: Vec<String> = Vec::new();
+    let mut cursor: Option<String> = None;
+    // Generous loop bound as a runaway backstop (each page advances the cursor).
+    for _ in 0..100_000 {
+        let url = match &cursor {
+            Some(c) => format!("{hub_root}/entries/{vfr_id}/events?limit=500&since={c}"),
+            None => format!("{hub_root}/entries/{vfr_id}/events?limit=500"),
+        };
+        let body = run_blocking_http(120, move |client| {
+            let resp = client
+                .get(&url)
+                .send()
+                .map_err(|e| format!("GET {url}: {e}"))?;
+            let status = resp.status();
+            if !status.is_success() {
+                return Err(format!("GET {url}: HTTP {status}"));
+            }
+            resp.text().map_err(|e| format!("read events: {e}"))
+        })?;
+        let parsed: serde_json::Value =
+            serde_json::from_str(&body).map_err(|e| format!("parse events: {e}"))?;
+        let page: Vec<String> = parsed
+            .get("events")
+            .and_then(|v| v.as_array())
+            .ok_or("events response has no `events` array")?
+            .iter()
+            .filter_map(|e| e.get("id").and_then(|i| i.as_str()).map(str::to_string))
+            .collect();
+        if page.is_empty() {
+            break;
+        }
+        ids.extend(page);
+        match parsed.get("next_cursor").and_then(|c| c.as_str()) {
+            Some(c) if !c.is_empty() => cursor = Some(c.to_string()),
+            _ => break,
+        }
+    }
+    Ok(ids)
 }
 
 /// Append a signed entry to a registry, replacing any prior entry

@@ -163,7 +163,11 @@ pub async fn run_command() {
                 }
             }
         }
-        Commands::Status { frontier, json } => cmd_status(&frontier, json),
+        Commands::Status {
+            frontier,
+            remote,
+            json,
+        } => cmd_status(&frontier, json, remote),
         Commands::Log {
             frontier,
             limit,
@@ -529,6 +533,15 @@ pub async fn run_command() {
         Commands::Frontier { action } => cmd_frontier(action),
         Commands::Queue { action } => cmd_queue(action),
         Commands::Registry { action } => cmd_registry(action),
+        Commands::Pull {
+            frontier,
+            from,
+            json,
+        } => {
+            let hub = crate::cli_identity::resolve_hub(from.as_deref());
+            crate::cli_registry::cmd_pull(&frontier, &hub, json);
+        }
+        Commands::Workspace { action } => crate::cli_registry::cmd_workspace(action),
         Commands::Init {
             path,
             name,
@@ -1113,6 +1126,8 @@ pub async fn run_command() {
             key,
             strict,
             force,
+            push,
+            to,
             json,
         } => {
             let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
@@ -1134,6 +1149,23 @@ pub async fn run_command() {
             )
             .unwrap_or_else(|e| fail_return(&e));
             let v = &outcome.verdict;
+
+            // P3.4: after applying the accept locally, optionally deliver the
+            // same human signature to the hub. Best-effort — a hub failure
+            // never unwinds the local accept (which is already on disk).
+            let mut hub_result = serde_json::Value::Null;
+            if push || to.is_some() {
+                hub_result = deliver_accept_to_hub(
+                    &frontier,
+                    &proposal_id,
+                    &reviewer,
+                    &reason,
+                    key.as_deref(),
+                    to.as_deref(),
+                    json,
+                );
+            }
+
             let payload = json!({
                 "ok": true,
                 "command": "accept",
@@ -1150,6 +1182,7 @@ pub async fn run_command() {
                     "release_blocking_failed": v.release_blocking_failed,
                     "warnings": v.warnings,
                 },
+                "hub": hub_result,
             });
             if json {
                 print_json(&payload);
@@ -5405,9 +5438,11 @@ Identity and publishing:
   id            Set up your key + identity once (then no --key/--actor/--hub flags)
   publish       Push a frontier to the hub (one verb; owner/key/hub from your identity; alias: push)
   clone         Clone a frontier from the hub into a working tree (reproduces + extends)
+  pull          Fast-forward a local checkout from its hub remote (no silent merge)
   sign          Optional signing and signature verification
   actor         Register Ed25519 publisher identities in a frontier
   registry      Publish, pull, list; maintainer add/remove, deprecate, rotate-owner
+  workspace     List/add/remove checked-out frontiers + their hub remotes (the gate reads this)
   frontier      Scaffold (`new`), materialize, and manage frontier metadata + deps
   lock          Regenerate or verify the frontier's `vela.lock` dependency pins
   doc           Generate a static HTML site documenting the frontier
@@ -5832,6 +5867,81 @@ pub(crate) fn print_json<T: Serialize + ?Sized>(value: &T) {
 /// Render an Engine verdict under an accept (human output). Quiet on a
 /// clean pass so the common case stays uncluttered; speaks up for
 /// warnings and forced overrides.
+/// P3.4: deliver a locally-applied accept to the hub under key custody. The
+/// human has already signed + applied the accept on disk; this re-signs the
+/// canonical accept preimage and POSTs it so the hub records the same
+/// decision. Best-effort and non-fatal: any failure is logged, the local
+/// accept stands, and the returned JSON reports the outcome.
+fn deliver_accept_to_hub(
+    frontier: &std::path::Path,
+    proposal_id: &str,
+    reviewer: &str,
+    reason: &str,
+    key: Option<&std::path::Path>,
+    to: Option<&str>,
+    json: bool,
+) -> serde_json::Value {
+    let Some(signing_key) = crate::cli_identity::resolve_signing_key_opt(key) else {
+        if !json {
+            eprintln!(
+                "  ! --push needs a signing key (--key or `vela id create`); local accept applied, hub delivery skipped"
+            );
+        }
+        return json!({"ok": false, "error": "no signing key for hub delivery"});
+    };
+    let hub = crate::cli_identity::resolve_hub(to);
+    let project = match repo::load_from_path(frontier) {
+        Ok(p) => p,
+        Err(e) => return json!({"ok": false, "error": format!("load frontier: {e}")}),
+    };
+    let vfr = project.frontier_id();
+    let preimage = match proposals::accept_preimage_bytes(&vfr, proposal_id, reviewer, reason) {
+        Ok(b) => b,
+        Err(e) => return json!({"ok": false, "error": format!("accept preimage: {e}")}),
+    };
+    let sig_hex = hex::encode(sign::sign_bytes(&signing_key, &preimage));
+    let pk_hex = sign::pubkey_hex(&signing_key);
+    match vela_protocol::registry::post_accept_to_hub(
+        &hub,
+        &vfr,
+        proposal_id,
+        reason,
+        &pk_hex,
+        &sig_hex,
+    ) {
+        Ok((status, text)) => {
+            let ok = (200..300).contains(&status);
+            if !json {
+                if ok {
+                    println!("  hub:   delivered accept to {hub} (HTTP {status})");
+                } else {
+                    eprintln!("  ! hub accept delivery failed (HTTP {status}): {text}");
+                    // The hub re-derives the reviewer id from the SIGNER KEY,
+                    // not the --reviewer string. A signature-blaming 401 almost
+                    // always means the key registers as a different actor than
+                    // the name that was signed over.
+                    if status == 401 && text.contains("does not verify") {
+                        eprintln!(
+                            "    hint: the hub identifies the reviewer by your signing KEY, not the \
+                             --reviewer name '{reviewer}'. Re-run with --reviewer set to the actor \
+                             your key is registered under on this frontier, or fix your `vela id` profile."
+                        );
+                    }
+                    eprintln!("    the local accept is applied; re-run with --push to retry.");
+                }
+            }
+            json!({"ok": ok, "http_status": status, "hub": hub})
+        }
+        Err(e) => {
+            if !json {
+                eprintln!("  ! hub accept delivery failed: {e}");
+                eprintln!("    the local accept is applied; re-run with --push to retry.");
+            }
+            json!({"ok": false, "error": e, "hub": hub})
+        }
+    }
+}
+
 pub(crate) fn print_engine_verdict(v: &proposals::EngineVerdict) {
     match v.status.as_str() {
         "pass" => {

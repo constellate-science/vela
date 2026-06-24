@@ -172,8 +172,12 @@ impl Storage {
         {
             Ok(_) => Ok(true),
             Err(e) => {
+                // S3-compatible backends spell "absent" several ways: AWS/MinIO
+                // emit `NoSuchKey`, the HTTP layer a `404`, some SDKs `NotFound`.
+                // Match all three as Ok(false); anything else (AccessDenied,
+                // dispatch/TLS/timeout) is a real error and surfaces as Err.
                 let s = e.to_string();
-                if s.contains("NotFound") || s.contains("404") {
+                if s.contains("NoSuchKey") || s.contains("NotFound") || s.contains("404") {
                     Ok(false)
                 } else {
                     Err(format!(

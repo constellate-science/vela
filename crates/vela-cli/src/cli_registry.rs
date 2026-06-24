@@ -1250,6 +1250,67 @@ fn parse_vfr_target(target: &str) -> Option<String> {
         .map(str::to_string)
 }
 
+/// Reconstruct a verified working `.vela/` tree at `dest` from a hub's signed
+/// registry entry: fetch + hash-verify the snapshot, rebuild the tree, restore
+/// every witness/proof blob by content hash (from a local mirror if
+/// `blobs_from` is set, else the hub blob tier), and GATE on byte-parity — the
+/// rebuilt snapshot + event-log hashes must equal the signed entry, or this
+/// errors. Shared by `vela clone` (fresh dir) and `vela pull` (fast-forward an
+/// existing checkout); both inherit the same swappability guarantee.
+fn reconstruct_working(
+    entry: &vela_protocol::registry::RegistryEntry,
+    registry_locator: &str,
+    hub_base: &str,
+    dest: &std::path::Path,
+    blobs_from: Option<&std::path::Path>,
+) -> Result<repo::WorkingFrontierReport, String> {
+    use vela_protocol::registry;
+    // Fetch the snapshot to a temp file (outside dest) and verify its hashes +
+    // signature against the signed registry entry.
+    let tmp = std::env::temp_dir().join(format!("vela-recon-{}.json", entry.vfr_id));
+    registry::fetch_frontier_to_prefer_event_hub(entry, Some(registry_locator), &tmp)
+        .map_err(|e| format!("fetch snapshot: {e}"))?;
+    if let Err(e) = registry::verify_pull(entry, &tmp) {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(format!("pull verification failed: {e}"));
+    }
+    let project = repo::load_from_path(&tmp).map_err(|e| format!("load snapshot: {e}"))?;
+    let _ = std::fs::remove_file(&tmp);
+
+    let hub_owned = hub_base.to_string();
+    let mirror = blobs_from.map(|p| p.to_path_buf());
+    let mut fetch = |hash: &str| -> Result<Vec<u8>, String> {
+        if let Some(dir) = &mirror {
+            for cand in [dir.join(hash), dir.join("sha256").join(hash)] {
+                if cand.is_file() {
+                    return std::fs::read(&cand)
+                        .map_err(|e| format!("read {}: {e}", cand.display()));
+                }
+            }
+            return Err(format!("blob {hash} not in mirror {}", dir.display()));
+        }
+        registry::fetch_blob(&hub_owned, hash)
+    };
+
+    let report = repo::write_working_frontier(dest, &project, &mut fetch)
+        .map_err(|e| format!("reconstruct working tree: {e}"))?;
+
+    if report.snapshot_hash != entry.latest_snapshot_hash
+        || report.event_log_hash != entry.latest_event_log_hash
+    {
+        return Err(format!(
+            "integrity check FAILED: reconstructed hashes do not match the signed registry entry\n  \
+             snapshot:  {} (rebuilt) vs {} (signed)\n  \
+             event_log: {} (rebuilt) vs {} (signed)",
+            report.snapshot_hash,
+            entry.latest_snapshot_hash,
+            report.event_log_hash,
+            entry.latest_event_log_hash
+        ));
+    }
+    Ok(report)
+}
+
 /// `vela clone`: reconstruct a working frontier from a hub into a fresh
 /// directory — the git-style pull that closes the round-trip.
 ///
@@ -1302,56 +1363,9 @@ pub(crate) fn cmd_clone(
     std::fs::create_dir_all(&dest_dir)
         .unwrap_or_else(|e| fail_return(&format!("create {}: {e}", dest_dir.display())));
 
-    // 1. Fetch the snapshot to a temp file (outside dest) and verify the
-    //    hashes + signature against the signed registry entry.
-    let tmp = std::env::temp_dir().join(format!("vela-clone-{vfr_id}.json"));
-    registry::fetch_frontier_to_prefer_event_hub(&entry, Some(&registry_locator), &tmp)
-        .unwrap_or_else(|e| fail_return(&format!("fetch snapshot: {e}")));
-    registry::verify_pull(&entry, &tmp).unwrap_or_else(|e| {
-        let _ = std::fs::remove_file(&tmp);
-        fail_return(&format!("pull verification failed: {e}"))
-    });
-
-    // 2. Load the verified Project and reconstruct the working tree, drawing
-    //    artifact blobs from a local mirror (offline pin) or the hub blob
-    //    tier (every fetched blob is verified against its content_hash).
-    let project =
-        repo::load_from_path(&tmp).unwrap_or_else(|e| fail_return(&format!("load snapshot: {e}")));
-    let _ = std::fs::remove_file(&tmp);
-
-    let hub_owned = hub_base.to_string();
-    let mirror = blobs_from.map(|p| p.to_path_buf());
-    let mut fetch = |hash: &str| -> Result<Vec<u8>, String> {
-        if let Some(dir) = &mirror {
-            for cand in [dir.join(hash), dir.join("sha256").join(hash)] {
-                if cand.is_file() {
-                    return std::fs::read(&cand)
-                        .map_err(|e| format!("read {}: {e}", cand.display()));
-                }
-            }
-            return Err(format!("blob {hash} not in mirror {}", dir.display()));
-        }
-        registry::fetch_blob(&hub_owned, hash)
-    };
-
-    let report = repo::write_working_frontier(&dest_dir, &project, &mut fetch)
-        .unwrap_or_else(|e| fail_return(&format!("reconstruct working tree: {e}")));
-
-    // 3. Byte-parity gate: the reconstructed tree must hash to exactly what
-    //    the publisher signed. This is the definition of "swappable".
-    if report.snapshot_hash != entry.latest_snapshot_hash
-        || report.event_log_hash != entry.latest_event_log_hash
-    {
-        fail(&format!(
-            "clone integrity check FAILED: reconstructed hashes do not match the signed registry entry\n  \
-             snapshot:  {} (rebuilt) vs {} (signed)\n  \
-             event_log: {} (rebuilt) vs {} (signed)",
-            report.snapshot_hash,
-            entry.latest_snapshot_hash,
-            report.event_log_hash,
-            entry.latest_event_log_hash
-        ));
-    }
+    // Fetch + verify + reconstruct + byte-parity gate (shared with `pull`).
+    let report = reconstruct_working(&entry, &registry_locator, hub_base, &dest_dir, blobs_from)
+        .unwrap_or_else(|e| fail_return(&format!("clone failed: {e}")));
 
     let payload = json!({
         "ok": true,
@@ -1385,5 +1399,397 @@ pub(crate) fn cmd_clone(
         println!("  integrity: snapshot + event_log hashes match the signed registry entry");
         println!();
         println!("  next: vela reproduce {}", report.dest);
+    }
+}
+
+/// Count how many event ids each side has that the other lacks, plus the
+/// shared count, by SET membership over content-addressed ids — NOT by
+/// position. Local events load hash-sorted (by `{id}.json` filename) while
+/// the hub serves them append-sorted, so a positional/prefix comparison
+/// misclassifies a strict ancestor as diverged; set containment is the
+/// order-independent ancestry test (ids are immutable content hashes).
+/// Returns `(local_only, hub_only, shared)`.
+fn event_set_diff(local_ids: &[String], hub_ids: &[String]) -> (usize, usize, usize) {
+    use std::collections::HashSet;
+    let l: HashSet<&str> = local_ids.iter().map(String::as_str).collect();
+    let h: HashSet<&str> = hub_ids.iter().map(String::as_str).collect();
+    let local_only = l.difference(&h).count();
+    let hub_only = h.difference(&l).count();
+    let shared = l.intersection(&h).count();
+    (local_only, hub_only, shared)
+}
+
+/// Fast-forward a checkout to the hub state SAFELY. Reconstruct the verified
+/// hub tree into a sibling staging dir (same parent ⇒ same filesystem ⇒
+/// atomic renames), then swap the regenerable parts into the checkout. If
+/// reconstruction or its byte-parity gate fails, the existing checkout is left
+/// UNTOUCHED — no half-written tree. The swap also replaces (not merges) the
+/// state dirs, so any stale local-only object file is cleared.
+fn fast_forward_into(
+    entry: &vela_protocol::registry::RegistryEntry,
+    registry_locator: &str,
+    hub_base: &str,
+    frontier: &std::path::Path,
+) -> Result<repo::WorkingFrontierReport, String> {
+    let parent = frontier
+        .parent()
+        .unwrap_or_else(|| std::path::Path::new("."));
+    let stage = parent.join(format!(".vela-pull-{}", entry.vfr_id));
+    let _ = std::fs::remove_dir_all(&stage);
+    std::fs::create_dir_all(&stage).map_err(|e| format!("create staging dir: {e}"))?;
+    let report = match reconstruct_working(entry, registry_locator, hub_base, &stage, None) {
+        Ok(r) => r,
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(&stage);
+            return Err(e);
+        }
+    };
+    // Swap each regenerable entry from the verified staging tree into the
+    // checkout, replacing the destination's version.
+    for name in [
+        ".vela",
+        "frontier.json",
+        "frontier.yaml",
+        "vela.lock",
+        "witnesses",
+        "proof",
+    ] {
+        let src = stage.join(name);
+        if !src.exists() {
+            continue;
+        }
+        let dst = frontier.join(name);
+        if dst.is_dir() {
+            let _ = std::fs::remove_dir_all(&dst);
+        } else if dst.exists() {
+            let _ = std::fs::remove_file(&dst);
+        }
+        std::fs::rename(&src, &dst).map_err(|e| format!("swap {name} into checkout: {e}"))?;
+    }
+    let _ = std::fs::remove_dir_all(&stage);
+    Ok(report)
+}
+
+/// `vela pull`: bring a local checkout up to date with its hub remote.
+/// Fast-forwards when the hub is strictly ahead and the local checkout is an
+/// ancestor; refuses (with guidance, NEVER a silent merge) when the histories
+/// have diverged or the local checkout is ahead. Divergence resolution is a
+/// human/proposal step, per doctrine — Vela does not auto-merge truth.
+pub(crate) fn cmd_pull(frontier: &std::path::Path, hub: &str, json: bool) {
+    use vela_protocol::{events, registry};
+    let bare = |h: &str| h.strip_prefix("sha256:").unwrap_or(h).to_string();
+
+    let project = repo::load_from_path(frontier).unwrap_or_else(|e| fail_return(&e));
+    let vfr_id = project.frontier_id();
+    let local_log = bare(&events::event_log_hash(&project.events));
+    let local_ids: Vec<String> = project.events.iter().map(|e| e.id.clone()).collect();
+
+    let is_http = hub.starts_with("http://") || hub.starts_with("https://");
+    let hub_base = hub.trim_end_matches('/').trim_end_matches("/entries");
+    let registry_locator = if is_http {
+        format!("{hub_base}/entries")
+    } else {
+        hub.to_string()
+    };
+    let registry_data = registry::load_any(&registry_locator)
+        .unwrap_or_else(|e| fail_return(&format!("load registry {registry_locator}: {e}")));
+    let entry = match registry::find_latest(&registry_data, &vfr_id) {
+        Some(e) => e,
+        None => {
+            if json {
+                print_json(&json!({
+                    "ok": true, "command": "pull", "state": "not_published", "vfr_id": vfr_id,
+                }));
+            } else {
+                println!(
+                    "{} {vfr_id} is not published to {registry_locator}; nothing to pull",
+                    style::ok("pull")
+                );
+            }
+            return;
+        }
+    };
+    let hub_log = bare(&entry.latest_event_log_hash);
+
+    if hub_log == local_log {
+        if json {
+            print_json(&json!({
+                "ok": true, "command": "pull", "state": "up_to_date",
+                "vfr_id": vfr_id, "event_log_hash": local_log,
+            }));
+        } else {
+            println!("{} already up to date with {hub_base}", style::ok("pull"));
+        }
+        return;
+    }
+
+    // The hashes differ: classify by SET CONTAINMENT over content-addressed
+    // event ids. A POSITIONAL prefix test would be WRONG — local events load
+    // hash-sorted (by `{id}.json` filename) while the hub serves them in
+    // append/seq order, so the two id lists share members, not positions.
+    // Ancestry here is set inclusion (ids are immutable content hashes).
+    let hub_ids: Vec<String> = if is_http {
+        registry::fetch_event_ids(hub_base, &vfr_id)
+            .unwrap_or_else(|e| fail_return(&format!("fetch hub events: {e}")))
+    } else {
+        // File/local registry: no HTTP events endpoint behind a filesystem
+        // path — read the ids straight from the pulled snapshot instead.
+        let tmp = std::env::temp_dir().join(format!("vela-pull-events-{vfr_id}.json"));
+        registry::fetch_frontier_to_prefer_event_hub(&entry, Some(&registry_locator), &tmp)
+            .unwrap_or_else(|e| fail_return(&format!("fetch snapshot: {e}")));
+        let snap = repo::load_from_path(&tmp)
+            .unwrap_or_else(|e| fail_return(&format!("load snapshot: {e}")));
+        let _ = std::fs::remove_file(&tmp);
+        snap.events.iter().map(|e| e.id.clone()).collect()
+    };
+    let (local_only, hub_only, shared) = event_set_diff(&local_ids, &hub_ids);
+
+    if local_only == 0 && hub_only == 0 {
+        // Same event SET, different serialization order (the hash differed only
+        // because publish/append order differs from the loader's id-sort).
+        if json {
+            print_json(&json!({
+                "ok": true, "command": "pull", "state": "up_to_date", "vfr_id": vfr_id,
+                "note": "same event set; hashes differ only by event order",
+            }));
+        } else {
+            println!(
+                "{} up to date with {hub_base} (same event set)",
+                style::ok("pull")
+            );
+        }
+    } else if local_only == 0 {
+        // FAST-FORWARD: the hub's event set strictly contains the local one.
+        // Reconstruct into a verified staging dir, then swap into place — this
+        // never half-writes the checkout and clears stale local-only files.
+        let report = fast_forward_into(&entry, &registry_locator, hub_base, frontier)
+            .unwrap_or_else(|e| fail_return(&format!("fast-forward failed: {e}")));
+        if json {
+            print_json(&json!({
+                "ok": true, "command": "pull", "state": "fast_forwarded", "vfr_id": vfr_id,
+                "events_added": hub_only, "event_log_hash": report.event_log_hash,
+                "snapshot_hash": report.snapshot_hash,
+            }));
+        } else {
+            println!(
+                "{} fast-forwarded {vfr_id} (+{hub_only} event(s)) from {hub_base}",
+                style::ok("pull")
+            );
+            println!("  event_log: {}", report.event_log_hash);
+            println!(
+                "  restored:  {} artifact blob(s), {} witness file(s)",
+                report.artifacts_restored, report.witnesses_reconstructed
+            );
+            println!("  next: vela reproduce {}", frontier.display());
+        }
+    } else if hub_only == 0 {
+        // Local's event set strictly contains the hub's: nothing to pull; push.
+        if json {
+            print_json(&json!({
+                "ok": true, "command": "pull", "state": "ahead", "vfr_id": vfr_id,
+                "events_ahead": local_only,
+            }));
+        } else {
+            println!(
+                "{} local is ahead of {hub_base} by {local_only} event(s) — nothing to pull",
+                style::warn("pull")
+            );
+            println!(
+                "  run `vela push {}` to publish your changes",
+                frontier.display()
+            );
+        }
+    } else {
+        // Diverged: each side has events the other lacks. NEVER auto-merge.
+        if json {
+            print_json(&json!({
+                "ok": false, "command": "pull", "state": "diverged", "vfr_id": vfr_id,
+                "shared_events": shared,
+                "local_only_events": local_only, "hub_only_events": hub_only,
+                "local_events": local_ids.len(), "hub_events": hub_ids.len(),
+            }));
+        } else {
+            println!("{} DIVERGED from {hub_base}", style::warn("pull"));
+            println!(
+                "  {shared} shared event(s); local has {local_only} the hub lacks, the hub has {hub_only} you lack"
+            );
+            println!("  the histories forked — Vela does not auto-merge truth.");
+            println!("  Resolve by proposing your local changes (`vela propose`) for human");
+            println!("  review, or clone the hub state into a fresh dir to inspect the diff.");
+        }
+        std::process::exit(1);
+    }
+}
+
+/// Resolve the workspace registry file: `--file` override → `$VELA_WORKSPACE`
+/// env → `~/.vela/workspace.json` (parallel to the registry at
+/// `~/.vela/registry/entries.json`).
+fn default_workspace_path(file: Option<PathBuf>) -> PathBuf {
+    if let Some(f) = file {
+        return f;
+    }
+    if let Ok(p) = std::env::var("VELA_WORKSPACE")
+        && !p.is_empty()
+    {
+        return PathBuf::from(p);
+    }
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    PathBuf::from(home).join(".vela").join("workspace.json")
+}
+
+/// `vela workspace`: the git-style "list of working copies" index. Records
+/// which frontiers are checked out and the hub remote each tracks; the
+/// conformance gate reads it instead of a hardcoded frontier list.
+pub(crate) fn cmd_workspace(action: WorkspaceAction) {
+    use vela_protocol::workspace;
+    match action {
+        WorkspaceAction::List { file, json } => {
+            let path = default_workspace_path(file);
+            let ws = workspace::load_workspace(&path).unwrap_or_else(|e| fail_return(&e));
+            if json {
+                print_json(&json!({
+                    "ok": true,
+                    "command": "workspace.list",
+                    "file": path.display().to_string(),
+                    "frontiers": ws.frontiers,
+                }));
+            } else if ws.frontiers.is_empty() {
+                println!(
+                    "{} no frontiers checked out ({})",
+                    style::ok("workspace"),
+                    path.display()
+                );
+            } else {
+                println!(
+                    "{} {} frontier(s) — {}",
+                    style::ok("workspace"),
+                    ws.frontiers.len(),
+                    path.display()
+                );
+                for f in &ws.frontiers {
+                    println!(
+                        "  {:<34} {}  → {}",
+                        f.path,
+                        f.vfr_id.as_deref().unwrap_or("?"),
+                        f.remote.as_deref().unwrap_or("(no remote)")
+                    );
+                }
+            }
+        }
+        WorkspaceAction::Add {
+            frontier,
+            remote,
+            name,
+            file,
+            json,
+        } => {
+            let path = default_workspace_path(file);
+            // Resolve the vfr id + name from the frontier on disk.
+            let project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
+            let vfr_id = project.frontier_id();
+            let proj_name = name.unwrap_or_else(|| project.project.name.clone());
+            let mut ws = workspace::load_workspace(&path).unwrap_or_else(|e| fail_return(&e));
+            workspace::upsert(
+                &mut ws,
+                workspace::WorkspaceFrontier {
+                    path: frontier.display().to_string(),
+                    vfr_id: Some(vfr_id.clone()),
+                    remote: remote.clone(),
+                    name: Some(proj_name.clone()),
+                    added_at: Some(chrono::Utc::now().to_rfc3339()),
+                },
+            );
+            workspace::save_workspace(&path, &ws).unwrap_or_else(|e| fail_return(&e));
+            if json {
+                print_json(&json!({
+                    "ok": true,
+                    "command": "workspace.add",
+                    "file": path.display().to_string(),
+                    "path": frontier.display().to_string(),
+                    "vfr_id": vfr_id,
+                    "remote": remote,
+                    "name": proj_name,
+                }));
+            } else {
+                println!(
+                    "{} added {} ({}) → {}",
+                    style::ok("workspace"),
+                    frontier.display(),
+                    vfr_id,
+                    remote.as_deref().unwrap_or("(no remote)")
+                );
+            }
+        }
+        WorkspaceAction::Remove {
+            frontier,
+            file,
+            json,
+        } => {
+            let path = default_workspace_path(file);
+            let mut ws = workspace::load_workspace(&path).unwrap_or_else(|e| fail_return(&e));
+            let removed = workspace::remove(&mut ws, &frontier);
+            workspace::save_workspace(&path, &ws).unwrap_or_else(|e| fail_return(&e));
+            if json {
+                print_json(&json!({
+                    "ok": true,
+                    "command": "workspace.remove",
+                    "removed": removed,
+                    "path": frontier,
+                }));
+            } else if removed {
+                println!("{} removed {}", style::ok("workspace"), frontier);
+            } else {
+                println!(
+                    "{} {} was not in the workspace",
+                    style::warn("workspace"),
+                    frontier
+                );
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod pull_classification_tests {
+    use super::event_set_diff;
+
+    fn ids(xs: &[&str]) -> Vec<String> {
+        xs.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// The regression the adversarial review caught: identical event SETS in
+    /// DIFFERENT orders (local loads hash-sorted, the hub serves append-sorted)
+    /// must read as up-to-date (0,0), never as diverged. A positional prefix
+    /// test failed exactly here.
+    #[test]
+    fn identical_sets_in_different_orders_are_up_to_date() {
+        let local = ids(&["vev_a", "vev_b", "vev_c", "vev_d"]); // hash order
+        let hub = ids(&["vev_c", "vev_a", "vev_d", "vev_b"]); // append order
+        assert_eq!(event_set_diff(&local, &hub), (0, 0, 4));
+    }
+
+    #[test]
+    fn hub_strict_superset_is_fast_forward() {
+        // local ⊊ hub, with the extra id NOT at the tail of either ordering.
+        let local = ids(&["vev_a", "vev_c", "vev_e"]);
+        let hub = ids(&["vev_e", "vev_a", "vev_d", "vev_c"]); // adds vev_d in the middle
+        let (local_only, hub_only, shared) = event_set_diff(&local, &hub);
+        assert_eq!((local_only, hub_only, shared), (0, 1, 3)); // fast-forward
+    }
+
+    #[test]
+    fn local_strict_superset_is_ahead() {
+        let local = ids(&["vev_a", "vev_b", "vev_c"]);
+        let hub = ids(&["vev_b", "vev_a"]);
+        assert_eq!(event_set_diff(&local, &hub), (1, 0, 2)); // ahead
+    }
+
+    #[test]
+    fn each_side_unique_is_diverged() {
+        let local = ids(&["vev_a", "vev_b", "vev_x"]);
+        let hub = ids(&["vev_a", "vev_b", "vev_y"]);
+        let (local_only, hub_only, shared) = event_set_diff(&local, &hub);
+        assert!(local_only > 0 && hub_only > 0); // diverged
+        assert_eq!(shared, 2);
     }
 }

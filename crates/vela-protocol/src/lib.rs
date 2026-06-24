@@ -51,6 +51,7 @@ pub mod transfer;
 pub mod transfer_registry;
 pub mod verdict_conflict;
 pub mod verifier_attachment;
+pub mod workspace;
 
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;

@@ -171,6 +171,11 @@ pub(crate) enum Commands {
     /// the audit, the federation health. Read in two seconds.
     Status {
         frontier: PathBuf,
+        /// Also compare the local event log to the hub remote
+        /// (up-to-date / differs / not-published), like `git status -uno`
+        /// against an upstream. Resolves the hub from your `vela id` profile.
+        #[arg(long)]
+        remote: bool,
         /// Output stable JSON for programmatic callers.
         #[arg(long)]
         json: bool,
@@ -459,6 +464,26 @@ pub(crate) enum Commands {
         blobs_from: Option<PathBuf>,
         #[arg(long)]
         json: bool,
+    },
+    /// Bring a local checkout up to date with its hub remote — the git-style
+    /// pull. Fast-forwards when the hub is strictly ahead; refuses with
+    /// guidance (never a silent merge) when histories diverge or you are
+    /// ahead. Divergence resolution is a human/proposal step, by doctrine.
+    Pull {
+        /// Path to the local frontier (`.vela/` repo or frontier.json).
+        frontier: PathBuf,
+        /// Hub to pull from. Defaults to your configured hub.
+        #[arg(long)]
+        from: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// The workspace registry: which frontiers you have checked out and the
+    /// hub remote each tracks (a git-style "list of working copies"). The
+    /// conformance gate reads it instead of a hardcoded frontier list.
+    Workspace {
+        #[command(subcommand)]
+        action: WorkspaceAction,
     },
     /// Manage the frontier's registered actor identities (Phase M, v0.4)
     Actor {
@@ -948,6 +973,15 @@ pub(crate) enum Commands {
         /// proposal's decision reason so it stays auditable.
         #[arg(long)]
         force: bool,
+        /// After applying the accept locally, also deliver the signed
+        /// acceptance to the hub (the same human signature, under key custody).
+        /// Best-effort: a hub failure never unwinds the local accept. Resolves
+        /// the hub from your `vela id` profile unless `--to` overrides it.
+        #[arg(long)]
+        push: bool,
+        /// Hub URL to deliver the accept to (implies `--push`).
+        #[arg(long)]
+        to: Option<String>,
         #[arg(long)]
         json: bool,
     },
@@ -3404,6 +3438,45 @@ pub(crate) enum QueueAction {
     Clear {
         #[arg(long)]
         queue_file: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum WorkspaceAction {
+    /// List the frontiers in the workspace registry (and their hub remotes).
+    List {
+        /// Read a specific workspace file instead of the default
+        /// (`$VELA_WORKSPACE`, else `~/.vela/workspace.json`).
+        #[arg(long)]
+        file: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Record a checked-out frontier and the hub it tracks. Upserts by path
+    /// (re-adding the same path updates it in place). Resolves the `vfr_…`
+    /// id from the frontier on disk.
+    Add {
+        /// Path to the frontier (`.vela/` repo or frontier.json).
+        frontier: PathBuf,
+        /// The hub this frontier pushes to / pulls from.
+        #[arg(long)]
+        remote: Option<String>,
+        /// Human-friendly name (defaults to the frontier's project name).
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long)]
+        file: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Drop a frontier from the workspace registry (by path).
+    Remove {
+        /// Path key to remove (as recorded by `add`).
+        frontier: String,
+        #[arg(long)]
+        file: Option<PathBuf>,
         #[arg(long)]
         json: bool,
     },

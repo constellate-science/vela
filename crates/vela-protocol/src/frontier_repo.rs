@@ -435,10 +435,13 @@ pub fn layout_issues(path: &Path, project: &Project) -> Vec<RepoLayoutIssue> {
         ));
     }
     let Some(lock) = lock else {
-        issues.push(issue(
-            "missing_frontier_lock",
-            "Split frontier repo is missing generated vela.lock.",
-        ));
+        // A missing vela.lock is benign: it is a DERIVED view, regenerated
+        // byte-for-byte by `vela frontier materialize` (and by `vela clone`).
+        // Since the hub-as-remote round-trip, the lock is no longer
+        // git-committed — a fresh git/`vela clone` checkout simply has no lock
+        // until the first materialize. Treat it as "not yet materialized,"
+        // not a layout fault, so the lock-dependent hash checks below are
+        // skipped rather than flagged.
         return issues;
     };
 
