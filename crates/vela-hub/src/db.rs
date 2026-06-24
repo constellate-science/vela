@@ -1864,6 +1864,17 @@ impl HubDb {
         // coherent. recompute_stats keeps the snapshot hash canonical.
         project.findings.extend(to_add_findings.iter().cloned());
         project.events.extend(to_add_events.iter().cloned());
+        // CANONICAL EVENT ORDER: the CLI loader reads `.vela/events/{id}.json`
+        // and sorts by filename, i.e. by content-hash id. An append, left
+        // alone, would land new events at the tail (append order) and store a
+        // tail-order event_log_hash + skeleton that a cold `vela clone`
+        // (which reloads id-sorted) would NOT match — breaking clone/pull on
+        // appended frontiers. Sort by id here so the stored hash + the served
+        // snapshot are in the SAME canonical order the loader reconstructs.
+        // (For a full promote the publisher already id-sorts, so this is a
+        // no-op there; seq stays append-order in frontier_events, which only
+        // affects the order-independent /events listing.)
+        project.events.sort_by(|a, b| a.id.cmp(&b.id));
         vela_protocol::project::recompute_stats(&mut project);
 
         let new_event_log_hash = event_log_hash(&project.events);
@@ -2218,11 +2229,15 @@ impl HubDb {
         let values = self
             .event_values_after(vfr_id, None, None, None, i64::MAX)
             .await?;
-        let events: Vec<StateEvent> = values
+        let mut events: Vec<StateEvent> = values
             .into_iter()
             .map(serde_json::from_value)
             .collect::<Result<_, _>>()
             .map_err(|e| format!("parse event log: {e}"))?;
+        // Hash in the loader's canonical id-sorted order (rows come back in
+        // seq/append order), so this recompute equals the stored hash and what
+        // a cold clone reconstructs. See append_to_frontier.
+        events.sort_by(|a, b| a.id.cmp(&b.id));
         Ok(event_log_hash(&events))
     }
 
