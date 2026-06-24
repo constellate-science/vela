@@ -2982,6 +2982,22 @@ pub const POSTGRES_EVENT_FIRST_SCHEMA: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_registry_diff_packs_pack_id ON registry_diff_packs (pack_id)",
     "CREATE INDEX IF NOT EXISTS idx_registry_diff_packs_frontier_id ON registry_diff_packs (frontier_id)",
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_registry_diff_packs_pack_sig ON registry_diff_packs (pack_id, signature)",
+    // Snapshot blob routing index: content-addressed pointer (snapshot_hash ->
+    // Tigris blob_url) the `?redirect=cdn` path reads via get_snapshot_meta.
+    // The live hub has this table from schema history, but it was missing from
+    // this Postgres schema string — so a FRESH Postgres hub would fail
+    // `insert_snapshot` on the first publish. `IF NOT EXISTS` makes adding it a
+    // no-op on the existing table and correct for a new hub. (The SQLite schema
+    // already creates it.)
+    r#"CREATE TABLE IF NOT EXISTS frontier_snapshots (
+        snapshot_hash TEXT PRIMARY KEY,
+        schema_version TEXT NOT NULL,
+        size_bytes BIGINT NOT NULL,
+        blob_url TEXT NOT NULL,
+        content_type TEXT NOT NULL DEFAULT 'application/json',
+        inserted_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )"#,
+    "CREATE INDEX IF NOT EXISTS idx_snapshots_inserted_at ON frontier_snapshots (inserted_at DESC)",
 ];
 
 pub async fn ensure_postgres_event_first_schema(pool: &PgPool) -> Result<(), String> {
