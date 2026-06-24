@@ -190,8 +190,8 @@ chooses `--apply-artifacts`. Truth-changing findings, gaps,
 contradiction notes, and attestations remain review-gated.
 
 ```bash
-vela artifact-to-state <frontier> packet.json --actor agent:demo --json
-vela artifact-to-state <frontier> packet.json --actor agent:demo --apply-artifacts
+vela ingest <frontier> packet.json --actor agent:demo --json
+vela ingest <frontier> packet.json --actor agent:demo --apply-artifacts
 vela runtime-adapter run <frontier> scienceclaw-artifact-v1 --input export.json --actor reviewer:demo --json
 vela proposals preview <frontier> vpr_... --json
 vela proposals accept <frontier> vpr_... --reviewer reviewer:demo --reason "Accepted bounded update"
@@ -329,7 +329,7 @@ The bundled v0.6 example is at
 - v0.5 and earlier example bundles preserved untouched. v0.6
   bundle added at
   `examples/carina-kernel/primitives.v0.6.json`.
-- `vela carina list` now lists 17 primitives.
+- The bundled Carina schema set now covers 17 primitives.
 - No new event kinds; trial state transitions remain
   expressible through existing finding / proposal / event
   primitives on the trial's frontier.
@@ -439,13 +439,8 @@ mirrored copy at `crates/vela-protocol/embedded/carina-schemas/`
 (for `cargo publish`). Schemas are JSON Schema draft-07,
 hand-authored to match the v0.3 example shapes.
 
-Validate any Carina-shaped JSON against the bundled schemas via:
-
-```bash
-vela carina list                       # list bundled primitives
-vela carina schema finding             # print one schema
-vela carina validate <file.json>       # validate a primitive or aggregate
-```
+The bundled JSON Schemas at `examples/carina-kernel/schemas/` are the public
+contract for validating any Carina-shaped JSON against the primitive set.
 
 The substrate's signature-pure event-payload validator at
 `crates/vela-protocol/src/events.rs::validate_event_payload`
@@ -463,7 +458,7 @@ cross-checks the two.
 - Bundled schema mirror at
   `crates/vela-protocol/embedded/carina-schemas/` so the crate
   publishes them.
-- New `vela carina list / schema / validate` CLI surface.
+
 - Three new conformance round-trip tests in
   `tests/carina_examples.rs`. Test count rises 599 to 602.
 - `Artifact.kind` documents `proof_script` as a recognized kind

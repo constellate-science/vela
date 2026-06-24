@@ -120,7 +120,6 @@ publishing a snapshot:
 
 ```bash
 vela frontier materialize <frontier>
-vela lock <frontier>
 vela check <frontier> --strict --json
 vela proof <frontier> --out /tmp/<frontier>-proof
 ```
@@ -634,9 +633,8 @@ It must also reject the negative no-hidden-state fixture and preserve historical
 ### 11. Rust realization (status)
 
 The profile is realized in Rust at `crates/vela-protocol/src/sidon_profile/`
-(modules `canonical` · `packets` · `kernel` · `evaluator` · `producer`) and
-surfaced through `vela sidon`. Every layer is conformance-pinned to the Python
-reference and to the landed fixtures:
+(modules `canonical` · `packets` · `kernel` · `evaluator` · `producer`). Every
+layer is conformance-pinned to the Python reference and to the landed fixtures:
 
 - **canonical + packets**: recompute all 25 fixture packet IDs and re-verify
   every Ed25519 signature (`tests/sidon_profile_conformance.rs`).
@@ -648,12 +646,11 @@ reference and to the landed fixtures:
   `make_result` regenerate the genesis observation, task, and result *byte for
   byte*, signatures included (`tests/sidon_profile_producer_conformance.rs`).
 
-`vela sidon submit WITNESS --base-observation OBS --key K --actor A` emits the
-signed `ResultPacket` a producer proposes; `vela sidon observe --presentation P
---key K --actor A` emits the authoritative `ObservationPacket` (which replays
-from the presentation it names). Both sign with the caller's own key. Packets
-emitted by the Rust CLI are accepted by the independent Python
-`verify_signed_packet`.
+The producer-side constructors in `sidon_profile::producer` emit the signed
+`ResultPacket` a producer proposes and the authoritative `ObservationPacket`
+(which replays from the presentation it names), each signed with the caller's
+own key. Packets emitted by the Rust reference are accepted by the independent
+Python `verify_signed_packet`.
 
 Not yet realized in Rust: the reviewer-side constructors
 (gate/acceptance/challenge/view/repair), where the **production gate runs the

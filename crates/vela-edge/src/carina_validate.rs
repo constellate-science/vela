@@ -136,15 +136,6 @@ pub fn validate(primitive: &str, value: &Value) -> Result<(), Vec<String>> {
     }
 }
 
-/// Auto-detect the primitive from `value.schema` and validate.
-pub fn validate_auto(value: &Value) -> Result<&'static str, Vec<String>> {
-    let primitive = detect_primitive(value).ok_or_else(|| {
-        vec!["could not detect Carina primitive (input must carry a `schema: \"carina.<name>.v0.X\"` field)".to_string()]
-    })?;
-    validate(primitive, value)?;
-    Ok(primitive)
-}
-
 fn walk(value: &Value, schema: &Value, path: &str, errors: &mut Vec<String>) {
     let Some(obj) = schema.as_object() else {
         return;

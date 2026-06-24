@@ -4312,7 +4312,7 @@ shipped binary for the exact Sidon profile):
 | Record: evaluator + observation replay | `sidon_profile::evaluator` | best-bound output + digests |
 | Record: producer constructors | `sidon_profile::producer` | regenerate genesis byte-for-byte |
 | Map: obligations + frontier map | `sidon_profile::frontier` | latent/open/discharged over live cells; positive-gap monotonicity |
-| Surface | `vela sidon observe / submit / frontier-map` | cross-verified by the Python reference |
+| Surface | `sidon_profile::producer` constructors (observation / result / frontier-map) | cross-verified by the Python reference |
 
 **Reference / contract only** (no production Rust until a named producer needs it):
 the eight `DomainAdapter` manifests, the certified / target-checked / exploratory

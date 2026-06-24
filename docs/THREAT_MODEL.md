@@ -453,7 +453,7 @@ makes signatures from that actor unverifiable.
 
 ### A17. Private signing keys committed to public git · Mitigated at v0.111.1
 
-`vela quickstart` writes a freshly-generated Ed25519 keypair
+`vela id create` writes a freshly-generated Ed25519 keypair
 to `<frontier>/keys/` by default. If a quickstart-scaffolded
 frontier is committed to a public repo as a reference example
 without first removing `keys/`, the private key reaches public

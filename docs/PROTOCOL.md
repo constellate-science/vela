@@ -29,7 +29,7 @@ of the v0 protocol contract.
 
 The Carina kernel name is reserved for the primitive object and event model
 inside this protocol. See [`CARINA.md`](CARINA.md) for the kernel vocabulary;
-the external-artifact adapter ships as the `vela artifact-to-state` command
+the external-artifact adapter ships as the `vela ingest` command
 (section 6's event kinds cover the records it mints).
 
 The protocol boundary is the invariant this spec enforces throughout:
@@ -399,7 +399,7 @@ Core proposal kinds:
 | Kind | CLI surface |
 |------|-------------|
 | `finding.add` | `vela finding add` |
-| `finding.review` | `vela review` |
+| `finding.review` | `vela propose` |
 | `finding.note` | `vela note` |
 | `finding.caveat` | `vela caveat` |
 | `finding.confidence_revise` | `vela revise` |
@@ -575,7 +575,7 @@ hashes, local blob sizes, target finding references, source locators,
 access terms, and profile fields such as NCT ids for trial records.
 The same report is exposed by `vela serve` at `/api/artifact-audit`.
 
-`vela artifact-to-state <frontier> <packet.json> --actor <actor>` validates a
+`vela ingest <frontier> <packet.json> --actor <actor>` validates a
 `carina.artifact_packet.v0.1` packet and writes reviewable proposals. Use
 `--apply-artifacts` to accept only the content-addressed artifact records while
 leaving candidate findings and gaps in the proposal inbox. `vela proposals
@@ -1076,8 +1076,7 @@ rules. Material additions, in cycle order:
   README six-step demo.
 - v0.75: Carina v0.3 spec deliverable plus the `Proof`
   primitive; bundled JSON Schemas at
-  `examples/carina-kernel/schemas/`; new `vela carina
-  list / schema / validate` CLI.
+  `examples/carina-kernel/schemas/`.
 - v0.78: `Atlas` (`vat_<id>`) primitive in Carina v0.4.
 - v0.80: `Constellation` (`vco_<id>`) primitive in Carina
   v0.5; per-event `attestation.recorded` event kind.
@@ -1114,7 +1113,6 @@ rules. Material additions, in cycle order:
 - v0.102: ingest-doi hint plus README path-precedence note;
   full crates.io + PyPI publish round (v0.102 is the first
   published binary that matches repo state since v0.77).
-- v0.103: `vela quickstart` wizard composes init + sign +
   actor add + finding add in one shot.
 - v0.104: multi-sig kernel correctness fix.
   `sign::canonical_json` strips
@@ -1146,11 +1144,11 @@ exists and replay agrees with the materialized state.
 The protocol exposes two read-only checks:
 
 ```bash
-vela integrity <FRONTIER> [--json]
+vela check <FRONTIER> --strict [--json]
 vela impact <FRONTIER> <vf_id> [--depth N] [--json]
 ```
 
-`vela integrity` reports duplicate event ids, orphan event targets, replay
+`vela check --strict` reports duplicate event ids, orphan event targets, replay
 conflicts, accepted proposals without applied events, accepted events without
 proposal ids, stale proof state, and accepted artifact proposals that lack a
 source locator or content hash.
@@ -1304,7 +1302,7 @@ Product obligation:
 Current implementation:
 
 - canonical events live in frontier state and split `.vela/events`
-- `vela integrity` checks replay consistency and proof freshness
+- `vela check --strict` checks replay consistency and proof freshness
 - proof packets include replay and snapshot commitments
 
 ### Invariant 2. Activity is not state
@@ -1523,7 +1521,7 @@ table.
 | `vaf_` | friction record (legacy writer removed) | historical logs only |
 | `vinc_` | incident record (legacy writer removed) | historical logs only |
 | `vex_` | experiment (Carina primitive) | `attempt.rs` references |
-| `vsx_` | hub untrusted scratch entry (`vela stash`) | vela-hub scratch tier |
+| `vsx_` | hub untrusted scratch entry | vela-hub scratch tier |
 
 ### Registry / governance objects
 
@@ -1548,8 +1546,7 @@ table.
 1. **`vat_`, attempt vs. Carina atlas.** The authoritative protocol
    sense is the *attempt* (`attempt.rs`, signed deposits verified by
    `vela attempt`). The Carina spec tier reuses `vat_` for the atlas
-   primitive (`embedded/carina-schemas/atlas.schema.json`,
-   `vela carina validate --primitive atlas`), and the handle resolver
+   primitive (`embedded/carina-schemas/atlas.schema.json`), and the handle resolver
    (`resolver.rs`) still maps bare `vat_<hex>` handles to atlas URLs.
    Both are live (attempts in the event log; atlas in the shipped
    Carina schema set), so neither side can be renamed without breaking
@@ -1954,7 +1951,7 @@ bytes of every other field, computed by `compute_event_id` in
 Run the substrate's integrity checker on a frontier:
 
 ```
-$ vela integrity examples/sidon-sets --json
+$ vela check examples/sidon-sets --strict --json
 ```
 
 Output (illustrative):
@@ -2064,7 +2061,7 @@ conflict silently, the same way they cannot edit a finding silently.
 - Drafts and `needs_revision` findings are excluded from
   verified-grade surfaces by filter, not by deletion. The events
   remain in the log.
-- Reproducible from any working tree. `vela integrity <frontier>`
+- Reproducible from any working tree. `vela check <frontier> --strict`
   replays from genesis, hashes the result, and compares against the
   materialized state. Two implementations that share the protocol
   produce byte-identical replays.

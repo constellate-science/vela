@@ -172,7 +172,7 @@ vela status examples/erdos-problems         # one-screen truth
 2. **Pull a task packet.** `vela serve examples/erdos-problems` exposes MCP tools; `task_packet` for a problem number returns the statement, allowed outputs mapped to verifiers, banked do-not-regrind routes, and open targets ranked by what rests on them.
 3. **Lease before long work.** `vela claim <frontier> <obligation-id> --ttl 86400 --by <actor> --key <key>` so other producers route around you.
 4. **Produce a state transition.** A witness that passes `vela reproduce`, a finding proposed via `vela propose`, or a signed attempt (failures included: they are ledger entries, not noise).
-5. **Authority is custody.** An agent may propose; only a key-holding human accepts (`vela accept --key`). Statement faithfulness is a separate signed verdict (`vela attest-statement`): the kernel proves the formal statement follows; only a human attests it is the problem anyone meant.
+5. **Authority is custody.** An agent may propose; only a key-holding human accepts (`vela accept --key`). Statement faithfulness is a separate signed verdict (`vela attest --scope formalism-fidelity`): the kernel proves the formal statement follows; only a human attests it is the problem anyone meant.
 
 ### The objects
 
@@ -482,7 +482,7 @@ The successful top-level envelope is:
 
 `frontier.hash` is the SHA-256 digest of the canonical frontier state used by the command. For a monolithic `frontier.json`, hash the file bytes. For a frontier directory, hash the deterministic manifest of included frontier files: relative path, byte length, and file SHA-256, sorted by relative path.
 
-### `vela stats <frontier> --json`
+### `vela status <frontier> --json`
 
 Returns aggregate frontier metadata and statistics.
 
@@ -977,9 +977,9 @@ Checks the read-only MCP/HTTP frontier tool surface and exits without starting a
 }
 ```
 
-### `vela search <query> --source <frontier> --json`
+### Finding search (read surface)
 
-Returns ranked finding matches for a query.
+Ranked finding matches for a query are read through `vela serve` / MCP (`search_findings`); the JSON shape below is the response contract.
 
 ```json
 {
@@ -1014,9 +1014,9 @@ Returns ranked finding matches for a query.
 
 `score` is a search relevance score, not confidence. Result ordering is by descending `score`; ties SHOULD be broken by finding ID for deterministic output.
 
-### `vela tensions <frontier> --json`
+### Candidate tensions (read surface)
 
-Returns candidate contradiction/tension pairs.
+Candidate contradiction/tension pairs are read through `vela serve` / MCP (`list_contradictions`); the JSON shape below is the response contract.
 
 ```json
 {
@@ -1135,7 +1135,7 @@ The release write surface records durable frontier state transitions through pro
 
 ```bash
 vela finding add frontier.json --assertion "..." --author reviewer:demo --json
-vela review frontier.json vf_0123 --status contested --reason "..." --reviewer reviewer:demo --json
+vela propose frontier.json vf_0123 --status contested --reason "..." --reviewer reviewer:demo --json
 vela note frontier.json vf_0123 --text "..." --author reviewer:demo --json
 vela caveat frontier.json vf_0123 --text "..." --author reviewer:demo --json
 vela revise frontier.json vf_0123 --confidence 0.42 --reason "..." --reviewer reviewer:demo --json
@@ -1144,10 +1144,9 @@ vela retract frontier.json vf_0123 --reason "..." --reviewer reviewer:demo --jso
 vela proposals list frontier.json --status pending_review --json
 vela proposals accept frontier.json vpr_0123456789abcdef --reviewer reviewer:demo --reason "Accepted after review" --json
 vela history frontier.json vf_0123 --json
-vela import-events packet-or-events.json --into frontier.json --json
 ```
 
-`finding add`, `review`, `note`, `caveat`, `revise`, `reject`, and `retract` create `vela.proposal.v0.1` records by default. `--apply` accepts and applies the proposal locally in one step. Applied proposals append a canonical `vela.event.v0.1` event and then save the materialized frontier snapshot. They return this stable envelope:
+`finding add`, `propose`, `note`, `caveat`, `revise`, `reject`, and `retract` create `vela.proposal.v0.1` records by default. `--apply` accepts and applies the proposal locally in one step. Applied proposals append a canonical `vela.event.v0.1` event and then save the materialized frontier snapshot. They return this stable envelope:
 
 ```json
 {

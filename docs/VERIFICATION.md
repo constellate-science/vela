@@ -118,24 +118,14 @@ substrate is not in the business of running Lean; it is in the
 business of pinning that someone with a known pubkey ran Lean
 and produced the named output.
 
-### CLI
+### Records
 
-```bash
-# Build + sign a vpv_* record (typically run by CI):
-vela proof-attest-verification \
-  --proof-id vpf_egz_n2 \
-  --tool lean4 --tool-version 4.29.1 \
-  --script-locator sha256:$(shasum -a 256 lean/Vela/Constructions/EGZ.lean | awk '{print $1}') \
-  --lake-manifest-hash sha256:$(shasum -a 256 lean/lake-manifest.json | awk '{print $1}') \
-  --verifier-output-hash sha256:$(lake build Vela.EGZ | shasum -a 256 | awk '{print $1}') \
-  --status verified \
-  --verifier-actor github-action:vela/.github/workflows/verify-carina-proofs.yml \
-  --key /secrets/verifier.key \
-  --out attestations/vpv_egz_n2.json
-
-# Verify a vpv_* record (any consumer):
-vela proof-verify-attestation attestations/vpv_egz_n2.json
-```
+A `vpv_*` proof-attestation record is built and signed (typically by CI) by
+hashing the proof script, the lake manifest, and the verifier output for a
+proof id (e.g. `vpf_egz_n2`), pinning `(tool, tool_version,
+lake_manifest_hash)`, the verifier actor, and a `verified` status, signed with
+the verifier key. Any consumer re-checks the record by re-hashing the same
+inputs and verifying the signature against the recorded `verifier_pubkey`.
 
 ### Canonical CI pipeline
 
