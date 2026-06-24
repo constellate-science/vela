@@ -421,6 +421,10 @@ pub(crate) enum Commands {
     /// idempotent publish (it replaces the hub's view), so it always
     /// succeeds regardless of how the hub's log diverged. Power users who
     /// want delta-only deposits can still use `vela registry append`.
+    ///
+    /// `vela push` is the git-style alias: clone -> reproduce -> propose ->
+    /// push is the producer loop, with `clone` and `push` as its bookends.
+    #[command(visible_alias = "push")]
     Publish {
         /// Path to the frontier (`.vela/` repo or frontier.json).
         frontier: PathBuf,

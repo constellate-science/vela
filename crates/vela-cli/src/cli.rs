@@ -5403,7 +5403,7 @@ Production (multi-producer coordination, signed judgment):
 
 Identity and publishing:
   id            Set up your key + identity once (then no --key/--actor/--hub flags)
-  publish       Push a frontier to the hub (one verb; owner/key/hub from your identity)
+  publish       Push a frontier to the hub (one verb; owner/key/hub from your identity; alias: push)
   clone         Clone a frontier from the hub into a working tree (reproduces + extends)
   sign          Optional signing and signature verification
   actor         Register Ed25519 publisher identities in a frontier
