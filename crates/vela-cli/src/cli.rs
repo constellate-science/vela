@@ -4734,7 +4734,7 @@ fn print_session_help() {
     println!();
     println!("  REVIEW (maintainers)");
     println!("    inbox             Pending review proposals");
-    println!("    review            Review a proposal interactively");
+    println!("    propose <vf>      Create/apply a finding.review proposal (the review verb)");
     println!("    diff <vpr_id>     Preview a pending proposal vs current frontier");
     println!("    accept <vpr_id>   Apply a proposal under your reviewer key");
     println!(
