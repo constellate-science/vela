@@ -3470,6 +3470,7 @@ mod tests {
             latest_event_log_hash: event_log_hash(&project.events),
             network_locator: "https://example.com/frontier.json".to_string(),
             license: None,
+            extras_manifest_hash: None,
             signed_publish_at: "2026-05-05T00:00:00Z".to_string(),
             signature: "sig_fixture".to_string(),
         }

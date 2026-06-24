@@ -216,6 +216,7 @@ mod tests {
             latest_event_log_hash: format!("log-{vfr}"),
             network_locator: format!("file:///{vfr}"),
             license: None,
+            extras_manifest_hash: None,
             signed_publish_at: "2026-05-11T00:00:00+00:00".to_string(),
             signature: "f".repeat(128),
         }

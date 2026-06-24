@@ -811,6 +811,15 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
             let vfr_id = frontier_data.frontier_id();
             let name = frontier_data.project.name.clone();
 
+            // v0.711: content-address the loose `.vela/` files a snapshot clone
+            // can't rebuild (policy/, releases/, the verifier sources under
+            // tasks/+workspaces/, evaluations/, tool_descriptors/) so the hub is
+            // a COMPLETE backup and `.vela/` can become a gitignored cache. The
+            // manifest hash rides in the signed entry, OUTSIDE snapshot_hash.
+            let extras =
+                registry::build_extras_manifest(&frontier).unwrap_or_else(|e| fail_return(&e));
+            let extras_manifest_hash = extras.as_ref().map(|(h, _)| h.clone());
+
             // Sanity check: pubkey on disk matches pubkey in the registry.
             if derived != pubkey {
                 fail(&format!(
@@ -855,6 +864,7 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
                 latest_event_log_hash: event_log_hash,
                 network_locator: resolved_locator,
                 license: license.clone(),
+                extras_manifest_hash: extras_manifest_hash.clone(),
                 signed_publish_at: chrono::Utc::now().to_rfc3339(),
                 signature: String::new(),
             };
@@ -909,6 +919,25 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
                         blob_summary = json!({ "error": e });
                     }
                 }
+                // v0.711: upload the extras manifest + its loose-file blobs so a
+                // cold clone can restore the FULL .vela/ tree from the hub.
+                if let Some((_, blobs)) = &extras {
+                    match registry::upload_blobs_http(&hub_url, &derived, blobs.clone()) {
+                        Ok((up, dup)) => {
+                            if !json && (up > 0 || dup > 0) {
+                                println!("  extras:    {up} uploaded, {dup} already present");
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("  ! warning: extras-manifest upload failed: {e}");
+                            eprintln!(
+                                "    the frontier is published but its loose .vela/ files \
+                                 (policy, releases, verifier sources) may not be cloneable \
+                                 until they upload; re-run `vela publish` to retry."
+                            );
+                        }
+                    }
+                }
                 (hub_url, resp.duplicate)
             } else {
                 // Local publish: populate a `file://` locator with the exact
@@ -923,6 +952,30 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
                         .unwrap_or_else(|e| fail_return(&format!("serialize snapshot: {e}")));
                     if let Some(parent) = std::path::Path::new(path).parent() {
                         let _ = std::fs::create_dir_all(parent);
+                        // v0.711: stage a co-located content-addressed blob store
+                        // next to the file:// snapshot, holding the artifact blobs
+                        // AND the extras (manifest + loose .vela/ files), so an
+                        // offline `vela clone --blobs-from <dir>/blobs` restores
+                        // the FULL tree without a live hub.
+                        let blob_dir = parent.join("blobs");
+                        let art = frontier.join(".vela/artifact-blobs/sha256");
+                        if art.is_dir() {
+                            let store = blob_dir.join("sha256");
+                            let _ = std::fs::create_dir_all(&store);
+                            if let Ok(rd) = std::fs::read_dir(&art) {
+                                for e in rd.flatten() {
+                                    let p = e.path();
+                                    if p.is_file()
+                                        && let Some(name) = p.file_name()
+                                    {
+                                        let _ = std::fs::copy(&p, store.join(name));
+                                    }
+                                }
+                            }
+                        }
+                        if let Some((_, blobs)) = &extras {
+                            let _ = registry::stage_blobs_local(&blob_dir, blobs);
+                        }
                     }
                     std::fs::write(path, snap)
                         .unwrap_or_else(|e| fail_return(&format!("write snapshot {path}: {e}")));
@@ -1098,6 +1151,7 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
                 latest_event_log_hash: event_log_hash,
                 network_locator: resolved_locator,
                 license: None,
+                extras_manifest_hash: None,
                 signed_publish_at: chrono::Utc::now().to_rfc3339(),
                 signature: String::new(),
             };
@@ -1318,8 +1372,13 @@ fn reconstruct_working(
         registry::fetch_blob(&hub_owned, hash)
     };
 
-    let report = repo::write_working_frontier(dest, &project, &mut fetch)
-        .map_err(|e| format!("reconstruct working tree: {e}"))?;
+    let report = repo::write_working_frontier(
+        dest,
+        &project,
+        entry.extras_manifest_hash.as_deref(),
+        &mut fetch,
+    )
+    .map_err(|e| format!("reconstruct working tree: {e}"))?;
 
     if report.snapshot_hash != entry.latest_snapshot_hash
         || report.event_log_hash != entry.latest_event_log_hash
@@ -1403,6 +1462,8 @@ pub(crate) fn cmd_clone(
         "event_log_hash": report.event_log_hash,
         "artifacts_restored": report.artifacts_restored,
         "witnesses_reconstructed": report.witnesses_reconstructed,
+        "extras_restored": report.extras_restored,
+        "extras_missing": report.extras_missing,
         "blobs_missing": report.blobs_missing,
         "integrity_verified": true,
     });

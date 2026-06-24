@@ -888,6 +888,14 @@ pub struct WorkingFrontierReport {
     /// Content hashes the blob provider could not supply (a partial clone:
     /// the tree is written but these payloads are absent).
     pub blobs_missing: Vec<String>,
+    /// v0.711: loose `.vela/` files (policy/, releases/, verifier sources,
+    /// evaluations/, tool_descriptors/) restored from the extras manifest —
+    /// what makes a cold clone reconstruct the FULL tree, not just the core.
+    #[serde(default)]
+    pub extras_restored: usize,
+    /// Extras the blob provider could not supply.
+    #[serde(default)]
+    pub extras_missing: Vec<String>,
     pub snapshot_hash: String,
     pub event_log_hash: String,
 }
@@ -911,6 +919,7 @@ pub struct WorkingFrontierReport {
 pub fn write_working_frontier(
     dest: &Path,
     project: &Project,
+    extras_manifest_hash: Option<&str>,
     fetch_blob: &mut dyn FnMut(&str) -> Result<Vec<u8>, String>,
 ) -> Result<WorkingFrontierReport, String> {
     use serde_json::Value;
@@ -992,6 +1001,18 @@ pub fn write_working_frontier(
         }
     }
 
+    // 2b. v0.711: restore the loose `.vela/` extras (governance policy/,
+    //     releases/, the verifier sources under tasks/+workspaces/,
+    //     evaluations/, tool_descriptors/) the snapshot does not carry, so the
+    //     cold clone reconstructs the FULL tree and the hub is a complete
+    //     backup. Each file is hash-verified inside `restore_extras`. These
+    //     are not part of the loaded `Project`, so they never touch
+    //     snapshot_hash — the integrity gate below is unaffected.
+    let (extras_restored, extras_missing) = match extras_manifest_hash {
+        Some(h) => crate::registry::restore_extras(dest, h, fetch_blob)?,
+        None => (0, Vec::new()),
+    };
+
     // 3. Materialize frontier.json + vela.lock canonically by RELOADING the
     //    tree (loader == reducer): this also proves the written events
     //    replay to the published state and recomputes the integrity hashes.
@@ -1020,6 +1041,8 @@ pub fn write_working_frontier(
         artifacts_restored,
         witnesses_reconstructed,
         blobs_missing,
+        extras_restored,
+        extras_missing,
         snapshot_hash,
         event_log_hash,
     })
@@ -1748,7 +1771,7 @@ name = "minimal"
         let dest = TempDir::new().unwrap();
         let mut blobs: HashMap<String, Vec<u8>> = HashMap::new();
         blobs.insert(hash_hex, witness_bytes.clone());
-        let report = write_working_frontier(dest.path(), &project, &mut |h| {
+        let report = write_working_frontier(dest.path(), &project, None, &mut |h| {
             blobs
                 .get(h)
                 .cloned()
@@ -1800,8 +1823,10 @@ name = "minimal"
         project.artifacts.push(artifact);
 
         let dest = TempDir::new().unwrap();
-        let err = write_working_frontier(dest.path(), &project, &mut |_h| Ok(b"tampered".to_vec()))
-            .expect_err("must reject a hash mismatch");
+        let err = write_working_frontier(dest.path(), &project, None, &mut |_h| {
+            Ok(b"tampered".to_vec())
+        })
+        .expect_err("must reject a hash mismatch");
         assert!(err.contains("hash mismatch"), "unexpected error: {err}");
     }
 }

@@ -59,6 +59,17 @@ pub struct RegistryEntry {
     /// whether to accept `UNLICENSED` (i.e. `None`) entries.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub license: Option<String>,
+    /// v0.711: SHA-256 hex of the content-addressed *extras manifest* — the
+    /// loose `.vela/` files a snapshot+artifact-blob clone does NOT
+    /// reconstruct (governance `policy/`, `releases/`, the verifier sources
+    /// under `tasks/`+`workspaces/`, `evaluations/`, `tool_descriptors/`).
+    /// Its presence is what lets a cold clone restore the FULL `.vela/`
+    /// tree, so the hub is a complete backup and `.vela/` can become a
+    /// gitignored cache. Pre-v0.711 entries serialize without it
+    /// (skip_if_none) and verify byte-identically — `entry_signing_bytes`
+    /// folds it into the preimage only when present.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub extras_manifest_hash: Option<String>,
 }
 
 fn default_entry_schema() -> String {
@@ -288,18 +299,29 @@ pub fn verify_maintainer_action(rec: &MaintainerActionRecord) -> Result<bool, St
 }
 
 pub fn entry_signing_bytes(entry: &RegistryEntry) -> Result<Vec<u8>, String> {
-    let preimage = json!({
-        "schema": entry.schema,
-        "vfr_id": entry.vfr_id,
-        "name": entry.name,
-        "owner_actor_id": entry.owner_actor_id,
-        "owner_pubkey": entry.owner_pubkey,
-        "latest_snapshot_hash": entry.latest_snapshot_hash,
-        "latest_event_log_hash": entry.latest_event_log_hash,
-        "network_locator": entry.network_locator,
-        "signed_publish_at": entry.signed_publish_at,
-    });
-    crate::canonical::to_canonical_bytes(&preimage)
+    let mut preimage = serde_json::Map::new();
+    preimage.insert("schema".into(), json!(entry.schema));
+    preimage.insert("vfr_id".into(), json!(entry.vfr_id));
+    preimage.insert("name".into(), json!(entry.name));
+    preimage.insert("owner_actor_id".into(), json!(entry.owner_actor_id));
+    preimage.insert("owner_pubkey".into(), json!(entry.owner_pubkey));
+    preimage.insert(
+        "latest_snapshot_hash".into(),
+        json!(entry.latest_snapshot_hash),
+    );
+    preimage.insert(
+        "latest_event_log_hash".into(),
+        json!(entry.latest_event_log_hash),
+    );
+    preimage.insert("network_locator".into(), json!(entry.network_locator));
+    preimage.insert("signed_publish_at".into(), json!(entry.signed_publish_at));
+    // v0.711: fold the extras-manifest pointer into the preimage ONLY when
+    // present, so pre-v0.711 entries (None) produce byte-identical signing
+    // bytes and their existing signatures keep verifying.
+    if let Some(h) = &entry.extras_manifest_hash {
+        preimage.insert("extras_manifest_hash".into(), json!(h));
+    }
+    crate::canonical::to_canonical_bytes(&serde_json::Value::Object(preimage))
 }
 
 /// Sign an unsigned entry (with `signature` as empty string), returning
@@ -813,6 +835,258 @@ pub fn fetch_blob(hub_url: &str, hash_hex: &str) -> Result<Vec<u8>, String> {
     })
 }
 
+// ---------------------------------------------------------------------------
+// v0.711: extras manifest — make the hub a COMPLETE backup of `.vela/`.
+//
+// A snapshot+artifact-blob clone reconstructs the protocol core (events,
+// findings, proposals, actors, artifacts) but silently drops the loose
+// `.vela/` files no `Project` field carries: governance `policy/`,
+// `releases/`, the verifier sources under `tasks/`+`workspaces/`,
+// `evaluations/`, `tool_descriptors/`. Those are source/provenance, not
+// regenerable views, so dropping them blocks `.vela/` from becoming a
+// gitignored cache. The extras manifest content-addresses every such file
+// and is itself content-addressed; its hash rides in the (signed) registry
+// entry, OUTSIDE `snapshot_hash`, so adding it never moves the integrity
+// anchor and never needs a re-sign of the substrate.
+// ---------------------------------------------------------------------------
+
+pub const EXTRAS_MANIFEST_SCHEMA: &str = "vela.extras_manifest.v0.1";
+
+/// `(manifest_hash, blobs)` — every extra file plus the manifest itself, as
+/// content-addressed `(hash, bytes)` pairs ready to stage or upload.
+pub type ExtrasBundle = (String, Vec<(String, Vec<u8>)>);
+
+/// One loose `.vela/` file, content-addressed.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtrasEntry {
+    /// Path relative to the frontier's `.vela/` dir, e.g. `policy/review_policy.md`.
+    pub rel_path: String,
+    /// SHA-256 hex (64 chars, no `sha256:` prefix — matches the blob store key).
+    pub content_hash: String,
+    pub size_bytes: u64,
+}
+
+/// The content-addressed manifest of a frontier's loose `.vela/` files.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExtrasManifest {
+    #[serde(default)]
+    pub schema: String,
+    pub entries: Vec<ExtrasEntry>,
+}
+
+/// `.vela/` top-level dirs a snapshot+artifact-blob clone already rebuilds.
+/// Kept next to the loader's write-set (`repo::save_vela_repo`); the
+/// `check-vela-coverage.sh` gate is the fail-closed backstop for any drift.
+const SNAPSHOT_RECONSTRUCTED_DIRS: &[&str] = &[
+    "events",
+    "findings",
+    "proposals",
+    "artifacts",
+    "code-artifacts",
+    "datasets",
+    "artifact-blobs",
+];
+/// Top-level `.vela/` files the snapshot already rebuilds.
+const SNAPSHOT_RECONSTRUCTED_FILES: &[&str] = &[
+    "actors.json",
+    "config.toml",
+    "proof-state.json",
+    "signatures.json",
+];
+
+/// Walk `<frontier>/.vela` and return every file a snapshot+artifact-blob
+/// clone would NOT reconstruct, as `(rel_path_under_dotvela, bytes)`, sorted
+/// by path for a deterministic manifest.
+pub fn collect_extras(frontier_root: &Path) -> Result<Vec<(String, Vec<u8>)>, String> {
+    let vela = frontier_root.join(".vela");
+    if !vela.is_dir() {
+        return Ok(Vec::new());
+    }
+    let mut out: Vec<(String, Vec<u8>)> = Vec::new();
+    let mut stack = vec![vela.clone()];
+    while let Some(dir) = stack.pop() {
+        let rd = std::fs::read_dir(&dir).map_err(|e| format!("read_dir {}: {e}", dir.display()))?;
+        for entry in rd {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let path = entry.path();
+            let rel = path
+                .strip_prefix(&vela)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            let top = rel.split('/').next().unwrap_or("");
+            if SNAPSHOT_RECONSTRUCTED_DIRS.contains(&top) {
+                continue;
+            }
+            if path.is_dir() {
+                stack.push(path);
+            } else {
+                if !rel.contains('/') && SNAPSHOT_RECONSTRUCTED_FILES.contains(&rel.as_str()) {
+                    continue;
+                }
+                let bytes =
+                    std::fs::read(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
+                out.push((rel, bytes));
+            }
+        }
+    }
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(out)
+}
+
+/// Build a frontier's extras manifest. Returns
+/// `(manifest_hash, blobs)` where `blobs` is every extra file PLUS the
+/// manifest itself as `(hash, bytes)`, ready to stage locally or upload.
+/// `None` when the frontier has no extras (a fully snapshot-covered tree).
+pub fn build_extras_manifest(frontier_root: &Path) -> Result<Option<ExtrasBundle>, String> {
+    use sha2::{Digest, Sha256};
+    let extras = collect_extras(frontier_root)?;
+    if extras.is_empty() {
+        return Ok(None);
+    }
+    let mut entries = Vec::with_capacity(extras.len());
+    let mut blobs: Vec<(String, Vec<u8>)> = Vec::with_capacity(extras.len() + 1);
+    for (rel, bytes) in &extras {
+        let hash = hex::encode(Sha256::digest(bytes));
+        entries.push(ExtrasEntry {
+            rel_path: rel.clone(),
+            content_hash: hash.clone(),
+            size_bytes: bytes.len() as u64,
+        });
+        blobs.push((hash, bytes.clone()));
+    }
+    let manifest = ExtrasManifest {
+        schema: EXTRAS_MANIFEST_SCHEMA.to_string(),
+        entries,
+    };
+    let manifest_value =
+        serde_json::to_value(&manifest).map_err(|e| format!("serialize extras manifest: {e}"))?;
+    let manifest_bytes = crate::canonical::to_canonical_bytes(&manifest_value)?;
+    let manifest_hash = hex::encode(Sha256::digest(&manifest_bytes));
+    blobs.push((manifest_hash.clone(), manifest_bytes));
+    Ok(Some((manifest_hash, blobs)))
+}
+
+/// Stage content-addressed blobs into a local store at `{dir}/sha256/{hash}`.
+/// The offline analogue of a hub blob tier — `vela clone --blobs-from {dir}`
+/// reads them back. Idempotent: skips a hash already present. Returns the
+/// number of NEW blobs written.
+pub fn stage_blobs_local(dir: &Path, blobs: &[(String, Vec<u8>)]) -> Result<usize, String> {
+    let store = dir.join("sha256");
+    std::fs::create_dir_all(&store).map_err(|e| format!("create blob store: {e}"))?;
+    let mut written = 0usize;
+    for (hash, bytes) in blobs {
+        let p = store.join(hash);
+        if !p.exists() {
+            std::fs::write(&p, bytes).map_err(|e| format!("write blob {hash}: {e}"))?;
+            written += 1;
+        }
+    }
+    Ok(written)
+}
+
+/// Upload content-addressed blobs to a hub blob tier (`PUT {hub}/blobs/{hash}`),
+/// the same shape as `upload_artifact_blobs`. Returns `(uploaded, duplicate)`.
+pub fn upload_blobs_http(
+    hub_url: &str,
+    pubkey_hex: &str,
+    blobs: Vec<(String, Vec<u8>)>,
+) -> Result<(usize, usize), String> {
+    if blobs.is_empty() {
+        return Ok((0, 0));
+    }
+    let hub_root = hub_root_of(hub_url);
+    let pubkey = pubkey_hex.to_string();
+    run_blocking_http(120, move |client| {
+        let mut up = 0usize;
+        let mut dup = 0usize;
+        for (hash, bytes) in blobs {
+            let url = format!("{hub_root}/blobs/{hash}");
+            let resp = client
+                .put(&url)
+                .header("content-type", "application/octet-stream")
+                .header("x-vela-pubkey", &pubkey)
+                .body(bytes)
+                .send()
+                .map_err(|e| format!("PUT {url}: {e}"))?;
+            let status = resp.status();
+            let text = resp.text().unwrap_or_default();
+            if !status.is_success() {
+                let msg = serde_json::from_str::<serde_json::Value>(&text)
+                    .ok()
+                    .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
+                    .unwrap_or(text);
+                return Err(format!("PUT {url}: HTTP {status}: {msg}"));
+            }
+            let is_dup = serde_json::from_str::<serde_json::Value>(&text)
+                .ok()
+                .and_then(|v| v.get("duplicate").and_then(serde_json::Value::as_bool))
+                .unwrap_or(false);
+            if is_dup {
+                dup += 1;
+            } else {
+                up += 1;
+            }
+        }
+        Ok((up, dup))
+    })
+}
+
+/// Restore a frontier's extras into `dest/.vela/` from a content-addressed
+/// blob source. `fetch` resolves a hash to bytes (local mirror or hub). Each
+/// file is hash-verified before write. Returns `(restored, missing)`.
+pub fn restore_extras(
+    dest: &Path,
+    manifest_hash: &str,
+    fetch: &mut dyn FnMut(&str) -> Result<Vec<u8>, String>,
+) -> Result<(usize, Vec<String>), String> {
+    use sha2::{Digest, Sha256};
+    // A missing manifest is a PARTIAL clone, not a fault: the snapshot core
+    // still reconstructs (the integrity hashes are unaffected). Report it as a
+    // missing extra so callers can surface the gap, mirroring how artifact
+    // `blobs_missing` is handled — never crash a clone from an incomplete
+    // mirror. (A corrupt manifest — fetched but wrong-hash — still errors.)
+    let manifest_bytes = match fetch(manifest_hash) {
+        Ok(b) => b,
+        Err(_) => return Ok((0, vec![format!("extras-manifest:{manifest_hash}")])),
+    };
+    let actual = hex::encode(Sha256::digest(&manifest_bytes));
+    if actual != manifest_hash {
+        return Err(format!(
+            "extras manifest hashes to {actual}, not the entry's {manifest_hash}"
+        ));
+    }
+    let manifest: ExtrasManifest = serde_json::from_slice(&manifest_bytes)
+        .map_err(|e| format!("parse extras manifest: {e}"))?;
+    let vela = dest.join(".vela");
+    let mut restored = 0usize;
+    let mut missing = Vec::new();
+    for entry in &manifest.entries {
+        let bytes = match fetch(&entry.content_hash) {
+            Ok(b) => b,
+            Err(_) => {
+                missing.push(entry.rel_path.clone());
+                continue;
+            }
+        };
+        let got = hex::encode(Sha256::digest(&bytes));
+        if got != entry.content_hash {
+            return Err(format!(
+                "extra {} hashes to {got}, not the committed {}",
+                entry.rel_path, entry.content_hash
+            ));
+        }
+        let out = vela.join(&entry.rel_path);
+        if let Some(parent) = out.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("create {}: {e}", parent.display()))?;
+        }
+        std::fs::write(&out, &bytes).map_err(|e| format!("write {}: {e}", out.display()))?;
+        restored += 1;
+    }
+    Ok((restored, missing))
+}
+
 /// Deliver a signed proposal-acceptance to a hub
 /// (`POST {hub}/entries/{vfr}/proposals/{pid}/accept`). The detached signature
 /// is over the canonical accept preimage (vfr, proposal, reviewer, reason);
@@ -1099,6 +1373,50 @@ mod tests {
     use rand::rngs::OsRng;
     use tempfile::TempDir;
 
+    #[test]
+    fn extras_manifest_round_trips_and_excludes_snapshot_dirs() {
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path();
+        let vela = root.join(".vela");
+        std::fs::create_dir_all(vela.join("policy")).unwrap();
+        std::fs::create_dir_all(vela.join("workspaces/vtask_x")).unwrap();
+        std::fs::create_dir_all(vela.join("events")).unwrap();
+        // Extras the snapshot can't rebuild:
+        std::fs::write(vela.join("policy/review.md"), b"be strict").unwrap();
+        std::fs::write(vela.join("workspaces/vtask_x/verify.py"), b"print(1)").unwrap();
+        // Snapshot-reconstructed — MUST be excluded from extras:
+        std::fs::write(vela.join("events/e1.json"), b"{}").unwrap();
+        std::fs::write(vela.join("actors.json"), b"[]").unwrap();
+
+        let (manifest_hash, blobs) = build_extras_manifest(root)
+            .unwrap()
+            .expect("frontier has extras");
+        // 2 extra files + the manifest blob; events/ + actors.json excluded.
+        assert_eq!(blobs.len(), 3, "2 extras + 1 manifest");
+
+        // Stage to a content-addressed store, restore into a fresh dest.
+        let store = tmp.path().join("store");
+        stage_blobs_local(&store, &blobs).unwrap();
+        let dest = TempDir::new().unwrap();
+        let mut fetch = |h: &str| -> Result<Vec<u8>, String> {
+            std::fs::read(store.join("sha256").join(h)).map_err(|e| e.to_string())
+        };
+        let (restored, missing) = restore_extras(dest.path(), &manifest_hash, &mut fetch).unwrap();
+        assert_eq!(restored, 2);
+        assert!(missing.is_empty());
+        assert_eq!(
+            std::fs::read(dest.path().join(".vela/policy/review.md")).unwrap(),
+            b"be strict"
+        );
+        assert_eq!(
+            std::fs::read(dest.path().join(".vela/workspaces/vtask_x/verify.py")).unwrap(),
+            b"print(1)"
+        );
+        // The snapshot-reconstructed files were NOT folded into extras.
+        assert!(!dest.path().join(".vela/events/e1.json").exists());
+        assert!(!dest.path().join(".vela/actors.json").exists());
+    }
+
     fn keypair() -> (SigningKey, String) {
         let key = SigningKey::generate(&mut OsRng);
         let pubkey = hex::encode(key.verifying_key().to_bytes());
@@ -1153,6 +1471,7 @@ mod tests {
             latest_event_log_hash: "b".repeat(64),
             network_locator: "/tmp/x.json".to_string(),
             license: None,
+            extras_manifest_hash: None,
             signed_publish_at: "2026-04-25T00:00:00Z".to_string(),
             signature: String::new(),
         }
@@ -1335,6 +1654,7 @@ mod tests {
             latest_event_log_hash: event_log.to_string(),
             network_locator: format!("file://{}", path.display()),
             license: None,
+            extras_manifest_hash: None,
             signed_publish_at: chrono::Utc::now().to_rfc3339(),
             signature: String::new(),
         };
