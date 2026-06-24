@@ -81,6 +81,11 @@ const MAX_ACCEPT_BODY_BYTES: usize = 4 * 1024;
 /// records — but far below the publish cap so a deposit can't smuggle a whole
 /// substrate; large bulk still goes through the full publish path.
 const MAX_APPEND_BODY_BYTES: usize = 4 * 1024 * 1024;
+/// Max body for `PUT /blobs/{hash}` (content-addressed artifact-blob ingest:
+/// witnesses, proof packets, `local_blob` datasets a frontier commits to by
+/// `content_hash`). Witnesses are bytes; datasets can be larger. 64 MB sits
+/// below the publish cap and well above any single witness/proof artifact.
+const MAX_BLOB_BODY_BYTES: usize = 64 * 1024 * 1024;
 
 /// Anti-replay: how long a proposal signature stays valid after its signed
 /// `created_at`. The proposal signing preimage includes `created_at` (see
@@ -649,6 +654,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .route("/producers/{pubkey}", get(get_producer))
         .route("/scratch", axum::routing::post(post_scratch))
+        // Content-addressed artifact-blob tier (witnesses, proof packets,
+        // `local_blob` datasets). GET 302-redirects to the immutable CDN
+        // object; PUT ingests bytes self-verified against their own hash.
+        // This is what lets a cold `vela clone` fetch the witness bytes a
+        // frontier commits to by `content_hash` and re-run `vela reproduce`.
+        .route(
+            "/blobs/{hash}",
+            get(get_blob)
+                .put(put_blob)
+                .layer(DefaultBodyLimit::max(MAX_BLOB_BODY_BYTES)),
+        )
         .route("/search", get(search_endpoint))
         .route("/entries/{vfr_id}/objects/{otype}", get(get_entry_objects))
         .route(
@@ -1591,6 +1607,157 @@ async fn post_scratch(
     };
     match storage.put_scratch(body.to_vec()).await {
         Ok((vsx, url)) => Json(json!({"ok": true, "vsx_id": vsx, "url": url})).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": format!("storage: {e}")})),
+        )
+            .into_response(),
+    }
+}
+
+/// True iff `s` is a lowercase 64-char hex sha256 digest.
+fn is_sha256_hex(s: &str) -> bool {
+    s.len() == 64
+        && s.bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+}
+
+/// The object-storage key for an artifact blob, namespaced away from the
+/// bare-`{hash}` snapshot keys and the `scratch/` tier.
+fn blob_key(hash: &str) -> String {
+    format!("blobs/{hash}")
+}
+
+/// Content-addressed artifact-blob fetch (`GET /blobs/{hash}`).
+///
+/// Serves the bytes a frontier's `Artifact` objects commit to by
+/// `content_hash` — witnesses, proof packets, `local_blob` datasets. Like
+/// the snapshot path, the hub stays OUT of the bytes path: a 302 to the
+/// immutable public CDN object. Reads are self-verifying — the client
+/// recomputes sha256 and checks it against the `content_hash` committed in
+/// the signed snapshot, so a wrong or poisoned blob is caught on receipt,
+/// never trusted. This is the read half of what makes a cold `vela clone`
+/// able to reconstruct the working tree and re-run `vela reproduce`.
+async fn get_blob(State(state): State<AppState>, Path(hash): Path<String>) -> Response {
+    let hash = hash.trim().to_ascii_lowercase();
+    if !is_sha256_hex(&hash) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "blob id must be a 64-char sha256 hex string"})),
+        )
+            .into_response();
+    }
+    let Some(storage) = &state.storage else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"ok": false, "error": "hub has no object storage configured"})),
+        )
+            .into_response();
+    };
+    let key = blob_key(&hash);
+    // 302 to the immutable CDN object. Content-addressed bytes never change,
+    // so cache hard. The client follows the redirect and verifies the hash.
+    let redirect = || {
+        let url = storage.public_url_for(&key);
+        let mut resp = (
+            StatusCode::FOUND,
+            [(axum::http::header::LOCATION, url.as_str())],
+            Json(json!({"ok": true, "hash": hash, "blob_url": url})),
+        )
+            .into_response();
+        resp.headers_mut().insert(
+            axum::http::header::CACHE_CONTROL,
+            axum::http::HeaderValue::from_static("public, max-age=31536000, immutable"),
+        );
+        if let Ok(etag) = axum::http::HeaderValue::from_str(&format!("\"{hash}\"")) {
+            resp.headers_mut().insert(axum::http::header::ETAG, etag);
+        }
+        resp
+    };
+    match storage.exists(&key).await {
+        Ok(true) => redirect(),
+        Ok(false) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"ok": false, "error": format!("blob {hash} not found")})),
+        )
+            .into_response(),
+        // A HEAD that errors (not a clean 404) must NOT block a blob that may
+        // well be present: the CDN is authoritative and the client verifies
+        // the hash, so redirect optimistically rather than 500. A truly-absent
+        // blob then surfaces as a CDN 404 on the followed request.
+        Err(_) => redirect(),
+    }
+}
+
+/// Content-addressed artifact-blob ingest (`PUT /blobs/{hash}`).
+///
+/// Stores inert bytes keyed by their own sha256. SELF-VERIFYING: the hub
+/// recomputes the digest and rejects a mismatch, so a blob can never be
+/// stored under a key whose content it does not match. Idempotent — a
+/// re-PUT of already-present bytes is a no-op. A registered pubkey header
+/// is required as a light rate-limit hook (same as `scratch`); no signature
+/// over the bytes is demanded because the bytes carry NO authority. Only the
+/// `content_hash` committed inside a signed snapshot makes a blob
+/// load-bearing, and that commitment lives in the frontier, not here. This
+/// is therefore consistent with the "no anonymous push of STATE" rule: state
+/// (events/frontiers) still requires an owner signature; a blob is just the
+/// referenced payload behind a hash the owner already signed.
+async fn put_blob(
+    State(state): State<AppState>,
+    Path(hash): Path<String>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> Response {
+    let hash = hash.trim().to_ascii_lowercase();
+    if !is_sha256_hex(&hash) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "blob id must be a 64-char sha256 hex string"})),
+        )
+            .into_response();
+    }
+    if headers.get("x-vela-pubkey").is_none() {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"ok": false, "error": "send your Ed25519 pubkey hex in x-vela-pubkey"})),
+        )
+            .into_response();
+    }
+    let actual = {
+        use sha2::Digest;
+        hex::encode(sha2::Sha256::digest(&body))
+    };
+    if actual != hash {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "ok": false,
+                "error": "content hash mismatch",
+                "declared": hash,
+                "actual": actual,
+            })),
+        )
+            .into_response();
+    }
+    let Some(storage) = &state.storage else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"ok": false, "error": "hub has no object storage configured"})),
+        )
+            .into_response();
+    };
+    let key = blob_key(&hash);
+    if let Ok(true) = storage.exists(&key).await {
+        return Json(json!({"ok": true, "hash": hash, "duplicate": true})).into_response();
+    }
+    let content_type = headers
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("application/octet-stream")
+        .to_string();
+    match storage.put(&key, body.to_vec(), &content_type).await {
+        Ok(url) => Json(json!({"ok": true, "hash": hash, "blob_url": url, "duplicate": false}))
+            .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"ok": false, "error": format!("storage: {e}")})),

@@ -433,6 +433,29 @@ pub(crate) enum Commands {
         #[arg(long)]
         json: bool,
     },
+    /// Clone a published frontier from a hub into a fresh working `.vela/`
+    /// tree — the git-style pull. Reconstructs everything `vela reproduce`
+    /// needs (events, objects, witnesses, proof, lock) and verifies it
+    /// byte-for-byte against the publisher's signed hashes. Unlike
+    /// `registry pull` (which writes a single snapshot/export file), the
+    /// result is a working frontier you can reproduce, extend, and re-push.
+    Clone {
+        /// The frontier to clone: a `vfr_…` id, or a hub URL containing it
+        /// (e.g. https://hub.constellate.science/entries/vfr_…).
+        target: String,
+        /// Destination directory (created if absent). Defaults to the vfr id.
+        dest: Option<PathBuf>,
+        /// Hub/registry to clone from. Defaults to your configured hub.
+        #[arg(long)]
+        from: Option<String>,
+        /// Read artifact blobs from a local content-addressed mirror
+        /// (`<dir>/<hash>` or `<dir>/sha256/<hash>`) instead of the hub blob
+        /// tier. Used by the offline round-trip conformance pin.
+        #[arg(long)]
+        blobs_from: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
     /// Manage the frontier's registered actor identities (Phase M, v0.4)
     Actor {
         #[command(subcommand)]

@@ -876,6 +876,155 @@ pub fn init_repo(dir: &Path, project: &Project) -> Result<(), String> {
     save_vela_repo(dir, project)
 }
 
+/// Report from reconstructing a working frontier tree (`vela clone`).
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkingFrontierReport {
+    pub dest: String,
+    /// Content-addressed artifact blobs restored to their `locator` path.
+    pub artifacts_restored: usize,
+    /// Human-facing `witnesses/*.witness.json` files rebuilt so
+    /// `vela reproduce` can re-verify.
+    pub witnesses_reconstructed: usize,
+    /// Content hashes the blob provider could not supply (a partial clone:
+    /// the tree is written but these payloads are absent).
+    pub blobs_missing: Vec<String>,
+    pub snapshot_hash: String,
+    pub event_log_hash: String,
+}
+
+/// Reconstruct a *working* `.vela/` frontier tree at `dest` from an
+/// in-memory [`Project`] (typically just pulled and hash-verified from a
+/// hub), then restore the content-addressed artifact blobs the frontier
+/// commits to so `vela reproduce <dest>` can re-verify from scratch.
+///
+/// This is the missing inverse of `vela publish`. A pull recovers the event
+/// log and the objects, but the witness / proof BYTES live in [`Artifact`]
+/// objects as `content_hash` commitments whose payloads are stored
+/// out-of-band (the producer's `.vela/artifact-blobs/`, or the hub blob
+/// tier). The `fetch_blob` provider supplies those payloads by hex hash —
+/// over the hub blob tier in production, or a local mirror in tests — and
+/// each is verified against its committed `content_hash` before it is
+/// written. No blob is trusted on faith: a wrong payload is rejected here,
+/// not silently reproduced.
+///
+/// [`Artifact`]: crate::bundle::Artifact
+pub fn write_working_frontier(
+    dest: &Path,
+    project: &Project,
+    fetch_blob: &mut dyn FnMut(&str) -> Result<Vec<u8>, String>,
+) -> Result<WorkingFrontierReport, String> {
+    use serde_json::Value;
+    use sha2::{Digest, Sha256};
+
+    // 1. Write the `.vela/` tree + visible files (frontier.json, vela.lock,
+    //    proof/) from the in-memory project.
+    init_repo(dest, project)?;
+
+    // 2. Restore the content-addressed artifact blobs the frontier commits
+    //    to, and rebuild the human-facing witness files `vela reproduce`
+    //    globs (`witnesses/*.witness.json`).
+    let mut artifacts_restored = 0usize;
+    let mut witnesses_reconstructed = 0usize;
+    let mut blobs_missing: Vec<String> = Vec::new();
+
+    for artifact in &project.artifacts {
+        if artifact.retracted {
+            continue;
+        }
+        // Only local-byte artifacts carry payloads we can restore; `remote`
+        // / `pointer` artifacts live behind a URL the frontier does not own.
+        if artifact.storage_mode != "local_blob" && artifact.storage_mode != "local_file" {
+            continue;
+        }
+        let hash_hex = artifact
+            .content_hash
+            .strip_prefix("sha256:")
+            .unwrap_or(&artifact.content_hash)
+            .to_string();
+        if hash_hex.len() != 64 {
+            continue;
+        }
+        let bytes = match fetch_blob(&hash_hex) {
+            Ok(b) => b,
+            Err(_) => {
+                blobs_missing.push(hash_hex.clone());
+                continue;
+            }
+        };
+        // Verify the payload against its committed hash before writing it.
+        let actual = hex::encode(Sha256::digest(&bytes));
+        if actual != hash_hex {
+            return Err(format!(
+                "artifact {} blob hash mismatch: committed {hash_hex}, fetched {actual}",
+                artifact.id
+            ));
+        }
+        // Restore the blob at its locator path so the artifact's locator
+        // resolves on the cloned tree (skip URL locators).
+        if let Some(locator) = &artifact.locator
+            && !locator.is_empty()
+            && !locator.contains("://")
+        {
+            let blob_path = dest.join(locator);
+            if let Some(parent) = blob_path.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("create {}: {e}", parent.display()))?;
+            }
+            std::fs::write(&blob_path, &bytes)
+                .map_err(|e| format!("write blob {}: {e}", blob_path.display()))?;
+            artifacts_restored += 1;
+        }
+        // Rebuild the human-facing witness file from the same verified bytes.
+        if let Some(witness_file) = artifact
+            .metadata
+            .get("witness_file")
+            .and_then(Value::as_str)
+            && !witness_file.is_empty()
+        {
+            let witness_path = dest.join("witnesses").join(witness_file);
+            if let Some(parent) = witness_path.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("create {}: {e}", parent.display()))?;
+            }
+            std::fs::write(&witness_path, &bytes)
+                .map_err(|e| format!("write witness {}: {e}", witness_path.display()))?;
+            witnesses_reconstructed += 1;
+        }
+    }
+
+    // 3. Materialize frontier.json + vela.lock canonically by RELOADING the
+    //    tree (loader == reducer): this also proves the written events
+    //    replay to the published state and recomputes the integrity hashes.
+    let materialized = crate::frontier_repo::materialize(dest)?;
+    // `materialize` reports hashes with a `sha256:` prefix; registry entries
+    // and `events::snapshot_hash` use the bare hex. Normalize to bare so the
+    // caller can compare directly against the signed `latest_*_hash`.
+    let strip = |v: &serde_json::Value, key: &str| -> String {
+        v.get(key)
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .strip_prefix("sha256:")
+            .map(str::to_string)
+            .unwrap_or_else(|| {
+                v.get(key)
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default()
+                    .to_string()
+            })
+    };
+    let snapshot_hash = strip(&materialized, "snapshot_hash");
+    let event_log_hash = strip(&materialized, "event_log_hash");
+
+    Ok(WorkingFrontierReport {
+        dest: dest.display().to_string(),
+        artifacts_restored,
+        witnesses_reconstructed,
+        blobs_missing,
+        snapshot_hash,
+        event_log_hash,
+    })
+}
+
 // ── Tests ────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -1525,5 +1674,134 @@ name = "minimal"
         assert_eq!(rt1.links.len(), 1);
         assert_eq!(rt1.links[0].target, "vf_rt2");
         assert_eq!(rt1.links[0].link_type, "extends");
+    }
+
+    /// Build a witness payload registered as a content-addressed `local_blob`
+    /// artifact, exactly as the witness backfill does (content_hash, locator
+    /// under `.vela/artifact-blobs/`, `witness_file` in metadata).
+    fn witness_artifact(
+        finding_id: &str,
+        witness_file: &str,
+        bytes: &[u8],
+    ) -> (Artifact, String, String) {
+        use sha2::{Digest, Sha256};
+        let hash_hex = hex::encode(Sha256::digest(bytes));
+        let locator = format!(".vela/artifact-blobs/sha256/{hash_hex}");
+        let mut metadata = std::collections::BTreeMap::new();
+        metadata.insert(
+            "witness_file".to_string(),
+            serde_json::Value::String(witness_file.to_string()),
+        );
+        let artifact = Artifact::new(
+            "dataset",
+            format!("Frozen-verifier witness: {witness_file}"),
+            format!("sha256:{hash_hex}"),
+            Some(bytes.len() as u64),
+            Some("application/json".to_string()),
+            "local_blob",
+            Some(locator.clone()),
+            None,
+            Some("CC-BY-4.0".to_string()),
+            vec![finding_id.to_string()],
+            Provenance {
+                source_type: "data_release".to_string(),
+                doi: None,
+                url: None,
+                title: format!("Frozen-verifier witness: {witness_file}"),
+                authors: Vec::new(),
+                year: None,
+                license: Some("CC-BY-4.0".to_string()),
+                publisher: None,
+                funders: Vec::new(),
+                extraction: Extraction::default(),
+                review: None,
+            },
+            metadata,
+            crate::access_tier::AccessTier::Public,
+        )
+        .expect("build witness artifact");
+        (artifact, hash_hex, locator)
+    }
+
+    /// The round-trip swappability pin (P1.4): a frontier rebuilt by
+    /// `write_working_frontier` must reproduce BYTE-IDENTICALLY and restore
+    /// the witness bytes `vela reproduce` needs. publish → clone → reproduce
+    /// → hashes equal origin, in one in-process proof.
+    #[test]
+    fn write_working_frontier_round_trips_byte_identical() {
+        let finding = make_finding("vf_0000000000000001", 7.0, "lower_bound");
+        let finding_id = finding.id.clone();
+        let mut project = make_project("round-trip", vec![finding]);
+
+        let witness_bytes =
+            br#"{"kind":"sidon","n":7,"claimed_size":4,"points":[0,1,3,7]}"#.to_vec();
+        let (artifact, hash_hex, locator) =
+            witness_artifact(&finding_id, "sidon-a07.witness.json", &witness_bytes);
+        project.artifacts.push(artifact);
+
+        // The publisher's signed integrity anchor (in-memory truth).
+        let origin_snapshot = crate::events::snapshot_hash(&project);
+        let origin_event_log = crate::events::event_log_hash(&project.events);
+
+        // Clone-side reconstruction into a fresh dir; blobs come from a
+        // content-addressed map (the role the hub blob tier plays live).
+        let dest = TempDir::new().unwrap();
+        let mut blobs: HashMap<String, Vec<u8>> = HashMap::new();
+        blobs.insert(hash_hex, witness_bytes.clone());
+        let report = write_working_frontier(dest.path(), &project, &mut |h| {
+            blobs
+                .get(h)
+                .cloned()
+                .ok_or_else(|| format!("missing blob {h}"))
+        })
+        .expect("write working frontier");
+
+        // Byte-parity: the rebuilt tree hashes to exactly what was signed.
+        assert_eq!(report.snapshot_hash, origin_snapshot, "snapshot hash drift");
+        assert_eq!(
+            report.event_log_hash, origin_event_log,
+            "event-log hash drift"
+        );
+        assert!(
+            report.blobs_missing.is_empty(),
+            "blobs missing: {:?}",
+            report.blobs_missing
+        );
+        assert_eq!(report.witnesses_reconstructed, 1);
+        assert_eq!(report.artifacts_restored, 1);
+
+        // The witness file `vela reproduce` globs is restored byte-for-byte.
+        assert_eq!(
+            std::fs::read(dest.path().join("witnesses/sidon-a07.witness.json")).unwrap(),
+            witness_bytes
+        );
+        // The content-addressed blob is restored at its locator.
+        assert_eq!(
+            std::fs::read(dest.path().join(&locator)).unwrap(),
+            witness_bytes
+        );
+
+        // A genuinely cold reload (loader == reducer) recomputes the anchor.
+        let reloaded = load_from_path(dest.path()).expect("reload clone");
+        assert_eq!(crate::events::snapshot_hash(&reloaded), origin_snapshot);
+    }
+
+    /// A poisoned blob (right hash key, wrong bytes) is REJECTED on receipt,
+    /// not silently written. The clone never trusts the blob tier.
+    #[test]
+    fn write_working_frontier_rejects_blob_hash_mismatch() {
+        let finding = make_finding("vf_0000000000000002", 8.0, "lower_bound");
+        let finding_id = finding.id.clone();
+        let mut project = make_project("round-trip-poison", vec![finding]);
+        let witness_bytes =
+            br#"{"kind":"sidon","n":8,"claimed_size":5,"points":[0,1,3,7,12]}"#.to_vec();
+        let (artifact, _hash, _locator) =
+            witness_artifact(&finding_id, "sidon-a08.witness.json", &witness_bytes);
+        project.artifacts.push(artifact);
+
+        let dest = TempDir::new().unwrap();
+        let err = write_working_frontier(dest.path(), &project, &mut |_h| Ok(b"tampered".to_vec()))
+            .expect_err("must reject a hash mismatch");
+        assert!(err.contains("hash mismatch"), "unexpected error: {err}");
     }
 }

@@ -658,6 +658,168 @@ pub fn publish_remote(
     .map_err(|_| "remote publish worker panicked".to_string())?
 }
 
+/// Strip a trailing `/entries` (and slashes) so `/blobs/<hash>` composes
+/// cleanly whether the caller passes the hub root or its `/entries` URL.
+fn hub_root_of(hub_url: &str) -> String {
+    hub_url
+        .trim_end_matches('/')
+        .trim_end_matches("/entries")
+        .trim_end_matches('/')
+        .to_string()
+}
+
+/// Result of uploading a frontier's content-addressed artifact blobs to a
+/// hub blob tier (the publish-side half of round-trip completeness).
+#[derive(Debug, Clone, Default)]
+pub struct BlobUploadReport {
+    pub uploaded: usize,
+    pub duplicate: usize,
+    pub skipped_remote: usize,
+    /// Locators whose bytes were not present on disk (a partial upload).
+    pub missing_local: Vec<String>,
+}
+
+/// Upload the BYTES behind a frontier's local artifacts (witnesses, proof
+/// packets, `local_blob` datasets) to the hub blob tier, content-addressed
+/// by their committed `content_hash`. This is what makes a published
+/// frontier *cloneable*: a pull recovers the objects, and these uploads make
+/// the payloads they reference fetchable, so a cold clone can `vela
+/// reproduce`.
+///
+/// Idempotent and dedup-friendly: a blob already on the hub returns
+/// `duplicate` and is not re-sent (git-style "only push missing objects").
+/// Each upload is content-addressed and self-verifying — the hub recomputes
+/// the hash — so no signature over the inert bytes is needed; the authority
+/// is the `content_hash` the owner already signed into the snapshot.
+pub fn upload_artifact_blobs(
+    frontier_root: &Path,
+    project: &crate::project::Project,
+    hub_url: &str,
+    pubkey_hex: &str,
+) -> Result<BlobUploadReport, String> {
+    use sha2::{Digest, Sha256};
+    let hub_root = hub_root_of(hub_url);
+    let mut jobs: Vec<(String, Vec<u8>)> = Vec::new();
+    let mut report = BlobUploadReport::default();
+    for artifact in &project.artifacts {
+        if artifact.retracted {
+            continue;
+        }
+        if artifact.storage_mode != "local_blob" && artifact.storage_mode != "local_file" {
+            report.skipped_remote += 1;
+            continue;
+        }
+        let hash_hex = artifact
+            .content_hash
+            .strip_prefix("sha256:")
+            .unwrap_or(&artifact.content_hash)
+            .to_string();
+        if hash_hex.len() != 64 {
+            continue;
+        }
+        let Some(locator) = &artifact.locator else {
+            continue;
+        };
+        if locator.is_empty() || locator.contains("://") {
+            continue;
+        }
+        let path = frontier_root.join(locator);
+        let bytes = match std::fs::read(&path) {
+            Ok(b) => b,
+            Err(_) => {
+                report.missing_local.push(locator.clone());
+                continue;
+            }
+        };
+        let actual = hex::encode(Sha256::digest(&bytes));
+        if actual != hash_hex {
+            return Err(format!(
+                "artifact {} on-disk blob {} hashes to {actual}, not the committed {hash_hex}",
+                artifact.id,
+                path.display()
+            ));
+        }
+        jobs.push((hash_hex, bytes));
+    }
+    if jobs.is_empty() {
+        return Ok(report);
+    }
+    let pubkey = pubkey_hex.to_string();
+    let (uploaded, duplicate) = std::thread::spawn(move || -> Result<(usize, usize), String> {
+        let client = reqwest::blocking::Client::builder()
+            .user_agent(concat!("vela/", env!("CARGO_PKG_VERSION")))
+            .timeout(std::time::Duration::from_secs(120))
+            .build()
+            .map_err(|e| format!("build http client: {e}"))?;
+        let mut up = 0usize;
+        let mut dup = 0usize;
+        for (hash, bytes) in jobs {
+            let url = format!("{hub_root}/blobs/{hash}");
+            let resp = client
+                .put(&url)
+                .header("content-type", "application/octet-stream")
+                .header("x-vela-pubkey", &pubkey)
+                .body(bytes)
+                .send()
+                .map_err(|e| format!("PUT {url}: {e}"))?;
+            let status = resp.status();
+            let text = resp.text().unwrap_or_default();
+            if !status.is_success() {
+                let msg = serde_json::from_str::<serde_json::Value>(&text)
+                    .ok()
+                    .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_string))
+                    .unwrap_or(text);
+                return Err(format!("PUT {url}: HTTP {status}: {msg}"));
+            }
+            let is_dup = serde_json::from_str::<serde_json::Value>(&text)
+                .ok()
+                .and_then(|v| v.get("duplicate").and_then(serde_json::Value::as_bool))
+                .unwrap_or(false);
+            if is_dup {
+                dup += 1;
+            } else {
+                up += 1;
+            }
+        }
+        Ok((up, dup))
+    })
+    .join()
+    .map_err(|_| "blob upload worker panicked".to_string())??;
+    report.uploaded = uploaded;
+    report.duplicate = duplicate;
+    Ok(report)
+}
+
+/// Fetch a content-addressed blob by hex hash from a hub blob tier. The hub
+/// answers with a 302 to the immutable CDN object; reqwest follows it. The
+/// blob tier is UNTRUSTED transport — the caller MUST verify the returned
+/// bytes against the expected `content_hash` (`write_working_frontier`
+/// does), so a wrong or poisoned blob is caught on receipt, never trusted.
+pub fn fetch_blob(hub_url: &str, hash_hex: &str) -> Result<Vec<u8>, String> {
+    let hub_root = hub_root_of(hub_url);
+    let url = format!("{hub_root}/blobs/{hash_hex}");
+    let hash = hash_hex.to_string();
+    std::thread::spawn(move || -> Result<Vec<u8>, String> {
+        let client = reqwest::blocking::Client::builder()
+            .user_agent(concat!("vela/", env!("CARGO_PKG_VERSION")))
+            .timeout(std::time::Duration::from_secs(120))
+            .build()
+            .map_err(|e| format!("build http client: {e}"))?;
+        let resp = client
+            .get(&url)
+            .send()
+            .map_err(|e| format!("GET {url}: {e}"))?;
+        let status = resp.status();
+        if !status.is_success() {
+            return Err(format!("GET {url}: HTTP {status}"));
+        }
+        let bytes = resp.bytes().map_err(|e| format!("read blob {hash}: {e}"))?;
+        Ok(bytes.to_vec())
+    })
+    .join()
+    .map_err(|_| "blob fetch worker panicked".to_string())?
+}
+
 /// Append a signed entry to a registry, replacing any prior entry
 /// for the same `vfr_id` (latest-publish-wins).
 ///

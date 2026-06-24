@@ -835,6 +835,7 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
             entry.signature =
                 registry::sign_entry(&entry, &signing_key).unwrap_or_else(|e| fail_return(&e));
 
+            let mut blob_summary = serde_json::Value::Null;
             let (registry_label, duplicate) = if to_is_remote {
                 let hub_url = to.clone().unwrap();
                 // v0.55: include the substrate inline so the hub can
@@ -842,8 +843,64 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
                 // event/projection rows for live reads.
                 let resp = registry::publish_remote(&entry, &hub_url, Some(&frontier_data))
                     .unwrap_or_else(|e| fail_return(&e));
+                // Round-trip completeness: upload the BYTES behind this
+                // frontier's local artifacts (witnesses, proof packets) to the
+                // hub blob tier so a cold `vela clone` can fetch them by
+                // content hash and re-run `vela reproduce`. Content-addressed
+                // and idempotent; a failure here does not unwind the published
+                // manifest (the signed state IS already on the hub) but is
+                // surfaced loudly so the frontier doesn't stay un-cloneable.
+                match registry::upload_artifact_blobs(&frontier, &frontier_data, &hub_url, &derived)
+                {
+                    Ok(rep) => {
+                        blob_summary = json!({
+                            "uploaded": rep.uploaded,
+                            "duplicate": rep.duplicate,
+                            "missing_local": rep.missing_local,
+                        });
+                        if !json
+                            && (rep.uploaded > 0
+                                || rep.duplicate > 0
+                                || !rep.missing_local.is_empty())
+                        {
+                            let missing = if rep.missing_local.is_empty() {
+                                String::new()
+                            } else {
+                                format!(", {} missing on disk", rep.missing_local.len())
+                            };
+                            println!(
+                                "  blobs:     {} uploaded, {} already present{missing}",
+                                rep.uploaded, rep.duplicate
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("  ! warning: artifact-blob upload failed: {e}");
+                        eprintln!(
+                            "    the frontier is published but may not be fully cloneable until \
+                             its blobs upload; re-run `vela publish` to retry."
+                        );
+                        blob_summary = json!({ "error": e });
+                    }
+                }
                 (hub_url, resp.duplicate)
             } else {
+                // Local publish: populate a `file://` locator with the exact
+                // in-memory snapshot we just hashed, so a later `vela clone` /
+                // `pull` fetches bytes that match the signed entry. Without
+                // this the entry would point at a file that may not exist or
+                // may drift from the published hash. (The hash is computed
+                // over the loaded Project, so pretty vs compact bytes do not
+                // matter.)
+                if let Some(path) = entry.network_locator.strip_prefix("file://") {
+                    let snap = serde_json::to_vec_pretty(&frontier_data)
+                        .unwrap_or_else(|e| fail_return(&format!("serialize snapshot: {e}")));
+                    if let Some(parent) = std::path::Path::new(path).parent() {
+                        let _ = std::fs::create_dir_all(parent);
+                    }
+                    std::fs::write(path, snap)
+                        .unwrap_or_else(|e| fail_return(&format!("write snapshot {path}: {e}")));
+                }
                 let registry_path = match &to {
                     Some(loc) => registry::resolve_local(loc).unwrap_or_else(|e| fail_return(&e)),
                     None => default_registry(),
@@ -865,6 +922,7 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
                 "signed_publish_at": entry.signed_publish_at,
                 "signature": entry.signature,
                 "duplicate": duplicate,
+                "blobs": blob_summary,
             });
             if json {
                 print_json(&payload);
@@ -1178,5 +1236,154 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
                 println!("  verified snapshot+event_log hashes match registry; signature ok");
             }
         }
+    }
+}
+
+/// Extract a `vfr_…` id from a bare id or a hub `/entries/<vfr>/…` URL.
+fn parse_vfr_target(target: &str) -> Option<String> {
+    let t = target.trim();
+    if t.starts_with("vfr_") {
+        return Some(t.split(['/', '?', '#']).next().unwrap_or(t).to_string());
+    }
+    t.split(['/', '?', '#'])
+        .find(|seg| seg.starts_with("vfr_"))
+        .map(str::to_string)
+}
+
+/// `vela clone`: reconstruct a working frontier from a hub into a fresh
+/// directory — the git-style pull that closes the round-trip.
+///
+/// Where `registry pull` writes a single `<vfr>.json` snapshot/export,
+/// `clone` rebuilds the full working `.vela/` tree PLUS the witness/proof
+/// BYTES (fetched by content hash from the hub blob tier, or a local mirror
+/// for the offline conformance pin), so `vela reproduce <dest>` re-verifies
+/// from scratch and the result can be appended-to and re-pushed. The
+/// reconstructed tree is checked byte-for-byte: its recomputed
+/// snapshot/event-log hashes MUST equal the publisher's signed entry, or the
+/// clone fails. That equality is the swappability guarantee.
+pub(crate) fn cmd_clone(
+    target: &str,
+    dest: Option<PathBuf>,
+    hub: &str,
+    blobs_from: Option<&std::path::Path>,
+    json: bool,
+) {
+    use vela_protocol::registry;
+    let vfr_id = match parse_vfr_target(target) {
+        Some(v) => v,
+        None => fail_return(&format!(
+            "could not find a vfr_… id in '{target}'; pass a vfr id or a hub /entries/<vfr> URL"
+        )),
+    };
+    // A hub URL resolves to its `/entries` listing; a local/file registry
+    // (used by the offline round-trip pin) is loaded directly.
+    let is_http = hub.starts_with("http://") || hub.starts_with("https://");
+    let hub_base = hub.trim_end_matches('/').trim_end_matches("/entries");
+    let registry_locator = if is_http {
+        format!("{hub_base}/entries")
+    } else {
+        hub.to_string()
+    };
+    let registry_data = registry::load_any(&registry_locator)
+        .unwrap_or_else(|e| fail_return(&format!("load registry {registry_locator}: {e}")));
+    let entry = registry::find_latest(&registry_data, &vfr_id).unwrap_or_else(|| {
+        fail_return(&format!(
+            "{vfr_id} not found in registry at {registry_locator}"
+        ))
+    });
+
+    let dest_dir = dest.unwrap_or_else(|| PathBuf::from(&vfr_id));
+    if dest_dir.join(".vela").exists() {
+        fail(&format!(
+            "{} already contains a .vela/ frontier; choose an empty destination",
+            dest_dir.display()
+        ));
+    }
+    std::fs::create_dir_all(&dest_dir)
+        .unwrap_or_else(|e| fail_return(&format!("create {}: {e}", dest_dir.display())));
+
+    // 1. Fetch the snapshot to a temp file (outside dest) and verify the
+    //    hashes + signature against the signed registry entry.
+    let tmp = std::env::temp_dir().join(format!("vela-clone-{vfr_id}.json"));
+    registry::fetch_frontier_to_prefer_event_hub(&entry, Some(&registry_locator), &tmp)
+        .unwrap_or_else(|e| fail_return(&format!("fetch snapshot: {e}")));
+    registry::verify_pull(&entry, &tmp).unwrap_or_else(|e| {
+        let _ = std::fs::remove_file(&tmp);
+        fail_return(&format!("pull verification failed: {e}"))
+    });
+
+    // 2. Load the verified Project and reconstruct the working tree, drawing
+    //    artifact blobs from a local mirror (offline pin) or the hub blob
+    //    tier (every fetched blob is verified against its content_hash).
+    let project =
+        repo::load_from_path(&tmp).unwrap_or_else(|e| fail_return(&format!("load snapshot: {e}")));
+    let _ = std::fs::remove_file(&tmp);
+
+    let hub_owned = hub_base.to_string();
+    let mirror = blobs_from.map(|p| p.to_path_buf());
+    let mut fetch = |hash: &str| -> Result<Vec<u8>, String> {
+        if let Some(dir) = &mirror {
+            for cand in [dir.join(hash), dir.join("sha256").join(hash)] {
+                if cand.is_file() {
+                    return std::fs::read(&cand)
+                        .map_err(|e| format!("read {}: {e}", cand.display()));
+                }
+            }
+            return Err(format!("blob {hash} not in mirror {}", dir.display()));
+        }
+        registry::fetch_blob(&hub_owned, hash)
+    };
+
+    let report = repo::write_working_frontier(&dest_dir, &project, &mut fetch)
+        .unwrap_or_else(|e| fail_return(&format!("reconstruct working tree: {e}")));
+
+    // 3. Byte-parity gate: the reconstructed tree must hash to exactly what
+    //    the publisher signed. This is the definition of "swappable".
+    if report.snapshot_hash != entry.latest_snapshot_hash
+        || report.event_log_hash != entry.latest_event_log_hash
+    {
+        fail(&format!(
+            "clone integrity check FAILED: reconstructed hashes do not match the signed registry entry\n  \
+             snapshot:  {} (rebuilt) vs {} (signed)\n  \
+             event_log: {} (rebuilt) vs {} (signed)",
+            report.snapshot_hash,
+            entry.latest_snapshot_hash,
+            report.event_log_hash,
+            entry.latest_event_log_hash
+        ));
+    }
+
+    let payload = json!({
+        "ok": true,
+        "command": "clone",
+        "vfr_id": vfr_id,
+        "dest": report.dest,
+        "registry": registry_locator,
+        "snapshot_hash": report.snapshot_hash,
+        "event_log_hash": report.event_log_hash,
+        "artifacts_restored": report.artifacts_restored,
+        "witnesses_reconstructed": report.witnesses_reconstructed,
+        "blobs_missing": report.blobs_missing,
+        "integrity_verified": true,
+    });
+    if json {
+        print_json(&payload);
+    } else {
+        println!("{} cloned {vfr_id} → {}", style::ok("clone"), report.dest);
+        println!("  snapshot:  {}", report.snapshot_hash);
+        println!("  event_log: {}", report.event_log_hash);
+        println!(
+            "  restored:  {} artifact blob(s), {} witness file(s)",
+            report.artifacts_restored, report.witnesses_reconstructed
+        );
+        if !report.blobs_missing.is_empty() {
+            println!(
+                "  ! {} blob(s) could not be fetched (partial clone; reproduce may fail)",
+                report.blobs_missing.len()
+            );
+        }
+        println!("  integrity: snapshot + event_log hashes match the signed registry entry");
+        println!();
+        println!("  next: vela reproduce {}", report.dest);
     }
 }
