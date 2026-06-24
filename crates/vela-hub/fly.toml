@@ -19,6 +19,18 @@ primary_region = "yyz"
   auto_start_machines = true
   min_machines_running = 1
 
+  # Self-healing: poll /healthz so Fly routes traffic away from a wedged
+  # machine to the healthy one and restarts the bad one automatically. Without
+  # this, a single overloaded machine (e.g. a heavy build hammering Neon) took
+  # the whole hub down until a manual restart. grace_period gives a fresh
+  # machine time to warm before the first probe.
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "8s"
+    grace_period = "20s"
+    method = "GET"
+    path = "/healthz"
+
 [[vm]]
   memory = "1gb"
   cpu_kind = "shared"
