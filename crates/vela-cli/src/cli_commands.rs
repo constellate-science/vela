@@ -692,14 +692,6 @@ pub(crate) enum Commands {
         #[command(subcommand)]
         action: TaskAction,
     },
-    /// v0.167: declare a federated-hub spec primitive (`vhs_*`).
-    /// Pure data; content-addressed over (hub_id, base_url,
-    /// operator_pubkey_hex, substrate_version, declared_at).
-    /// No network calls.
-    Hub {
-        #[command(subcommand)]
-        action: HubSpecCli,
-    },
     /// v0.163: render a frontier as a Markdown preprint
     /// (abstract, contributors with CRediT roles, findings as
     /// evidence sections, BibTeX citation block). Pure derived
@@ -2225,38 +2217,6 @@ pub(crate) enum ReviewThreadCli {
     /// declared pubkey + id matches preimage.
     Verify {
         thread: PathBuf,
-        #[arg(long)]
-        json: bool,
-    },
-}
-
-#[derive(Subcommand)]
-pub(crate) enum HubSpecCli {
-    /// Build a `vhs_*` spec record and write it to `--out`.
-    Declare {
-        #[arg(long)]
-        hub_id: String,
-        #[arg(long)]
-        display_name: String,
-        #[arg(long)]
-        base_url: String,
-        #[arg(long)]
-        operator_pubkey_hex: String,
-        #[arg(long)]
-        substrate_version: String,
-        #[arg(long)]
-        contact: Option<String>,
-        #[arg(long)]
-        latest_checkpoint: Option<String>,
-        #[arg(long)]
-        out: Option<PathBuf>,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Validate an existing `vhs_*` spec file: re-derive the id
-    /// and check it matches the record.
-    Validate {
-        spec: PathBuf,
         #[arg(long)]
         json: bool,
     },

@@ -1524,7 +1524,6 @@ table.
 | `vinc_` | incident record (legacy writer removed) | historical logs only |
 | `vex_` | experiment (Carina primitive) | `attempt.rs` references |
 | `vsx_` | hub untrusted scratch entry (`vela stash`) | vela-hub scratch tier |
-| `vhs_` | federated-hub spec | `hub_spec.rs` |
 
 ### Registry / governance objects
 

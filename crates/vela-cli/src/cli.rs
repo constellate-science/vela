@@ -717,7 +717,6 @@ pub async fn run_command() {
             json,
         } => cmd_retro_impact(&record, &frontier, json),
         Commands::Task { action } => cmd_task(action),
-        Commands::Hub { action } => cmd_hub_spec(action),
         Commands::Preprint {
             frontier,
             released_at,
@@ -5437,7 +5436,6 @@ Production (multi-producer coordination, signed judgment):
   stash              Park bytes in the hub's untrusted vsx_ scratch tier
   events             Follow a frontier's hub event stream (--follow)
   task               Create, list, claim, and close local frontier tasks
-  hub                Declare a federated-hub spec primitive (vhs_*)
   artifact-to-state  Import a Carina artifact packet as reviewable proposals
   export             Export frontier artifacts
   preprint           Render a frontier as a Markdown preprint (derived view)
@@ -6074,7 +6072,6 @@ mod surface_tests {
         "frontier",
         "gate",
         "history",
-        "hub",
         "id",
         "import",
         "import-events",

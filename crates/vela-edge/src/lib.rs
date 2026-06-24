@@ -24,7 +24,6 @@ pub mod frontier_health;
 pub mod frontier_release;
 pub mod frontier_task;
 pub mod governance;
-pub mod hub_spec;
 pub mod incremental_ingest;
 pub mod index_db_schema;
 pub mod ingest;
