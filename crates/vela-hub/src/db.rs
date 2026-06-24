@@ -3167,18 +3167,28 @@ pub async fn ensure_sqlite_schema(pool: &SqlitePool) -> Result<(), String> {
     Ok(())
 }
 
+/// The array keys whose contents live in the `frontier_objects` projection,
+/// not the stored skeleton. `frontier_skeleton` empties them and
+/// `merge_projected_objects` rebuilds them on read.
+const PROJECTED_ARRAY_KEYS: [&str; 10] = [
+    "findings",
+    "sources",
+    "evidence_atoms",
+    "condition_records",
+    "actors",
+    "artifacts",
+    "proposals",
+    // The trust arrays: projected so the record pages can fetch them granularly
+    // instead of pulling the whole snapshot to render the verification web.
+    "verifier_attachments",
+    "statement_attestations",
+    "statement_registrations",
+];
+
 fn frontier_skeleton(snapshot: &Value) -> Value {
     let mut skeleton = snapshot.clone();
     if let Value::Object(map) = &mut skeleton {
-        for array_key in [
-            "findings",
-            "sources",
-            "evidence_atoms",
-            "condition_records",
-            "actors",
-            "artifacts",
-            "proposals",
-        ] {
+        for array_key in PROJECTED_ARRAY_KEYS {
             map.insert(array_key.to_string(), Value::Array(Vec::new()));
         }
     }
@@ -3194,6 +3204,9 @@ fn projection_array_key(object_type: &str) -> Option<&'static str> {
         "actor" => Some("actors"),
         "artifact" => Some("artifacts"),
         "proposal" => Some("proposals"),
+        "verifier_attachment" => Some("verifier_attachments"),
+        "statement_attestation" => Some("statement_attestations"),
+        "statement_registration" => Some("statement_registrations"),
         _ => None,
     }
 }
@@ -3202,16 +3215,18 @@ fn merge_projected_objects(snapshot: &mut Value, objects: Vec<(String, i64, Valu
     let Some(map) = snapshot.as_object_mut() else {
         return;
     };
-    for array_key in [
-        "findings",
-        "sources",
-        "evidence_atoms",
-        "condition_records",
-        "actors",
-        "artifacts",
-        "proposals",
-    ] {
-        map.insert(array_key.to_string(), Value::Array(Vec::new()));
+    // Only rebuild a type's array when the projection actually has rows for it.
+    // A frontier promoted before a type was projected has no such rows, so its
+    // skeleton-held array is left intact — which makes adding a newly-projected
+    // type a single safe deploy with no re-projection ordering dependency.
+    let mut present: std::collections::BTreeSet<&'static str> = std::collections::BTreeSet::new();
+    for (object_type, _seq, _) in &objects {
+        if let Some(key) = projection_array_key(object_type) {
+            present.insert(key);
+        }
+    }
+    for array_key in &present {
+        map.insert((*array_key).to_string(), Value::Array(Vec::new()));
     }
     for (object_type, _seq, raw_json) in objects {
         let Some(array_key) = projection_array_key(&object_type) else {
@@ -3232,6 +3247,27 @@ fn collect_frontier_objects(snapshot: &Value) -> Vec<FrontierObjectRow> {
     collect_array_objects(snapshot, "actors", "actor", &mut out);
     collect_array_objects(snapshot, "artifacts", "artifact", &mut out);
     collect_array_objects(snapshot, "proposals", "proposal", &mut out);
+    // The trust arrays the record pages render (verification web, attestation
+    // cards). Projecting them lets a page fetch GET /objects/{type} instead of
+    // the whole snapshot. See PROJECTED_ARRAY_KEYS / merge_projected_objects.
+    collect_array_objects(
+        snapshot,
+        "verifier_attachments",
+        "verifier_attachment",
+        &mut out,
+    );
+    collect_array_objects(
+        snapshot,
+        "statement_attestations",
+        "statement_attestation",
+        &mut out,
+    );
+    collect_array_objects(
+        snapshot,
+        "statement_registrations",
+        "statement_registration",
+        &mut out,
+    );
 
     if let Some(findings) = snapshot.get("findings").and_then(Value::as_array) {
         for finding in findings {
@@ -3406,6 +3442,84 @@ mod tests {
             signed_publish_at: "2026-05-05T00:00:00Z".to_string(),
             signature: "sig_fixture".to_string(),
         }
+    }
+
+    #[test]
+    fn trust_arrays_round_trip_through_projection() {
+        // A snapshot carrying the trust arrays: after promote (the skeleton
+        // holds none of the projected types) and read (merge the projected
+        // rows back), the reconstruction must equal the original on those
+        // arrays — the property the record pages now depend on for granular
+        // /objects fetches.
+        let snapshot = json!({
+            "frontier_id": "vfr_demo",
+            "findings": [{"id": "vf_1"}],
+            "verifier_attachments": [
+                {"id": "vva_1", "target": {"id": "vf_1"}, "outcome": "pass"},
+                {"id": "vva_2", "target": {"id": "vf_1"}, "outcome": "pass"}
+            ],
+            "statement_attestations": [{"id": "vsa_1", "target": "vf_1", "verdict": "faithful"}],
+            "statement_registrations": [{"statement_hash": "sha256:abc", "informal_ref": "erdos:1"}]
+        });
+
+        let objects = collect_frontier_objects(&snapshot);
+        for t in [
+            "verifier_attachment",
+            "statement_attestation",
+            "statement_registration",
+        ] {
+            assert!(
+                objects.iter().any(|o| o.object_type == t),
+                "expected projected object_type {t}"
+            );
+        }
+
+        let mut reconstructed = frontier_skeleton(&snapshot);
+        let rows: Vec<(String, i64, Value)> = objects
+            .iter()
+            .map(|o| (o.object_type.clone(), o.seq, o.raw_json.clone()))
+            .collect();
+        merge_projected_objects(&mut reconstructed, rows);
+
+        assert_eq!(
+            reconstructed["verifier_attachments"],
+            snapshot["verifier_attachments"]
+        );
+        assert_eq!(
+            reconstructed["statement_attestations"],
+            snapshot["statement_attestations"]
+        );
+        assert_eq!(
+            reconstructed["statement_registrations"],
+            snapshot["statement_registrations"]
+        );
+        assert_eq!(reconstructed["findings"], snapshot["findings"]);
+    }
+
+    #[test]
+    fn merge_keeps_skeleton_arrays_when_a_type_has_no_projected_rows() {
+        // Deploy safety: a frontier promoted before the trust arrays were
+        // projected holds them in its stored skeleton and has no projected
+        // rows for them. The conditional merge must leave them intact rather
+        // than blanking them — otherwise the live trust web would vanish the
+        // instant this change deploys, before any re-publish.
+        let mut stored_skeleton = json!({
+            "findings": [],
+            "verifier_attachments": [{"id": "vva_old", "outcome": "pass"}],
+            "statement_attestations": [{"id": "vsa_old", "verdict": "faithful"}]
+        });
+        let rows = vec![("finding".to_string(), 0i64, json!({"id": "vf_1"}))];
+        merge_projected_objects(&mut stored_skeleton, rows);
+
+        assert_eq!(stored_skeleton["findings"], json!([{"id": "vf_1"}]));
+        assert_eq!(
+            stored_skeleton["verifier_attachments"],
+            json!([{"id": "vva_old", "outcome": "pass"}])
+        );
+        assert_eq!(
+            stored_skeleton["statement_attestations"],
+            json!([{"id": "vsa_old", "verdict": "faithful"}])
+        );
     }
 
     #[tokio::test]
