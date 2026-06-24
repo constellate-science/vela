@@ -189,7 +189,6 @@ pub async fn run_command() {
         } => cmd_inbox(&frontier, kind.as_deref(), limit, json),
         Commands::Verify { path, json } => cmd_verify(&path, json),
         Commands::Gate { action } => cmd_gate(action),
-        Commands::Sidon { action } => crate::cli_sidon::cmd_sidon(action),
         Commands::Agents { action } => crate::cli_agents::cmd_agents(action),
         Commands::Campaign { action } => crate::cli_campaign::cmd_campaign(action),
         Commands::Foundry { action } => crate::cli_engine::cmd_foundry(action),
@@ -1265,8 +1264,6 @@ pub async fn run_command() {
                 );
             }
         }
-
-        Commands::Carina { action } => cmd_carina(action),
     }
 }
 
@@ -4512,7 +4509,6 @@ const DEPRECATED_FROM_HELP: &[&str] = &[
     "proof-attest-verification",
     "proof-verify-attestation",
     "lean",
-    "carina",
     "queue",
     "onboard",
     "artifact-to-state",
@@ -4628,7 +4624,6 @@ Nouns (subcommand groups; run `vela <noun> --help`):
   agents        Generate agent-config adapters from VELA.md (sync | doctor | diff)
   workspace     List/add/remove checked-out frontiers + their hub remotes (the gate reads this)
   task          Create, list, claim, and close local frontier tasks
-  sidon         Sidon Producer Profile (A309370): submit, observe, export, frontier-map, support
   serve         Serve a read-only frontier over MCP stdio or HTTP (the local review server)
 
 Specialist and legacy commands stay callable but are out of this menu
@@ -5238,7 +5233,6 @@ mod surface_tests {
         "attach",
         "attempt",
         "attest",
-        "carina",
         "check",
         "claim",
         "completions",

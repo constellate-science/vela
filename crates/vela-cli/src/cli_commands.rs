@@ -225,15 +225,6 @@ pub(crate) enum Commands {
         #[command(subcommand)]
         action: GateAction,
     },
-    /// The Sidon Producer Profile (`vela.sidon-producer-profile.v1`): the
-    /// realized finite/positive/ranked Scientific State Kernel for one live
-    /// frontier, lower bounds for OEIS A309370 (Sidon sets in the binary cube).
-    /// `submit` produces the signed witness a producer brings; `observe`
-    /// produces the authoritative best-bound read. Both sign with your own key.
-    Sidon {
-        #[command(subcommand)]
-        action: SidonAction,
-    },
     /// Generate vendor agent-config adapters from the canonical `VELA.md`
     /// (one source of truth; the adapter files are disposable, regenerable
     /// leaves). `AGENTS.md`, `CLAUDE.md`, `.cursor/rules/vela.mdc`,
@@ -957,44 +948,6 @@ pub(crate) enum Commands {
         #[arg(long)]
         json: bool,
     },
-
-    /// v0.75: validate Carina-shaped JSON against the bundled
-    /// schemas, list bundled primitives, or print one schema.
-    #[command(hide = true)]
-    Carina {
-        #[command(subcommand)]
-        action: CarinaAction,
-    },
-}
-
-/// v0.75: actions on the Carina spec deliverable. Each one talks
-/// to the schemas embedded under
-/// `crates/vela-protocol/embedded/carina-schemas/`.
-#[derive(Subcommand)]
-pub(crate) enum CarinaAction {
-    /// Validate a JSON file against the matching Carina schema.
-    /// Detects the primitive automatically from the input's
-    /// `schema: "carina.<name>.v0.X"` field, or accepts an
-    /// explicit `--primitive <name>`.
-    Validate {
-        /// Path to a JSON file containing one Carina primitive,
-        /// or a `primitives.v0.X.json`-style aggregate object
-        /// with a `primitives` map.
-        path: PathBuf,
-        /// Override auto-detection: validate as a specific
-        /// primitive (`finding`, `evidence`, `proof`, ...).
-        #[arg(long)]
-        primitive: Option<String>,
-        #[arg(long)]
-        json: bool,
-    },
-    /// List the 14 bundled Carina primitives.
-    List {
-        #[arg(long)]
-        json: bool,
-    },
-    /// Print one bundled Carina schema to stdout.
-    Schema { primitive: String },
 }
 
 #[derive(Subcommand)]
@@ -1559,102 +1512,6 @@ pub(crate) enum GateAction {
         /// for a read-only preview.
         #[arg(long)]
         apply: bool,
-        #[arg(long)]
-        json: bool,
-    },
-}
-
-#[derive(Subcommand)]
-pub(crate) enum SidonAction {
-    /// Produce a signed `ResultPacket` from a Sidon witness, root-pinned to a
-    /// base `ObservationPacket`. The producer on-ramp: bring a witness, get the
-    /// signed result to propose. Signs with YOUR key — never a maintainer's.
-    Submit {
-        /// A Sidon witness JSON: `{kind:"sidon", n, claimed_size, points:[[0/1,…],…]}`.
-        witness: PathBuf,
-        /// The base `ObservationPacket` the work is pinned to (its state is
-        /// repeated byte-for-byte into the result).
-        #[arg(long)]
-        base_observation: PathBuf,
-        /// Path to your Ed25519 signing key (hex). Your producer key.
-        #[arg(long)]
-        key: PathBuf,
-        /// Your producer actor id, e.g. `producer:alice`.
-        #[arg(long)]
-        actor: String,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Replay a presentation into the authoritative best-bound
-    /// `ObservationPacket` (the four roots, the canonical output, and the
-    /// replay receipt). Signs with your own key; the read replays from the
-    /// presentation it names.
-    Observe {
-        /// A presentation JSON: `{cell_ranks, clauses, accepted_events, cell_metadata}`.
-        #[arg(long)]
-        presentation: PathBuf,
-        /// Path to your Ed25519 signing key (hex).
-        #[arg(long)]
-        key: PathBuf,
-        /// Your observer actor id, e.g. `hub:observer`.
-        #[arg(long)]
-        actor: String,
-        #[arg(long)]
-        json: bool,
-    },
-    /// The open frontier: the next bound to beat at each n, latent/open/discharged,
-    /// bound to the presentation root. The view a producer reads to choose work.
-    /// No key required (a planning view, not accepted state). Source the
-    /// presentation from a JSON file (`--presentation`) or compile it live from a
-    /// frontier directory's accepted record (`--frontier`).
-    FrontierMap {
-        /// A presentation JSON file.
-        #[arg(long)]
-        presentation: Option<PathBuf>,
-        /// A live frontier dir (contains `.vela/`); the presentation is compiled
-        /// from its accepted Sidon record.
-        #[arg(long)]
-        frontier: Option<PathBuf>,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Compile the live accepted Sidon record into the authoritative current-bound
-    /// `ObservationPacket` and export `bounds.json` from it (carrying the
-    /// observation id + presentation root). The frontier's numbers become a
-    /// replayable export, not a scraped file. Signs with your own key.
-    Export {
-        /// A live frontier dir (contains `.vela/`), e.g. `examples/sidon-sets`.
-        #[arg(long)]
-        frontier: PathBuf,
-        /// Path to your Ed25519 signing key (hex).
-        #[arg(long)]
-        key: PathBuf,
-        /// Your observer actor id, e.g. `hub:observer`.
-        #[arg(long)]
-        actor: String,
-        /// Where to write bounds.json (defaults to stdout).
-        #[arg(long)]
-        out: Option<PathBuf>,
-        #[arg(long)]
-        json: bool,
-    },
-    /// The support / correction packet for one bound cell over the live record:
-    /// the minimal assumption environments that hold `a(n) >= k`, and (by
-    /// implication) what a challenge must hit to kill it. Signs with your own key.
-    Support {
-        /// A live frontier dir (contains `.vela/`).
-        #[arg(long)]
-        frontier: PathBuf,
-        #[arg(long)]
-        n: i64,
-        #[arg(long)]
-        k: i64,
-        /// Path to your Ed25519 signing key (hex).
-        #[arg(long)]
-        key: PathBuf,
-        /// Your actor id.
-        #[arg(long)]
-        actor: String,
         #[arg(long)]
         json: bool,
     },

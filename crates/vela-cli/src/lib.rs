@@ -31,7 +31,6 @@ mod cli_policy;
 mod cli_proof;
 mod cli_read;
 mod cli_registry;
-mod cli_sidon;
 mod cli_source_fetch;
 mod cli_write;
 mod review_work;
