@@ -69,14 +69,6 @@ pub(crate) enum Commands {
         #[arg(long)]
         strict: bool,
     },
-    /// v0.262: run Evidence CI as a review-readiness gate.
-    EvidenceCi {
-        /// Frontier JSON file or Vela repo.
-        frontier: PathBuf,
-        /// Output stable JSON.
-        #[arg(long)]
-        json: bool,
-    },
     /// Diagnose first-user checkout, frontier, proof, and serve readiness.
     Doctor {
         /// Frontier JSON file or Vela repo. Defaults to the release frontier
@@ -296,12 +288,6 @@ pub(crate) enum Commands {
         #[arg(long)]
         json: bool,
     },
-    /// Run protocol conformance vectors
-    #[command(hide = true)]
-    Conformance {
-        #[arg(default_value = "conformance")]
-        dir: PathBuf,
-    },
     /// The verification gate: deliverable-grade and verifier-attachment
     /// checks. `vela verify` proves the *log* is what was signed; `vela
     /// gate` proves a *claim* earned its status — ≥2 independent matched
@@ -388,7 +374,6 @@ pub(crate) enum Commands {
     /// The ranked "what should I work on next" queue: the dark-matter boundary
     /// (one-premise-away first, then brittle single-points-of-failure, fragile,
     /// contested, stale-open) as a flat, ordered, actionable list.
-    #[command(visible_alias = "what-next")]
     Attack {
         /// Frontier directory (e.g. examples/erdos-problems).
         frontier: PathBuf,
@@ -410,8 +395,6 @@ pub(crate) enum Commands {
         #[arg(long)]
         json: bool,
     },
-    /// Show version information
-    Version,
     /// Optional signing and signature verification
     Sign {
         #[command(subcommand)]
@@ -734,28 +717,6 @@ pub(crate) enum Commands {
         #[command(subcommand)]
         command: FindingCommands,
     },
-    /// Create or apply one proposal-backed finding review
-    Review {
-        /// Frontier JSON file or Vela repo
-        frontier: PathBuf,
-        /// Finding ID to review
-        finding_id: String,
-        /// accepted, contested, needs_revision, or rejected
-        #[arg(long)]
-        status: Option<String>,
-        /// Reason for the review
-        #[arg(long)]
-        reason: Option<String>,
-        /// Reviewer identifier. Optional: defaults to your `vela id`.
-        #[arg(long)]
-        reviewer: Option<String>,
-        /// Immediately accept and apply the proposal locally
-        #[arg(long)]
-        apply: bool,
-        /// Output stable JSON
-        #[arg(long)]
-        json: bool,
-    },
     /// Show state-transition history for one finding
     History {
         frontier: PathBuf,
@@ -870,14 +831,6 @@ pub(crate) enum Commands {
         #[arg(long)]
         json: bool,
     },
-    /// Show read-only review-work queues for a frontier.
-    ReviewWork {
-        frontier: PathBuf,
-        /// Emit JSON to stdout.
-        #[arg(long)]
-        json: bool,
-    },
-
     // v0.74: top-level alias verbs. Each variant is a thin wrapper
     // routing to an existing canonical-event emission path. No new
     // substrate logic. The aliases exist so the daily flow reads
@@ -1422,8 +1375,7 @@ pub(crate) enum SignAction {
     /// Sign unsigned findings in a frontier
     Apply {
         frontier: PathBuf,
-        /// Path to the Ed25519 private key. Canonical flag is `--key`;
-        /// `--private-key` is accepted as a back-compat alias.
+        /// Path to the Ed25519 private key.
         #[arg(long = "key")]
         private_key: PathBuf,
         #[arg(long)]
@@ -3392,11 +3344,8 @@ pub(crate) enum QueueAction {
         #[arg(long)]
         queue_file: Option<PathBuf>,
         /// Skip per-action confirmation prompts and sign every queued
-        /// draft. Required in non-interactive contexts. The `--all`
-        /// alias is accepted for muscle-memory convenience (the v0.28
-        /// sim-user docs and an early friction report both wrote it
-        /// that way; cheaper to accept the alias than to retrain).
-        #[arg(long, alias = "all")]
+        /// draft. Required in non-interactive contexts.
+        #[arg(long)]
         yes_to_all: bool,
         #[arg(long)]
         json: bool,

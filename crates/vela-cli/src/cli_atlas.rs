@@ -235,7 +235,7 @@ fn run_boundary(args: &[String]) {
     print_json(&boundary::Boundary::derive(&project).to_json());
 }
 
-/// `vela attack <frontier>` (alias `what-next`) — the ranked "what should I work
+/// `vela attack <frontier>` — the ranked "what should I work
 /// on next" queue, derived from the dark-matter boundary. A flat, ordered list:
 /// one-premise-away (closest to done) first, then brittle single-points-of-
 /// failure (by blast size), then fragile, contested, stale-open. This is the

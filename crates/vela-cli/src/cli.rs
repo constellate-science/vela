@@ -1,5 +1,4 @@
 use crate::serve;
-use vela_edge::conformance;
 use vela_edge::export;
 use vela_edge::frontier_health;
 use vela_edge::frontier_task;
@@ -97,7 +96,6 @@ pub async fn run_command() {
             json,
             strict,
         } => cmd_integrity(&frontier, json, strict),
-        Commands::EvidenceCi { frontier, json } => cmd_evidence_ci(&frontier, json),
         Commands::Doctor {
             frontier,
             port,
@@ -243,9 +241,6 @@ pub async fn run_command() {
             )),
         },
         Commands::Verify { path, json } => cmd_verify(&path, json),
-        Commands::Conformance { dir } => {
-            let _ = conformance::run(&dir);
-        }
         Commands::Gate { action } => cmd_gate(action),
         Commands::Sidon { action } => crate::cli_sidon::cmd_sidon(action),
         Commands::Agents { action } => crate::cli_agents::cmd_agents(action),
@@ -512,7 +507,6 @@ pub async fn run_command() {
             finding,
             json,
         } => crate::cli_atlas::cmd_correct(&frontier, &finding, json),
-        Commands::Version => println!("vela {}", env!("CARGO_PKG_VERSION")),
         Commands::Sign { action } => cmd_sign(action),
         Commands::Id { action } => cmd_id(action),
         Commands::Publish {
@@ -970,33 +964,6 @@ pub async fn run_command() {
             } => cmd_finding_retract(source, finding_id, reason, reviewer, apply, json),
             FindingCommands::Link { action } => cmd_link(action),
         },
-        Commands::Review {
-            frontier,
-            finding_id,
-            status,
-            reason,
-            reviewer,
-            apply,
-            json,
-        } => {
-            let status = status.unwrap_or_else(|| fail_return("--status is required for review"));
-            let reason = reason.unwrap_or_else(|| fail_return("--reason is required for review"));
-            // Reviewer id defaults from `vela id` (provenance; signing only
-            // happens on --apply, via the canonical key-custody path).
-            let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
-            let report = state::review_finding(
-                &frontier,
-                &finding_id,
-                state::ReviewOptions {
-                    status,
-                    reason,
-                    reviewer,
-                },
-                apply,
-            )
-            .unwrap_or_else(|e| fail_return(&e));
-            print_state_report(&report, json);
-        }
         Commands::History {
             frontier,
             finding_id,
@@ -1090,7 +1057,6 @@ pub async fn run_command() {
         Commands::ProofVerifyAttestation { record, json } => {
             cmd_proof_verify_attestation(record, json)
         }
-        Commands::ReviewWork { frontier, json } => cmd_review_work(&frontier, json),
 
         // v0.74: alias verb dispatch. Each arm calls into an
         // existing canonical-event emission path.
@@ -1555,105 +1521,6 @@ pub async fn run_command() {
 
         Commands::Carina { action } => cmd_carina(action),
     }
-}
-
-fn cmd_review_work(frontier: &Path, json_out: bool) {
-    let payload = crate::review_work::build_review_work_json(frontier)
-        .unwrap_or_else(|e| fail_return(&format!("review work failed: {e}")));
-    if json_out {
-        print_json(&payload);
-        return;
-    }
-
-    let frontier_name = payload
-        .get("frontier_name")
-        .and_then(Value::as_str)
-        .unwrap_or("frontier");
-    let frontier_id = payload
-        .get("frontier_id")
-        .and_then(Value::as_str)
-        .unwrap_or("unknown");
-    let total_open = payload
-        .get("total_open")
-        .and_then(Value::as_u64)
-        .unwrap_or(0);
-    let proof_status = payload
-        .get("proof_status")
-        .and_then(Value::as_str)
-        .unwrap_or("unknown");
-
-    println!();
-    println!(
-        "  {}",
-        format!("Vela · review work · {frontier_name}").dimmed()
-    );
-    println!("  {}", style::tick_row(60));
-    println!("  frontier: {frontier_id}");
-    println!("  open rows: {total_open}");
-    println!("  proof packet: {proof_status}");
-    println!(
-        "  boundary: read-only. This does not count as review and does not mutate frontier state."
-    );
-
-    if let Some(queues) = payload.get("queues").and_then(Value::as_array) {
-        for queue in queues {
-            let title = queue
-                .get("title")
-                .and_then(Value::as_str)
-                .unwrap_or("queue");
-            let count = queue.get("count").and_then(Value::as_u64).unwrap_or(0);
-            let boundary = queue.get("boundary").and_then(Value::as_str).unwrap_or("");
-            let examples = queue
-                .get("examples")
-                .and_then(Value::as_array)
-                .map(|items| {
-                    items
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .take(6)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                })
-                .unwrap_or_else(|| "none".to_string());
-            let artifacts = queue
-                .get("operator_artifacts")
-                .and_then(Value::as_array)
-                .map(|items| {
-                    items
-                        .iter()
-                        .filter_map(Value::as_str)
-                        .take(6)
-                        .collect::<Vec<_>>()
-                        .join(", ")
-                })
-                .unwrap_or_else(|| "none".to_string());
-            println!();
-            println!("  · {title}: {count}");
-            if !examples.is_empty() {
-                println!("      examples: {examples}");
-            }
-            if !artifacts.is_empty() {
-                println!("      artifacts: {artifacts}");
-            }
-            if !boundary.is_empty() {
-                println!("      boundary: {}", wrap_line(boundary, 78));
-            }
-        }
-    }
-
-    let commands = payload
-        .get("validation_commands")
-        .and_then(Value::as_array)
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(Value::as_str)
-                .collect::<Vec<_>>()
-                .join(", ")
-        })
-        .unwrap_or_else(|| "none".to_string());
-    println!();
-    println!("  validation commands: {commands}");
 }
 
 pub(crate) fn wrap_line(text: &str, max_chars: usize) -> String {
@@ -5337,9 +5204,6 @@ const DEPRECATED_FROM_HELP: &[&str] = &[
     "search",
     "tensions",
     "ask",
-    "review-work",
-    "evidence-ci",
-    "conformance",
     "correct",
     "experiment",
     "attach",
@@ -5368,7 +5232,6 @@ const DEPRECATED_FROM_HELP: &[&str] = &[
     "import",
     "quickstart",
     "completions",
-    "version",
 ];
 
 /// Whether `name` is a released top-level command the dispatcher will hand
@@ -5443,7 +5306,7 @@ Sync:
 
 Review (maintainers):
   inbox         Triage list of pending proposals
-  review        Create a review proposal or review interactively
+  propose       Create a finding.review proposal (the review verb)
   accept        Apply a proposal under your reviewer key
   accept-batch  Apply several pending proposals under one reviewer decision
   land          Land a result in one step: accept a vpr_ proposal or a vf_ finding's pending add
@@ -5458,7 +5321,7 @@ Verify:
   verify        Re-hash and validate a proof packet (manifest + proof-trace chain)
 
 Work next (discovery):
-  attack        Ranked "what to work on next" queue from the dark-matter boundary (alias: what-next)
+  attack        Ranked "what to work on next" queue from the dark-matter boundary
   explore       A finding's neighbourhood: what it rests on / what rests on it, within --hops
   campaign      Discovery engine: search verifier-gated constructions, verify, propose
   foundry       One unattended compounding turn: produce -> frozen-verify -> auto-admit
@@ -5505,7 +5368,7 @@ Monolithic frontier file:
   vela finding add frontier.json --assertion "..." --author "reviewer:demo" --apply
   vela check frontier.json --json
   FINDING_ID=$(jq -r '.findings[0].id' frontier.json)
-  vela review frontier.json "$FINDING_ID" --status contested --reason "Mouse-only evidence" --reviewer reviewer:demo --apply
+  vela propose frontier.json "$FINDING_ID" --status contested --reason "Mouse-only evidence" --apply
 
 Publish your own frontier (see docs/PUBLISHING.md):
   vela frontier new ./frontier.json --name "Your bounded question"
@@ -6096,12 +5959,10 @@ mod surface_tests {
         "check",
         "claim",
         "completions",
-        "conformance",
         "diff",
         "doc",
         "doctor",
         "events",
-        "evidence-ci",
         "export",
         "finding",
         "frontier",
@@ -6134,8 +5995,6 @@ mod surface_tests {
         "registry",
         "reproduce",
         "retro-impact",
-        "review",
-        "review-work",
         "search",
         "serve",
         "sign",
@@ -6146,7 +6005,6 @@ mod surface_tests {
         "tensions",
         "transfer",
         "verify",
-        "version",
     ];
 
     #[test]

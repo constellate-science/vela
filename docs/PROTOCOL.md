@@ -2091,7 +2091,7 @@ implementation is §10.)
   and `verify.py`, a thin reference runner over the canonical Python
   reducer.
 - `tests/conformance/`: the protocol vector set the reference Rust
-  implementation runs via `vela conformance`.
+  implementation runs via `vela check --conformance`.
 
 Both directories are tracked in the repository. Nothing about running
 them depends on private state.
@@ -2104,7 +2104,7 @@ Against this repository's implementations:
 ./scripts/run-conformance-suite.sh --out dist/conformance
 ```
 
-This runs the reference Rust implementation (`vela conformance`) and
+This runs the reference Rust implementation (`vela check --conformance`) and
 the reference Python reducer (`conformance/verify.py`), then writes a
 content-addressed `conformance-report.json`
 (schema `vela.conformance_report.v0.1`): per-implementation
