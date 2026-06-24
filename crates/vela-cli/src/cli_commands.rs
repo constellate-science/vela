@@ -31,6 +31,10 @@ pub(crate) enum Commands {
         /// Run frontier lint checks
         #[arg(long)]
         stats: bool,
+        /// Run the Evidence-CI readiness check (source, evidence, condition,
+        /// confidence, policy). Folds in the standalone `evidence-ci` verb.
+        #[arg(long)]
+        evidence: bool,
         /// Run conformance vectors
         #[arg(long)]
         conformance: bool,

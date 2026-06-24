@@ -61,6 +61,7 @@ pub async fn run_command() {
             source,
             schema,
             stats,
+            evidence,
             conformance,
             conformance_dir,
             all,
@@ -68,18 +69,29 @@ pub async fn run_command() {
             strict,
             fix,
             json,
-        } => cmd_check(
-            source.as_deref(),
-            schema,
-            stats,
-            conformance,
-            &conformance_dir,
-            all,
-            schema_only,
-            strict,
-            fix,
-            json,
-        ),
+        } => {
+            if evidence {
+                // `check --evidence` folds in the standalone `evidence-ci` verb,
+                // routing to the same handler. A source/frontier is required.
+                let frontier = source.unwrap_or_else(|| {
+                    fail_return("check --evidence needs a frontier path (e.g. `vela check <frontier> --evidence`)")
+                });
+                cmd_evidence_ci(&frontier, json);
+            } else {
+                cmd_check(
+                    source.as_deref(),
+                    schema,
+                    stats,
+                    conformance,
+                    &conformance_dir,
+                    all,
+                    schema_only,
+                    strict,
+                    fix,
+                    json,
+                );
+            }
+        }
         Commands::Integrity {
             frontier,
             json,
@@ -5310,6 +5322,55 @@ pub struct ProofTrace {
 /// someone remembered to add its string. Empty today.
 const RELEASE_DENY: &[&str] = &[];
 
+/// Commands that stay fully callable + dispatchable but are curated OUT of the
+/// `vela help advanced` menu (`strict_help_text`) to keep the presented surface
+/// minimal and coherent. This is presentation only: every name here still
+/// resolves through `is_science_subcommand`, so the gate scripts, the web app,
+/// MCP/serve, and any existing invocation keep working unchanged. The
+/// completeness guard (`every_subcommand_is_documented_in_advanced_help`) skips
+/// these so the curated menu can shrink without losing the "no command is
+/// silently undocumented" protection for the canonical set.
+const DEPRECATED_FROM_HELP: &[&str] = &[
+    "integrity",
+    "normalize",
+    "stats",
+    "search",
+    "tensions",
+    "ask",
+    "review-work",
+    "evidence-ci",
+    "conformance",
+    "correct",
+    "experiment",
+    "attach",
+    "attempt",
+    "transfer",
+    "retro-impact",
+    "proof-add",
+    "proof-attest-verification",
+    "proof-verify-attestation",
+    "lean",
+    "carina",
+    "recommend",
+    "import-events",
+    "queue",
+    "register-statement",
+    "attest-statement",
+    "onboard",
+    "stash",
+    "events",
+    "artifact-to-state",
+    "export",
+    "preprint",
+    "agent",
+    "lock",
+    "doc",
+    "import",
+    "quickstart",
+    "completions",
+    "version",
+];
+
 /// Whether `name` is a released top-level command the dispatcher will hand
 /// to clap. Derived from the clap command tree (`Cli::command()`), not a
 /// hand-maintained list, so a newly-added subcommand — or any of its
@@ -5354,6 +5415,7 @@ fn print_strict_help() {
 /// so it can never silently omit a newly-added command (the drift the old
 /// hand-maintained allowlist suffered, now caught at the help layer too).
 fn strict_help_text() -> String {
+    let deprecated_line = DEPRECATED_FROM_HELP.join(", ");
     format!(
         r#"Vela {}
 Version control for scientific state.
@@ -5361,102 +5423,67 @@ Version control for scientific state.
 Usage:
   vela <COMMAND>
 
-Core flow:
-  init          Initialize a split frontier repo
+Setup (once):
+  id            Set up your key + identity once (then no --key/--actor/--hub flags)
+  init          Initialize a new frontier repo
+  clone         Clone a frontier from the hub into a working tree (reproduces + extends)
+
+Producer loop (clone -> reproduce -> ingest -> propose -> publish):
+  reproduce     Re-verify stored witnesses from scratch (frozen exact verifiers)
   ingest        Ingest a paper, dataset, or Carina packet (dispatches by file type)
   propose       Create a finding.review proposal
+  publish       Push a frontier to the hub (owner/key/hub from your identity; alias: push)
+
+Sync:
+  status        One-screen frontier state; --remote compares against the hub upstream
+  pull          Fast-forward a local checkout from its hub remote (no silent merge)
+  log           Recent canonical state events
   diff          Preview a `vpr_*` proposal, or compare two frontier files
-  accept        Apply a proposal under reviewer authority (keyed reviewers: --key)
+  history       State-transition replay for one finding
+
+Review (maintainers):
+  inbox         Triage list of pending proposals
+  review        Create a review proposal or review interactively
+  accept        Apply a proposal under your reviewer key
+  accept-batch  Apply several pending proposals under one reviewer decision
   land          Land a result in one step: accept a vpr_ proposal or a vf_ finding's pending add
   attest        Sign findings under your private key
-  status        One-screen frontier state (replay, proposals, leases, attestations)
-  log           Recent canonical state events
-  history       State-transition replay for one finding
-  serve         Serve a read-only frontier over MCP stdio or HTTP (the local review server)
+  proposals     Inspect, validate, export, import, accept, or reject write proposals
 
-Read-only inspection:
-  check         Validate a frontier, repo, or proof packet
-  integrity     Check accepted frontier state integrity
-  normalize     Apply deterministic frontier-state repairs
+Verify:
+  check         Validate a frontier, repo, or proof packet (--strict, --evidence, --conformance)
+  gate          Verification gate: deliverable-grade + verifier-attachment checks
+  reproduce     Re-verify stored witnesses from scratch (frozen exact verifiers)
   proof         Export and validate a proof packet (`proof verify`, `proof explain`)
+  verify        Re-hash and validate a proof packet (manifest + proof-trace chain)
+
+Work next (discovery):
+  attack        Ranked "what to work on next" queue from the dark-matter boundary (alias: what-next)
+  explore       A finding's neighbourhood: what it rests on / what rests on it, within --hops
+  campaign      Discovery engine: search verifier-gated constructions, verify, propose
+  foundry       One unattended compounding turn: produce -> frozen-verify -> auto-admit
+
+Inspect (read-only):
   doctor        Diagnose first-user checkout, frontier, proof, and serve readiness
-  stats         Show frontier statistics
-  search        Search findings
-  tensions      List candidate contradictions and tensions
-  inbox         Triage list of pending proposals
-  ask           Route a natural-language question to a structured kernel query
-  review-work   Show read-only review-work queues
-  evidence-ci   Check source, evidence, condition, confidence, and policy review readiness
   claim state   Derive the Claim-State Cell for a finding (Belnap status, deps, obligations)
   claim trust   Derive the Trust Vector for a finding (absent fields shown as absent)
   claim pack    Bundle state + trust + reproduce command + event ids (citable claim pack)
   claim diff    Evidence Diff: a proposal's before/after effect on a claim + downstream impact
 
-Verification:
-  verify        Re-hash and validate a proof packet (manifest + proof-trace chain)
-  conformance   Run protocol conformance vectors
-  gate          Verification gate: deliverable-grade + verifier-attachment checks
-  reproduce     Re-verify stored witnesses from scratch (frozen exact verifiers)
-  correct       Record repair: dependency blast radius of a correction/retraction
-  campaign      Discovery engine: search verifier-gated constructions, verify, propose
-  foundry       One unattended compounding turn: produce -> frozen-verify -> auto-admit
-  experiment    Experiment receipts: run-manifest, cohort obligation-status, author obligation
-  attack        Ranked "what to work on next" queue from the dark-matter boundary (alias: what-next)
-  explore       A finding's neighbourhood: what it rests on / what rests on it, within --hops
-  sidon         Sidon Producer Profile (A309370): submit, observe, export, frontier-map, support
-  attach        Bind a verifier attachment to a finding (propose -> accept in one step)
-  attempt       Verify banked attempts (vat_): id re-derivation + signature + claim digest
-  transfer      Verify cross-domain transfers (vtr_): id re-derivation + signature
-  retro-impact  How much downstream verified state rests on a record
-  proof-add     Register a Carina Proof primitive (vpf_*) against a finding
-  proof-attest-verification
-                Record a verifier's signed output as a vpv_* attestation
-  proof-verify-attestation
-                Verify a vpv_* proof-verification record (id + signature)
-  lean          Anchor Lean theorems to their content-addressed source bytes
-  carina        Validate Carina-shaped JSON against the bundled primitive schemas
-
-Proposals and review:
-  proposals     Inspect, validate, export, import, accept, or reject write proposals
-  review        Create a review proposal or review interactively
-  accept-batch  Apply several pending proposals under one reviewer decision
-  recommend     Record a reviewer-tier recommend-accept on a pending proposal
-  import-events Import review/state events from a packet or JSON file
-  queue         Walk the local draft queue: list, sign-and-apply, or clear queued review actions
-  finding       Manage finding bundles + per-finding verbs:
-                  finding add | review | note | caveat | revise | reject |
-                  retract | link | supersede | causal-set
-
-Production (multi-producer coordination, signed judgment):
-  claim              Lease an open obligation (TTL; one live lease per target)
-  register-statement Register a statement hash as a priority timestamp
-  attest-statement   Sign a statement-faithfulness verdict (faithful/variant/unfaithful)
-  onboard            Write AGENTS.md + CLAUDE.md for a frontier (regenerated from the log)
-  agents             Generate agent-config adapters from VELA.md (sync | doctor | diff)
-  stash              Park bytes in the hub's untrusted vsx_ scratch tier
-  events             Follow a frontier's hub event stream (--follow)
-  task               Create, list, claim, and close local frontier tasks
-  artifact-to-state  Import a Carina artifact packet as reviewable proposals
-  export             Export frontier artifacts
-  preprint           Render a frontier as a Markdown preprint (derived view)
-  agent              Scaffold an AI-agent identity kit (init / list)
-
-Identity and publishing:
-  id            Set up your key + identity once (then no --key/--actor/--hub flags)
-  publish       Push a frontier to the hub (one verb; owner/key/hub from your identity; alias: push)
-  clone         Clone a frontier from the hub into a working tree (reproduces + extends)
-  pull          Fast-forward a local checkout from its hub remote (no silent merge)
-  sign          Optional signing and signature verification
-  actor         Register Ed25519 publisher identities in a frontier
-  registry      Publish, pull, list; maintainer add/remove, deprecate, rotate-owner
-  workspace     List/add/remove checked-out frontiers + their hub remotes (the gate reads this)
+Nouns (subcommand groups; run `vela <noun> --help`):
   frontier      Scaffold (`new`), materialize, and manage frontier metadata + deps
-  lock          Regenerate or verify the frontier's `vela.lock` dependency pins
-  doc           Generate a static HTML site documenting the frontier
-  import        Import frontier.json into a .vela repo
-  quickstart    Guided first-frontier walkthrough
-  completions   Emit shell completions (bash, zsh, fish)
-  version       Show version information
+  finding       Per-finding verbs: add, review, note, caveat, revise, reject, retract, link, supersede
+  registry      Publish, pull, list; maintainer add/remove, deprecate, rotate-owner
+  actor         Register Ed25519 publisher identities in a frontier
+  sign          Signing and signature verification
+  agents        Generate agent-config adapters from VELA.md (sync | doctor | diff)
+  workspace     List/add/remove checked-out frontiers + their hub remotes (the gate reads this)
+  task          Create, list, claim, and close local frontier tasks
+  sidon         Sidon Producer Profile (A309370): submit, observe, export, frontier-map, support
+  serve         Serve a read-only frontier over MCP stdio or HTTP (the local review server)
+
+Specialist and legacy commands stay callable but are out of this menu
+(run `vela <name> --help`): {}.
 
 Quick start (the demo):
   vela init demo --name "Your bounded question"
@@ -5488,7 +5515,8 @@ Publish your own frontier (see docs/PUBLISHING.md):
   vela registry publish ./frontier.json --owner reviewer:you --key keys/private.key \
       --to https://hub.constellate.science
 "#,
-        env!("CARGO_PKG_VERSION")
+        env!("CARGO_PKG_VERSION"),
+        deprecated_line,
     )
 }
 
@@ -6029,6 +6057,12 @@ mod surface_tests {
         on_big_stack(|| {
             let help = strict_help_text();
             for name in released_names() {
+                // Commands curated out of the menu (DEPRECATED_FROM_HELP) stay
+                // callable but are intentionally not listed; the guard applies
+                // only to the canonical surface.
+                if DEPRECATED_FROM_HELP.contains(&name.as_str()) {
+                    continue;
+                }
                 let listed = help.lines().any(|l| {
                     let t = l.trim_start();
                     t == name || t.starts_with(&format!("{name} "))
@@ -6036,7 +6070,8 @@ mod surface_tests {
                 assert!(
                     listed,
                     "subcommand `{name}` is not listed in `vela help advanced` \
-                     (strict_help_text) — add a row so the reference stays complete"
+                     (strict_help_text) — add a row so the reference stays complete, \
+                     or add it to DEPRECATED_FROM_HELP if it is intentionally off-menu"
                 );
             }
         });
