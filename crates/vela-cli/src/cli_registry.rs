@@ -741,6 +741,32 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
             let signing_key = crate::cli_identity::resolve_signing_key(key.as_deref());
             let derived = hex::encode(signing_key.verifying_key().to_bytes());
 
+            // Auto-register any loose-but-mapped witnesses as content-addressed
+            // artifacts BEFORE loading, so the pushed snapshot is always a
+            // complete, cloneable set (a producer never runs a separate
+            // `gate backfill` to make their witnesses cloneable). Idempotent:
+            // a strict no-op when every witness is already registered or the
+            // frontier ships no `witnesses/targets.json`. `targets.json` is the
+            // consent gate — an unmapped witness is skipped, not registered.
+            // This is the publisher's own provenance deposit, the one write
+            // publish makes to the corpus; it is surfaced, not silent.
+            let (registered_witnesses, unmapped_witnesses) =
+                crate::cli_engine::register_canonical_witnesses(&frontier, &owner, false);
+            if registered_witnesses > 0 {
+                eprintln!(
+                    "  vela publish · registered {registered_witnesses} previously-loose \
+                     witness(es) as content-addressed artifacts (now cloneable)"
+                );
+            }
+            if !unmapped_witnesses.is_empty() {
+                eprintln!(
+                    "  vela publish · note: {} witness file(s) have no entry in \
+                     witnesses/targets.json and were NOT registered (so a clone omits them): {}",
+                    unmapped_witnesses.len(),
+                    unmapped_witnesses.join(", ")
+                );
+            }
+
             // Load frontier and look up (or auto-register) the owner.
             let mut frontier_data =
                 repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));

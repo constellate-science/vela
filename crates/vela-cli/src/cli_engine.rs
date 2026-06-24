@@ -166,7 +166,16 @@ pub(crate) fn cmd_gate(action: GateAction) {
             reviewer,
             dry_run,
             json,
-        } => cmd_gate_backfill(&frontier, &reviewer, dry_run, json),
+        } => {
+            // Default the reviewer authority from the configured identity
+            // (`vela id`), like `publish` resolves owner/key/hub. An explicit
+            // --reviewer still overrides; with no flag and no identity the
+            // resolver exits with the setup hint. Trust model is unchanged:
+            // the agent-vs-human guard inside cmd_gate_backfill fires on the
+            // resolved id (an `agent:` id still only drafts pending).
+            let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
+            cmd_gate_backfill(&frontier, &reviewer, dry_run, json)
+        }
         GateAction::AutoAdmit {
             frontier,
             finding,
@@ -2318,7 +2327,13 @@ fn cmd_gate_backfill(frontier: &Path, reviewer: &str, dry_run: bool, json_output
 /// signed `verifier.attach`, which the attach loop types by actor).
 ///
 /// Returns `(registered, witnesses_without_target)`.
-fn register_canonical_witnesses(
+///
+/// `pub(crate)` so `vela publish` can auto-register any loose-but-mapped
+/// witnesses as part of the push (a producer never has to run a separate
+/// `gate backfill` to make their witnesses cloneable). Idempotent on content
+/// hash, and `targets.json` is the consent gate: a witness with no mapping is
+/// skipped, not registered.
+pub(crate) fn register_canonical_witnesses(
     frontier: &Path,
     deposited_by: &str,
     dry_run: bool,

@@ -750,9 +750,9 @@ pub(crate) enum Commands {
         /// Reason for the review
         #[arg(long)]
         reason: Option<String>,
-        /// Reviewer identifier
+        /// Reviewer identifier. Optional: defaults to your `vela id`.
         #[arg(long)]
-        reviewer: String,
+        reviewer: Option<String>,
         /// Immediately accept and apply the proposal locally
         #[arg(long)]
         apply: bool,
@@ -811,9 +811,10 @@ pub(crate) enum Commands {
         /// Human-readable label for the proof artifact.
         #[arg(long, default_value = "Proof script")]
         name: String,
-        /// Reviewer actor id (e.g. `reviewer:will-blair`).
+        /// Reviewer actor id (e.g. `reviewer:will-blair`). Optional:
+        /// defaults to your `vela id`.
         #[arg(long)]
-        reviewer: String,
+        reviewer: Option<String>,
         /// Reason for registering the proof artifact.
         #[arg(long)]
         reason: String,
@@ -1022,8 +1023,9 @@ pub(crate) enum Commands {
         #[arg(long)]
         attachment_file: PathBuf,
         /// Reviewer authority applying the attachment (e.g. `reviewer:opus`).
+        /// Optional: defaults to your `vela id`.
         #[arg(long)]
-        reviewer: String,
+        reviewer: Option<String>,
         #[arg(long, default_value = "bind verifier attachment")]
         reason: String,
         #[arg(long)]
@@ -1878,9 +1880,10 @@ pub(crate) enum GateAction {
         /// Frontier directory (e.g. `examples/sidon-sets`).
         frontier: PathBuf,
         /// Reviewer authority landing the attachments (e.g.
-        /// `reviewer:will-blair`). A signing key is required to apply.
+        /// `reviewer:will-blair`). Optional: defaults to your configured
+        /// identity (`vela id`). A signing key is required to apply.
         #[arg(long)]
-        reviewer: String,
+        reviewer: Option<String>,
         /// Report the plan without writing.
         #[arg(long)]
         dry_run: bool,

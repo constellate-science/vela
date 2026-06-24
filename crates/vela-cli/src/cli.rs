@@ -482,14 +482,18 @@ pub async fn run_command() {
             reviewer,
             reason,
             json,
-        } => cmd_attach(
-            &frontier,
-            &target,
-            &attachment_file,
-            &reviewer,
-            &reason,
-            json,
-        ),
+        } => {
+            // Reviewer authority defaults from `vela id`.
+            let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
+            cmd_attach(
+                &frontier,
+                &target,
+                &attachment_file,
+                &reviewer,
+                &reason,
+                json,
+            )
+        }
         Commands::Reproduce { path, json } => cmd_reproduce(&path, json),
         Commands::Correct {
             frontier,
@@ -966,6 +970,9 @@ pub async fn run_command() {
         } => {
             let status = status.unwrap_or_else(|| fail_return("--status is required for review"));
             let reason = reason.unwrap_or_else(|| fail_return("--reason is required for review"));
+            // Reviewer id defaults from `vela id` (provenance; signing only
+            // happens on --apply, via the canonical key-custody path).
+            let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
             let report = state::review_finding(
                 &frontier,
                 &finding_id,
@@ -1030,6 +1037,8 @@ pub async fn run_command() {
             reason,
             json,
         } => {
+            // Reviewer (signing actor for the artifact event) defaults from `vela id`.
+            let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
             cmd_proof_add(
                 &frontier,
                 &target_finding,
@@ -5526,40 +5535,45 @@ fn print_session_help() {
     println!(
         "    id create         Generate your key + identity; then no --key/--actor/--hub flags"
     );
+    println!("    init <dir>        Start a new frontier repo (vs clone, which joins one)");
     println!();
-    println!("  CORE FLOW");
-    println!("    init              Initialize a split frontier repo");
+    println!("  PRODUCER LOOP (the git-style path: clone, reproduce, propose, push)");
+    println!("    clone <vfr|url>   Clone a published frontier from the hub into a working tree");
+    println!(
+        "    reproduce <dir>   Re-verify the cloned witnesses from scratch (frozen verifiers)"
+    );
     println!("    ingest <path>     Ingest a paper, dataset, or Carina packet");
     println!("    propose           Create a finding.review proposal");
+    println!(
+        "    publish <dir>     Push your frontier to the hub (alias: push); owner/key/hub from id"
+    );
+    println!();
+    println!("  SYNC");
+    println!(
+        "    status            One-screen frontier state; status --remote vs the hub upstream"
+    );
+    println!(
+        "    pull <dir>        Fast-forward a local checkout from its hub remote (no silent merge)"
+    );
+    println!("    log               Recent canonical state events");
+    println!();
+    println!("  REVIEW (maintainers)");
+    println!("    inbox             Pending review proposals");
+    println!("    review            Review a proposal interactively");
     println!("    diff <vpr_id>     Preview a pending proposal vs current frontier");
-    println!("    accept <vpr_id>   Apply a proposal under reviewer authority");
+    println!("    accept <vpr_id>   Apply a proposal under your reviewer key");
     println!(
         "    accept-batch      Accept all pending in one signed, reconciled pass (--all-pending)"
     );
     println!("    attest            Sign findings under your private key");
-    println!("    log               Recent canonical state events");
-    println!("    history <vf_id>   State-transition replay for one finding");
-    println!("    serve             Read-only frontier over MCP stdio or HTTP");
-    println!();
-    println!("  DAILY ALSO-RANS");
-    println!("    status            One-screen frontier health");
-    println!("    frontier audit    Strict check, proof, Evidence CI, health, review work");
-    println!("    inbox             Pending review proposals");
-    println!("    review            Review a proposal interactively");
-    println!("    ask <question>    Plain-text query against the frontier");
     println!();
     println!("  VERIFY");
     println!("    gate check <vf>                    Trust-gate status for one finding");
     println!("    reproduce <dir>                    Re-verify stored witnesses from scratch");
-    println!("    claim state <vf>                   Claim-State Cell (Belnap status, deps)");
-    println!();
-    println!("  PUBLISH");
-    println!(
-        "    publish <frontier>                 Push your frontier to the hub (one verb, no flags)"
-    );
     println!(
         "    registry verify-log <vfr>          Independently verify a hub's transparency log"
     );
+    println!("    claim state <vf>                   Claim-State Cell (Belnap status, deps)");
     println!();
     println!("  In session, type a single letter for a quick verb, or any");
     println!("  question in plain text. `q` or `exit` quits.");
