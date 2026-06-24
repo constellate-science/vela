@@ -608,6 +608,92 @@ pub struct ReplayVerification {
     pub note: String,
 }
 
+/// v0.701: per-finding provenance classification for the event-sourcing
+/// migration. Where `verify_replay` *proves* the materialized findings are
+/// reducible, this reports *why* each one is reducible — exactly which
+/// on-disk derived view still pins a finding to git — so a migration can
+/// target the gap and a decommit can be justified one bucket at a time.
+///
+/// Each finding lands in exactly one bucket (inline takes precedence, so a
+/// finding asserted-by-proposal then superseded-inline counts as inline —
+/// its current body is in the log):
+///
+/// - `inline`: an assert/supersede event carries the full body in its
+///   payload; reducible from `events/` alone.
+/// - `proposal_backed`: an assert event exists but hydrates its body from
+///   the signed proposal store; still needs `proposals/`.
+/// - `remnant`: no assert/supersede event targets it; seeded straight from
+///   the `findings/` cache. Predates the event-first discipline.
+///
+/// A frontier is *fully event-sourced* iff `proposal_backed` and `remnant`
+/// are both empty: then `events/` reduces to its whole finding set and the
+/// derived views are pure caches, safe to decommit. This is the explanatory
+/// companion to `verify_replay`, not a trust gate — `verify_replay` remains
+/// the exact, byte-parity invariant.
+#[derive(Debug, Clone, Default)]
+pub struct ProvenanceReport {
+    pub inline: Vec<String>,
+    pub proposal_backed: Vec<String>,
+    pub remnant: Vec<String>,
+    pub actors: usize,
+    pub proposals: usize,
+}
+
+impl ProvenanceReport {
+    /// True when every materialized finding is reducible from the event log
+    /// alone (no proposal-backed bodies, no pre-event remnants).
+    pub fn fully_event_sourced(&self) -> bool {
+        self.proposal_backed.is_empty() && self.remnant.is_empty()
+    }
+}
+
+/// Classify every materialized finding by how its body enters the log.
+/// Mirrors the `seed_genesis` dispatch: an inline body (`payload.finding`
+/// / `payload.new_finding`) vs a proposal reference (`payload.proposal_id`).
+pub fn classify_provenance(state: &Project) -> ProvenanceReport {
+    use std::collections::HashSet;
+    let mut inline: HashSet<&str> = HashSet::new();
+    let mut proposal_backed: HashSet<&str> = HashSet::new();
+    for ev in &state.events {
+        match ev.kind.as_str() {
+            "finding.asserted" => {
+                let id = ev.target.id.as_str();
+                if ev.payload.get("finding").is_some() {
+                    inline.insert(id);
+                } else if ev.payload.get("proposal_id").is_some() {
+                    proposal_backed.insert(id);
+                }
+            }
+            "finding.superseded" => {
+                if let Some(nid) = ev.payload.get("new_finding_id").and_then(Value::as_str) {
+                    if ev.payload.get("new_finding").is_some() {
+                        inline.insert(nid);
+                    } else if ev.payload.get("proposal_id").is_some() {
+                        proposal_backed.insert(nid);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut report = ProvenanceReport {
+        actors: state.actors.len(),
+        proposals: state.proposals.len(),
+        ..Default::default()
+    };
+    for f in &state.findings {
+        let id = f.id.as_str();
+        if inline.contains(id) {
+            report.inline.push(f.id.clone());
+        } else if proposal_backed.contains(id) {
+            report.proposal_backed.push(f.id.clone());
+        } else {
+            report.remnant.push(f.id.clone());
+        }
+    }
+    report
+}
+
 // --- per-kind reducer rules ---------------------------------------------------
 
 fn apply_finding_asserted(
@@ -1666,6 +1752,49 @@ mod tests {
         });
         apply_event(&mut state, &event).unwrap();
         assert!(state.findings[0].flags.contested);
+    }
+
+    #[test]
+    fn classify_provenance_separates_inline_from_remnant() {
+        // `inline` carries its body in a finding.asserted event; `rem` has
+        // no event at all (a pre-event-sourcing remnant seeded from cache).
+        let inline = finding("inline");
+        let rem = finding("rem");
+        let mut state = project::assemble("test", vec![inline.clone(), rem.clone()], 0, 0, "test");
+        state.events.push(StateEvent {
+            schema: events::EVENT_SCHEMA.to_string(),
+            id: "vev_inline".to_string(),
+            kind: "finding.asserted".into(),
+            target: StateTarget {
+                r#type: "finding".to_string(),
+                id: inline.id.clone(),
+            },
+            actor: StateActor {
+                id: "reviewer:test".to_string(),
+                r#type: "human".to_string(),
+            },
+            timestamp: Utc::now().to_rfc3339(),
+            reason: "assert".to_string(),
+            before_hash: NULL_HASH.to_string(),
+            after_hash: events::finding_hash(&inline),
+            payload: json!({ "finding": inline }),
+            caveats: vec![],
+            signature: None,
+            schema_artifact_id: None,
+        });
+
+        let report = classify_provenance(&state);
+        assert_eq!(report.inline, vec![inline.id.clone()]);
+        assert_eq!(report.remnant, vec![rem.id.clone()]);
+        assert!(report.proposal_backed.is_empty());
+        assert!(
+            !report.fully_event_sourced(),
+            "a frontier with a remnant is not fully event-sourced"
+        );
+
+        // Removing the remnant leaves an all-inline frontier: fully reducible.
+        state.findings.retain(|f| f.id != rem.id);
+        assert!(classify_provenance(&state).fully_event_sourced());
     }
 
     #[test]

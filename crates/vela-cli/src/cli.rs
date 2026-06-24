@@ -2760,6 +2760,27 @@ pub(crate) fn cmd_frontier_audit(frontier: PathBuf, json_out: bool) {
             }))
         });
 
+    let provenance = vela_protocol::reducer::classify_provenance(&project);
+    let fully_event_sourced = provenance.fully_event_sourced();
+    let event_source = json!({
+        "fully_event_sourced": fully_event_sourced,
+        "inline": provenance.inline.len(),
+        "proposal_backed": provenance.proposal_backed.len(),
+        "remnant": provenance.remnant.len(),
+        "actors": provenance.actors,
+        "proposals": provenance.proposals,
+        "pins": {
+            // What still keeps a derived view committed to git.
+            "findings_dir": provenance.remnant.len(),
+            "proposals_dir": provenance.proposal_backed.len(),
+        },
+        "note": if fully_event_sourced {
+            "events/ reduces to the whole finding set; findings/ + proposals/ are pure caches, safe to decommit once verify_replay is green"
+        } else {
+            "some finding bodies live only in findings/ (remnants) or proposals/ (proposal-backed asserts); migrate them to inline asserts before decommitting"
+        },
+    });
+
     let strict_ok = json_bool(&strict_check, "ok");
     let proof_ok = json_bool(&proof, "ok");
     let evidence_ok = evidence.ok;
@@ -2816,6 +2837,7 @@ pub(crate) fn cmd_frontier_audit(frontier: PathBuf, json_out: bool) {
             "health_issues": health.issues.len(),
         },
         "stats": &project.stats,
+        "event_source": event_source,
         "strict_check": strict_check_summary,
         "proof": proof,
         "evidence_ci": evidence_ci_summary,
@@ -2851,6 +2873,17 @@ pub(crate) fn cmd_frontier_audit(frontier: PathBuf, json_out: bool) {
         project.stats.evidence_atom_count,
         project.stats.event_count,
         project.stats.links
+    );
+    println!(
+        "  event-sourced:   {} ({} inline · {} proposal-backed · {} remnant)",
+        if fully_event_sourced {
+            style::ok("fully")
+        } else {
+            style::warn("partial")
+        },
+        provenance.inline.len(),
+        provenance.proposal_backed.len(),
+        provenance.remnant.len()
     );
     println!(
         "  strict check:    {}",
