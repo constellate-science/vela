@@ -331,9 +331,11 @@ fn integrity_tolerates_missing_lock_for_frontier_repo() {
     ]);
     fs::remove_file(frontier.join("vela.lock")).expect("remove lock");
 
-    let report = run_json(&["integrity", frontier.to_str().unwrap(), "--json"]);
+    // `integrity` was folded into `check`; state_integrity carries the same
+    // structural_errors with rule_ids.
+    let report = run_json(&["check", frontier.to_str().unwrap(), "--json"]);
 
-    let flags_missing_lock = report["structural_errors"]
+    let flags_missing_lock = report["state_integrity"]["structural_errors"]
         .as_array()
         .map(|errs| {
             errs.iter()

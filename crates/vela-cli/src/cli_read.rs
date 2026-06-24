@@ -4,7 +4,6 @@ use serde_json::json;
 use std::path::Path;
 use vela_edge::doctor;
 use vela_edge::packet;
-use vela_edge::state_integrity;
 use vela_protocol::cli_style as style;
 use vela_protocol::project;
 use vela_protocol::repo;
@@ -535,40 +534,6 @@ pub(crate) fn cmd_doctor(frontier: Option<&Path>, port: u16, json_output: bool) 
         }
     }
     if !report.blocking.is_empty() {
-        std::process::exit(1);
-    }
-}
-
-pub(crate) fn cmd_integrity(frontier: &Path, json: bool, strict: bool) {
-    let mut report = state_integrity::analyze_path(frontier).unwrap_or_else(|e| fail_return(&e));
-    // CI gate: --strict treats warnings as failures. Promote the reported status
-    // so the JSON and the exit code both reflect the gate; default behaviour is
-    // unchanged (informational, exit 0).
-    let strict_fail =
-        strict && (!report.structural_errors.is_empty() || !report.warnings.is_empty());
-    if strict_fail {
-        report.status = "fail".to_string();
-    }
-    if json {
-        print_json(&report);
-    } else {
-        println!("vela integrity");
-        println!("  frontier: {}", frontier.display());
-        println!("  status: {}", report.status);
-        println!("  proof freshness: {}", report.proof_freshness);
-        println!("  structural errors: {}", report.structural_errors.len());
-        for error in report.structural_errors.iter().take(8) {
-            println!("  - {}: {}", error.rule_id, error.message);
-        }
-        println!("  warnings: {}", report.warnings.len());
-        for warning in report.warnings.iter().take(8) {
-            println!("  ~ {}: {}", warning.rule_id, warning.message);
-        }
-        if strict {
-            println!("  strict: warnings treated as failures");
-        }
-    }
-    if strict_fail {
         std::process::exit(1);
     }
 }

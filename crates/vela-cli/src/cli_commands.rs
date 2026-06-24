@@ -57,18 +57,6 @@ pub(crate) enum Commands {
         #[arg(long)]
         json: bool,
     },
-    /// Check structural integrity of accepted frontier state
-    Integrity {
-        /// Frontier JSON file or Vela repo
-        frontier: PathBuf,
-        /// Output stable JSON
-        #[arg(long)]
-        json: bool,
-        /// CI gate: treat warnings (unreviewed AI-authored findings,
-        /// unattributed sources, stale proof) as failures and exit non-zero.
-        #[arg(long)]
-        strict: bool,
-    },
     /// Diagnose first-user checkout, frontier, proof, and serve readiness.
     Doctor {
         /// Frontier JSON file or Vela repo. Defaults to the release frontier
@@ -248,21 +236,6 @@ pub(crate) enum Commands {
         #[arg(long)]
         json: bool,
     },
-    /// Scientific record repair: the dependency blast radius of correcting or
-    /// retracting a finding. Over the frozen Bottleneck-kappa cascade it shows
-    /// which downstream findings LOSE their only support, which are weakened but
-    /// keep surviving routes, and which are unaffected (alternative support
-    /// prunes them). The correction is a new root; prior state stays replayable.
-    /// READ-ONLY analysis; the actual retraction is `vela retract` (key custody).
-    Correct {
-        /// Frontier directory (e.g. `examples/erdos-problems`).
-        frontier: PathBuf,
-        /// The finding id (`vf_…`) being corrected/retracted.
-        #[arg(long)]
-        finding: String,
-        #[arg(long)]
-        json: bool,
-    },
     /// The discovery engine: search for verifier-gated constructions, then
     /// verify them with the frozen `vela-verify` and (optionally) propose the
     /// result. Search *produces* candidates; the frozen verifier is the gate —
@@ -427,24 +400,6 @@ pub(crate) enum Commands {
         #[arg(long)]
         json: bool,
     },
-    /// v0.109: regenerate or verify the frontier's `vela.lock`
-    /// pinning every cross-frontier dependency by snapshot hash.
-    /// The lockfile is the substrate's "I used this exact
-    /// scientific state" artifact. Default mode regenerates the
-    /// lock from current state; `--check` verifies on-disk state
-    /// matches the recorded lock and exits non-zero on drift.
-    #[command(hide = true)]
-    Lock {
-        /// Frontier path (the .vela/ repo root)
-        path: PathBuf,
-        /// Verify the existing lock against current on-disk
-        /// state instead of regenerating.
-        #[arg(long)]
-        check: bool,
-        /// Emit JSON to stdout instead of the human banner.
-        #[arg(long)]
-        json: bool,
-    },
     /// Compare two frontiers, or preview one pending proposal
     /// against the current frontier.
     ///
@@ -516,21 +471,6 @@ pub(crate) enum Commands {
         #[command(subcommand)]
         action: TaskAction,
     },
-    /// Import a Carina artifact packet as reviewable frontier proposals
-    ArtifactToState {
-        /// Frontier JSON file or Vela repo
-        frontier: PathBuf,
-        /// Artifact packet JSON
-        packet: PathBuf,
-        /// Actor importing the packet
-        #[arg(long)]
-        actor: String,
-        /// Apply artifact proposals immediately while leaving truth changes pending
-        #[arg(long)]
-        apply_artifacts: bool,
-        #[arg(long)]
-        json: bool,
-    },
     /// Manage finding bundles as the core frontier primitive
     Finding {
         #[command(subcommand)]
@@ -547,99 +487,6 @@ pub(crate) enum Commands {
         /// the finding had at that moment (last revision <= cutoff).
         #[arg(long, value_name = "RFC3339_TIMESTAMP")]
         as_of: Option<String>,
-    },
-    /// v0.117: Register a machine-checked Proof primitive (`vpf_*`)
-    /// against an existing finding. The proof script is hashed with
-    /// sha256 to produce a content-addressed locator; the artifact
-    /// rides as a `kind: source_file` artifact carrying
-    /// `metadata.carina_kind: proof_script` plus tool + tool-version
-    /// (matching the v0.75.6 sidon-sets pattern). Routes to
-    /// `state::add_artifact`; the artifact event is signed under the
-    /// reviewer's actor id. Closes the v0.75.6 Carina Proof primitive
-    /// loop end-to-end: every proof script lives in the frontier's
-    /// canonical event log with a content-addressed locator the
-    /// substrate's verifier can pin against.
-    #[command(hide = true)]
-    ProofAdd {
-        frontier: PathBuf,
-        /// Finding the proof targets (`vf_*`).
-        #[arg(long = "target-finding")]
-        target_finding: String,
-        /// Proof-assistant identifier. One of: lean4 (default), coq,
-        /// isabelle, agda, metamath, rocq, other.
-        #[arg(long, default_value = "lean4")]
-        tool: String,
-        /// Tool version pin (e.g. `4.29.1` for Lean 4).
-        #[arg(long = "tool-version", default_value = "4.29.1")]
-        tool_version: String,
-        /// Path to the proof script on disk.
-        #[arg(long = "script-path")]
-        script_path: PathBuf,
-        /// Human-readable label for the proof artifact.
-        #[arg(long, default_value = "Proof script")]
-        name: String,
-        /// Reviewer actor id (e.g. `reviewer:will-blair`). Optional:
-        /// defaults to your `vela id`.
-        #[arg(long)]
-        reviewer: Option<String>,
-        /// Reason for registering the proof artifact.
-        #[arg(long)]
-        reason: String,
-        #[arg(long)]
-        json: bool,
-    },
-    /// v0.151: attest that an external verifier ran a Carina
-    /// Proof artifact and produced a specific output hash. Writes
-    /// a signed `vpv_*` record next to the proof; consumers
-    /// verify the attestation via `proof-verify-attestation`.
-    /// The verifier itself (Lean kernel, Coq, etc.) runs
-    /// outside the substrate; this command records the
-    /// verifier's signed output and pubkey.
-    #[command(hide = true)]
-    ProofAttestVerification {
-        /// Proof artifact id (`vpf_*`) the verification covers.
-        #[arg(long)]
-        proof_id: String,
-        /// Verifier tool: lean4|coq|isabelle|agda|metamath|rocq|other.
-        #[arg(long, default_value = "lean4")]
-        tool: String,
-        #[arg(long = "tool-version", default_value = "4.29.1")]
-        tool_version: String,
-        /// Content-addressed locator (sha256:HEX) of the proof
-        /// script the verifier ran.
-        #[arg(long)]
-        script_locator: String,
-        /// Optional sha256 over the Lake manifest (or equivalent).
-        #[arg(long = "lake-manifest-hash")]
-        lake_manifest_hash: Option<String>,
-        /// sha256:HEX over the verifier's standard output.
-        #[arg(long = "verifier-output-hash")]
-        verifier_output_hash: String,
-        /// `verified` | `failed` | `toolchain_mismatch`.
-        #[arg(long, default_value = "verified")]
-        status: String,
-        /// Verifier actor identifier (GitHub Action url, Vela
-        /// actor id, institutional steward id).
-        #[arg(long = "verifier-actor")]
-        verifier_actor: String,
-        /// Verifier's Ed25519 signing key.
-        #[arg(long)]
-        key: PathBuf,
-        /// Output path for the verification record JSON.
-        #[arg(long)]
-        out: PathBuf,
-        #[arg(long)]
-        json: bool,
-    },
-    /// v0.151: verify a `vpv_*` proof-verification record:
-    /// re-derive the id, verify the Ed25519 signature against
-    /// `verifier_pubkey`. Exits non-zero on any mismatch.
-    #[command(hide = true)]
-    ProofVerifyAttestation {
-        /// Path to the `vpv_*` verification record JSON.
-        record: PathBuf,
-        #[arg(long)]
-        json: bool,
     },
     // v0.74: top-level alias verbs. Each variant is a thin wrapper
     // routing to an existing canonical-event emission path. No new
@@ -795,18 +642,6 @@ pub(crate) enum Commands {
     Completions {
         /// bash | zsh | fish
         shell: String,
-    },
-
-    /// Emit AGENTS.md + CLAUDE.md for a frontier workspace, regenerated
-    /// deterministically from the log: statements, banked do-not-regrind
-    /// routes, allowed outputs, and the named done-condition
-    /// ("done means `vela gate` passes"). Codex and Claude Code read
-    /// these natively — zero-integration onboarding.
-    #[command(hide = true)]
-    Onboard {
-        frontier: PathBuf,
-        #[arg(long)]
-        json: bool,
     },
 
     /// Lease an open obligation so other producers route around it.
