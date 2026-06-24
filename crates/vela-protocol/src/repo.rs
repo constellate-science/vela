@@ -1,12 +1,11 @@
 //! Git-native VelaRepo abstraction — load/save projects from either monolithic JSON
 //! or a `.vela/` directory of individual finding files.
 
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::bundle::{ConfidenceUpdate, FindingBundle, Link, ReviewEvent};
+use crate::bundle::{ConfidenceUpdate, FindingBundle, ReviewEvent};
 use crate::events::StateEvent;
 use crate::project::{self, Project};
 use crate::proposals::{ProofState, StateProposal};
@@ -120,28 +119,6 @@ struct RepoProjectMeta {
 
 fn default_compiler() -> String {
     crate::project::VELA_COMPILER_VERSION.into()
-}
-
-// ── Link manifest ────────────────────────────────────────────────────
-
-/// A link record in the centralized manifest. Contains a `source` field
-/// (the finding ID that owns this link) so we can redistribute on load.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-struct ManifestLink {
-    source: String,
-    target: String,
-    #[serde(rename = "type")]
-    link_type: String,
-    #[serde(default)]
-    note: String,
-    #[serde(default = "default_inferred_by")]
-    inferred_by: String,
-    #[serde(default)]
-    created_at: String,
-}
-
-fn default_inferred_by() -> String {
-    "compiler".into()
 }
 
 // ── Load ─────────────────────────────────────────────────────────────
@@ -374,39 +351,6 @@ fn load_vela_repo(dir: &Path) -> Result<Project, String> {
         }
     }
 
-    // Read link manifest and redistribute
-    let links_dir = dir.join(".vela/links");
-    let manifest_path = links_dir.join("manifest.json");
-    if manifest_path.exists() {
-        let data = std::fs::read_to_string(&manifest_path)
-            .map_err(|e| format!("Failed to read links/manifest.json: {e}"))?;
-        let manifest_links: Vec<ManifestLink> = serde_json::from_str(&data)
-            .map_err(|e| format!("Failed to parse links/manifest.json: {e}"))?;
-
-        // Build a map of source_id -> links
-        let mut links_by_source: HashMap<String, Vec<Link>> = HashMap::new();
-        for ml in manifest_links {
-            links_by_source
-                .entry(ml.source.clone())
-                .or_default()
-                .push(Link {
-                    target: ml.target,
-                    link_type: ml.link_type,
-                    note: ml.note,
-                    inferred_by: ml.inferred_by,
-                    created_at: ml.created_at,
-                    mechanism: None,
-                });
-        }
-
-        // Distribute links into findings
-        for finding in &mut findings {
-            if let Some(links) = links_by_source.remove(&finding.id) {
-                finding.links = links;
-            }
-        }
-    }
-
     // Read reviews
     let reviews_dir = dir.join(".vela/reviews");
     let mut review_events: Vec<ReviewEvent> = Vec::new();
@@ -494,48 +438,6 @@ fn load_vela_repo(dir: &Path) -> Result<Project, String> {
     } else {
         ProofState::default()
     };
-
-    // v0.33: Read datasets from `.vela/datasets/` and code artifacts
-    // from `.vela/code-artifacts/`. Same one-file-per-record pattern
-    // as findings and replications. Both directories are optional,
-    // so pre-v0.33 frontiers without them load unchanged.
-    let datasets_dir = dir.join(".vela/datasets");
-    let mut datasets: Vec<crate::bundle::Dataset> = Vec::new();
-    if datasets_dir.is_dir() {
-        let mut entries: Vec<PathBuf> = std::fs::read_dir(&datasets_dir)
-            .map_err(|e| format!("Failed to read datasets/: {e}"))?
-            .filter_map(|e| e.ok())
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|ext| ext == "json"))
-            .collect();
-        entries.sort();
-        for path in entries {
-            let data = std::fs::read_to_string(&path)
-                .map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
-            let dataset: crate::bundle::Dataset = serde_json::from_str(&data)
-                .map_err(|e| format!("Failed to parse {}: {e}", path.display()))?;
-            datasets.push(dataset);
-        }
-    }
-
-    let code_artifacts_dir = dir.join(".vela/code-artifacts");
-    let mut code_artifacts: Vec<crate::bundle::CodeArtifact> = Vec::new();
-    if code_artifacts_dir.is_dir() {
-        let mut entries: Vec<PathBuf> = std::fs::read_dir(&code_artifacts_dir)
-            .map_err(|e| format!("Failed to read code-artifacts/: {e}"))?
-            .filter_map(|e| e.ok())
-            .map(|e| e.path())
-            .filter(|p| p.extension().is_some_and(|ext| ext == "json"))
-            .collect();
-        entries.sort();
-        for path in entries {
-            let data = std::fs::read_to_string(&path)
-                .map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
-            let artifact: crate::bundle::CodeArtifact = serde_json::from_str(&data)
-                .map_err(|e| format!("Failed to parse {}: {e}", path.display()))?;
-            code_artifacts.push(artifact);
-        }
-    }
 
     let artifacts_dir = dir.join(".vela/artifacts");
     let mut artifacts: Vec<crate::bundle::Artifact> = Vec::new();
@@ -626,8 +528,6 @@ fn load_vela_repo(dir: &Path) -> Result<Project, String> {
     c.proof_state = proof_state;
     c.actors = actors;
     c.signatures = signatures;
-    c.datasets = datasets;
-    c.code_artifacts = code_artifacts;
     c.artifacts = artifacts;
 
     // The loader IS the reducer. Every event-derived collection is
@@ -716,9 +616,6 @@ fn save_vela_repo(dir: &Path, project: &Project) -> Result<(), String> {
     let tasks_dir = vela_dir.join("tasks");
     let workspaces_dir = vela_dir.join("workspaces");
     let source_inbox_dir = vela_dir.join("source-inbox");
-    // v0.33: datasets and code artifacts each get their own directory.
-    let datasets_dir = vela_dir.join("datasets");
-    let code_artifacts_dir = vela_dir.join("code-artifacts");
     let artifacts_dir = vela_dir.join("artifacts");
 
     // Create directories
@@ -730,8 +627,6 @@ fn save_vela_repo(dir: &Path, project: &Project) -> Result<(), String> {
         &tasks_dir,
         &workspaces_dir,
         &source_inbox_dir,
-        &datasets_dir,
-        &code_artifacts_dir,
         &artifacts_dir,
     ] {
         std::fs::create_dir_all(d)
@@ -755,7 +650,7 @@ fn save_vela_repo(dir: &Path, project: &Project) -> Result<(), String> {
         .map_err(|e| format!("Failed to write config.toml: {e}"))?;
 
     // Write each finding as findings/{id}.json. Links remain embedded in the
-    // finding bundle; legacy link manifests are still accepted on load.
+    // finding bundle.
     for finding in &project.findings {
         let json = serde_json::to_string_pretty(finding)
             .map_err(|e| format!("Failed to serialize finding {}: {e}", finding.id))?;
@@ -784,23 +679,6 @@ fn save_vela_repo(dir: &Path, project: &Project) -> Result<(), String> {
         .map_err(|e| format!("Failed to serialize proof state: {e}"))?;
     std::fs::write(vela_dir.join("proof-state.json"), proof_state_json)
         .map_err(|e| format!("Failed to write proof-state.json: {e}"))?;
-
-    // v0.33: datasets and code artifacts as individual `vd_<id>.json`
-    // and `vc_<id>.json` files. Same persistence shape as findings.
-    for dataset in &project.datasets {
-        let json = serde_json::to_string_pretty(dataset)
-            .map_err(|e| format!("Failed to serialize dataset {}: {e}", dataset.id))?;
-        let filename = format!("{}.json", dataset.id);
-        std::fs::write(datasets_dir.join(&filename), json)
-            .map_err(|e| format!("Failed to write dataset {}: {e}", filename))?;
-    }
-    for artifact in &project.code_artifacts {
-        let json = serde_json::to_string_pretty(artifact)
-            .map_err(|e| format!("Failed to serialize code artifact {}: {e}", artifact.id))?;
-        let filename = format!("{}.json", artifact.id);
-        std::fs::write(code_artifacts_dir.join(&filename), json)
-            .map_err(|e| format!("Failed to write code artifact {}: {e}", filename))?;
-    }
 
     for artifact in &project.artifacts {
         let json = serde_json::to_string_pretty(artifact)
@@ -1054,6 +932,7 @@ pub fn write_working_frontier(
 mod tests {
     use super::*;
     use crate::bundle::*;
+    use std::collections::HashMap;
     use tempfile::TempDir;
 
     use crate::test_support::{make_finding, make_project};

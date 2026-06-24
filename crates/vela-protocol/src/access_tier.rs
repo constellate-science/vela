@@ -178,8 +178,6 @@ fn clone_project_metadata(p: &crate::project::Project) -> crate::project::Projec
         proof_state: p.proof_state.clone(),
         signatures: p.signatures.clone(),
         actors: p.actors.clone(),
-        datasets: p.datasets.clone(),
-        code_artifacts: p.code_artifacts.clone(),
         artifacts: Vec::new(),
         released_diff_packs: Vec::new(),
         verdict_conflicts: Vec::new(),

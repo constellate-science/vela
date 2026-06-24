@@ -93,19 +93,6 @@ pub struct Project {
     /// `--strict` must carry a verifiable Ed25519 signature.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub actors: Vec<ActorRecord>,
-    /// v0.33: Datasets as first-class kernel objects. A `vd_<hash>`
-    /// captures a versioned, content-addressed reference to data that
-    /// anchors empirical claims. Distinct from `Provenance` (which
-    /// describes the paper) — a single paper may publish multiple
-    /// datasets, and a single dataset may be reused across many papers.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub datasets: Vec<crate::bundle::Dataset>,
-    /// v0.33: Code artifacts as first-class kernel objects. A `vc_<hash>`
-    /// is a content-addressed pointer at a specific region of source
-    /// code at a specific git commit. Claims can reference the code
-    /// that produced them, not only a repository name in prose.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub code_artifacts: Vec<crate::bundle::CodeArtifact>,
     /// Generic content-addressed artifacts: protocols, trial registry
     /// records, supplements, notebooks, source files, and dataset
     /// manifests that need a durable byte or pointer commitment.
@@ -391,8 +378,6 @@ pub fn assemble(
         proof_state: ProofState::default(),
         signatures: Vec::new(),
         actors: Vec::new(),
-        datasets: Vec::new(),
-        code_artifacts: Vec::new(),
         artifacts: Vec::new(),
         released_diff_packs: Vec::new(),
         verdict_conflicts: Vec::new(),

@@ -1466,25 +1466,10 @@ fn export_one(
     let kinds_value: Value = serde_json::to_value(&kinds_seen).unwrap();
 
     let fixture = json!({
-        // bumped from "5" to "6". The entity-resolution event family
-        // (finding.entity_resolved, finding.entity_added) was retired
-        // from the protocol, so the entity_resolve + entity_added
-        // coverage fixtures are gone. The per-finding digest never
-        // covered entity fields, so the surviving fixtures' digests are
-        // byte-identical across the bump.
-        //
-        // v0.108: bumped from "4" to "5". The empirical object families
-        // (negative_results, trajectories, replications, predictions)
-        // were retired from the protocol, so the digest now covers only
-        // findings and artifacts. v4 readers that looked for the four
-        // removed collections find them absent and treat them as empty.
-        //
-        // v0.55: the digest covers expected_artifacts, covering
-        // artifact.asserted/reviewed/retracted and artifact tier changes.
-        //
-        // v0.53: added access_tier on each finding so `tier.set` events
-        // on findings participate in the cross-impl byte-equivalence
-        // promise.
+        // The post-replay digest covers findings and artifacts only:
+        // expected_states (with access_tier, so finding `tier.set` events
+        // participate) plus expected_artifacts (artifact.asserted/reviewed/
+        // retracted and artifact tier changes).
         "fixture_version": "6",
         "schema_url": "https://vela.science/schema/cross-impl-reducer-fixture/v6",
         "doctrine": "every reducer implementation must agree on per-kind mutation rules across findings and artifacts",
@@ -1559,10 +1544,9 @@ fn export_cross_impl_reducer_fixtures() {
         export_one(&out_dir, frontier_idx, "annotations", findings, event_log);
     }
 
-    // Fixture slots 05 (negative_results) and 06 (trajectories) were
-    // retired with the empirical object families; their frontier_idx
-    // offsets (+2, +3) are intentionally skipped so the surviving
-    // fixtures keep their established numbers.
+    // Fixture slots 05 and 06 are retired; their frontier_idx offsets
+    // (+2, +3) are intentionally skipped so the surviving fixtures keep
+    // their established numbers.
 
     // Fixture 07 — tier.set lifecycle scenario (v0.51). Exercises the
     // dual-use access tier reclassification on the finding arm
@@ -1599,17 +1583,13 @@ fn export_cross_impl_reducer_fixtures() {
     // and that path lives in the integration test suite, not in the
     // genesis-only replay scaffold the cross-impl reducer relies on.
 
-    // v0.105.7: export span-repair, entity-resolve, and entity-added
-    // fixtures so the public conformance contract at
-    // `conformance/fixtures/` exercises every reducer arm that
-    // mutates a finding bundle in the genesis-only replay scaffold.
-    // Pre-v0.105.7 the cross-impl coverage test asserted these arms
-    // existed in some builder somewhere; v0.105.7 makes them part of
-    // the exported fixture set so a second-implementation reducer
-    // running `conformance/verify.py` exercises them too. The
-    // post-replay finding digest covers `findings[]` only and these
-    // arms each mutate a finding (evidence_spans, entity resolution
-    // metadata, entities list), so the digest catches drift.
+    // Export the span-repair fixture so the public conformance contract
+    // at `conformance/fixtures/` exercises the finding.span_repaired
+    // reducer arm in the genesis-only replay scaffold. A second-
+    // implementation reducer running `conformance/verify.py` exercises it
+    // too. The post-replay finding digest covers `findings[]` only and
+    // this arm mutates a finding (evidence_spans), so the digest catches
+    // drift.
 
     // Fixture 09 — finding.span_repaired scenario (v0.57).
     {
@@ -1621,9 +1601,8 @@ fn export_cross_impl_reducer_fixtures() {
         export_one(&out_dir, frontier_idx, "span_repair", findings, event_log);
     }
 
-    // Fixtures 10 and 11 (finding.entity_resolved / finding.entity_added)
-    // were retired with the entity-resolution event family. The slots are
-    // left vacant; surviving fixtures keep their numbers.
+    // Fixtures 10 and 11 are retired. The slots are left vacant;
+    // surviving fixtures keep their numbers.
 
     // Fixture 12 — side-table events. Pins the reducer arms that
     // mutate side tables outside the finding-effects digest

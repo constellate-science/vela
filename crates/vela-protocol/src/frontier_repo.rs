@@ -861,8 +861,6 @@ fn empty_project(name: &str, description: &str, compiled_at: &str) -> Project {
         proof_state: proposals::ProofState::default(),
         signatures: Vec::new(),
         actors: Vec::new(),
-        datasets: Vec::new(),
-        code_artifacts: Vec::new(),
         artifacts: Vec::new(),
         released_diff_packs: Vec::new(),
         verdict_conflicts: Vec::new(),

@@ -32,11 +32,10 @@
 //!   - It does not push to the hub. It mutates a local `.vela/` repo only.
 //!   - It does not re-run the proposal reducer or Evidence CI gate. The
 //!     records in a batch are already-materialized objects + their canonical
-//!     events; the deposit-style event kinds (`finding.asserted`,
-//!     `negative_result.asserted`) carry their object inline exactly as the
-//!     reducer would have emitted them. Callers that need the full
-//!     proposal -> accept -> reducer pipeline still use
-//!     `proposals::accept_proposal_in_frontier`.
+//!     events; the deposit-style event kinds (e.g. `finding.asserted`)
+//!     carry their object inline exactly as the reducer would have emitted
+//!     them. Callers that need the full proposal -> accept -> reducer
+//!     pipeline still use `proposals::accept_proposal_in_frontier`.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -64,11 +63,9 @@ pub enum AppendRecord {
         event: Box<StateEvent>,
     },
     /// An event whose object (if any) is carried inline on the event
-    /// payload and materialized from the event log on load — negative
-    /// results (`negative_result.asserted`), trajectories
-    /// (`trajectory.created`), replications, attestations, and every
-    /// frontier-level observation. `repo::load_vela_repo` rebuilds these
-    /// from the event stream (see `materialize_*_from_events`), so the
+    /// payload and materialized from the event log on load — attestations
+    /// and every frontier-level observation. `repo::load_vela_repo` rebuilds
+    /// these from the event stream (see `materialize_*_from_events`), so the
     /// append only needs to write the event file. No separate projection
     /// file exists for them on disk.
     EventOnly { event: Box<StateEvent> },

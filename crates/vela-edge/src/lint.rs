@@ -841,8 +841,6 @@ mod tests {
             proof_state: Default::default(),
             signatures: vec![],
             actors: Vec::new(),
-            datasets: Vec::new(),
-            code_artifacts: Vec::new(),
             artifacts: Vec::new(),
             released_diff_packs: vec![],
             verdict_conflicts: vec![],

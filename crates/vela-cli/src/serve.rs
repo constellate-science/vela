@@ -141,10 +141,8 @@ fn merge_projects(frontiers: Vec<(String, Project)>) -> Project {
     let mut papers_processed = 0usize;
     let mut errors = 0usize;
     // v0.36.2: preserve v0.32+ kernel objects across the merge.
-    // Pre-v0.36.2, `datasets`, `code_artifacts`, and `artifacts` were dropped
-    // during merge, leaving the merged stats incomplete.
-    let mut datasets = Vec::new();
-    let mut code_artifacts = Vec::new();
+    // Pre-v0.36.2, `artifacts` were dropped during merge, leaving the
+    // merged stats incomplete.
     let mut artifacts = Vec::new();
 
     for (name, frontier) in frontiers {
@@ -158,8 +156,6 @@ fn merge_projects(frontiers: Vec<(String, Project)>) -> Project {
             *link_types.entry(link_type).or_default() += count;
         }
         findings.extend(frontier.findings);
-        datasets.extend(frontier.datasets);
-        code_artifacts.extend(frontier.code_artifacts);
         artifacts.extend(frontier.artifacts);
     }
 
@@ -286,8 +282,6 @@ fn merge_projects(frontiers: Vec<(String, Project)>) -> Project {
         proof_state: Default::default(),
         signatures: Vec::new(),
         actors: Vec::new(),
-        datasets,
-        code_artifacts,
         artifacts,
         released_diff_packs: Vec::new(),
         verdict_conflicts: Vec::new(),

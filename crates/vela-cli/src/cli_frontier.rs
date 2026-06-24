@@ -55,8 +55,6 @@ pub(crate) fn cmd_frontier(action: FrontierAction) {
                 proof_state: proposals::ProofState::default(),
                 signatures: Vec::new(),
                 actors: Vec::new(),
-                datasets: Vec::new(),
-                code_artifacts: Vec::new(),
                 artifacts: Vec::new(),
                 released_diff_packs: Vec::new(),
                 verdict_conflicts: Vec::new(),

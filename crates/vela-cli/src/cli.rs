@@ -1998,18 +1998,11 @@ pub(crate) fn answer(project: &vela_protocol::project::Project, q: &str, json: b
                     "findings": n,
                     "events": evs,
                     "actors": actors,
-                    "datasets": project.datasets.len(),
-                    "code_artifacts": project.code_artifacts.len(),
                 }))
                 .unwrap()
             );
         } else {
             println!("  {n} findings · {evs} events · {actors} actors.");
-            println!(
-                "  {} datasets · {} code artifacts.",
-                project.datasets.len(),
-                project.code_artifacts.len(),
-            );
         }
         return;
     }
