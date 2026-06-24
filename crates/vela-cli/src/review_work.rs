@@ -153,11 +153,7 @@ fn build_review_work_frontier_index(
         counts,
         copy_commands: vec![
             format!("vela status {} --json", repo_path.display()),
-            format!("vela stats {} --json", repo_path.display()),
-            format!(
-                "vela search <query> --source {} --json",
-                repo_path.display()
-            ),
+            format!("vela inbox {} --json", repo_path.display()),
         ],
         boundary: "The database is a rebuildable read model. Canonical state remains frontier files and accepted events.",
     }

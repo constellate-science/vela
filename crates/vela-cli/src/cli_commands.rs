@@ -205,79 +205,6 @@ pub(crate) enum Commands {
         #[arg(long)]
         json: bool,
     },
-    /// v0.42: Conversational substrate access. Type a natural-language
-    /// question; the substrate routes it to a structured query and
-    /// renders the answer. No agent in the loop — kernel queries only.
-    /// Codex-flavored REPL that doesn't pretend to be an agent.
-    Ask {
-        frontier: PathBuf,
-        /// The question. If omitted, drops into a REPL.
-        #[arg(trailing_var_arg = true)]
-        question: Vec<String>,
-        /// Output stable JSON when the answer has structure.
-        #[arg(long)]
-        json: bool,
-    },
-    /// Show frontier statistics
-    Stats {
-        /// Frontier JSON file, Vela repo, or packet
-        frontier: PathBuf,
-        /// Output stable JSON
-        #[arg(long)]
-        json: bool,
-    },
-    /// Search findings
-    Search {
-        /// Search query
-        query: String,
-        /// Frontier JSON file, Vela repo, or packet
-        #[arg(long)]
-        source: Option<PathBuf>,
-        /// Filter by entity
-        #[arg(long)]
-        entity: Option<String>,
-        /// Filter by assertion type
-        #[arg(long)]
-        r#type: Option<String>,
-        /// Search every frontier in a directory
-        #[arg(long)]
-        all: Option<PathBuf>,
-        /// Maximum results
-        #[arg(long, default_value = "20")]
-        limit: usize,
-        /// Output stable JSON
-        #[arg(long)]
-        json: bool,
-    },
-    /// List candidate contradictions and tensions
-    Tensions {
-        source: PathBuf,
-        #[arg(long)]
-        both_high: bool,
-        #[arg(long)]
-        cross_domain: bool,
-        #[arg(long, default_value = "20")]
-        top: usize,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Export frontier artifacts
-    Export {
-        frontier: PathBuf,
-        #[arg(short, long, default_value = "csv")]
-        format: String,
-        #[arg(short, long)]
-        output: Option<PathBuf>,
-        /// Venue-native projection: oeis (a %H comment block + b-file
-        /// fragment from sidon witnesses) or nanopub (one TriG document
-        /// per verified finding). Rides existing registries; never
-        /// invents a destination.
-        #[arg(long)]
-        venue: Option<String>,
-        /// For --venue oeis: the OEIS A-number to format against.
-        #[arg(long, default_value = "A309370")]
-        sequence: String,
-    },
     /// Recompute SHA-256 over every file in a proof packet, compare to
     /// the manifest, and validate the proof-trace chain. Use this when
     /// you've pulled a packet from someone else and want one command
@@ -509,50 +436,6 @@ pub(crate) enum Commands {
         #[arg(long)]
         json: bool,
     },
-    /// v0.103: scaffold a fresh frontier end-to-end in one command.
-    /// Composes init + sign generate-keypair + actor add + finding add
-    /// + a print-ready next-steps banner. Designed for the
-    /// fresh-from-`cargo install` user who wants to feel the substrate
-    /// in 30 seconds without memorizing the demo sequence.
-    /// v0.131: scaffold an AI-agent identity kit. Generates an
-    /// Ed25519 keypair, writes an `actor.json` with the canonical
-    /// `actor:<slug>-<date>` id and `actor.type: "agent"`, plus a
-    /// minimal `agent.yaml` config file documenting which
-    /// frameworks the agent supports. The output is portable: a
-    /// human reviewer can register the agent into any frontier
-    /// with `vela actor add <frontier> <agent_id> --pubkey
-    /// <hex>`, after which the agent can draft proposals that
-    /// flow through the reviewer-gated truth-claim discipline.
-    /// See docs/AI_ATTRIBUTION.md for the full doctrine and
-    /// docs/AGENT_QUICKSTART.md for the workflow.
-    Agent {
-        #[command(subcommand)]
-        action: AgentAction,
-    },
-    Quickstart {
-        /// Frontier directory to create. Defaults to ./demo
-        #[arg(default_value = "demo")]
-        path: PathBuf,
-        /// Frontier display name. Defaults to "Quickstart frontier".
-        #[arg(long, default_value = "Quickstart frontier")]
-        name: String,
-        /// Reviewer / actor id under which the first finding lands.
-        /// Defaults to `reviewer:you`. Override with e.g.
-        /// `--reviewer reviewer:will-blair`.
-        #[arg(long, default_value = "reviewer:you")]
-        reviewer: String,
-        /// First-finding assertion text. Defaults to a generic placeholder.
-        /// Override with `--assertion "your real claim"`.
-        #[arg(long)]
-        assertion: Option<String>,
-        /// Where to drop the generated keypair. Defaults to
-        /// `<path>/keys/`.
-        #[arg(long)]
-        keys_out: Option<PathBuf>,
-        /// Output stable JSON instead of the human-readable banner.
-        #[arg(long)]
-        json: bool,
-    },
     /// v0.109: regenerate or verify the frontier's `vela.lock`
     /// pinning every cross-frontier dependency by snapshot hash.
     /// The lockfile is the substrate's "I used this exact
@@ -570,30 +453,6 @@ pub(crate) enum Commands {
         /// Emit JSON to stdout instead of the human banner.
         #[arg(long)]
         json: bool,
-    },
-    /// v0.110: generate a static HTML site documenting the
-    /// frontier. Self-contained: no JS framework, no external
-    /// dependencies, browseable from disk in any browser.
-    /// Cargo's docs.rs analog for scientific state. Renders
-    /// index, findings table, events table, and per-finding
-    /// detail pages.
-    #[command(hide = true)]
-    Doc {
-        /// Frontier path (the .vela/ repo root)
-        path: PathBuf,
-        /// Output directory. Defaults to `<path>/doc/`.
-        #[arg(long)]
-        out: Option<PathBuf>,
-        /// Emit a JSON report to stdout instead of the human
-        /// banner. The HTML files are written either way.
-        #[arg(long)]
-        json: bool,
-    },
-    /// Import frontier JSON into a .vela repo
-    Import {
-        frontier: PathBuf,
-        #[arg(long)]
-        into: Option<PathBuf>,
     },
     /// Compare two frontiers, or preview one pending proposal
     /// against the current frontier.
@@ -660,42 +519,11 @@ pub(crate) enum Commands {
         #[command(subcommand)]
         action: TransferAction,
     },
-    /// Retro-impact: how much downstream verified state rests on a record,
-    /// via the declared dependency graph (`depends_on` + transfer discharges).
-    /// A deterministic oracle over verified state, never a popularity score.
-    #[command(hide = true)]
-    RetroImpact {
-        /// The record id (`vat_`/`vf_`/`vfr_`/`vtr_`) to measure.
-        record: String,
-        /// Path to the frontier (project root or frontier.json file).
-        #[arg(long)]
-        frontier: PathBuf,
-        #[arg(long)]
-        json: bool,
-    },
     /// Local frontier tasks. Tasks organize scientific work before any
     /// accepted event changes frontier truth state.
     Task {
         #[command(subcommand)]
         action: TaskAction,
-    },
-    /// v0.163: render a frontier as a Markdown preprint
-    /// (abstract, contributors with CRediT roles, findings as
-    /// evidence sections, BibTeX citation block). Pure derived
-    /// view from the canonical substrate state.
-    #[command(hide = true)]
-    Preprint {
-        /// Frontier path.
-        frontier: PathBuf,
-        /// Optional release timestamp to pin in the footer.
-        /// Defaults to now (UTC).
-        #[arg(long)]
-        released_at: Option<String>,
-        /// Output path (default: stdout).
-        #[arg(long)]
-        out: Option<PathBuf>,
-        #[arg(long)]
-        json: bool,
     },
     /// Import a Carina artifact packet as reviewable frontier proposals
     ArtifactToState {
@@ -728,15 +556,6 @@ pub(crate) enum Commands {
         /// the finding had at that moment (last revision <= cutoff).
         #[arg(long, value_name = "RFC3339_TIMESTAMP")]
         as_of: Option<String>,
-    },
-    /// Import review/state events from a packet or JSON file into a frontier
-    #[command(hide = true)]
-    ImportEvents {
-        source: PathBuf,
-        #[arg(long)]
-        into: PathBuf,
-        #[arg(long)]
-        json: bool,
     },
     /// v0.117: Register a machine-checked Proof primitive (`vpf_*`)
     /// against an existing finding. The proof script is hashed with
@@ -981,97 +800,10 @@ pub(crate) enum Commands {
         json: bool,
     },
 
-    /// Attest that a FORMAL statement faithfully encodes an INFORMAL
-    /// problem. Human judgment by design: requires a reviewer: actor and
-    /// that reviewer's signing key (the attestation is a signed vsa_
-    /// record; kernel verification proves the formal statement follows —
-    /// only a human can attest it is the problem anyone meant).
-    #[command(hide = true)]
-    AttestStatement {
-        frontier: PathBuf,
-        /// The finding (`vf_…`) whose formalization is being judged.
-        #[arg(long)]
-        target: String,
-        /// Where the informal problem lives (e.g. "erdosproblems.com #12").
-        #[arg(long)]
-        informal_ref: String,
-        /// Where the formal statement lives (repo path / URL at a commit).
-        #[arg(long)]
-        formal_ref: String,
-        /// Path to the formal statement artifact (its sha256 is recorded),
-        /// or pass --formal-hash directly.
-        #[arg(long)]
-        formal_file: Option<PathBuf>,
-        #[arg(long)]
-        formal_hash: Option<String>,
-        /// faithful | variant | unfaithful
-        #[arg(long)]
-        verdict: String,
-        /// The reasoning: what was compared, what diverges. Required.
-        #[arg(long)]
-        note: String,
-        /// The attesting reviewer (must be reviewer:…). Optional: defaults
-        /// to your configured identity (`vela id`).
-        #[arg(long = "reviewer")]
-        by: Option<String>,
-        /// Path to the reviewer's Ed25519 private key. Optional: defaults to
-        /// your configured identity's key.
-        #[arg(long)]
-        key: Option<PathBuf>,
-        #[arg(long)]
-        json: bool,
-    },
-
     /// Emit shell completions for bash, zsh, or fish.
     Completions {
         /// bash | zsh | fish
         shell: String,
-    },
-
-    /// Park bytes in the hub's UNTRUSTED scratch tier; returns a vsx_
-    /// content hash for attempts/failed-routes to reference.
-    #[command(hide = true)]
-    Stash {
-        file: PathBuf,
-        #[arg(long, default_value = "https://hub.constellate.science")]
-        to: String,
-        /// Your public key hex (rate-limit identity; content stays untrusted).
-        #[arg(long)]
-        pubkey: String,
-        #[arg(long)]
-        json: bool,
-    },
-
-    /// Follow a frontier's hub event stream (new events as they land).
-    #[command(hide = true)]
-    Events {
-        vfr_id: String,
-        #[arg(long, default_value = "https://hub.constellate.science")]
-        from: String,
-        /// Keep following (SSE); without it, print the page after --since.
-        #[arg(long)]
-        follow: bool,
-        #[arg(long)]
-        since: Option<String>,
-    },
-
-    /// Record a signed recommend-accept on a pending proposal (a
-    /// reviewer-tier verdict that owner/maintainer keys consume; it
-    /// never lands state by itself).
-    #[command(hide = true)]
-    Recommend {
-        frontier: PathBuf,
-        proposal_id: String,
-        /// Recommending reviewer. Optional: defaults to your identity.
-        #[arg(long = "reviewer")]
-        by: Option<String>,
-        /// Reviewer key. Optional: defaults to your identity's key.
-        #[arg(long)]
-        key: Option<PathBuf>,
-        #[arg(long)]
-        reason: String,
-        #[arg(long)]
-        json: bool,
     },
 
     /// Emit AGENTS.md + CLAUDE.md for a frontier workspace, regenerated
@@ -1101,38 +833,6 @@ pub(crate) enum Commands {
         by: Option<String>,
         /// Path to the claimant's Ed25519 private key. Optional: defaults to
         /// your configured identity's key.
-        #[arg(long)]
-        key: Option<PathBuf>,
-        #[arg(long)]
-        json: bool,
-    },
-
-    /// Register a statement hash for priority: a content-addressed
-    /// timestamp in the signed log, externally anchored by the
-    /// release-archive chain.
-    #[command(hide = true)]
-    RegisterStatement {
-        frontier: PathBuf,
-        /// Path to a file holding the exact statement text, or pass
-        /// --hash directly.
-        #[arg(long)]
-        statement_file: Option<PathBuf>,
-        #[arg(long)]
-        hash: Option<String>,
-        /// Where the informal problem lives.
-        #[arg(long)]
-        informal_ref: String,
-        /// The `vf_` finding this registration timestamps — the
-        /// canonical finding-to-registration edge (STATE_PLANE_MEMO
-        /// appendix gap 5). Lands inside the statement.registered
-        /// payload; the claim projections use the exact edge instead
-        /// of the digest/informal_ref heuristic when present.
-        #[arg(long)]
-        finding: Option<String>,
-        /// Recording actor. Optional: defaults to your configured identity.
-        #[arg(long = "reviewer")]
-        by: Option<String>,
-        /// Actor key. Optional: defaults to your configured identity's key.
         #[arg(long)]
         key: Option<PathBuf>,
         #[arg(long)]

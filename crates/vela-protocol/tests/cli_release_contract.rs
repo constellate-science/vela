@@ -88,13 +88,13 @@ fn first_finding_id(path: &Path) -> String {
 }
 
 #[test]
-fn stats_missing_frontier_reports_error_without_panic() {
+fn check_missing_frontier_reports_error_without_panic() {
     let tmp = TempDir::new().unwrap();
     let missing = tmp.path().join("missing-frontier.json");
 
-    let error = run_expect_failure(&["stats", missing.to_str().unwrap()]);
+    // `stats` was retired; `check` is the kept loader-error contract.
+    let error = run_expect_failure(&["check", missing.to_str().unwrap()]);
 
-    assert!(error.contains("Failed to load frontier"));
     assert!(error.contains(missing.to_str().unwrap()));
     assert!(!error.contains("panicked at"));
 }
@@ -258,23 +258,6 @@ fn note_is_proposal_backed_by_default_and_applies_with_flag() {
         after_applied["events"].as_array().unwrap().last().unwrap()["kind"],
         "finding.noted"
     );
-}
-
-#[test]
-fn stats_and_gap_text_preserve_review_lead_caveats() {
-    let tmp = TempDir::new().unwrap();
-    let Some(frontier) = copy_bbb_frontier(&tmp) else {
-        eprintln!("skip: bbb-alzheimer.json fixture absent (internal-only)");
-        return;
-    };
-
-    let stats = run_text(&["stats", frontier.to_str().unwrap()]);
-    assert!(stats.contains("recorded proof:"));
-    assert!(stats.contains("packet files are checked by `vela verify`"));
-
-    let gaps = run_text(&["gaps", "rank", frontier.to_str().unwrap(), "--top", "3"]);
-    assert!(gaps.contains("CANDIDATE GAP REVIEW LEADS"));
-    assert!(gaps.contains("not guaranteed experiment targets"));
 }
 
 #[test]

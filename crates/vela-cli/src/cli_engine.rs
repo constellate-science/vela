@@ -1,7 +1,4 @@
-use crate::cli::{
-    collect_witness_files, fail, fail_return, hash_path, load_frontier_or_fail, parse_witness,
-    print_json,
-};
+use crate::cli::{collect_witness_files, fail, fail_return, hash_path, parse_witness, print_json};
 use crate::cli_commands::*;
 use serde_json::{Value, json};
 use std::path::Path;
@@ -2622,22 +2619,6 @@ pub(crate) fn cmd_evidence_ci(frontier: &Path, json: bool) {
             check.id,
             check.target_id,
             check.message
-        );
-    }
-}
-
-pub(crate) fn cmd_retro_impact(record: &str, frontier: &Path, json: bool) {
-    let project = load_frontier_or_fail(frontier);
-    let impact = vela_edge::dependency_oracle::dependency_impact(&project, record);
-    if json {
-        print_json(&serde_json::to_value(&impact).unwrap_or_default());
-    } else {
-        println!(
-            "impact {}: {} record(s) rest on it ({} gate-verified); {} direct",
-            record,
-            impact.weight,
-            impact.verified_weight,
-            impact.direct_dependents.len()
         );
     }
 }
