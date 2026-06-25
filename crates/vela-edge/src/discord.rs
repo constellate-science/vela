@@ -300,11 +300,6 @@ impl DiscordAssignment {
             .collect();
         FrontierSupport { contexts }
     }
-
-    /// Number of contexts in this assignment.
-    pub fn context_count(&self) -> usize {
-        self.by_context.len()
-    }
 }
 
 /// Frontier support: the set of contexts where the discord

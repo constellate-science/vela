@@ -27,7 +27,6 @@ pub mod identity;
 pub mod lean_verification;
 pub mod link;
 pub mod merkle;
-pub mod migrate;
 pub mod nanopub;
 pub mod pathfind;
 pub mod project;

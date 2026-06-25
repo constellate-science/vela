@@ -117,14 +117,6 @@ pub struct TraceValidationSummary {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct TraceValidationReport {
-    pub ok: bool,
-    pub trace: TraceReport,
-    pub summary: TraceValidationSummary,
-    pub issues: Vec<String>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct TraceReport {
     pub trace_id: String,
     pub schema: String,
@@ -268,42 +260,6 @@ impl ResearchTrace {
             .collect()
     }
 }
-
-pub fn validate_trace_file(path: &Path) -> Result<TraceValidationReport, String> {
-    let trace = ResearchTrace::from_path(path)?;
-    let data = fs::read(path)
-        .map_err(|e| format!("Failed to read research trace {}: {e}", path.display()))?;
-    let report = TraceReport {
-        trace_id: trace.trace_id.clone(),
-        schema: trace.schema.clone(),
-        created_at: trace.created_at.clone(),
-        producer: trace.producer.id.clone(),
-        content_hash: format!("sha256:{}", hex::encode(Sha256::digest(data))),
-    };
-    match trace.validate() {
-        Ok(summary) => Ok(TraceValidationReport {
-            ok: true,
-            trace: report,
-            summary,
-            issues: Vec::new(),
-        }),
-        Err(issues) => Err(format!(
-            "Research trace validation failed for {}: {}",
-            path.display(),
-            issues.join("; ")
-        )),
-    }
-}
-
-pub fn proposals_from_trace_file(
-    path: &Path,
-    frontier: &Project,
-) -> Result<Vec<StateProposal>, String> {
-    let trace = ResearchTrace::from_path(path)?;
-    trace.validate().map_err(|issues| issues.join("; "))?;
-    Ok(proposals_from_trace(&trace, frontier))
-}
-
 pub fn proposals_from_trace(trace: &ResearchTrace, frontier: &Project) -> Vec<StateProposal> {
     let mut proposals = Vec::new();
     let source_refs = vec![trace.trace_id.clone()];

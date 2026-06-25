@@ -401,25 +401,6 @@ pub struct EntityBenchmarkReport {
     pub by_type: Vec<TypeBreakdown>,
     pub details: Vec<EntityMatchDetail>,
 }
-
-pub fn run_entity_benchmark(frontier_path: &Path, gold_path: &Path, json_output: bool) {
-    let frontier = repo::load_from_path(frontier_path).expect("Failed to load frontier");
-
-    let gold_data =
-        std::fs::read_to_string(gold_path).expect("Failed to read entity gold standard file");
-    let gold: Vec<GoldEntity> =
-        serde_json::from_str(&gold_data).expect("Failed to parse entity gold standard JSON");
-
-    let report = entity_benchmark(&frontier.findings, &gold);
-
-    if json_output {
-        let json = serde_json::to_string_pretty(&report).unwrap();
-        println!("{json}");
-    } else {
-        print_entity_report(&report);
-    }
-}
-
 /// Collect all entities from findings into a lookup keyed by lowercase name.
 fn collect_entities(findings: &[FindingBundle]) -> HashMap<String, Vec<&Entity>> {
     let mut map: HashMap<String, Vec<&Entity>> = HashMap::new();
@@ -603,73 +584,6 @@ fn entity_resolution_confidence(entity: &Entity) -> f64 {
         .map(|cid| cid.confidence)
         .unwrap_or(entity.resolution_confidence)
 }
-
-fn print_entity_report(report: &EntityBenchmarkReport) {
-    println!();
-    println!("  {}", "VELA · ENTITY RESOLUTION BENCHMARK".dimmed());
-    println!("  {}", style::tick_row(60));
-    println!("  gold entities:      {}", report.total_gold_entities);
-    println!("  found in frontier:  {}", report.found_in_frontier);
-    println!("  type correct:       {}", report.type_correct);
-    println!("  id correct:         {}", report.id_correct);
-    println!("  confidence ok:      {}", report.confidence_ok);
-    println!();
-    println!("  precision:  {:.1}%", report.precision * 100.0);
-    println!("  recall:     {:.1}%", report.recall * 100.0);
-    println!("  f1:         {:.1}%", report.f1 * 100.0);
-    println!("  type accuracy: {:.1}%", report.type_accuracy * 100.0);
-    println!();
-    println!("  {}", "BY TYPE".dimmed());
-    println!(
-        "  {}",
-        format!(
-            "{:<12} {:>5} {:>5} {:>7} {:>8} {:>6} {:>6}",
-            "type", "total", "found", "correct", "conf_ok", "prec", "f1"
-        )
-        .dimmed()
-    );
-    for t in &report.by_type {
-        println!(
-            "  {:<12} {:>5} {:>5} {:>7} {:>8} {:>5.1}% {:>5.1}%",
-            t.entity_type,
-            t.total,
-            t.found,
-            t.id_correct,
-            t.confidence_ok,
-            t.precision * 100.0,
-            t.f1 * 100.0,
-        );
-    }
-
-    // Show mismatches.
-    let mismatches: Vec<_> = report.details.iter().filter(|d| !d.id_match).collect();
-    if !mismatches.is_empty() {
-        println!();
-        println!(
-            "  {}",
-            format!("MISMATCHES ({})", mismatches.len()).dimmed()
-        );
-        println!("  {}", style::tick_row(60));
-        for d in &mismatches {
-            let resolved = match (&d.resolved_source, &d.resolved_id) {
-                (Some(s), Some(id)) => format!("{s}:{id}"),
-                _ => d
-                    .found_type
-                    .clone()
-                    .unwrap_or_else(|| "missing".to_string()),
-            };
-            println!(
-                "  {} ({}) expected {}:{} got {}",
-                d.name, d.entity_type, d.expected_source, d.expected_id, resolved
-            );
-        }
-    }
-
-    println!();
-    println!("  {}", style::tick_row(60));
-    println!();
-}
-
 // ---------------------------------------------------------------------------
 // Link benchmark
 // ---------------------------------------------------------------------------
@@ -720,25 +634,6 @@ pub struct LinkBenchmarkReport {
     pub by_type: Vec<LinkTypeBreakdown>,
     pub details: Vec<LinkMatchDetail>,
 }
-
-pub fn run_link_benchmark(frontier_path: &Path, gold_path: &Path, json_output: bool) {
-    let frontier = repo::load_from_path(frontier_path).expect("Failed to load frontier");
-
-    let gold_data =
-        std::fs::read_to_string(gold_path).expect("Failed to read link gold standard file");
-    let gold: Vec<GoldLink> =
-        serde_json::from_str(&gold_data).expect("Failed to parse link gold standard JSON");
-
-    let report = link_benchmark(&frontier.findings, &gold);
-
-    if json_output {
-        let json = serde_json::to_string_pretty(&report).unwrap();
-        println!("{json}");
-    } else {
-        print_link_report(&report);
-    }
-}
-
 /// Build a lookup: (source_id, target_id) -> list of link types.
 fn collect_links(findings: &[FindingBundle]) -> HashMap<(String, String), Vec<String>> {
     let mut map: HashMap<(String, String), Vec<String>> = HashMap::new();
@@ -846,67 +741,6 @@ pub fn link_benchmark(findings: &[FindingBundle], gold: &[GoldLink]) -> LinkBenc
         details,
     }
 }
-
-fn print_link_report(report: &LinkBenchmarkReport) {
-    println!();
-    println!("  {}", "VELA · LINK BENCHMARK".dimmed());
-    println!("  {}", style::tick_row(60));
-    println!("  gold links:        {}", report.total_gold_links);
-    println!("  project links:     {}", report.total_frontier_links);
-    println!("  found:             {}", report.found);
-    println!("  type correct:      {}", report.type_correct);
-    println!();
-    println!("  precision:  {:.1}%", report.precision * 100.0);
-    println!("  recall:     {:.1}%", report.recall * 100.0);
-    println!("  f1:         {:.1}%", report.f1 * 100.0);
-    println!();
-    println!("  {}", "BY TYPE".dimmed());
-    println!(
-        "  {}",
-        format!(
-            "{:<12} {:>5} {:>5} {:>7} {:>6} {:>6}",
-            "type", "total", "found", "correct", "prec", "f1"
-        )
-        .dimmed()
-    );
-    for t in &report.by_type {
-        println!(
-            "  {:<12} {:>5} {:>5} {:>7} {:>5.1}% {:>5.1}%",
-            t.link_type,
-            t.total,
-            t.found,
-            t.type_correct,
-            t.precision * 100.0,
-            t.f1 * 100.0,
-        );
-    }
-
-    // Show mismatches.
-    let mismatches: Vec<_> = report.details.iter().filter(|d| !d.type_correct).collect();
-    if !mismatches.is_empty() {
-        println!();
-        println!(
-            "  {}",
-            format!("MISMATCHES ({})", mismatches.len()).dimmed()
-        );
-        println!("  {}", style::tick_row(60));
-        for d in &mismatches {
-            let found_str = match &d.found_type {
-                Some(t) => t.as_str(),
-                None => "missing",
-            };
-            println!(
-                "  {} · {} expected:{} got:{}",
-                d.source_id, d.target_id, d.expected_type, found_str
-            );
-        }
-    }
-
-    println!();
-    println!("  {}", style::tick_row(60));
-    println!();
-}
-
 // ---------------------------------------------------------------------------
 // Suite-based benchmark gate
 // ---------------------------------------------------------------------------
@@ -1027,23 +861,6 @@ pub fn load_suite(path: &Path) -> Result<BenchmarkSuite, String> {
     serde_json::from_str(&data)
         .map_err(|e| format!("Failed to parse benchmark suite '{}': {e}", path.display()))
 }
-
-pub fn suite_ready_report(suite_path: &Path) -> Result<serde_json::Value, String> {
-    let envelope = run_suite(suite_path)?;
-    let suite_ready = envelope
-        .get("ok")
-        .and_then(|value| value.as_bool())
-        .unwrap_or(false);
-    Ok(json!({
-        "ok": suite_ready,
-        "command": "bench",
-        "suite_ready": suite_ready,
-        "suite": envelope.get("suite").cloned().unwrap_or(serde_json::Value::Null),
-        "tasks": envelope.get("tasks").cloned().unwrap_or_else(|| json!([])),
-        "failures": envelope.get("failures").cloned().unwrap_or_else(|| json!([])),
-    }))
-}
-
 pub fn run_suite(suite_path: &Path) -> Result<serde_json::Value, String> {
     let suite = load_suite(suite_path)?;
     let base_dir = suite_path.parent().unwrap_or_else(|| Path::new("."));

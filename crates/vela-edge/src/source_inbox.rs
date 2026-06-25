@@ -140,44 +140,6 @@ pub struct SourceInboxTaskResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SourceInboxSummary {
-    pub total: usize,
-    pub quarantined: usize,
-    pub retracted: usize,
-    pub task_linked: usize,
-    pub stale: usize,
-    pub rejected_imports: usize,
-}
-
-impl SourceInboxSummary {
-    pub fn from_records(records: &[SourceInboxRecord]) -> Self {
-        Self {
-            total: records.len(),
-            quarantined: records
-                .iter()
-                .filter(|record| record.state == SourceInboxState::Quarantined)
-                .count(),
-            retracted: records
-                .iter()
-                .filter(|record| record.state == SourceInboxState::Retracted)
-                .count(),
-            task_linked: records
-                .iter()
-                .filter(|record| record.linked_task_id.is_some())
-                .count(),
-            stale: records.iter().filter(|record| is_stale(record)).count(),
-            rejected_imports: 0,
-        }
-    }
-
-    pub fn from_list(list: &SourceInboxList) -> Self {
-        let mut summary = Self::from_records(&list.records);
-        summary.rejected_imports = list.rejected_imports.len();
-        summary
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SourceInboxAddOptions {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_id: Option<String>,
@@ -239,67 +201,6 @@ pub fn add_record(
     write_record(&root, &record, false)?;
     Ok(record)
 }
-
-pub fn upsert_adapter_record(
-    frontier_path: &Path,
-    adapter: &str,
-    run_id: &str,
-    entry_id: &str,
-    source_id: &str,
-    title: &str,
-    locator: &str,
-    source_type: &str,
-    content_hash: &str,
-    status: &str,
-) -> Result<SourceInboxRecord, String> {
-    let mut metadata = BTreeMap::new();
-    metadata.insert("adapter".to_string(), json!(adapter));
-    metadata.insert("adapter_run_id".to_string(), json!(run_id));
-    metadata.insert("source_ingest_entry_id".to_string(), json!(entry_id));
-    metadata.insert("adapter_status".to_string(), json!(status));
-    let root = repo_root(frontier_path)?;
-    let project = repo::load_from_path(&root)?;
-    let draft = SourceInboxDraft {
-        frontier_id: project.frontier_id(),
-        source_id: Some(non_empty("source id", source_id.to_string())?),
-        title: non_empty("title", title.to_string())?,
-        locator: non_empty("locator", locator.to_string())?,
-        source_type: non_empty("source type", source_type.to_string())?,
-        risk_class: "source_repair".to_string(),
-    };
-    let id = derive_source_inbox_id(&draft)?;
-    let now = chrono::Utc::now().to_rfc3339();
-    let path = source_inbox_dir(&root).join(format!("{id}.json"));
-    let mut record = if path.is_file() {
-        read_record_file(&path)?
-    } else {
-        SourceInboxRecord {
-            id,
-            frontier_id: draft.frontier_id,
-            source_id: draft.source_id,
-            title: draft.title,
-            locator: draft.locator,
-            source_type: draft.source_type,
-            state: SourceInboxState::Retrieved,
-            risk_class: draft.risk_class,
-            created_at: now.clone(),
-            updated_at: now.clone(),
-            retrieved_at: Some(now.clone()),
-            verified_at: None,
-            linked_task_id: None,
-            content_hash: None,
-            notes: Vec::new(),
-            metadata: BTreeMap::new(),
-        }
-    };
-    record.updated_at = now.clone();
-    record.retrieved_at.get_or_insert(now);
-    record.content_hash = Some(non_empty("content hash", content_hash.to_string())?);
-    record.metadata.extend(metadata);
-    write_record(&root, &record, true)?;
-    Ok(record)
-}
-
 pub fn list_records(frontier_path: &Path) -> Result<SourceInboxList, String> {
     let root = repo_root(frontier_path)?;
     let project = repo::load_from_path(&root)?;
@@ -360,38 +261,6 @@ pub fn verify_record(
     write_record(&root, &record, true)?;
     Ok(record)
 }
-
-pub fn update_record_state(
-    frontier_path: &Path,
-    record_id: &str,
-    state: SourceInboxState,
-    note: Option<String>,
-    incident_id: Option<Value>,
-) -> Result<SourceInboxRecord, String> {
-    let root = repo_root(frontier_path)?;
-    let mut record = load_record(&root, record_id)?;
-    record.state = state;
-    record.updated_at = chrono::Utc::now().to_rfc3339();
-    if state == SourceInboxState::Retracted {
-        record
-            .metadata
-            .insert("retracted_at".to_string(), json!(record.updated_at));
-    }
-    if let Some(note) = note.and_then(|note| {
-        let trimmed = note.trim().to_string();
-        (!trimmed.is_empty()).then_some(trimmed)
-    }) {
-        record.notes.push(note);
-    }
-    if let Some(incident_id) = incident_id {
-        record
-            .metadata
-            .insert("frontier_incident_id".to_string(), incident_id);
-    }
-    write_record(&root, &record, true)?;
-    Ok(record)
-}
-
 pub fn create_task_from_record(
     frontier_path: &Path,
     record_id: &str,
@@ -471,20 +340,6 @@ pub fn derive_source_inbox_id(draft: &SourceInboxDraft) -> Result<String, String
     let hash = canonical::sha256_canonical(draft)?;
     Ok(format!("vsrcin_{}", &hash[..16]))
 }
-
-pub fn source_inbox_summary(frontier_path: &Path) -> SourceInboxSummary {
-    list_records(frontier_path)
-        .map(|list| SourceInboxSummary::from_list(&list))
-        .unwrap_or(SourceInboxSummary {
-            total: 0,
-            quarantined: 0,
-            retracted: 0,
-            task_linked: 0,
-            stale: 0,
-            rejected_imports: 0,
-        })
-}
-
 pub fn repo_root(frontier_path: &Path) -> Result<PathBuf, String> {
     match repo::detect(frontier_path)? {
         repo::VelaSource::VelaRepo(root) => Ok(root),
@@ -609,22 +464,6 @@ fn clean_list(values: Vec<String>) -> Vec<String> {
         .filter(|v| !v.is_empty())
         .collect()
 }
-
-fn is_stale(record: &SourceInboxRecord) -> bool {
-    if record.state == SourceInboxState::Retracted {
-        return false;
-    }
-    chrono::DateTime::parse_from_rfc3339(&record.updated_at)
-        .ok()
-        .map(|updated| {
-            chrono::Utc::now()
-                .signed_duration_since(updated.with_timezone(&chrono::Utc))
-                .num_days()
-                > 30
-        })
-        .unwrap_or(false)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

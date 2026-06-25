@@ -91,12 +91,6 @@ pub fn entity_name(name: &str) -> String {
     name.trim().to_string()
 }
 
-/// Build a deterministic, safe repair plan for a loaded frontier.
-pub fn plan_project(frontier: &Project) -> NormalizeReport {
-    let changes = plan_project_changes(frontier);
-    report_from_changes("<loaded>", "loaded", true, false, None, changes, 0)
-}
-
 /// Build a deterministic repair plan for a loaded frontier, including content
 /// address and internal link updates implied by entity normalization.
 pub fn plan_project_changes(frontier: &Project) -> Vec<NormalizeChange> {

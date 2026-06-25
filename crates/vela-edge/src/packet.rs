@@ -116,21 +116,10 @@ pub const REQUIRED_PACKET_FILES: &[&str] = &[
     "candidate-bridges.json",
     "mcp-session.json",
 ];
-
-pub fn required_packet_files() -> &'static [&'static str] {
-    REQUIRED_PACKET_FILES
-}
-
 /// Canonical-only packet artifacts. Use when checking proof-bearing
 /// correctness, not packet completeness.
 pub fn canonical_packet_files() -> &'static [&'static str] {
     CANONICAL_PACKET_FILES
-}
-
-/// Derived packet artifacts. Use when reasoning about projections that
-/// can be regenerated from the canonical layer.
-pub fn derived_packet_artifacts() -> &'static [&'static str] {
-    DERIVED_PACKET_ARTIFACTS
 }
 
 #[derive(Debug, Deserialize)]

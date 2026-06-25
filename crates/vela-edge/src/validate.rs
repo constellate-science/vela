@@ -278,14 +278,6 @@ pub fn quality_report(source_path: &Path, options: QualityCheckOptions) -> Quali
         },
     }
 }
-
-pub fn quality_report_json(
-    source_path: &Path,
-    options: QualityCheckOptions,
-) -> Result<String, serde_json::Error> {
-    serde_json::to_string_pretty(&quality_report(source_path, options))
-}
-
 fn schema_section(report: &ValidationReport) -> QualityCheckSection {
     let diagnostics = report
         .errors

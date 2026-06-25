@@ -10,10 +10,8 @@
 //! confidence thresholds. The observer makes those lenses explicit.
 
 use chrono::Datelike;
-use colored::Colorize;
 
 use vela_protocol::bundle::FindingBundle;
-use vela_protocol::cli_style as style;
 
 /// An observer policy — a named lens over the frontier.
 pub struct ObserverPolicy {
@@ -338,91 +336,6 @@ pub fn diff_views(view_a: &ObserverView, view_b: &ObserverView) -> Vec<Disagreem
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     disagreements
-}
-
-/// Print an observer view to stdout.
-pub fn print_view(view: &ObserverView) {
-    println!();
-    println!(
-        "  {}",
-        format!("VELA · OBSERVER · {}", view.policy.to_uppercase()).dimmed()
-    );
-    println!("  {}", style::tick_row(80));
-    println!(
-        "  {} findings shown · {} hidden (below threshold) · {} total",
-        view.findings.len(),
-        view.hidden,
-        view.total
-    );
-    println!();
-    println!(
-        "  {}",
-        format!(
-            "{:<5} {:<16} {:>8} {:>8}  assertion",
-            "rank", "id", "orig", "score"
-        )
-        .dimmed()
-    );
-
-    for sf in &view.findings {
-        println!(
-            "  {:<5} {:<16} {:>8.3} {:>8.3}  {}",
-            sf.rank, sf.finding_id, sf.original_confidence, sf.observer_score, sf.label
-        );
-    }
-    println!();
-}
-
-/// Print a diff between two observer views.
-pub fn print_diff(policy_a: &str, policy_b: &str, disagreements: &[Disagreement], limit: usize) {
-    println!();
-    println!(
-        "  {}",
-        format!(
-            "VELA · OBSERVER · DIFF · {} VS {}",
-            policy_a.to_uppercase(),
-            policy_b.to_uppercase()
-        )
-        .dimmed()
-    );
-    println!("  {}", style::tick_row(90));
-    println!("  top {} disagreements by score delta", limit);
-    println!();
-    println!(
-        "  {}",
-        format!(
-            "{:<16} {:>10} {:>10} {:>8}  assertion",
-            "id", policy_a, policy_b, "delta"
-        )
-        .dimmed()
-    );
-
-    for d in disagreements.iter().take(limit) {
-        let rank_a = d
-            .rank_a
-            .map(|r| format!("#{} ({:.3})", r, d.score_a))
-            .unwrap_or_else(|| "hidden".into());
-        let rank_b = d
-            .rank_b
-            .map(|r| format!("#{} ({:.3})", r, d.score_b))
-            .unwrap_or_else(|| "hidden".into());
-
-        let label = if d.label.len() > 40 {
-            let mut end = 40;
-            while end > 0 && !d.label.is_char_boundary(end) {
-                end -= 1;
-            }
-            format!("{}...", &d.label[..end])
-        } else {
-            d.label.clone()
-        };
-
-        println!(
-            "  {:<16} {:>10} {:>10} {:>8.3}  {}",
-            d.finding_id, rank_a, rank_b, d.delta, label
-        );
-    }
-    println!();
 }
 
 #[cfg(test)]
