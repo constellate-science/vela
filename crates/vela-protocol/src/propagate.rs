@@ -9,10 +9,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use chrono::Utc;
 use sha2::{Digest, Sha256};
 
-use colored::Colorize;
-
 use crate::bundle::{FindingBundle, ReviewAction, ReviewEvent};
-use crate::cli_style as style;
 use crate::project::Project;
 
 /// The type of correction being propagated.
@@ -288,59 +285,6 @@ fn make_event(
         evidence_considered: Vec::new(),
         state_change: None,
     }
-}
-
-/// Create a review event recording a retraction with a human-readable reason.
-pub fn make_retraction_event(finding_id: &str, reason: &str) -> ReviewEvent {
-    let now = Utc::now().to_rfc3339();
-    make_event(
-        finding_id,
-        "retraction",
-        &now,
-        ReviewAction::Flagged {
-            flag_type: "retracted".into(),
-        },
-        reason,
-    )
-}
-
-/// Print a propagation result to stdout.
-pub fn print_result(result: &PropagationResult, action_label: &str, finding_id: &str) {
-    println!();
-    println!(
-        "  {}",
-        format!(
-            "VELA · PROPAGATE · {} · {}",
-            action_label.to_uppercase(),
-            finding_id
-        )
-        .dimmed()
-    );
-    println!("  {}", style::tick_row(60));
-    println!("  {} findings affected", result.affected);
-
-    for (depth, ids) in result.cascade.iter().enumerate() {
-        if !ids.is_empty() {
-            println!("  depth {}: {} findings", depth + 1, ids.len());
-            for id in ids {
-                println!("    · {}", id);
-            }
-        }
-    }
-
-    if !result.events.is_empty() {
-        println!();
-        println!("  review events created: {}", result.events.len());
-        for event in &result.events {
-            println!(
-                "    {} · {} · {}",
-                event.id.dimmed(),
-                event.finding_id,
-                event.reason
-            );
-        }
-    }
-    println!();
 }
 
 #[cfg(test)]

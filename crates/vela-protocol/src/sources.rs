@@ -6,7 +6,6 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -352,11 +351,6 @@ pub fn sources_for_finding<'a>(project: &'a Project, finding_id: &str) -> Vec<&'
         })
         .collect()
 }
-
-pub fn source_evidence_map(project: &Project) -> Value {
-    source_evidence_map_from_atoms(&project.evidence_atoms)
-}
-
 pub fn source_evidence_map_from_atoms(evidence_atoms: &[EvidenceAtom]) -> Value {
     let mut by_source = BTreeMap::<String, Vec<Value>>::new();
     for atom in evidence_atoms {
@@ -401,69 +395,6 @@ pub fn condition_matrix(records: &[ConditionRecord]) -> Value {
         "conditions": rows,
     })
 }
-
-pub fn attach_local_source_details(
-    project: &mut Project,
-    finding_hashes: &BTreeMap<String, String>,
-    finding_source_types: &BTreeMap<String, String>,
-) {
-    if finding_hashes.is_empty() && finding_source_types.is_empty() {
-        return;
-    }
-    let mut remap = BTreeMap::<String, String>::new();
-    for source in &mut project.sources {
-        let hashes = source
-            .finding_ids
-            .iter()
-            .filter_map(|finding_id| finding_hashes.get(finding_id))
-            .collect::<BTreeSet<_>>();
-        if hashes.len() == 1
-            && let Some(hash) = hashes.into_iter().next().cloned()
-        {
-            source.content_hash = Some(hash);
-        }
-        let source_types = source
-            .finding_ids
-            .iter()
-            .filter_map(|finding_id| finding_source_types.get(finding_id))
-            .collect::<BTreeSet<_>>();
-        if source_types.len() == 1
-            && let Some(source_type) = source_types.into_iter().next()
-        {
-            source.source_type = normalize_source_type(source_type);
-        }
-        let old_id = source.id.clone();
-        source.id = source_id(
-            &source.source_type,
-            &source.locator,
-            source.content_hash.as_deref(),
-            source.doi.as_deref(),
-            source.pmid.as_deref(),
-            &source.title,
-        );
-        if source.id != old_id {
-            remap.insert(old_id, source.id.clone());
-        }
-    }
-    if remap.is_empty() {
-        crate::project::recompute_stats(project);
-        return;
-    }
-    for atom in &mut project.evidence_atoms {
-        if let Some(new_source_id) = remap.get(&atom.source_id) {
-            atom.source_id = new_source_id.clone();
-            atom.id = evidence_atom_id(
-                &atom.source_id,
-                &atom.finding_id,
-                atom.locator.as_deref(),
-                &atom.measurement_or_claim,
-                &atom.evidence_type,
-            );
-        }
-    }
-    crate::project::recompute_stats(project);
-}
-
 pub fn source_record_for_finding(finding: &FindingBundle) -> SourceRecord {
     let source_type = normalize_source_type(&finding.provenance.source_type);
     let locator = source_locator(&finding.provenance, &finding.id);
@@ -1035,15 +966,6 @@ pub fn source_has_canonical_locator(source: &SourceRecord) -> bool {
             || source.pmid.is_some()
             || source.content_hash.is_some())
 }
-
-pub fn now_imported_at_fallback(value: &str) -> String {
-    if value.trim().is_empty() {
-        Utc::now().to_rfc3339()
-    } else {
-        value.to_string()
-    }
-}
-
 fn push_unique(values: &mut Vec<String>, value: &str) {
     if !values.iter().any(|existing| existing == value) {
         values.push(value.to_string());

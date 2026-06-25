@@ -72,13 +72,6 @@ impl AxiomVerdict {
             Self::UnlistedAxiom => "unlisted_axiom",
         }
     }
-
-    /// True only for [`AxiomVerdict::KernelClean`]. The gate treats every
-    /// other verdict as a compromised method.
-    #[must_use]
-    pub fn is_clean(self) -> bool {
-        self == Self::KernelClean
-    }
 }
 
 /// A content-addressed axiom + kernel-checker policy.

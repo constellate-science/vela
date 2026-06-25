@@ -178,17 +178,6 @@ impl Contradiction {
         self
     }
 
-    /// A reviewer takes the contradiction up (not yet adjudicated).
-    /// Marks it open as of `at` if not already opened.
-    #[must_use]
-    pub fn under_review(mut self, by: &str, at: &str) -> Self {
-        self.opened_at.get_or_insert_with(|| at.to_string());
-        self.with_status(ContradictionStatus::UnderReview {
-            by: by.to_string(),
-            at: at.to_string(),
-        })
-    }
-
     /// A named expert confirms the contradiction is real. Marks it open
     /// as of `at` if not already opened.
     #[must_use]

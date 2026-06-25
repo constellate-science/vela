@@ -217,28 +217,6 @@ pub fn review_requirement_for_operation(
         policy_sources: policy_sources.into_iter().collect(),
     }
 }
-
-pub fn attestation_enforcement_enabled(summary: Option<&FrontierPolicySummary>) -> bool {
-    summary
-        .and_then(|s| {
-            s.documents
-                .iter()
-                .find(|doc| doc.kind == PolicyDocumentKind::Review)
-        })
-        .and_then(|doc| {
-            doc.front_matter
-                .get("enforce_attestations")
-                .or_else(|| doc.front_matter.get("attestation_enforcement"))
-        })
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(false)
-}
-
-pub fn override_reason_is_explicit(reason: &str) -> bool {
-    let lower = reason.to_ascii_lowercase();
-    lower.contains("policy_override:") || lower.contains("attestation_override:")
-}
-
 fn frontier_root(path: &Path) -> PathBuf {
     if path.is_dir() {
         path.to_path_buf()

@@ -4,17 +4,12 @@
 //! analysis run. The trace may draft review proposals, but it does not mutate
 //! frontier state by itself.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
-
-use vela_protocol::events::StateTarget;
-use vela_protocol::project::Project;
-use vela_protocol::proposals::{self, StateProposal};
+use serde_json::Value;
 
 pub const RESEARCH_TRACE_SCHEMA: &str = "vela.research_trace.v0.1";
 
@@ -260,73 +255,6 @@ impl ResearchTrace {
             .collect()
     }
 }
-pub fn proposals_from_trace(trace: &ResearchTrace, frontier: &Project) -> Vec<StateProposal> {
-    let mut proposals = Vec::new();
-    let source_refs = vec![trace.trace_id.clone()];
-    let actor_id = trace.producer.id.clone();
-    let actor_type = trace.producer.kind.clone();
-    let frontier_id = frontier
-        .frontier_id
-        .clone()
-        .unwrap_or_else(|| frontier.project.name.clone());
-
-    for candidate in &trace.state_outputs.candidate_findings {
-        let payload = json!({
-            "trace_id": trace.trace_id,
-            "frontier": frontier_id,
-            "output_kind": "candidate_finding",
-            "candidate": candidate,
-            "source_inputs": sources_by_id(trace, &candidate.evidence_source_ids),
-            "verifier_attachments": trace.verifier_attachments,
-            "formalization_fidelity": trace.formalization_fidelity,
-            "authority_boundary": trace.authority_boundary,
-        });
-        proposals.push(proposals::new_proposal(
-            "research_trace.review",
-            StateTarget {
-                r#type: "frontier_observation".to_string(),
-                id: observation_id(&trace.trace_id, &candidate.id),
-            },
-            actor_id.clone(),
-            actor_type.clone(),
-            format!(
-                "Review candidate finding `{}` from research trace",
-                candidate.id
-            ),
-            payload,
-            source_refs.clone(),
-            candidate.caveats.clone(),
-        ));
-    }
-
-    for need in &trace.state_outputs.open_needs {
-        let payload = json!({
-            "trace_id": trace.trace_id,
-            "frontier": frontier_id,
-            "output_kind": "open_need",
-            "open_need": need,
-            "source_inputs": trace.source_inputs,
-            "verifier_attachments": trace.verifier_attachments,
-            "formalization_fidelity": trace.formalization_fidelity,
-            "authority_boundary": trace.authority_boundary,
-        });
-        proposals.push(proposals::new_proposal(
-            "research_trace.review",
-            StateTarget {
-                r#type: "frontier_observation".to_string(),
-                id: observation_id(&trace.trace_id, &need.id),
-            },
-            actor_id.clone(),
-            actor_type.clone(),
-            format!("Review open need `{}` from research trace", need.id),
-            payload,
-            source_refs.clone(),
-            Vec::new(),
-        ));
-    }
-    proposals
-}
-
 pub fn load_traces_for_frontier(source_path: Option<&Path>) -> Result<Vec<ResearchTrace>, String> {
     let Some(root) = trace_root(source_path) else {
         return Ok(Vec::new());
@@ -428,28 +356,6 @@ fn trace_root(source_path: Option<&Path>) -> Option<PathBuf> {
         source.parent().map(Path::to_path_buf)
     }
 }
-
-fn sources_by_id(trace: &ResearchTrace, source_ids: &[String]) -> Vec<TraceSourceInput> {
-    let by_id = trace
-        .source_inputs
-        .iter()
-        .map(|source| (source.id.as_str(), source.clone()))
-        .collect::<BTreeMap<_, _>>();
-    source_ids
-        .iter()
-        .filter_map(|id| by_id.get(id.as_str()).cloned())
-        .collect()
-}
-
-fn observation_id(trace_id: &str, output_id: &str) -> String {
-    let bytes = vela_protocol::canonical::to_canonical_bytes(&json!({
-        "trace_id": trace_id,
-        "output_id": output_id,
-    }))
-    .unwrap_or_default();
-    format!("vobs_{}", &hex::encode(Sha256::digest(bytes))[..16])
-}
-
 fn validate_authority_boundary(boundary: &AuthorityBoundary, issues: &mut Vec<String>) {
     if boundary.trace_is_truth {
         issues.push("authority_boundary.trace_is_truth must be false".to_string());
@@ -549,7 +455,7 @@ mod tests {
                 name: "Test agent".to_string(),
             },
             objective: "Test bounded trace validation.".to_string(),
-            scope: json!({"frontier": "test"}),
+            scope: serde_json::json!({"frontier": "test"}),
             source_inputs: vec![TraceSourceInput {
                 id: "source_a".to_string(),
                 kind: "paper".into(),

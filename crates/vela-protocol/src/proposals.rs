@@ -1,7 +1,7 @@
 //! Proposal-first frontier writes and proof freshness tracking.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
@@ -1708,16 +1708,6 @@ pub fn reject_at_path_signed(
     repo::save_to_path(path, &frontier)?;
     Ok(())
 }
-
-pub fn request_revision_at_path(
-    path: &Path,
-    proposal_id: &str,
-    reviewer: &str,
-    reason: &str,
-) -> Result<(), String> {
-    request_revision_at_path_signed(path, proposal_id, reviewer, reason, None)
-}
-
 /// Request revision on a proposal, signing the resulting
 /// `review.revision_requested` event under the reviewer key when supplied.
 pub fn request_revision_at_path_signed(
@@ -4137,11 +4127,6 @@ pub fn manifest_hash(path: &Path) -> Result<String, String> {
         .map_err(|e| format!("Failed to read manifest '{}': {e}", path.display()))?;
     Ok(hex::encode(Sha256::digest(bytes)))
 }
-
-pub fn repo_proposals_dir(root: &Path) -> PathBuf {
-    root.join(".vela/proposals")
-}
-
 // ── Review-decision projection + parity (status derived from the log) ──
 //
 // A proposal's decision state is no longer a free-floating mutable field:

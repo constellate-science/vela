@@ -888,16 +888,6 @@ pub fn evidence_atom_hash(atom: &crate::sources::EvidenceAtom) -> String {
     let bytes = canonical::to_canonical_bytes(atom).unwrap_or_default();
     format!("sha256:{}", hex::encode(Sha256::digest(bytes)))
 }
-
-pub fn evidence_atom_hash_by_id(frontier: &Project, atom_id: &str) -> String {
-    frontier
-        .evidence_atoms
-        .iter()
-        .find(|atom| atom.id == atom_id)
-        .map(evidence_atom_hash)
-        .unwrap_or_else(|| NULL_HASH.to_string())
-}
-
 pub fn finding_hash(finding: &FindingBundle) -> String {
     // Per Protocol §5, links are "review surfaces" — typed relationships
     // between findings inferred at compile or review time, NOT part of the
@@ -1068,11 +1058,6 @@ pub fn replay_report(frontier: &Project) -> ReplayReport {
         conflicts,
     }
 }
-
-pub fn replay_report_json(frontier: &Project) -> Value {
-    serde_json::to_value(replay_report(frontier)).unwrap_or_else(|_| json!({"ok": false}))
-}
-
 pub fn summarize(frontier: &Project) -> EventLogSummary {
     let mut kinds = BTreeMap::<String, usize>::new();
     let mut seen = BTreeSet::<String>::new();

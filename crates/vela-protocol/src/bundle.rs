@@ -712,11 +712,9 @@ impl Confidence {
 /// Returns a fully populated Confidence with components and aggregate score,
 /// using a deterministic, auditable support computation.
 ///
-/// Back-compat wrapper: derives `n_replicated` from the legacy
-/// `Evidence.replicated` / `Evidence.replication_count` scalars, with
-/// `n_failed` and `n_partial` defaulting to zero. Use
-/// `Project::compute_confidence_for` when the v0.32 `Replication`
-/// collection is available — that's the authoritative path.
+/// Derives `n_replicated` from the legacy `Evidence.replicated` /
+/// `Evidence.replication_count` scalars, with `n_failed` and `n_partial`
+/// defaulting to zero.
 pub fn compute_confidence(
     evidence: &Evidence,
     conditions: &Conditions,
@@ -774,10 +772,8 @@ pub fn causal_consistency_multiplier(
 }
 
 /// Pure-math kernel for the frontier-epistemic confidence formula. Takes
-/// replication counts and (v0.38.1) the optional causal typing as inputs
-/// so the same math drives both the legacy scalar path
-/// (`compute_confidence`) and the v0.32+ Project-aware path
-/// (`Project::compute_confidence_for`).
+/// replication counts and (v0.38.1) the optional causal typing as inputs,
+/// driving the `compute_confidence` scalar path.
 ///
 /// Replication strength schedule:
 /// `clamp(0.7 + 0.1 * n_replicated + 0.05 * n_partial - 0.10 * n_failed, 0.4, 1.0)`

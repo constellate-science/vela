@@ -423,44 +423,6 @@ impl Project {
         derive_frontier_id_from_meta(&self.project)
     }
 
-    /// Materialize the frontier_id field if absent. Idempotent.
-    pub fn ensure_frontier_id(&mut self) -> String {
-        if self.frontier_id.is_none() {
-            self.frontier_id = Some(self.frontier_id());
-        }
-        self.frontier_id.clone().unwrap()
-    }
-
-    /// v0.36.1: Compute frontier-epistemic confidence for a finding using
-    /// the v0.32 `Replication` collection as the authoritative source. A
-    /// failed replication subtracts from confidence; a successful one
-    /// adds to it; partials half-add. This closes the long-standing
-    /// "two sources of truth" between `Evidence.replicated` (the legacy
-    /// scalar set when a finding was first asserted) and
-    /// `Project.replications` (the kernel objects accumulated over time).
-    ///
-    /// Falls back to the legacy scalar only when no `Replication` record
-    /// targets this finding's id — preserves behavior for unmigrated
-    /// frontiers.
-    #[must_use]
-    pub fn compute_confidence_for(&self, bundle: &FindingBundle) -> crate::bundle::Confidence {
-        let (n_repl, n_failed, n_partial) = if bundle.evidence.replicated {
-            (bundle.evidence.replication_count.unwrap_or(1), 0, 0)
-        } else {
-            (0, 0, 0)
-        };
-        crate::bundle::compute_confidence_from_components(
-            &bundle.evidence,
-            &bundle.conditions,
-            bundle.flags.contested,
-            n_repl,
-            n_failed,
-            n_partial,
-            bundle.assertion.causal_claim,
-            bundle.assertion.causal_evidence_grade,
-        )
-    }
-
     /// v0.8: iterate the cross-frontier dependencies (those with
     /// `vfr_id` set). Pre-v0.8 compile-time deps without `vfr_id`
     /// are filtered out.
