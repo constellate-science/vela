@@ -544,6 +544,23 @@ pub fn layout_issues(path: &Path, project: &Project) -> Vec<RepoLayoutIssue> {
             ),
         ));
     }
+    // 2026-06-25 (repo-native): the frozen-verifier pin must match the witnesses
+    // on disk, so the pin is load-bearing rather than decorative. This catches a
+    // witness added or re-kinded without a re-materialize, which the snapshot /
+    // event hashes (computed over frontier.json, not the sidecar witnesses) do
+    // not see. Skipped for pre-pin locks, whose `verifiers.package` is empty.
+    if !lock.verifiers.package.is_empty() {
+        let actual_kinds = collect_verifier_kinds(path);
+        if lock.verifiers.kinds != actual_kinds {
+            issues.push(issue(
+                "frontier_lock_mismatch",
+                format!(
+                    "vela.lock verifiers.kinds does not match the witnesses on disk: lock={:?}, current={actual_kinds:?} (run `vela frontier materialize`)",
+                    lock.verifiers.kinds
+                ),
+            ));
+        }
+    }
 
     let visible_path = path.join("frontier.json");
     if !visible_path.is_file() {
@@ -1446,5 +1463,39 @@ mod tests {
             "sha256:event-log",
             "sha256:new-snapshot"
         ));
+    }
+
+    #[test]
+    fn collect_verifier_kinds_scans_witnesses_dir_sorted_unique() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let root = tmp.path();
+        let wdir = root.join("witnesses");
+        fs::create_dir_all(&wdir).expect("mkdir witnesses");
+        fs::write(wdir.join("a.witness.json"), r#"{"kind":"sidon","n":8}"#).unwrap();
+        fs::write(wdir.join("b.witness.json"), r#"{"kind":"golomb","n":5}"#).unwrap();
+        fs::write(wdir.join("c.witness.json"), r#"{"kind":"sidon","n":9}"#).unwrap();
+        // a non-witness json is ignored
+        fs::write(wdir.join("notes.json"), r#"{"kind":"ignored"}"#).unwrap();
+        // When a top-level witnesses/ exists, only it is scanned, so a stray
+        // witness elsewhere is NOT picked up (mirrors collect_witness_files).
+        fs::write(root.join("stray.witness.json"), r#"{"kind":"cap"}"#).unwrap();
+        assert_eq!(
+            collect_verifier_kinds(root),
+            vec!["golomb".to_string(), "sidon".to_string()]
+        );
+    }
+
+    #[test]
+    fn collect_verifier_kinds_falls_back_to_whole_tree_when_no_witnesses_dir() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let root = tmp.path();
+        let nested = root.join("discoveries").join("sweep");
+        fs::create_dir_all(&nested).expect("mkdir nested");
+        fs::write(nested.join("x.witness.json"), r#"{"kind":"costas"}"#).unwrap();
+        // .vela is skipped even though it may hold event payloads
+        let vela = root.join(".vela").join("events");
+        fs::create_dir_all(&vela).unwrap();
+        fs::write(vela.join("e.witness.json"), r#"{"kind":"should_skip"}"#).unwrap();
+        assert_eq!(collect_verifier_kinds(root), vec!["costas".to_string()]);
     }
 }
