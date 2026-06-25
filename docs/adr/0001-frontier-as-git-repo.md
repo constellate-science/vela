@@ -2,6 +2,13 @@
 
 - Status: Accepted 2026-06-24. Phase 0 landed (agent-doable); Phase 1+ pending
   Will key-custody. Target sharpened 2026-06-25 to **repo-native Vela** (below).
+- 2026-06-25 progress (no re-sign needed): the lock self-describes + enforces its
+  verifier contract (`verifiers:` pin), and the producing repo now hydrates its
+  frontiers from GIT (`vela-frontiers`), not the hub — the hub is demoted to a
+  fallback/index. A plain `git clone` of vela-frontiers reproduces every witness
+  with the hub offline; the gate git-hydrates all six and stays 0 FAIL. This is
+  the source-of-truth half of the cutover, achieved without the path migration or
+  the re-sign ceremony.
 - Deciders: Will (key custody), substrate
 - Question that triggered it: "Why are we rebuilding git ourselves instead of
   referencing a GitHub repo?"
