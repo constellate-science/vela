@@ -1,0 +1,80 @@
+# vela-check — the producer-facing PR gate (ADR 0001 Phase 0e).
+#
+# Drop this into a frontier repo's PR workflow to make the Vela binary the
+# REQUIRED status check on every proposed change. It is the git-native
+# replacement for the bespoke accept boundary: the model (or a producer) opens
+# a PR, and this re-derives the frontier's truth as a status check, exactly
+# where the producer already lives. Enable it as a required check in branch
+# protection and merging a PR is only possible once the frozen verifiers agree.
+#
+# What it proves on every PR, from a clean checkout:
+#   1. reproduce      — the frozen verifiers re-derive every witness from scratch.
+#   2. check --strict — the trust gate (signals + proof readiness) is clean.
+#   3. hash-parity    — the recomputed event_log_hash + snapshot_hash equal the
+#                       committed vela.lock, i.e. the working tree IS the signed
+#                       state (this is the ADR 0a/0b property: the hashes are
+#                       load-path independent and materialize is deterministic,
+#                       so a green check here means what merges is what verifies).
+#
+# It NEVER signs anything: the human-key accept stays the reviewer's signed
+# event committed in the PR. This action only re-derives and reports.
+
+name: vela-check
+description: Re-derive a Vela frontier (reproduce + check --strict + hash-parity) as a PR status check.
+
+inputs:
+  frontier:
+    description: Path to the frontier directory in the repo (contains .vela/, witnesses/, vela.lock).
+    required: true
+  vela-version:
+    description: Pinned vela release tag to install (e.g. v0.710.0). Empty installs the latest release.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Install vela (pinned binary, no from-source build)
+      shell: bash
+      run: |
+        set -euo pipefail
+        ver="${{ inputs.vela-version }}"
+        # install.sh fetches the right platform asset from the GitHub release
+        # and verifies its sha256 before placing the binary on PATH.
+        if [ -x "./install.sh" ]; then
+          VELA_VERSION="$ver" ./install.sh
+        else
+          curl -fsSL https://raw.githubusercontent.com/constellate-science/vela/main/install.sh | VELA_VERSION="$ver" sh
+        fi
+        vela --version
+
+    - name: reproduce (frozen verifiers re-derive every witness)
+      shell: bash
+      run: vela reproduce "${{ inputs.frontier }}"
+
+    - name: check --strict (trust gate)
+      shell: bash
+      run: vela check "${{ inputs.frontier }}" --strict
+
+    - name: hash-parity (recomputed hashes == committed vela.lock)
+      shell: bash
+      run: |
+        set -euo pipefail
+        f="${{ inputs.frontier }}"
+        out="$(vela frontier materialize "$f" --json)"
+        snap="$(printf '%s' "$out" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("snapshot_hash",""))')"
+        elog="$(printf '%s' "$out" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("event_log_hash",""))')"
+        lock="$f/vela.lock"
+        if [ ! -f "$lock" ]; then
+          echo "::error::no vela.lock at $lock — cannot prove the working tree matches the signed state"
+          exit 1
+        fi
+        lsnap="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("snapshot_hash",""))' "$lock")"
+        lelog="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("event_log_hash",""))' "$lock")"
+        echo "recomputed: snapshot=$snap event_log=$elog"
+        echo "vela.lock:  snapshot=$lsnap event_log=$lelog"
+        if [ -z "$snap" ] || [ "$snap" != "$lsnap" ] || [ "$elog" != "$lelog" ]; then
+          echo "::error::hash-parity failed — the working tree does not match the committed vela.lock"
+          exit 1
+        fi
+        echo "hash-parity OK: the working tree IS the signed state"

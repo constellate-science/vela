@@ -1,0 +1,36 @@
+# Producer on-ramp gate (ADR 0001 Phase 0e). This is the workflow a FRONTIER
+# repo runs on every PR, and the one to mark REQUIRED in branch protection.
+#
+# The git-native producer loop becomes: fork -> edit/add a witness -> open a PR.
+# This check re-derives the frontier (reproduce + check --strict + hash-parity)
+# from a clean checkout. A reviewer's accept is a human-key-signed event
+# committed in the PR; merge is gated on this check passing, never on a click.
+#
+# This file is the TEMPLATE a frontier repo copies. In a frontier repo, change
+# the trigger to `pull_request` and set `frontier:` to that repo's frontier
+# path. It is `workflow_dispatch`-only here on purpose: the substrate repo has
+# no `examples/sidon-sets` frontier of its own (the substrate's gate is
+# conformance.yml), so an auto `pull_request` trigger would fail against a path
+# that does not exist here. Frontier repos flip the two commented lines below.
+name: vela-check
+
+on:
+  workflow_dispatch:
+  # In a FRONTIER repo, enable this and mark the job a required status check:
+  # pull_request:
+
+concurrency:
+  group: vela-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  re-derive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/vela-check
+        with:
+          # A frontier repo points this at its own frontier directory.
+          frontier: examples/sidon-sets
+          # Pin to a release in production; empty tracks latest.
+          vela-version: ""
