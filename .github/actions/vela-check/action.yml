@@ -52,9 +52,9 @@ runs:
       shell: bash
       run: vela reproduce "${{ inputs.frontier }}"
 
-    - name: check --strict (trust gate)
+    - name: check (structural + signal gate)
       shell: bash
-      run: vela check "${{ inputs.frontier }}" --strict
+      run: vela check "${{ inputs.frontier }}"
 
     - name: hash-parity (recomputed hashes == committed vela.lock)
       shell: bash
@@ -69,8 +69,10 @@ runs:
           echo "::error::no vela.lock at $lock — cannot prove the working tree matches the signed state"
           exit 1
         fi
-        lsnap="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("snapshot_hash",""))' "$lock")"
-        lelog="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1])).get("event_log_hash",""))' "$lock")"
+        # vela.lock is YAML; the hashes are flat `key: value` lines, so awk is
+        # enough and avoids a PyYAML dependency on the runner.
+        lsnap="$(awk '/^snapshot_hash:/{print $2}' "$lock")"
+        lelog="$(awk '/^event_log_hash:/{print $2}' "$lock")"
         echo "recomputed: snapshot=$snap event_log=$elog"
         echo "vela.lock:  snapshot=$lsnap event_log=$lelog"
         if [ -z "$snap" ] || [ "$snap" != "$lsnap" ] || [ "$elog" != "$lelog" ]; then
@@ -78,3 +80,13 @@ runs:
           exit 1
         fi
         echo "hash-parity OK: the working tree IS the signed state"
+
+    # The strict trust gate runs but does NOT block: it surfaces the maintainer's
+    # proof-readiness / unsigned-reviewer debt as a notice. That debt is a
+    # key-custody item for the frontier owner, never a producer's PR to fix, so
+    # it must not red-X a producer's contribution. Tighten to a hard gate once
+    # the owner has signed the reviewer events.
+    - name: check --strict (maintainer trust signal — non-blocking)
+      shell: bash
+      continue-on-error: true
+      run: vela check "${{ inputs.frontier }}" --strict

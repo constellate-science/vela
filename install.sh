@@ -17,14 +17,19 @@ case "${OS}-${ARCH}" in
   *) echo "Unsupported: ${OS}-${ARCH}"; exit 1 ;;
 esac
 
-# Get latest release
-LATEST=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
-URL="https://github.com/${REPO}/releases/download/${LATEST}/${NAME}"
+# Resolve the release tag. VELA_VERSION pins an exact tag (e.g. v0.710.0) — used
+# by CI (the vela-check action) so a frontier gate is reproducible; empty falls
+# back to the latest release.
+TAG="${VELA_VERSION:-}"
+if [ -z "$TAG" ]; then
+  TAG=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name"' | sed -E 's/.*"([^"]+)".*/\1/')
+fi
+URL="https://github.com/${REPO}/releases/download/${TAG}/${NAME}"
 SUM_URL="${URL}.sha256"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-echo "Installing vela ${LATEST} for ${OS}/${ARCH}..."
+echo "Installing vela ${TAG} for ${OS}/${ARCH}..."
 curl -fsSL "$URL" -o "$TMP/$BINARY"
 
 if curl -fsSL "$SUM_URL" -o "$TMP/$BINARY.sha256"; then
