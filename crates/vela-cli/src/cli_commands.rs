@@ -155,11 +155,6 @@ pub(crate) enum Commands {
     /// the audit, the federation health. Read in two seconds.
     Status {
         frontier: PathBuf,
-        /// Also compare the local event log to the hub remote
-        /// (up-to-date / differs / not-published), like `git status -uno`
-        /// against an upstream. Resolves the hub from your `vela id` profile.
-        #[arg(long)]
-        remote: bool,
         /// Output stable JSON for programmatic callers.
         #[arg(long)]
         json: bool,
@@ -340,19 +335,6 @@ pub(crate) enum Commands {
         /// tier. Used by the offline round-trip conformance pin.
         #[arg(long)]
         blobs_from: Option<PathBuf>,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Bring a local checkout up to date with its hub remote — the git-style
-    /// pull. Fast-forwards when the hub is strictly ahead; refuses with
-    /// guidance (never a silent merge) when histories diverge or you are
-    /// ahead. Divergence resolution is a human/proposal step, by doctrine.
-    Pull {
-        /// Path to the local frontier (`.vela/` repo or frontier.json).
-        frontier: PathBuf,
-        /// Hub to pull from. Defaults to your configured hub.
-        #[arg(long)]
-        from: Option<String>,
         #[arg(long)]
         json: bool,
     },
@@ -2590,28 +2572,6 @@ pub(crate) enum RegistryAction {
         #[arg(long)]
         json: bool,
     },
-    /// Incrementally deposit a frontier's new events to a hub via the
-    /// owner-authenticated append endpoint (`POST /entries/{vfr}/append`),
-    /// instead of re-publishing the whole snapshot. Computes the delta vs the
-    /// hub's current event-log tail, signs the batch under the owner key, and
-    /// posts only the new records. Owner-deposit path: it does not run the
-    /// Evidence-CI accept gate (a reviewer accept still does).
-    Append {
-        /// Path to the local frontier (`.vela/` repo or frontier.json).
-        frontier: PathBuf,
-        /// Hub base URL. Optional: defaults to your configured identity's hub.
-        #[arg(long)]
-        to: Option<String>,
-        /// Path to the owner's Ed25519 private key. Optional: defaults to
-        /// your configured identity's key.
-        #[arg(long)]
-        key: Option<PathBuf>,
-        /// Cap the number of new records pushed this run (0 = all).
-        #[arg(long, default_value_t = 0)]
-        limit: usize,
-        #[arg(long)]
-        json: bool,
-    },
     /// Hub-native proposal — the frictionless second-signer on-ramp.
     ///
     /// A contributor with only a keypair and the hub URL submits a
@@ -2757,19 +2717,9 @@ pub(crate) enum RegistryAction {
         /// Registry to pull from
         #[arg(long)]
         from: Option<String>,
-        /// Output path for the pulled frontier. With --transitive, this
-        /// is the directory dependencies are also written into; without
-        /// it, this is the file path the primary lands at.
+        /// Output file path the pulled frontier lands at.
         #[arg(long)]
         out: PathBuf,
-        /// v0.8: also pull every cross-frontier dependency the primary
-        /// declares, recursively, verifying each pinned snapshot.
-        #[arg(long)]
-        transitive: bool,
-        /// v0.8: maximum recursion depth when --transitive is set.
-        /// Primary is depth 0; its direct deps are depth 1.
-        #[arg(long, default_value = "4")]
-        depth: usize,
         #[arg(long)]
         json: bool,
     },

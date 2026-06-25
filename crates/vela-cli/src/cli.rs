@@ -165,11 +165,7 @@ pub async fn run_command() {
                 }
             }
         }
-        Commands::Status {
-            frontier,
-            remote,
-            json,
-        } => cmd_status(&frontier, json, remote),
+        Commands::Status { frontier, json } => cmd_status(&frontier, json),
         Commands::Log {
             frontier,
             limit,
@@ -280,14 +276,6 @@ pub async fn run_command() {
         Commands::Frontier { action } => cmd_frontier(action),
         Commands::Queue { action } => cmd_queue(action),
         Commands::Registry { action } => cmd_registry(action),
-        Commands::Pull {
-            frontier,
-            from,
-            json,
-        } => {
-            let hub = crate::cli_identity::resolve_hub(from.as_deref());
-            crate::cli_registry::cmd_pull(&frontier, &hub, json);
-        }
         Commands::Workspace { action } => crate::cli_registry::cmd_workspace(action),
         Commands::Init {
             path,
@@ -2525,7 +2513,7 @@ fn cmd_link(action: LinkAction) {
                         if target_finding.flags.superseded {
                             target_warning = Some(format!(
                                 "warn · cross-frontier target '{target_vf}' in '{target_vfr}' has flags.superseded = true. \
-You may be linking to outdated wording. Pull --transitive and inspect the supersedes chain to find the current finding. \
+You may be linking to outdated wording. Inspect the supersedes chain to find the current finding. \
 Use --no-check-target to skip this check."
                             ));
                         }
@@ -4344,8 +4332,7 @@ Producer loop (clone -> reproduce -> ingest -> propose -> publish):
   publish       Push a frontier to the hub (owner/key/hub from your identity; alias: push)
 
 Sync:
-  status        One-screen frontier state; --remote compares against the hub upstream
-  pull          Fast-forward a local checkout from its hub remote (no silent merge)
+  status        One-screen frontier state
   log           Recent canonical state events
   diff          Preview a `vpr_*` proposal, or compare two frontier files
   history       State-transition replay for one finding
@@ -4485,12 +4472,7 @@ fn print_session_help() {
     );
     println!();
     println!("  SYNC");
-    println!(
-        "    status            One-screen frontier state; status --remote vs the hub upstream"
-    );
-    println!(
-        "    pull <dir>        Fast-forward a local checkout from its hub remote (no silent merge)"
-    );
+    println!("    status            One-screen frontier state");
     println!("    log               Recent canonical state events");
     println!();
     println!("  REVIEW (maintainers)");

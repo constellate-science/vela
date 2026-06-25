@@ -5,47 +5,11 @@ use std::path::Path;
 use vela_edge::doctor;
 use vela_edge::packet;
 use vela_protocol::cli_style as style;
-use vela_protocol::project;
 use vela_protocol::repo;
 
-/// Compare the local event log to the hub remote (the `--remote` half of
-/// `vela status`). Returns a JSON object: state is one of `up_to_date`,
-/// `differs`, `not_published`, or `unreachable`, alongside the local and (if
-/// known) hub event-log hashes. A pure read: it never mutates anything.
-fn remote_sync_status(project: &project::Project) -> serde_json::Value {
-    use vela_protocol::{events, registry};
-    let bare = |h: &str| h.strip_prefix("sha256:").unwrap_or(h).to_string();
-    let hub = crate::cli_identity::resolve_hub(None);
-    let vfr = project.frontier_id();
-    let local = bare(&events::event_log_hash(&project.events));
-    match registry::load_any(&hub) {
-        Err(e) => {
-            json!({"hub": hub, "state": "unreachable", "detail": e, "local_event_log_hash": local})
-        }
-        Ok(reg) => match registry::find_latest(&reg, &vfr) {
-            None => json!({"hub": hub, "state": "not_published", "local_event_log_hash": local}),
-            Some(entry) => {
-                let hub_hash = bare(&entry.latest_event_log_hash);
-                let state = if hub_hash == local {
-                    "up_to_date"
-                } else {
-                    "differs"
-                };
-                json!({
-                    "hub": hub,
-                    "state": state,
-                    "local_event_log_hash": local,
-                    "hub_event_log_hash": hub_hash,
-                })
-            }
-        },
-    }
-}
-
 /// v0.42: One-screen status. The `git status` analogue.
-pub(crate) fn cmd_status(path: &Path, json: bool, remote: bool) {
+pub(crate) fn cmd_status(path: &Path, json: bool) {
     let project = repo::load_from_path(path).unwrap_or_else(|e| fail_return(&e));
-    let remote_status = remote.then(|| remote_sync_status(&project));
 
     // Replay integrity: the one-line truth a stranger checks first.
     let replay = vela_protocol::reducer::verify_replay(&project);
@@ -109,7 +73,6 @@ pub(crate) fn cmd_status(path: &Path, json: bool, remote: bool) {
                     "underidentified": audit_summary.underidentified,
                     "underdetermined": audit_summary.underdetermined,
                 },
-                "remote": remote_status,
             }))
             .expect("serialize status")
         );
@@ -136,22 +99,6 @@ pub(crate) fn cmd_status(path: &Path, json: bool, remote: bool) {
         }
     );
     println!("  last event:  {}", last_event_ts.unwrap_or("none"));
-    if let Some(rs) = &remote_status {
-        let state = rs.get("state").and_then(|v| v.as_str()).unwrap_or("?");
-        let line = match state {
-            "up_to_date" => style::ok("up to date with remote"),
-            "differs" => style::warn(
-                "differs from remote — `vela pull` (hub ahead) / `vela push` (you ahead)",
-            ),
-            "not_published" => style::dim("not published to the hub yet").to_string(),
-            "unreachable" => style::warn(&format!(
-                "hub unreachable ({})",
-                rs.get("detail").and_then(|v| v.as_str()).unwrap_or("?")
-            )),
-            other => other.to_string(),
-        };
-        println!("  remote:      {line}");
-    }
     if !live_leases.is_empty() {
         println!("  leases:      {} live", live_leases.len());
         for l in live_leases.iter().take(5) {
