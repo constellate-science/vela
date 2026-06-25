@@ -66,40 +66,16 @@ pub struct LintReport {
 pub fn all_rules() -> Vec<LintRule> {
     vec![
         LintRule {
-            id: "L001".into(),
-            name: "small_sample".into(),
-            severity: Severity::Warning,
-            description: "Experimental finding with sample size < 10".into(),
-        },
-        LintRule {
             id: "L002".into(),
             name: "no_replication".into(),
             severity: Severity::Warning,
             description: "High-confidence finding without replication".into(),
         },
         LintRule {
-            id: "L003".into(),
-            name: "missing_species".into(),
-            severity: Severity::Warning,
-            description: "Experimental finding without species information".into(),
-        },
-        LintRule {
             id: "L004".into(),
             name: "confidence_mismatch".into(),
             severity: Severity::Warning,
             description: "Theoretical finding with unusually high confidence".into(),
-        },
-        LintRule {
-            id: "L005".into(),
-            name: "unreported_effect".into(),
-            severity: Severity::Warning,
-            description: "P-value reported but no effect size".into(),
-        },
-        LintRule {
-            id: "L006".into(),
-            name: "p_boundary".into(),
-            severity: Severity::Info,
-            description: "P-value near significance boundary (0.04-0.06)".into(),
         },
         LintRule {
             id: "L007".into(),
@@ -200,12 +176,6 @@ fn is_exact_or_verifier_backed(finding: &FindingBundle) -> bool {
         "computational" | "theoretical"
     )
 }
-
-pub fn check_sample_size(_finding: &FindingBundle) -> Vec<Diagnostic> {
-    // sample_size field removed (empirical-domain field); always empty.
-    Vec::new()
-}
-
 pub fn check_no_replication(finding: &FindingBundle) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
     // Skip exact / verifier-backed findings: "replication" there is the
@@ -228,12 +198,6 @@ pub fn check_no_replication(finding: &FindingBundle) -> Vec<Diagnostic> {
     }
     diags
 }
-
-pub fn check_missing_species(_finding: &FindingBundle) -> Vec<Diagnostic> {
-    // species field removed (empirical-domain field); always empty.
-    Vec::new()
-}
-
 pub fn check_confidence_mismatch(finding: &FindingBundle) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
     // Skip exact / verifier-backed findings: a frozen verifier re-derives the
@@ -257,17 +221,6 @@ pub fn check_confidence_mismatch(finding: &FindingBundle) -> Vec<Diagnostic> {
     }
     diags
 }
-
-pub fn check_unreported_effect(_finding: &FindingBundle) -> Vec<Diagnostic> {
-    // p_value and effect_size fields removed (empirical-domain fields); always empty.
-    Vec::new()
-}
-
-pub fn check_p_boundary(_finding: &FindingBundle) -> Vec<Diagnostic> {
-    // p_value field removed (empirical-domain field); always empty.
-    Vec::new()
-}
-
 pub fn check_missing_controls(finding: &FindingBundle) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
     if finding.evidence.evidence_type == "experimental" && !has_abstract_only_caveat(finding) {
@@ -639,12 +592,8 @@ pub fn lint(
     // Per-finding checks
     for finding in &frontier.findings {
         let mut finding_diags = Vec::new();
-        finding_diags.extend(check_sample_size(finding));
         finding_diags.extend(check_no_replication(finding));
-        finding_diags.extend(check_missing_species(finding));
         finding_diags.extend(check_confidence_mismatch(finding));
-        finding_diags.extend(check_unreported_effect(finding));
-        finding_diags.extend(check_p_boundary(finding));
         finding_diags.extend(check_missing_controls(finding));
         finding_diags.extend(check_multiple_comparisons(finding));
         finding_diags.extend(check_wrong_test(finding));
@@ -859,22 +808,7 @@ mod tests {
 
     #[test]
     fn all_rules_count() {
-        assert_eq!(all_rules().len(), 11);
-    }
-
-    #[test]
-    fn check_sample_size_small() {
-        // sample_size field removed; check_sample_size always returns empty.
-        let f = make_finding("vf_001");
-        let diags = check_sample_size(&f);
-        assert!(diags.is_empty());
-    }
-
-    #[test]
-    fn check_sample_size_adequate() {
-        let f = make_finding("vf_002"); // n=30
-        let diags = check_sample_size(&f);
-        assert!(diags.is_empty());
+        assert_eq!(all_rules().len(), 7);
     }
 
     #[test]
@@ -893,14 +827,6 @@ mod tests {
         f.confidence.score = 0.9;
         f.evidence.replicated = true;
         let diags = check_no_replication(&f);
-        assert!(diags.is_empty());
-    }
-
-    #[test]
-    fn check_missing_species_experimental() {
-        // species field removed; check_missing_species always returns empty.
-        let f = make_finding("vf_005");
-        let diags = check_missing_species(&f);
         assert!(diags.is_empty());
     }
 
@@ -979,30 +905,6 @@ mod tests {
             "L004 must still fire on overconfident empirical theory"
         );
         assert_eq!(l004[0].rule_id, "L004");
-    }
-
-    #[test]
-    fn check_unreported_effect_size() {
-        // p_value and effect_size fields removed; check_unreported_effect always returns empty.
-        let f = make_finding("vf_007");
-        let diags = check_unreported_effect(&f);
-        assert!(diags.is_empty());
-    }
-
-    #[test]
-    fn check_p_boundary_near() {
-        // p_value field removed; check_p_boundary always returns empty.
-        let f = make_finding("vf_008");
-        let diags = check_p_boundary(&f);
-        assert!(diags.is_empty());
-    }
-
-    #[test]
-    fn check_p_boundary_clear() {
-        // p_value field removed; check_p_boundary always returns empty.
-        let f = make_finding("vf_009");
-        let diags = check_p_boundary(&f);
-        assert!(diags.is_empty());
     }
 
     #[test]
