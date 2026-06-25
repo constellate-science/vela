@@ -924,8 +924,23 @@ pub fn finding_hash_by_id(frontier: &Project, finding_id: &str) -> String {
         .unwrap_or_else(|| NULL_HASH.to_string())
 }
 
+/// The integrity commitment over an event log.
+///
+/// Canonical order is the content-addressed event `id`, so the hash is
+/// INDEPENDENT of how the events were loaded: the packet path (authored
+/// array order), the `.vela/events/` directory path (filename
+/// `vev_<id>.json`, i.e. id order), and a future one-file-per-event git
+/// layout all canonicalize to the same sequence. This is the property the
+/// git-backed migration needs (ADR 0001): committing events as individual
+/// files must not redefine the hash. Sorting by `id` (rather than the
+/// causal `(timestamp, id)` replay order) is also what keeps existing
+/// signed locks byte-stable, because the directory loader already yields
+/// id order. Causal REPLAY order is enforced separately in
+/// `reducer::sorted_for_replay`; this function is only the commitment.
 pub fn event_log_hash(events: &[StateEvent]) -> String {
-    let bytes = canonical::to_canonical_bytes(events).unwrap_or_default();
+    let mut sorted: Vec<&StateEvent> = events.iter().collect();
+    sorted.sort_by(|a, b| a.id.cmp(&b.id));
+    let bytes = canonical::to_canonical_bytes(&sorted).unwrap_or_default();
     hex::encode(Sha256::digest(bytes))
 }
 
@@ -2447,5 +2462,52 @@ mod tests {
             "proof_id": "not_a_vpf"
         });
         assert!(validate_event_payload(EVENT_KIND_ATTESTATION_RECORDED, &bad_proof).is_err());
+    }
+
+    #[test]
+    fn event_log_hash_is_independent_of_input_order() {
+        // ADR 0001 Phase 0a: the integrity commitment must not depend on how
+        // the events were loaded (packet authored-order vs `.vela/events/`
+        // filename-order vs a future git per-file layout). event_log_hash
+        // canonicalizes on the content-addressed event id, so any permutation
+        // of the same events hashes identically.
+        let mk = |id: &str, ts: &str| StateEvent {
+            schema: EVENT_SCHEMA.to_string(),
+            id: id.to_string(),
+            kind: "note.added".into(),
+            target: StateTarget {
+                r#type: "finding".to_string(),
+                id: "vf_x".to_string(),
+            },
+            actor: StateActor {
+                id: "reviewer:t".to_string(),
+                r#type: "human".to_string(),
+            },
+            timestamp: ts.to_string(),
+            reason: "t".to_string(),
+            before_hash: String::new(),
+            after_hash: String::new(),
+            payload: Value::Null,
+            caveats: vec![],
+            signature: None,
+            schema_artifact_id: None,
+        };
+        // ids deliberately NOT in timestamp order: proves the canonical order
+        // is id-sort (load-path stable), not (timestamp, id) replay order.
+        let a = mk("vev_c", "2026-01-01T00:00:03Z");
+        let b = mk("vev_a", "2026-01-01T00:00:01Z");
+        let c = mk("vev_b", "2026-01-01T00:00:02Z");
+        let forward = vec![a.clone(), b.clone(), c.clone()];
+        let shuffled = vec![c, a.clone(), b];
+        assert_eq!(
+            event_log_hash(&forward),
+            event_log_hash(&shuffled),
+            "event_log_hash must be independent of input order"
+        );
+        let mut reversed = forward.clone();
+        reversed.reverse();
+        assert_eq!(event_log_hash(&forward), event_log_hash(&reversed));
+        // sanity: it is NOT the trivial empty hash
+        assert_ne!(event_log_hash(&forward), event_log_hash(&[]));
     }
 }
