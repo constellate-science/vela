@@ -297,8 +297,7 @@ pub(crate) enum Commands {
     /// your work: owner, key, and hub come from your `vela id` profile, so
     /// the common path is just `vela publish <frontier>`. A full,
     /// idempotent publish (it replaces the hub's view), so it always
-    /// succeeds regardless of how the hub's log diverged. Power users who
-    /// want delta-only deposits can still use `vela registry append`.
+    /// succeeds regardless of how the hub's log diverged.
     ///
     /// `vela push` is the git-style alias: clone -> reproduce -> propose ->
     /// push is the producer loop, with `clone` and `push` as its bookends.

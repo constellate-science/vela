@@ -864,7 +864,8 @@ mod tests {
         SigningKey::generate(&mut OsRng)
     }
 
-    /// The deposit-endpoint signing contract: the `vela registry append` client
+    /// The deposit-endpoint signing contract: a deposit client (e.g. a producer
+    /// posting to the hub's append endpoint)
     /// signs `to_vec(json!({action, vfr_id, parent_event_log_hash, batch}))`
     /// with the owner key; the hub rebuilds that preimage from the parsed wire
     /// body and checks it with `verify_action_signature`. This asserts the two
