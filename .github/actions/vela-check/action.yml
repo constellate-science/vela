@@ -61,20 +61,23 @@ runs:
       run: |
         set -euo pipefail
         f="${{ inputs.frontier }}"
-        out="$(vela frontier materialize "$f" --json)"
-        snap="$(printf '%s' "$out" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("snapshot_hash",""))')"
-        elog="$(printf '%s' "$out" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("event_log_hash",""))')"
         lock="$f/vela.lock"
         if [ ! -f "$lock" ]; then
           echo "::error::no vela.lock at $lock — cannot prove the working tree matches the signed state"
           exit 1
         fi
-        # vela.lock is YAML; the hashes are flat `key: value` lines, so awk is
-        # enough and avoids a PyYAML dependency on the runner.
+        # Read the COMMITTED lock hashes FIRST — `materialize` rewrites vela.lock,
+        # so reading it afterward would compare a value to itself (a no-op). The
+        # committed lock is the signed-state pin; we recompute and compare to it.
+        # vela.lock is YAML with flat `key: value` lines, so awk avoids a PyYAML
+        # dependency on the runner.
         lsnap="$(awk '/^snapshot_hash:/{print $2}' "$lock")"
         lelog="$(awk '/^event_log_hash:/{print $2}' "$lock")"
-        echo "recomputed: snapshot=$snap event_log=$elog"
-        echo "vela.lock:  snapshot=$lsnap event_log=$lelog"
+        out="$(vela frontier materialize "$f" --json)"
+        snap="$(printf '%s' "$out" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("snapshot_hash",""))')"
+        elog="$(printf '%s' "$out" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("event_log_hash",""))')"
+        echo "committed vela.lock: snapshot=$lsnap event_log=$lelog"
+        echo "recomputed:          snapshot=$snap event_log=$elog"
         if [ -z "$snap" ] || [ "$snap" != "$lsnap" ] || [ "$elog" != "$lelog" ]; then
           echo "::error::hash-parity failed — the working tree does not match the committed vela.lock"
           exit 1
