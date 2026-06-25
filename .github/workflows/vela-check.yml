@@ -31,6 +31,6 @@ jobs:
       - uses: ./.github/actions/vela-check
         with:
           # A frontier repo points this at its own frontier directory.
-          frontier: examples/sidon-sets
+          frontier: auto   # discover + gate every frontiers/*/ with a vela.lock
           # Pin to a release in production; empty tracks latest.
           vela-version: ""
