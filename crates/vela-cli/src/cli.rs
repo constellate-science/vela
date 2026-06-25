@@ -4845,7 +4845,19 @@ fn deliver_accept_to_hub(
         Err(e) => return json!({"ok": false, "error": format!("load frontier: {e}")}),
     };
     let vfr = project.frontier_id();
-    let preimage = match proposals::accept_preimage_bytes(&vfr, proposal_id, reviewer, reason) {
+    // ADR 0001 Phase 0d: bind the head we are accepting against. The hub
+    // recomputes this from its own pre-accept copy of the frontier, so the
+    // signature only verifies if our local view is in sync with the hub
+    // (a stale local head fails fast — pull first). event_log_hash is the
+    // id-canonical, load-path-independent commitment.
+    let parent_event_log_hash = vela_protocol::events::event_log_hash(&project.events);
+    let preimage = match proposals::accept_preimage_bytes(
+        &vfr,
+        proposal_id,
+        reviewer,
+        reason,
+        &parent_event_log_hash,
+    ) {
         Ok(b) => b,
         Err(e) => return json!({"ok": false, "error": format!("accept preimage: {e}")}),
     };

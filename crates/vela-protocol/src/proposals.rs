@@ -465,6 +465,7 @@ pub fn accept_preimage_bytes(
     proposal_id: &str,
     reviewer_id: &str,
     reason: &str,
+    parent_event_log_hash: &str,
 ) -> Result<Vec<u8>, String> {
     let preimage = json!({
         "action": PROPOSAL_ACCEPT_ACTION,
@@ -472,6 +473,15 @@ pub fn accept_preimage_bytes(
         "proposal_id": proposal_id,
         "reviewer_id": reviewer_id,
         "reason": reason,
+        // ADR 0001 Phase 0d: bind the chain head the reviewer accepted
+        // against. The signature therefore attests "I accepted this
+        // proposal on top of THIS history", so a captured accept cannot be
+        // replayed onto a re-ordered or forked log where the head differs:
+        // the verifier rebuilds the preimage with its own current head and
+        // the signature fails. event_log_hash is the load-path-independent
+        // (id-canonical) commitment, so the bound head is stable across the
+        // packet / directory / git-per-file layouts.
+        "parent_event_log_hash": parent_event_log_hash,
     });
     canonical::to_canonical_bytes(&preimage)
 }
@@ -562,8 +572,20 @@ pub fn authorize_proposal_accept(
 
     // 5. SIGNATURE: verify the detached decision signature over the
     //    canonical accept preimage, rebuilt with the *resolved*
-    //    reviewer_id so a client cannot substitute a different identity.
-    let preimage = accept_preimage_bytes(vfr_id, &proposal.id, &actor.id, reason)?;
+    //    reviewer_id so a client cannot substitute a different identity,
+    //    and with the head the accept is being applied against
+    //    (ADR 0001 Phase 0d). `project` here is the PRE-accept state (the
+    //    boundary loads the current frontier before applying), so its
+    //    event_log_hash is exactly the head the reviewer must have signed
+    //    over. A signature captured against a different head fails.
+    let parent_event_log_hash = crate::events::event_log_hash(&project.events);
+    let preimage = accept_preimage_bytes(
+        vfr_id,
+        &proposal.id,
+        &actor.id,
+        reason,
+        &parent_event_log_hash,
+    )?;
     let verified =
         crate::sign::verify_action_signature(&preimage, signature_hex, &actor.public_key)?;
     if !verified {
@@ -6117,15 +6139,20 @@ mod tests {
     const VFR: &str = "vfr_accept_gate_fixture";
     const NOW: &str = "2026-05-29T00:00:00Z";
 
-    /// Sign the canonical accept preimage for `reviewer_id` with `key`.
+    /// Sign the canonical accept preimage for `reviewer_id` with `key`,
+    /// binding the head of `project` (ADR 0001 Phase 0d) so it matches what
+    /// `authorize_proposal_accept` rebuilds from the same pre-accept project.
     fn sign_accept(
         key: &SigningKey,
+        project: &Project,
         vfr_id: &str,
         proposal_id: &str,
         reviewer_id: &str,
         reason: &str,
     ) -> String {
-        let bytes = accept_preimage_bytes(vfr_id, proposal_id, reviewer_id, reason).unwrap();
+        let parent = crate::events::event_log_hash(&project.events);
+        let bytes =
+            accept_preimage_bytes(vfr_id, proposal_id, reviewer_id, reason, &parent).unwrap();
         hex::encode(crate::sign::sign_bytes(key, &bytes))
     }
 
@@ -6136,11 +6163,75 @@ mod tests {
         let (project, proposal) =
             frontier_with_proposal(vec![accept_actor("reviewer:will-blair", &pubkey)]);
         let reason = "Verified; mouse-only scope is accurate";
-        let sig = sign_accept(&key, VFR, &proposal.id, "reviewer:will-blair", reason);
+        let sig = sign_accept(
+            &key,
+            &project,
+            VFR,
+            &proposal.id,
+            "reviewer:will-blair",
+            reason,
+        );
 
         let auth = authorize_proposal_accept(&project, VFR, &pubkey, &sig, &proposal, reason, NOW)
             .unwrap();
         assert_eq!(auth.actor.id, "reviewer:will-blair");
+    }
+
+    #[test]
+    fn authorize_accept_against_stale_head_rejected() {
+        // ADR 0001 Phase 0d: an accept signed against head H is rejected once
+        // the head moves to H' (a captured accept replayed onto a re-ordered
+        // or extended history). The verifier recomputes the parent from its
+        // own pre-accept project, so the bound head no longer matches and the
+        // signature fails. This is the property that closes the accept-replay
+        // hole the ADR identified.
+        let key = accept_keypair();
+        let pubkey = crate::sign::pubkey_hex(&key);
+        let (mut project, proposal) =
+            frontier_with_proposal(vec![accept_actor("reviewer:will-blair", &pubkey)]);
+        let reason = "Verified";
+        // Sign binding the CURRENT head.
+        let sig = sign_accept(
+            &key,
+            &project,
+            VFR,
+            &proposal.id,
+            "reviewer:will-blair",
+            reason,
+        );
+        // Valid against the head it was signed over.
+        assert!(
+            authorize_proposal_accept(&project, VFR, &pubkey, &sig, &proposal, reason, NOW).is_ok()
+        );
+        // The head moves: another event lands. The same signature now binds a
+        // stale head and must be rejected.
+        project.events.push(StateEvent {
+            schema: events::EVENT_SCHEMA.to_string(),
+            id: "vev_headmover00000".to_string(),
+            kind: "note.added".into(),
+            target: StateTarget {
+                r#type: "finding".to_string(),
+                id: "vf_target0000000".to_string(),
+            },
+            actor: StateActor {
+                id: "reviewer:will-blair".to_string(),
+                r#type: "human".to_string(),
+            },
+            timestamp: "2026-05-28T00:00:00Z".to_string(),
+            reason: "moves the head".to_string(),
+            before_hash: String::new(),
+            after_hash: String::new(),
+            payload: serde_json::Value::Null,
+            caveats: vec![],
+            signature: None,
+            schema_artifact_id: None,
+        });
+        let err = authorize_proposal_accept(&project, VFR, &pubkey, &sig, &proposal, reason, NOW)
+            .unwrap_err();
+        assert!(
+            err.contains("does not verify"),
+            "stale-head accept must be rejected, got: {err}"
+        );
     }
 
     #[test]
@@ -6167,7 +6258,14 @@ mod tests {
         let pubkey = crate::sign::pubkey_hex(&key);
         let (project, proposal) =
             frontier_with_proposal(vec![accept_actor("reviewer:will-blair", &pubkey)]);
-        let sig_for_a = sign_accept(&key, VFR, &proposal.id, "reviewer:will-blair", "reason A");
+        let sig_for_a = sign_accept(
+            &key,
+            &project,
+            VFR,
+            &proposal.id,
+            "reviewer:will-blair",
+            "reason A",
+        );
 
         let err = authorize_proposal_accept(
             &project, VFR, &pubkey, &sig_for_a, &proposal, "reason B", NOW,
@@ -6187,6 +6285,7 @@ mod tests {
         let reason = "Verified";
         let sig_other = sign_accept(
             &key,
+            &project,
             VFR,
             "vpr_some_other_proposal",
             "reviewer:will-blair",
@@ -6215,7 +6314,14 @@ mod tests {
         let reason = "Verified";
         // Even a cryptographically valid self-signature does not help:
         // the key resolves to no registered actor.
-        let sig = sign_accept(&stranger, VFR, &proposal.id, "reviewer:will-blair", reason);
+        let sig = sign_accept(
+            &stranger,
+            &project,
+            VFR,
+            &proposal.id,
+            "reviewer:will-blair",
+            reason,
+        );
 
         let err = authorize_proposal_accept(
             &project,
@@ -6242,7 +6348,14 @@ mod tests {
         actor.revoked_reason = Some("key rotated".to_string());
         let (project, proposal) = frontier_with_proposal(vec![actor]);
         let reason = "Verified";
-        let sig = sign_accept(&key, VFR, &proposal.id, "reviewer:will-blair", reason);
+        let sig = sign_accept(
+            &key,
+            &project,
+            VFR,
+            &proposal.id,
+            "reviewer:will-blair",
+            reason,
+        );
 
         // NOW (2026-05-29) is after revoked_at → rejected even though
         // the signature itself is valid.
@@ -6260,7 +6373,14 @@ mod tests {
         let (project, proposal) =
             frontier_with_proposal(vec![accept_actor("agent:replicator", &pubkey)]);
         let reason = "Verified";
-        let sig = sign_accept(&key, VFR, &proposal.id, "agent:replicator", reason);
+        let sig = sign_accept(
+            &key,
+            &project,
+            VFR,
+            &proposal.id,
+            "agent:replicator",
+            reason,
+        );
 
         let err = authorize_proposal_accept(&project, VFR, &pubkey, &sig, &proposal, reason, NOW)
             .unwrap_err();
@@ -6280,7 +6400,14 @@ mod tests {
         actor.tier = Some("auto-notes".to_string());
         let (project, proposal) = frontier_with_proposal(vec![actor]);
         let reason = "Verified";
-        let sig = sign_accept(&key, VFR, &proposal.id, "agent:notes-compiler", reason);
+        let sig = sign_accept(
+            &key,
+            &project,
+            VFR,
+            &proposal.id,
+            "agent:notes-compiler",
+            reason,
+        );
 
         let err = authorize_proposal_accept(&project, VFR, &pubkey, &sig, &proposal, reason, NOW)
             .unwrap_err();
@@ -6300,7 +6427,7 @@ mod tests {
         let (project, proposal) =
             frontier_with_proposal(vec![accept_actor("local-reviewer", &pubkey)]);
         let reason = "Verified";
-        let sig = sign_accept(&key, VFR, &proposal.id, "local-reviewer", reason);
+        let sig = sign_accept(&key, &project, VFR, &proposal.id, "local-reviewer", reason);
         let err = authorize_proposal_accept(&project, VFR, &pubkey, &sig, &proposal, reason, NOW)
             .unwrap_err();
         assert!(
@@ -6315,7 +6442,14 @@ mod tests {
         let pubkey = crate::sign::pubkey_hex(&key);
         let (project, proposal) =
             frontier_with_proposal(vec![accept_actor("reviewer:will-blair", &pubkey)]);
-        let sig = sign_accept(&key, VFR, &proposal.id, "reviewer:will-blair", "   ");
+        let sig = sign_accept(
+            &key,
+            &project,
+            VFR,
+            &proposal.id,
+            "reviewer:will-blair",
+            "   ",
+        );
         let err = authorize_proposal_accept(&project, VFR, &pubkey, &sig, &proposal, "   ", NOW)
             .unwrap_err();
         assert!(err.contains("Decision reason"), "unexpected error: {err}");
@@ -6332,7 +6466,14 @@ mod tests {
             &pubkey.to_uppercase(),
         )]);
         let reason = "Verified";
-        let sig = sign_accept(&key, VFR, &proposal.id, "reviewer:will-blair", reason);
+        let sig = sign_accept(
+            &key,
+            &project,
+            VFR,
+            &proposal.id,
+            "reviewer:will-blair",
+            reason,
+        );
         let auth = authorize_proposal_accept(
             &project, VFR, &pubkey, // lowercase on the wire
             &sig, &proposal, reason, NOW,
