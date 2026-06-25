@@ -306,12 +306,15 @@ fn advanced_help_quickstart_uses_release_commands() {
     assert!(!help.contains("vela workbench"));
     // The v0.700 cut: the help must advertise nothing the binary
     // cannot run. These were the most prominent removed families.
+    // (`atlas` is NOT here: it is a live first-class noun group —
+    // cross-frontier projection, `vela atlas <frontier>` — and is now
+    // correctly listed in the advanced-help Nouns block alongside
+    // workspace/task/serve. `policy` likewise.)
     for dead in [
         "scout",
         "compile-notes",
         "clinical-trial-import",
         "source-inbox",
-        "  atlas ",
         "constellation",
         "federation",
         "  bridge ",

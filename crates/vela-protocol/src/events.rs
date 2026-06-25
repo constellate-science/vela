@@ -1821,6 +1821,26 @@ mod tests {
     };
     use crate::project;
 
+    #[test]
+    fn snapshot_hash_exclusion_keys_exist_on_project() {
+        // snapshot_hash removes "events"/"signatures"/"proof_state" by string
+        // key from the serialized Project so the derived/mutable plane is
+        // excluded from the hash. If a future serde rename or field rename made
+        // one of these keys stop existing, the remove() would silently no-op and
+        // snapshot_hash would begin covering the event log — a global byte-parity
+        // break with NO compiler error. This pins the contract cheaply.
+        let project = project::assemble("guard", vec![finding()], 0, 0, "guard");
+        let value = serde_json::to_value(&project).expect("serialize Project");
+        let map = value.as_object().expect("Project serializes as an object");
+        for key in ["events", "signatures", "proof_state"] {
+            assert!(
+                map.contains_key(key),
+                "snapshot_hash excludes `{key}` by string key, but it is absent from \
+                 serde_json::to_value(Project) — the exclusion would silently no-op"
+            );
+        }
+    }
+
     fn finding() -> FindingBundle {
         FindingBundle::new(
             Assertion {

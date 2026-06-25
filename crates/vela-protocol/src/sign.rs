@@ -3,7 +3,6 @@
 //! Every finding event can be signed with Ed25519 and verified independently.
 //! Signatures cover the canonical JSON of the finding (deterministic, sorted keys).
 
-use std::collections::BTreeMap;
 use std::path::Path;
 
 use chrono::Utc;
@@ -227,7 +226,8 @@ pub fn generate_keypair(output_dir: &Path) -> Result<String, String> {
 // ── Canonical JSON ───────────────────────────────────────────────────
 
 /// Produce deterministic canonical JSON for a finding bundle.
-/// Uses sorted keys (via serde_json::Value -> BTreeMap conversion) and compact format.
+/// Sorted keys + compact form via the single `canonical.rs` RFC-8785
+/// primitive (the same one that mints the finding id).
 ///
 /// `flags.jointly_accepted` is excluded from the signing preimage. The flag
 /// is a derived cache that the substrate flips when the v0.37 multi-sig
@@ -244,25 +244,13 @@ pub fn canonical_json(finding: &FindingBundle) -> Result<String, String> {
     if let Some(flags) = value.get_mut("flags").and_then(|v| v.as_object_mut()) {
         flags.remove("jointly_accepted");
     }
-    let sorted = sort_value(&value);
-    serde_json::to_string(&sorted).map_err(|e| format!("Failed to produce canonical JSON: {e}"))
-}
-
-/// Recursively sort all object keys in a JSON value.
-fn sort_value(v: &serde_json::Value) -> serde_json::Value {
-    match v {
-        serde_json::Value::Object(map) => {
-            let sorted: BTreeMap<String, serde_json::Value> = map
-                .iter()
-                .map(|(k, v)| (k.clone(), sort_value(v)))
-                .collect();
-            serde_json::to_value(sorted).unwrap()
-        }
-        serde_json::Value::Array(arr) => {
-            serde_json::Value::Array(arr.iter().map(sort_value).collect())
-        }
-        other => other.clone(),
-    }
+    // v0.712: route through the ONE canonicalizer (`canonical.rs`, RFC-8785,
+    // conformance-pinned, rejects non-finite floats) instead of a private
+    // sort+serialize. Two divergent canonical forms — the id committed via
+    // canonical.rs, the signature here — were a latent drift surface: a
+    // future number-formatting change to one would silently invalidate the
+    // other. `canonical_signing_bytes_match_canonical_primitive` pins them.
+    crate::canonical::to_canonical_string(&value)
 }
 
 // ── Signing and verification ─────────────────────────────────────────
@@ -767,6 +755,42 @@ pub fn verify_frontier_data(
 mod tests {
     use super::*;
     use crate::bundle::*;
+
+    #[test]
+    fn canonical_signing_bytes_match_legacy_sort() {
+        // The unified canonical_json (now routed through canonical.rs) must be
+        // BYTE-IDENTICAL to the legacy private sort+serialize, so every stored
+        // finding signature keeps verifying. Pins the unification: if a future
+        // canonical.rs change ever diverged from the old form, this fails
+        // loudly instead of silently invalidating signatures/ids.
+        fn legacy_sort(v: &serde_json::Value) -> serde_json::Value {
+            use std::collections::BTreeMap;
+            match v {
+                serde_json::Value::Object(map) => {
+                    let sorted: BTreeMap<String, serde_json::Value> = map
+                        .iter()
+                        .map(|(k, v)| (k.clone(), legacy_sort(v)))
+                        .collect();
+                    serde_json::to_value(sorted).unwrap()
+                }
+                serde_json::Value::Array(arr) => {
+                    serde_json::Value::Array(arr.iter().map(legacy_sort).collect())
+                }
+                other => other.clone(),
+            }
+        }
+        let f = sample_finding();
+        let mut value = serde_json::to_value(&f).unwrap();
+        if let Some(flags) = value.get_mut("flags").and_then(|v| v.as_object_mut()) {
+            flags.remove("jointly_accepted");
+        }
+        let legacy = serde_json::to_string(&legacy_sort(&value)).unwrap();
+        assert_eq!(
+            canonical_json(&f).unwrap(),
+            legacy,
+            "unified canonicalizer must match the legacy form byte-for-byte"
+        );
+    }
 
     fn sample_finding() -> FindingBundle {
         FindingBundle::new(

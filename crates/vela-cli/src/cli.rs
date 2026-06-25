@@ -4388,6 +4388,8 @@ Nouns (subcommand groups; run `vela <noun> --help`):
   agents        Generate agent-config adapters from VELA.md (sync | doctor | diff)
   workspace     List/add/remove checked-out frontiers + their hub remotes (the gate reads this)
   task          Create, list, claim, and close local frontier tasks
+  atlas         Cross-frontier projection: lift one frontier's calculus over a whole field
+  policy        Inspect / evaluate the policy-bound acceptance engine (permit/defer/deny)
   serve         Serve a read-only frontier over MCP stdio or HTTP (the local review server)
 
 Specialist and legacy commands stay callable but are out of this menu

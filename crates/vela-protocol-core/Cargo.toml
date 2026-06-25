@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Minimal-dependency core types and signing primitives for the Vela protocol: Conjecture and ProofPacket. Targets both native server and wasm32 runtimes. Consumed by vela-protocol (full server crate) and vela-protocol-wasm (WASM bindings)."
+description = "Minimal-dependency core types and signing primitives for the Vela protocol: Conjecture and ProofPacket. Kept dependency-light so the primitives can be reused without the full server stack. Consumed by vela-edge."
 readme = "../../README.md"
 publish = true
 
