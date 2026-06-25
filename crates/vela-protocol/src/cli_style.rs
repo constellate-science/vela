@@ -14,7 +14,6 @@
 //! discipline is enforced in one place.
 
 use colored::{ColoredString, Colorize};
-use indicatif::ProgressStyle;
 use std::io::IsTerminal;
 use std::sync::Once;
 
@@ -51,12 +50,6 @@ pub fn dim(s: &str) -> ColoredString {
     s.dimmed()
 }
 
-#[must_use]
-pub fn mono_eyebrow(label: &str) -> ColoredString {
-    // Tracked uppercase lives at the call site; we just dim the mono.
-    label.dimmed()
-}
-
 /// A tick row — dim `·` characters of a given visual width.
 #[must_use]
 pub fn tick_row(width: usize) -> String {
@@ -84,12 +77,6 @@ pub fn madder(s: impl AsRef<str>) -> ColoredString {
 #[must_use]
 pub fn brass(s: impl AsRef<str>) -> ColoredString {
     let (r, g, b) = BRASS;
-    s.as_ref().truecolor(r, g, b)
-}
-
-#[must_use]
-pub fn dust_color(s: impl AsRef<str>) -> ColoredString {
-    let (r, g, b) = DUST;
     s.as_ref().truecolor(r, g, b)
 }
 
@@ -151,18 +138,4 @@ pub fn header(eyebrow: &str, title: &str) {
 pub fn err_prefix() -> String {
     let (r, g, b) = MADDER;
     format!("{}", "err ·".truecolor(r, g, b))
-}
-
-// --- progress bar ------------------------------------------------------------
-
-/// Progress-bar style for long-running work.
-///
-/// Uses a hairline bar (`──` filled, blank unfilled), signal-blue for the
-/// current position, and `·` as the separator.
-#[must_use]
-pub fn progress_style(unit: &str) -> ProgressStyle {
-    let template = format!("  {{bar:30}} {{pos}}/{{len}} · {unit} · {{msg}}");
-    ProgressStyle::with_template(&template)
-        .unwrap_or_else(|_| ProgressStyle::default_bar())
-        .progress_chars("──╌")
 }
