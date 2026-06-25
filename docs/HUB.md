@@ -99,13 +99,56 @@ read path. It falls back to the entry's `network_locator` only when
 talking to older hubs that do not expose the snapshot endpoint. It always verifies
 signature, snapshot hash, and event-log hash before keeping the file.
 
+## Hub as remote (the `.vela/` decommit)
+
+A frontier's `.vela/` store is to Vela what `.git/` is to git: a local store
+that is **not committed**. Each canonical frontier carries its own
+`.gitignore` with `/.vela/`, so git tracks only the working tree (README,
+`frontier.yaml`, `SCOPE.md`, `witnesses/`, `sources/`) and the `.vela/` event
+log lives on the hub. This makes the hub the **remote of record** and the local
+`.vela/` a reconstructible cache, exactly as `git clone` / `git checkout`
+rebuild a working tree from a remote.
+
+- **What is on the hub.** The science core — events, findings, proposals, and
+  content-addressed artifact blobs (witnesses + proof packets) — is uploaded by
+  `vela publish`. Everything else in `.vela/` (policy, releases, evaluations,
+  tool descriptors) is content-addressed into a signed **extras manifest**:
+  each loose file's hash is collected into an `ExtrasManifest` whose digest
+  rides in the signed `RegistryEntry.extras_manifest_hash`. That hash sits
+  **outside** `snapshot_hash` / `event_log_hash` (the canonical-bytes anchors
+  never move), so the extras travel as a complete byte-for-byte backup without
+  perturbing the integrity hashes. The result: a published frontier on the hub
+  is a complete backup of its committed-and-uncommitted state.
+- **What is never backed up.** `LOCAL_ONLY_DIRS` (`tasks/`, `workspaces/`) are
+  per-machine scratch — the worktree analogue. They are neither committed nor
+  hub-backed and are excluded from the extras manifest by `collect_extras`.
+- **The read side.** `vela clone <vfr|url>` reconstructs the full working
+  `.vela/` tree (event log + materialized `frontier.json` + witness/proof
+  sidecars fetched by content hash + `vela.lock`). `scripts/hydrate-frontiers.sh`
+  does the same for a monorepo checkout whose `.vela/` is absent. Both are no-ops
+  when `.vela/` is already present.
+- **The registry.** `scripts/workspace.json` is the git-style index of
+  checked-out frontiers and their hub remotes (`vela workspace add` writes it).
+  The conformance gate discovers its frontiers from it and fails closed if any
+  decommitted frontier is missing from it, so a cold clone and the gate always
+  agree on what is canonical.
+
 ## Release verification boundary
 
-The hub is signed transport. It is not the scientific source of truth.
-Release checks can prove that the published anti-amyloid frontier id
-matches the expected snapshot and event-log hashes, but the authority
-still comes from local frontier state, signed events, and proof packet
-validation.
+Two distinct senses of "source of truth" must not be conflated:
+
+- **Byte custody (the git-remote sense).** Since the `.vela/` decommit, the
+  hub IS the canonical store for a frontier's event-log bytes and witness
+  blobs; the local `.vela/` is a reconstructible cache (see "Hub as remote"
+  below). `vela clone` repopulates it from the hub the way `git checkout`
+  populates a working tree. In this sense the hub is the remote of record.
+- **Scientific verdict (the trust sense).** The hub is signed transport. It is
+  NOT the arbiter of what is true. Release checks can prove that the published
+  `examples/sidon-sets` frontier id matches the expected snapshot and event-log
+  hashes, but the authority for *correctness* still comes from re-deriving local
+  frontier state, the signed events, and frozen-verifier proof-packet validation
+  on a clean clone. A hub that served tampered bytes would simply fail to
+  reproduce. The hub stores; the verifiers judge.
 
 The live gate is operator-driven so normal clean clones do not need
 network credentials:
@@ -336,13 +379,13 @@ Use these checks before and after any hub deploy:
 
 ```bash
 cargo build --release -p vela-hub -p vela-protocol
-./scripts/audit-live-frontiers.sh --frontier vfr_5076e7b3ff8e6b0f --json | jq
 curl -fsS https://hub.constellate.science/healthz | jq
-curl -fsS https://hub.constellate.science/entries/vfr_5076e7b3ff8e6b0f | jq '.vfr_id'
-curl -fsS 'https://hub.constellate.science/entries/vfr_5076e7b3ff8e6b0f/events?limit=1' | jq '.events[0].id'
+curl -fsS https://hub.constellate.science/entries/vfr_496956067dc5ad79 | jq '.vfr_id'
+curl -fsS 'https://hub.constellate.science/entries/vfr_496956067dc5ad79/events?limit=1' | jq '.events[0].id'
 ```
 
-The focused anti-amyloid frontier is the public canary. It must be live,
+The Sidon-sets frontier (`examples/sidon-sets`, `vfr_496956067dc5ad79`, the
+keystone OEIS-adoption frontier) is the public canary. It must be live,
 pullable, snapshot-verified, and event-feed verified before a deploy is
 considered healthy.
 
@@ -380,12 +423,13 @@ belongs in `frontier_publish_audit`; it should not be promoted to
 Nightly or pre-demo audit:
 
 ```bash
-./tests/test-anti-amyloid-p0-gates.sh
+./scripts/full-conformance.sh --mode=ci
 ```
 
-This gate verifies the focused frontier, decision projections, artifact
-manifests, current-source freshness, hub pullability, snapshot hashes,
-and event reads.
+The gate hydrates every published frontier from the hub, reproduces the
+canonical witnesses from scratch (`reproduce-sidon`, `reproduce-erdos`),
+round-trips a cold clone (`clone-roundtrip-*`), and verifies decision
+projections, artifact manifests, snapshot hashes, and event reads.
 
 ## Operational notes
 
@@ -426,23 +470,24 @@ the same bytes to `to/entries`. Both hubs validate the manifest's
 Ed25519 signature against the embedded `owner_pubkey`. Mirroring is a
 no-op for authenticity — neither hub gains any signing role.
 
-What was validated end-to-end before the consolidation:
+What was validated end-to-end (the federation mechanism is unchanged; the
+fixtures it was first proven on were the pre-consolidation AD cluster, since
+retired):
 
-- 3 fixture frontiers (legacy BBB proof fixture, BBB-extension, Will's
-  Alzheimer's drug-target landscape) mirrored cleanly between hub-1 and
-  a peer.
+- Multiple fixture frontiers mirrored cleanly between hub-1 and a peer.
 - Re-mirroring the same vfr returns `duplicate=true` from the
   destination (idempotent on the `(vfr_id, signature)` unique
   constraint).
 - `vela registry pull` against either hub produced byte-identical
   bytes with same `verified=true`.
-
-After the public-frontier clamp on 2026-05-07, BBB-extension and Will's
-drug-target landscape are retained as local fixtures and registry
-history, but their `frontiers.status` rows are `archived`. The public
-live list now contains only the focused anti-amyloid frontier and the
-broad Alzheimer reservoir.
 - Snapshot hashes matched across hubs for the same vfr_id.
+
+The public live list is now the math-wedge frontiers: Sidon sets
+(`vfr_496956067dc5ad79`), Erdős problems, quantum codes, formal
+conjectures, benchmark state, and the Erdős certificate lanes (see
+`scripts/workspace.json` for the canonical registry). The retired AD
+frontiers are gone from the hub; the mirror primitive is identical for any
+frontier.
 
 What this unblocks for any institution that runs its own peer:
 

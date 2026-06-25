@@ -81,7 +81,7 @@ Vela v0 has three protocol-level primitives:
 
 A frontier snapshot is a bounded, reviewable frontier state over a scientific
 question. It is not a claim of final truth. ("Belief state" is the theory-side
-nomenclature for the same object. See `docs/MATH.md` and `docs/THEORY.md`.)
+nomenclature for the same object. See `docs/THEORY.md`.)
 
 ### 2.1 finding bundle
 
