@@ -20,7 +20,7 @@
 //!     the new files"; it does not invent a new storage shape.
 //!   - Append is content-addressed and idempotent. A record whose id is
 //!     already present on disk is skipped, so re-applying the same batch
-//!     (federation re-sync, a retried agent run) is a no-op.
+//!     (a re-sync from another hub, a retried agent run) is a no-op.
 //!   - This is purely additive. It does NOT modify `repo::save`,
 //!     `proposals::accept_proposal_in_frontier`, or the hub publish/accept
 //!     boundary. A frontier written by `save_vela_repo` loads identically
@@ -134,7 +134,7 @@ impl std::error::Error for AppendError {}
 ///      whole batch is rejected and nothing is written (validate-then-write,
 ///      so a batch is all-or-nothing at the validation boundary).
 ///   3. Records whose object id / event id already exist on disk are
-///      skipped (idempotent). This makes federation re-sync and agent
+///      skipped (idempotent). This makes hub re-sync and agent
 ///      retries safe.
 ///   4. Objects are written before their events, so a crash mid-batch
 ///      leaves the on-disk log referencing only objects that exist (a

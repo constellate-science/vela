@@ -233,8 +233,7 @@ attacker can:
   `owner_pubkey`; the in-frontier actors array retains the
   rotation timeline (`revoked_at` / `revoked_reason` on the
   retired record, `created_at` on the new record) so the audit
-  chain is reconstructable from the frontier itself
-  (`scripts/test-owner-rotate.sh`).
+  chain is reconstructable from the frontier itself.
 - v0.145 hardens the rotation primitive with multi-sig
   governance. A per-frontier `vela.registry_governance_policy.v0.1`
   (v0.144) declares a quorum of eligible attesters and a
@@ -250,8 +249,7 @@ attacker can:
   so attestations cannot be replayed. With governance bound, a
   fully-compromised current owner key alone is insufficient
   authority for non-bootstrap rotations: the threshold of
-  distinct eligible attesters must approve
-  (`scripts/test-governed-owner-rotate.sh`).
+  distinct eligible attesters must approve.
 
 **Out of scope (deferred to future cycle):**
 

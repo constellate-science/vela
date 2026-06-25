@@ -20,7 +20,7 @@
 //! Real frontiers today (low hundreds of findings each) are ~3 orders
 //! of magnitude smaller and replay in single-digit ms. The O(N^2)
 //! characterization matters for infrastructure-grade scaling (100K+
-//! event federations), not for current load.
+//! event histories), not for current load.
 //!
 //! ## Future optimization (deferred)
 //!

@@ -9,7 +9,7 @@
 //! outputs with dates, and standard candles (reference points to measure
 //! against). Multi-signature: a witness (the institutional actor that
 //! takes the stake) plus zero or more co-signers (pillar heads,
-//! reviewers, federation peers).
+//! reviewers, peer institutions).
 //!
 //! Popper's word: a conjecture is a bold guess structured to be
 //! falsifiable. Goldbach's Conjecture, the Riemann Conjecture — names

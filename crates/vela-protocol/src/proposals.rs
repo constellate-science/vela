@@ -1708,29 +1708,6 @@ pub fn reject_at_path_signed(
     repo::save_to_path(path, &frontier)?;
     Ok(())
 }
-/// Request revision on a proposal, signing the resulting
-/// `review.revision_requested` event under the reviewer key when supplied.
-pub fn request_revision_at_path_signed(
-    path: &Path,
-    proposal_id: &str,
-    reviewer: &str,
-    reason: &str,
-    signing_key: Option<&ed25519_dalek::SigningKey>,
-) -> Result<(), String> {
-    let mut frontier = repo::load_from_path(path)?;
-    request_revision_in_frontier_signed(
-        &mut frontier,
-        proposal_id,
-        reviewer,
-        reason,
-        signing_key,
-        false,
-    )?;
-    project::recompute_stats(&mut frontier);
-    repo::save_to_path(path, &frontier)?;
-    Ok(())
-}
-
 /// Load a frontier, backfill legacy review events for already-decided
 /// proposals lacking one, and save only if anything was synthesized.
 /// Returns the number of events added. Idempotent: a second run adds zero.
@@ -4122,11 +4099,6 @@ fn annotation_id(finding_id: &str, text: &str, author: &str, timestamp: &str) ->
     format!("ann_{}", &hex::encode(hash)[..16])
 }
 
-pub fn manifest_hash(path: &Path) -> Result<String, String> {
-    let bytes = std::fs::read(path)
-        .map_err(|e| format!("Failed to read manifest '{}': {e}", path.display()))?;
-    Ok(hex::encode(Sha256::digest(bytes)))
-}
 // ── Review-decision projection + parity (status derived from the log) ──
 //
 // A proposal's decision state is no longer a free-floating mutable field:

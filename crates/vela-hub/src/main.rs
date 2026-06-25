@@ -174,7 +174,7 @@ struct AppState {
     /// v0.49.3: optional Ed25519 signing key for the
     /// `/.well-known/vela` discovery manifest. When present, the
     /// manifest's `manifest_canonical` bytes are signed and a
-    /// `signature` block is attached so a federated client can detect
+    /// `signature` block is attached so a client can detect
     /// MITM at the hub edge. Loaded once at startup from the file at
     /// `VELA_HUB_SIGNING_KEY_PATH`; absent ⇒ unsigned mode (dev).
     signing_key: Option<Arc<ed25519_dalek::SigningKey>>,
@@ -331,7 +331,7 @@ impl DbCacheMetrics {
     }
 
     /// Render the cache metrics as Prometheus 0.0.4 text format. The
-    /// shape `vela_hub_db_cache_*` is namespaced so a federated
+    /// shape `vela_hub_db_cache_*` is namespaced so a multi-hub
     /// scrape can pull this hub alongside others without collision.
     fn render_prometheus(&self) -> String {
         let hits = self.hits.load(std::sync::atomic::Ordering::Relaxed);
@@ -482,7 +482,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // v0.49.3: optional signing key for /.well-known/vela. Loaded
     // once at startup. Absent ⇒ unsigned mode (dev). Present ⇒ the
     // discovery manifest's canonical bytes are signed and a
-    // signature block is attached so a federated client can detect
+    // signature block is attached so a client can detect
     // MITM at the hub edge.
     // Inline hex key (`VELA_HUB_SIGNING_KEY`) takes precedence over a file
     // path (`VELA_HUB_SIGNING_KEY_PATH`). The inline form is what a hosted
@@ -838,7 +838,7 @@ async fn metrics_prometheus(State(state): State<AppState>) -> impl axum::respons
 
 /// v0.49.2: schema discoverability endpoint. Returns the canonical
 /// list of versioned protocol schemas this hub knows about. Lets a
-/// federated client bootstrap without scraping HTML or guessing URLs.
+/// client bootstrap without scraping HTML or guessing URLs.
 async fn well_known_vela(State(state): State<AppState>) -> Json<Value> {
     let signed_at = chrono::Utc::now().to_rfc3339();
     let manifest = json!({
@@ -2295,7 +2295,7 @@ async fn get_log_consistency(
         .into_response()
 }
 
-/// v0.201: federation handle for a Scientific Diff Pack (`vsd_*`).
+/// v0.201: hub lookup handle for a Scientific Diff Pack (`vsd_*`).
 ///
 /// Returns the signed pack JSON if the pack has been registered with
 /// this hub via a `diff_pack.released` event. The pack body itself
@@ -2305,7 +2305,7 @@ async fn get_log_consistency(
 ///
 /// 404 when the pack id isn't on this hub — that's substrate-honest:
 /// a hub can witness packs but is not required to mirror every
-/// federation peer's set.
+/// peer hub's set.
 async fn get_diff_pack(State(state): State<AppState>, Path(pack_id): Path<String>) -> Response {
     if !pack_id.starts_with("vsd_") {
         return (
@@ -2320,7 +2320,7 @@ async fn get_diff_pack(State(state): State<AppState>, Path(pack_id): Path<String
             StatusCode::NOT_FOUND,
             Json(json!({
                 "error": format!("{pack_id} not found on this hub"),
-                "hub_note": "v0.201: federation handle. A pack lands here when a `diff_pack.released` event has been applied on a frontier this hub mirrors.",
+                "hub_note": "v0.201: A pack lands here when a `diff_pack.released` event has been applied on a frontier this hub mirrors.",
             })),
         )
             .into_response(),

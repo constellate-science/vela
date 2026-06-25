@@ -23,7 +23,7 @@
 //!     letting "this pack was replicated by Lab X" be a first-
 //!     class statement.
 //!   - v0.201 diff_pack.released: a canonical event arm that turns
-//!     a signed pack into a federated record across hubs.
+//!     a signed pack into a released record across hubs.
 
 use ed25519_dalek::SigningKey;
 use serde::{Deserialize, Serialize};

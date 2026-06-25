@@ -865,12 +865,6 @@ impl FrontierGraph {
         EdgeKind::Discharges,
     ];
 
-    /// True if `id` is a node in this graph.
-    #[must_use]
-    pub fn has_node(&self, id: &str) -> bool {
-        self.nodes.contains_key(id)
-    }
-
     /// Resolve a query to a node id: an exact id; else an id *prefix* (ids are
     /// addressed by prefix, like `deep_trace` — a substring match would let a
     /// bare number like "617" spuriously hit the hex tail of a content-addressed

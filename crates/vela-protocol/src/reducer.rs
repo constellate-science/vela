@@ -185,11 +185,11 @@ pub fn apply_event_indexed(
         // pointing at a target event id.
         EventKind::AttestationRecorded => Ok(()),
         // v0.201: a `vsd_*` Scientific Diff Pack was signed, applied,
-        // and is now federated. The event is a metadata-only handle —
+        // and is now released. The event is a metadata-only handle —
         // its payload references the pack id; replay does not mutate
         // project state because the pack's member proposals already
         // applied through their own `proposal.accepted` arms. The arm
-        // exists so the event is a first-class federation handle that
+        // exists so the event is a first-class handle that
         // hubs can index by `vsd_*`.
         EventKind::DiffPackReleased => apply_diff_pack_released(state, event),
         // v0.205: a reviewer issued a verdict on a `vsd_*` Diff Pack.
@@ -1076,7 +1076,7 @@ fn apply_tier_set(state: &mut Project, event: &StateEvent) -> Result<(), String>
 /// v0.213: append a ReleasedDiffPackRecord to
 /// `state.released_diff_packs` when a `diff_pack.released` event
 /// lands on the canonical log. Idempotent on pack_id — re-applying
-/// the same released event is a no-op so federation re-sync stays
+/// the same released event is a no-op so hub re-sync stays
 /// clean. Theorem 29 pins the accumulation algebra.
 fn apply_diff_pack_released(state: &mut Project, event: &StateEvent) -> Result<(), String> {
     use crate::released_diff_pack::ReleasedDiffPackRecord;
@@ -1207,7 +1207,7 @@ fn apply_diff_pack_reviewed(state: &mut Project, event: &StateEvent) -> Result<(
         // a record from the verdict event so the log stays self-
         // sufficient. The promoter typically emits the release event
         // before the verdict, but a hub that receives only the
-        // verdict (e.g., a federation peer that missed the release)
+        // verdict (e.g., a peer hub that missed the release)
         // can still reconstruct a sensible record.
         let mut rec = ReleasedDiffPackRecord::from_released_event(
             pack_id,

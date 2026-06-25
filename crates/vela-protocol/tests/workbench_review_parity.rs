@@ -197,9 +197,6 @@ fn promote_cli_and_ui_produce_identical_proposal_ids() {
     assert!(cli_id.starts_with("vpr_"));
 }
 
-// v0.59 federation conflict-resolution parity test removed with the
-// federation surface.
-
 #[test]
 fn proposal_ids_change_when_payload_changes() {
     let a = cli_locator_repair_proposal(

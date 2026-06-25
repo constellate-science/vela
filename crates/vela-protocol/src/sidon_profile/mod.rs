@@ -37,8 +37,8 @@ pub use evaluator::{
     verify_observation_replay, witness_cell,
 };
 pub use frontier::{
-    Obligation, build_frontier_map, frontier_transition, next_bound_obligations,
-    obligation_discharged, obligation_status, verify_positive_gap_monotonicity,
+    Obligation, build_frontier_map, next_bound_obligations, obligation_discharged,
+    obligation_status, verify_positive_gap_monotonicity,
 };
 pub use kernel::{
     Clause, Monomial, Polynomial, Presentation, active_environments, active_view_root,
@@ -51,6 +51,4 @@ pub use packets::{
 pub use producer::{
     fixture_time, make_observation, make_result, make_support_function, make_task, validate_shape,
 };
-pub use reducer::{
-    LiveBound, collect_live_bounds, live_presentation, live_presentation_from_path, parse_bound,
-};
+pub use reducer::{LiveBound, collect_live_bounds, live_presentation, parse_bound};

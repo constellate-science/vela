@@ -208,16 +208,6 @@ impl ProvenancePoly {
         p
     }
 
-    /// Polynomial consisting of a single monomial with the given
-    /// coefficient. If the coefficient is 0, returns `zero()`.
-    pub fn from_monomial(monomial: Monomial, coefficient: u64) -> Self {
-        let mut p = Self::default();
-        if coefficient > 0 {
-            p.terms.insert(monomial, coefficient);
-        }
-        p
-    }
-
     /// Iterate `(monomial, coefficient)` in monomial-sorted order.
     pub fn terms(&self) -> impl Iterator<Item = (&Monomial, &u64)> {
         self.terms.iter()

@@ -34,7 +34,6 @@ import Vela.Governance.ConfidenceUpdate
 import Vela.Governance.GovernedQuorumSoundness
 import Vela.Protocol.SearchIndexDeterminism
 import Vela.Governance.OwnerEpochChainMonotonicity
-import Vela.Crypto.CheckpointRootInjectivity
 import Vela.Protocol.EmptyLogReplay
 import Vela.Protocol.CanonicalSequenceLength
 import Vela.Protocol.ReplayAppend
@@ -45,7 +44,6 @@ import Vela.Governance.DiffPackVerdictAtomicity
 import Vela.Governance.EvaluationRecordInjectivity
 import Vela.Governance.ToolDescriptorComposition
 import Vela.Governance.ReleasedDiffPackAccumulation
-import Vela.Governance.DiffPackFederationSoundness
 import Vela.Governance.VerdictConflictResolution
 import Vela.Governance.VerdictConflictAccumulation
 import Vela.Governance.ReleasedDiffPackReplay
@@ -82,7 +80,6 @@ This module imports the machine-checked substrate theorems for Vela:
 - `Vela.GovernedQuorumSoundness`: Theorem 16 (governed-quorum soundness).
 - `Vela.SearchIndexDeterminism`: Theorem 17 (search-index determinism).
 - `Vela.OwnerEpochChainMonotonicity`: Theorem 18 (owner-epoch chain monotone-by-one).
-- `Vela.CheckpointRootInjectivity`: Theorem 19 (registry-checkpoint root injectivity).
 - `Vela.EmptyLogReplay`: Theorem 20 (empty-log replay identity — base case of replay convergence).
 - `Vela.CanonicalSequenceLength`: Theorem 21 (canonical-sequence cardinality preservation).
 - `Vela.ReplayAppend`: Theorem 22 (replay-compositional append; incremental-replay legitimacy).

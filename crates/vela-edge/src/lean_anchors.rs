@@ -162,13 +162,6 @@ pub const THEOREMS: &[TheoremDescriptor] = &[
         substrate_role: "The OwnerEpochChain::append rule enforces strict monotonicity: each new transition's owner_epoch equals the previous + 1.",
     },
     TheoremDescriptor {
-        id: 19,
-        title: "Registry checkpoint root injectivity",
-        module: "Vela/CheckpointRootInjectivity.lean",
-        decl: "theorem19_registry_root_injective",
-        substrate_role: "checkpoint::compute_registry_root produces sha256 over canonical bytes; two checkpoints sharing a root necessarily share the canonical summary.",
-    },
-    TheoremDescriptor {
         id: 20,
         title: "Empty-log replay identity",
         module: "Vela/EmptyLogReplay.lean",
@@ -237,13 +230,6 @@ pub const THEOREMS: &[TheoremDescriptor] = &[
         module: "Vela/ReleasedDiffPackAccumulation.lean",
         decl: "theorem29_released_pack_accumulation",
         substrate_role: "Replay of N diff_pack.released and diff_pack.reviewed events produces a released_diff_packs array whose length is bounded by N (the no-op-on-duplicate behavior). The reducer makes the canonical event log self-sufficient for replay over the v0.193+ Diff Pack lifecycle — a consumer walking the log alone can answer 'what packs have been released?' without reading sibling directories.",
-    },
-    TheoremDescriptor {
-        id: 30,
-        title: "Diff Pack federation soundness",
-        module: "Vela/DiffPackFederationSoundness.lean",
-        decl: "theorem30_diff_pack_federation_soundness",
-        substrate_role: "If two hubs hold a Diff Pack with the same pack_id AND the witness-check verifies their signed_bytes match, the pack bodies are byte-identical. Pins the v0.201/v0.209 federation handle: a multi-hub witness check returning 'verified' implies N-way agreement on the pack body. Composes T23 (vsd_* injectivity) + T19 (registry-checkpoint root injectivity) + T29 (released-pack accumulation).",
     },
     TheoremDescriptor {
         id: 31,

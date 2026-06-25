@@ -6,7 +6,6 @@ pub mod artifact_audit;
 pub mod artifact_to_state;
 pub mod benchmark;
 pub mod causal_reasoning;
-pub mod checkpoint;
 pub mod citation;
 pub mod code_executor;
 pub mod conformance;

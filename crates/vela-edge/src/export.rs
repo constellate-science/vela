@@ -903,7 +903,7 @@ pub fn export_packet_with_source(
         out_of_scope: vec![
             "Autonomous experiment planning".to_string(),
             "Definitive novelty claims".to_string(),
-            "Institutional federation or broad exchange-network claims".to_string(),
+            "Institutional cross-hub or broad exchange-network claims".to_string(),
         ],
         caveats: caveats.clone(),
     };

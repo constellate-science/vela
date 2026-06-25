@@ -122,36 +122,20 @@ pub fn canonical_packet_files() -> &'static [&'static str] {
     CANONICAL_PACKET_FILES
 }
 
+// Minimal deserialize schema for `validate`: only the fields it reads. The
+// manifest carries more keys (packet_version, generated_at, stats, full
+// source metadata); serde ignores the unmodeled ones. The human-facing
+// `inspect` view that read them was retired.
 #[derive(Debug, Deserialize)]
 struct PacketManifest {
     packet_format: String,
-    packet_version: String,
-    generated_at: String,
     source: PacketSource,
-    stats: PacketStats,
     included_files: Vec<PacketManifestFile>,
 }
 
 #[derive(Debug, Deserialize)]
 struct PacketSource {
     project_name: String,
-    description: String,
-    compiled_at: String,
-    compiler: String,
-    vela_version: String,
-    schema: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct PacketStats {
-    findings: usize,
-    review_events: usize,
-    #[serde(default)]
-    proposals: usize,
-    gaps: usize,
-    contested: usize,
-    bridge_entities: usize,
-    contradiction_edges: usize,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -186,71 +170,6 @@ struct ProofTrace {
     caveats: Vec<String>,
     status: String,
     trace_path: Option<String>,
-}
-
-pub fn inspect(path: &Path) -> Result<String, String> {
-    let manifest = load_manifest(path)?;
-    let mut out = String::new();
-    out.push_str("vela packet inspect\n");
-    out.push_str(&format!("  root:             {}\n", path.display()));
-    out.push_str(&format!(
-        "  project:          {}\n",
-        manifest.source.project_name
-    ));
-    out.push_str(&format!(
-        "  format:           {} {}\n",
-        manifest.packet_format, manifest.packet_version
-    ));
-    out.push_str(&format!("  generated:        {}\n", manifest.generated_at));
-    out.push_str(&format!(
-        "  compiled_at:      {}\n",
-        manifest.source.compiled_at
-    ));
-    out.push_str(&format!(
-        "  compiler:         {}\n",
-        manifest.source.compiler
-    ));
-    out.push_str(&format!(
-        "  vela_version:     {}\n",
-        manifest.source.vela_version
-    ));
-    out.push_str(&format!("  schema:           {}\n", manifest.source.schema));
-    out.push_str(&format!(
-        "  findings:         {}\n",
-        manifest.stats.findings
-    ));
-    out.push_str(&format!(
-        "  review_events:    {}\n",
-        manifest.stats.review_events
-    ));
-    out.push_str(&format!(
-        "  proposals:        {}\n",
-        manifest.stats.proposals
-    ));
-    out.push_str(&format!("  gaps:             {}\n", manifest.stats.gaps));
-    out.push_str(&format!(
-        "  contested:        {}\n",
-        manifest.stats.contested
-    ));
-    out.push_str(&format!(
-        "  bridge_entities:  {}\n",
-        manifest.stats.bridge_entities
-    ));
-    out.push_str(&format!(
-        "  contradictions:   {}\n",
-        manifest.stats.contradiction_edges
-    ));
-    out.push_str(&format!(
-        "  files:            {}\n",
-        manifest.included_files.len()
-    ));
-    if !manifest.source.description.is_empty() {
-        out.push_str(&format!(
-            "  description:      {}\n",
-            manifest.source.description
-        ));
-    }
-    Ok(out)
 }
 
 pub fn validate(path: &Path) -> Result<String, String> {

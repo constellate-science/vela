@@ -1126,55 +1126,6 @@ pub fn post_accept_to_hub(
     })
 }
 
-/// Fetch the FULL set of event ids of a frontier's log from a hub
-/// (`GET {hub}/entries/{vfr}/events`), used by `vela pull` to classify the
-/// relationship (fast-forward / ahead / diverged) between local and remote.
-/// The hub clamps page size server-side (~500), so this paginates via the
-/// `since=<last id>` cursor until the log is exhausted — never truncating.
-/// Returned order is the hub's append order; callers must NOT rely on it for
-/// ancestry (compare by set membership: ids are content-addressed).
-pub fn fetch_event_ids(hub_url: &str, vfr_id: &str) -> Result<Vec<String>, String> {
-    let hub_root = hub_root_of(hub_url);
-    let mut ids: Vec<String> = Vec::new();
-    let mut cursor: Option<String> = None;
-    // Generous loop bound as a runaway backstop (each page advances the cursor).
-    for _ in 0..100_000 {
-        let url = match &cursor {
-            Some(c) => format!("{hub_root}/entries/{vfr_id}/events?limit=500&since={c}"),
-            None => format!("{hub_root}/entries/{vfr_id}/events?limit=500"),
-        };
-        let body = run_blocking_http(120, move |client| {
-            let resp = client
-                .get(&url)
-                .send()
-                .map_err(|e| format!("GET {url}: {e}"))?;
-            let status = resp.status();
-            if !status.is_success() {
-                return Err(format!("GET {url}: HTTP {status}"));
-            }
-            resp.text().map_err(|e| format!("read events: {e}"))
-        })?;
-        let parsed: serde_json::Value =
-            serde_json::from_str(&body).map_err(|e| format!("parse events: {e}"))?;
-        let page: Vec<String> = parsed
-            .get("events")
-            .and_then(|v| v.as_array())
-            .ok_or("events response has no `events` array")?
-            .iter()
-            .filter_map(|e| e.get("id").and_then(|i| i.as_str()).map(str::to_string))
-            .collect();
-        if page.is_empty() {
-            break;
-        }
-        ids.extend(page);
-        match parsed.get("next_cursor").and_then(|c| c.as_str()) {
-            Some(c) if !c.is_empty() => cursor = Some(c.to_string()),
-            _ => break,
-        }
-    }
-    Ok(ids)
-}
-
 /// Append a signed entry to a registry, replacing any prior entry
 /// for the same `vfr_id` (latest-publish-wins).
 ///

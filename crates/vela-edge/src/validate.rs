@@ -403,8 +403,6 @@ fn lint_fixability(rule_id: &str) -> Fixability {
         | "critical_gap"
         | "fragile_anchor"
         | "stale_superseded"
-        | "L002"
-        | "L004"
         | "L007"
         | "L008"
         | "L009"
@@ -1208,15 +1206,6 @@ mod tests {
         assert!(report.checks.iter().any(|check| check.id == "schema"));
         assert!(report.checks.iter().any(|check| check.id == "lint"));
         assert!(report.checks.iter().any(|check| check.id == "graph"));
-        // Check L002 (no-replication), which fires when replicated=false and
-        // score=0.9. (The empirical L001/L003/L005/L006 rules were retired.)
-        assert!(
-            report
-                .checks
-                .iter()
-                .flat_map(|check| check.diagnostics.iter())
-                .any(|diagnostic| diagnostic.rule_id == "L002")
-        );
         assert!(
             report
                 .checks

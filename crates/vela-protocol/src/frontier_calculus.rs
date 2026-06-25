@@ -61,9 +61,6 @@ impl Rational {
             den: den.abs() / g,
         }
     }
-    pub fn from_int(n: i128) -> Self {
-        Rational { num: n, den: 1 }
-    }
     pub fn zero() -> Self {
         Rational { num: 0, den: 1 }
     }
@@ -234,25 +231,8 @@ impl BilatticePoint {
     pub fn leq_k(&self, o: &Self) -> bool {
         self.x <= o.x && self.y <= o.y
     }
-    /// Truth order: more support, less opposition.
-    pub fn leq_t(&self, o: &Self) -> bool {
-        self.x <= o.x && self.y >= o.y
-    }
-    pub fn meet_k(&self, o: &Self) -> Self {
-        BilatticePoint::new(self.x.min(o.x), self.y.min(o.y))
-    }
     pub fn join_k(&self, o: &Self) -> Self {
         BilatticePoint::new(self.x.max(o.x), self.y.max(o.y))
-    }
-    pub fn meet_t(&self, o: &Self) -> Self {
-        BilatticePoint::new(self.x.min(o.x), self.y.max(o.y))
-    }
-    pub fn join_t(&self, o: &Self) -> Self {
-        BilatticePoint::new(self.x.max(o.x), self.y.min(o.y))
-    }
-    /// Negation swaps coordinates (inverts truth, preserves knowledge).
-    pub fn neg(&self) -> Self {
-        BilatticePoint::new(self.y, self.x)
     }
     /// Information content `x + y`.
     pub fn information(&self) -> Rational {

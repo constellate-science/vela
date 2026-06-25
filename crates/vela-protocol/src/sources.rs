@@ -307,14 +307,6 @@ pub fn condition_summary(project: &Project) -> ConditionSummary {
     }
 }
 
-pub fn source_map(project: &Project) -> BTreeMap<&str, &SourceRecord> {
-    let mut map = BTreeMap::new();
-    for source in &project.sources {
-        map.insert(source.id.as_str(), source);
-    }
-    map
-}
-
 pub fn condition_records_for_finding<'a>(
     project: &'a Project,
     finding_id: &str,

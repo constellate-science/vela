@@ -23,7 +23,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::{Value, json};
 
-use super::canonical::{content_id, digest};
+use super::canonical::content_id;
 use super::evaluator::bound_cell;
 use super::kernel::{Presentation, compile_gamma, supported};
 
@@ -200,46 +200,6 @@ pub fn build_frontier_map(
     out.insert("open_obligations".into(), json!(open));
     out.insert("latent_obligations".into(), json!(latent));
     out.insert("discharged_obligations".into(), json!(discharged));
-    Ok(Value::Object(out))
-}
-
-/// Explain how the actionable frontier moved between two map roots.
-pub fn frontier_transition(before: &Value, after: &Value) -> Result<Value, String> {
-    let status_map = |m: &Value| -> std::collections::BTreeMap<String, String> {
-        m["obligations"]
-            .as_array()
-            .map(|rows| {
-                rows.iter()
-                    .filter_map(|r| {
-                        Some((
-                            r["obligation_id"].as_str()?.to_string(),
-                            r["status"].as_str()?.to_string(),
-                        ))
-                    })
-                    .collect()
-            })
-            .unwrap_or_default()
-    };
-    let b = status_map(before);
-    let a = status_map(after);
-    let mut ids: BTreeSet<String> = BTreeSet::new();
-    ids.extend(b.keys().cloned());
-    ids.extend(a.keys().cloned());
-    let mut transitions = Vec::new();
-    for id in ids {
-        let old = b.get(&id).map(String::as_str).unwrap_or("absent");
-        let new = a.get(&id).map(String::as_str).unwrap_or("absent");
-        if old != new {
-            transitions.push(json!({ "obligation_id": id, "before": old, "after": new }));
-        }
-    }
-    let payload = json!({
-        "before_frontier_map_root": before["frontier_map_root"],
-        "after_frontier_map_root": after["frontier_map_root"],
-        "transitions": transitions,
-    });
-    let mut out = payload.as_object().cloned().unwrap();
-    out.insert("transition_digest".into(), json!(digest(&payload)?));
     Ok(Value::Object(out))
 }
 

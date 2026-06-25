@@ -1169,7 +1169,7 @@ fn write_section_readmes(path: &Path) -> Result<(), String> {
         ),
         (
             "exports/registry",
-            "Generated registry and federation bundles.",
+            "Generated registry and cross-hub bundles.",
         ),
     ]);
     for (dir, description) in export_sections {

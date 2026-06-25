@@ -272,16 +272,6 @@ impl StatusProvenance {
             confidence,
         )
     }
-
-    /// Whether the support set contains the given variable.
-    pub fn support_contains(&self, var: &str) -> bool {
-        self.support.support().contains(var)
-    }
-
-    /// Whether the refute set contains the given variable.
-    pub fn refute_contains(&self, var: &str) -> bool {
-        self.refute.support().contains(var)
-    }
 }
 
 #[cfg(test)]

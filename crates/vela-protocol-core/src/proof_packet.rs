@@ -12,7 +12,7 @@
 //!
 //! - `packet.rs` — Canonical state replay packet. A *directory* of
 //!   canonical artifacts (manifest.json, packet.lock.json, etc) that
-//!   a peer uses to replay frontier state. Heavy; used for federation
+//!   a peer uses to replay frontier state. Heavy; used for cross-hub
 //!   bundles.
 //! - `review_packet.rs` — Task handoff packet. A human-readable bundle
 //!   for one reviewer to hand work to another. Local-frontier scope.
@@ -41,7 +41,7 @@ pub enum ProofPacketKind {
     Hire,
     ModelPromotion,
     ConjectureTransition,
-    /// Open enum: federation peers may issue domain-specific kinds.
+    /// Open enum: other producers may issue domain-specific kinds.
     /// Stored as the discriminant value in serde; consumers that
     /// don't know the kind treat the packet opaquely.
     Other,

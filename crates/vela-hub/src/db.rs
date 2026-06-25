@@ -566,8 +566,8 @@ impl HubDb {
 
     /// v0.201: look up a Scientific Diff Pack by its `vsd_*` id.
     /// Returns the raw signed pack JSON if the pack has been
-    /// registered with this hub via a `diff_pack.released` federation
-    /// event, otherwise None.
+    /// registered with this hub via a `diff_pack.released` event,
+    /// otherwise None.
     pub async fn get_diff_pack(&self, pack_id: &str) -> Result<Option<Value>, String> {
         match self {
             Self::Postgres(p) => sqlx::query_scalar::<_, Value>(
@@ -2961,7 +2961,7 @@ pub const POSTGRES_EVENT_FIRST_SCHEMA: &[&str] = &[
     // Producer index: signer extracted at promote for cross-frontier
     // per-key queries.
     "ALTER TABLE frontier_objects ADD COLUMN IF NOT EXISTS signer_pubkey TEXT",
-    // v0.201: federation handle for `vsd_*` Scientific Diff Packs.
+    // v0.201: hub-side index handle for `vsd_*` Scientific Diff Packs.
     // Mirror of registry_entries but for the v0.193 primitive.
     r#"CREATE TABLE IF NOT EXISTS registry_diff_packs (
         id BIGSERIAL PRIMARY KEY,
@@ -3035,7 +3035,7 @@ pub async fn ensure_sqlite_schema(pool: &SqlitePool) -> Result<(), String> {
         "CREATE INDEX IF NOT EXISTS idx_entries_vfr_id ON registry_entries (vfr_id)",
         "CREATE INDEX IF NOT EXISTS idx_entries_signed_publish_at ON registry_entries (signed_publish_at DESC)",
         "CREATE UNIQUE INDEX IF NOT EXISTS uq_entries_vfr_signature ON registry_entries (vfr_id, signature)",
-        // v0.201: registry_diff_packs is the federation handle for
+        // v0.201: registry_diff_packs is the hub-side index for
         // `vsd_*` Scientific Diff Packs. A pack lands here when the
         // corresponding `diff_pack.released` event has been applied
         // on a frontier and its member proposals have been accepted.

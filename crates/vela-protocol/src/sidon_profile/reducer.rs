@@ -139,13 +139,6 @@ pub fn live_presentation(project: &crate::project::Project) -> Result<Presentati
     presentation_from_bounds(&collect_live_bounds(&rows))
 }
 
-/// Load a frontier directory (replaying its event log) and compile its live
-/// Sidon presentation. The path is a frontier working dir containing `.vela/`.
-pub fn live_presentation_from_path(path: &std::path::Path) -> Result<Presentation, String> {
-    let project = crate::repo::load_from_path(path)?;
-    live_presentation(&project)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

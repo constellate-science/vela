@@ -66,18 +66,6 @@ pub struct LintReport {
 pub fn all_rules() -> Vec<LintRule> {
     vec![
         LintRule {
-            id: "L002".into(),
-            name: "no_replication".into(),
-            severity: Severity::Warning,
-            description: "High-confidence finding without replication".into(),
-        },
-        LintRule {
-            id: "L004".into(),
-            name: "confidence_mismatch".into(),
-            severity: Severity::Warning,
-            description: "Theoretical finding with unusually high confidence".into(),
-        },
-        LintRule {
             id: "L007".into(),
             name: "missing_controls".into(),
             severity: Severity::Warning,
@@ -150,77 +138,6 @@ fn has_abstract_only_caveat(finding: &FindingBundle) -> bool {
     })
 }
 
-/// True when a finding is exact-math / verifier-backed rather than empirical.
-///
-/// The methodology lints L002 (no-replication) and L004 (high confidence for
-/// unvalidated theory) encode *empirical* norms: a wet-lab claim needs
-/// independent replication, and an untested theory should not assert near-
-/// certainty. Those norms invert in the exact wedge. A Sidon / Erdős finding
-/// carries `confidence = 1.0` precisely *because* a frozen verifier re-derives
-/// it from the witness — "replication" is the verifier re-run, and the high
-/// confidence is earned, not a red flag. Firing L002/L004 on these is the
-/// same category error L001 (sample size) and L003 (species) avoided by being
-/// stubbed: those slots only exist in the empirical domain.
-///
-/// The signal is the *evidence* typing — how the claim is established, not
-/// what it asserts. The exact wedge establishes its objects by `computational`
-/// re-derivation (a constructed witness re-checked by a frozen verifier) or by
-/// `theoretical` proof, distinct from the empirical `experimental` /
-/// `observational` evidence these heuristics were written for. Assertion type
-/// is deliberately NOT used: an empirical claim can carry assertion type
-/// `theoretical` while resting on `experimental` evidence, and L004's whole
-/// point is to flag exactly that over-confident empirical case.
-fn is_exact_or_verifier_backed(finding: &FindingBundle) -> bool {
-    matches!(
-        finding.evidence.evidence_type.as_str(),
-        "computational" | "theoretical"
-    )
-}
-pub fn check_no_replication(finding: &FindingBundle) -> Vec<Diagnostic> {
-    let mut diags = Vec::new();
-    // Skip exact / verifier-backed findings: "replication" there is the
-    // verifier re-run, not an independent empirical study. (Mirrors why
-    // L001/L003 are stubbed — empirical-domain norms only.)
-    if is_exact_or_verifier_backed(finding) {
-        return diags;
-    }
-    if finding.confidence.score > 0.8 && !finding.evidence.replicated {
-        diags.push(Diagnostic {
-            rule_id: "L002".into(),
-            finding_id: finding.id.clone(),
-            message: format!(
-                "Confidence {:.2} but no replication reported",
-                finding.confidence.score
-            ),
-            suggestion: "High-confidence claims should have independent replication".into(),
-            severity: Severity::Warning,
-        });
-    }
-    diags
-}
-pub fn check_confidence_mismatch(finding: &FindingBundle) -> Vec<Diagnostic> {
-    let mut diags = Vec::new();
-    // Skip exact / verifier-backed findings: a frozen verifier re-derives the
-    // result, so confidence ~1.0 is earned, not "unusually high for unvalidated
-    // theory". The empirical caveat this rule encodes does not apply in the
-    // exact wedge. (Mirrors why L001/L003 are stubbed.)
-    if is_exact_or_verifier_backed(finding) {
-        return diags;
-    }
-    if finding.assertion.assertion_type == "theoretical" && finding.confidence.score > 0.9 {
-        diags.push(Diagnostic {
-            rule_id: "L004".into(),
-            finding_id: finding.id.clone(),
-            message: format!(
-                "Theoretical assertion with confidence {:.2} — unusually high for unvalidated theory",
-                finding.confidence.score
-            ),
-            suggestion: "Theoretical findings typically warrant lower confidence until experimentally validated".into(),
-            severity: Severity::Warning,
-        });
-    }
-    diags
-}
 pub fn check_missing_controls(finding: &FindingBundle) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
     if finding.evidence.evidence_type == "experimental" && !has_abstract_only_caveat(finding) {
@@ -592,8 +509,6 @@ pub fn lint(
     // Per-finding checks
     for finding in &frontier.findings {
         let mut finding_diags = Vec::new();
-        finding_diags.extend(check_no_replication(finding));
-        finding_diags.extend(check_confidence_mismatch(finding));
         finding_diags.extend(check_missing_controls(finding));
         finding_diags.extend(check_multiple_comparisons(finding));
         finding_diags.extend(check_wrong_test(finding));
@@ -808,103 +723,7 @@ mod tests {
 
     #[test]
     fn all_rules_count() {
-        assert_eq!(all_rules().len(), 7);
-    }
-
-    #[test]
-    fn check_no_replication_high_confidence() {
-        let mut f = make_finding("vf_003");
-        f.confidence.score = 0.9;
-        f.evidence.replicated = false;
-        let diags = check_no_replication(&f);
-        assert_eq!(diags.len(), 1);
-        assert_eq!(diags[0].rule_id, "L002");
-    }
-
-    #[test]
-    fn check_no_replication_ok() {
-        let mut f = make_finding("vf_004");
-        f.confidence.score = 0.9;
-        f.evidence.replicated = true;
-        let diags = check_no_replication(&f);
-        assert!(diags.is_empty());
-    }
-
-    #[test]
-    fn check_confidence_mismatch_theoretical() {
-        let mut f = make_finding("vf_006");
-        f.assertion.assertion_type = "theoretical".into();
-        // Empirical evidence backing a theoretical claim — the rule's target.
-        f.evidence.evidence_type = "experimental".into();
-        f.confidence.score = 0.95;
-        let diags = check_confidence_mismatch(&f);
-        assert_eq!(diags.len(), 1);
-        assert_eq!(diags[0].rule_id, "L004");
-    }
-
-    /// An exact-math / verifier-backed finding (a Sidon bound re-derived by
-    /// the frozen verifier) carries confidence ~1.0 *because* the witness
-    /// checks — that is earned certainty, not unvalidated theory. L002 and
-    /// L004 must not fire on it, mirroring how L001/L003 are scoped out of the
-    /// exact wedge.
-    #[test]
-    fn methodology_lints_skip_verifier_backed_exact_finding() {
-        let mut f = make_finding("vf_exact");
-        // Shape of a live Sidon finding: computational/theoretical typing,
-        // confidence pinned at 1.0 by a frozen verifier, no empirical
-        // "replication".
-        f.assertion.assertion_type = "computational".into();
-        f.evidence.evidence_type = "computational".into();
-        f.evidence.replicated = false;
-        f.confidence.score = 1.0;
-        assert!(
-            check_no_replication(&f).is_empty(),
-            "L002 should not fire on a verifier-backed exact finding"
-        );
-
-        // And the same for a `theoretical` exact proof at confidence 1.0.
-        let mut t = make_finding("vf_exact_theory");
-        t.assertion.assertion_type = "theoretical".into();
-        t.evidence.evidence_type = "theoretical".into();
-        t.confidence.score = 0.99;
-        assert!(
-            check_confidence_mismatch(&t).is_empty(),
-            "L004 should not fire on a verifier-backed exact finding"
-        );
-    }
-
-    /// The scoping is surgical: genuine empirical no-replication / high-
-    /// confidence-theory cases must STILL fire. Guards against the fix
-    /// silencing the rules wholesale.
-    #[test]
-    fn methodology_lints_still_fire_on_empirical_cases() {
-        // L002: high-confidence experimental claim with no replication.
-        let mut emp = make_finding("vf_emp_noreplication");
-        emp.evidence.evidence_type = "experimental".into();
-        emp.assertion.assertion_type = "mechanism".into();
-        emp.confidence.score = 0.9;
-        emp.evidence.replicated = false;
-        let l002 = check_no_replication(&emp);
-        assert_eq!(
-            l002.len(),
-            1,
-            "L002 must still fire on empirical no-replication"
-        );
-        assert_eq!(l002[0].rule_id, "L002");
-
-        // L004: theoretical claim backed by experimental (empirical) evidence
-        // asserting near-certainty — still a red flag.
-        let mut theory = make_finding("vf_emp_overconfident_theory");
-        theory.assertion.assertion_type = "theoretical".into();
-        theory.evidence.evidence_type = "experimental".into();
-        theory.confidence.score = 0.95;
-        let l004 = check_confidence_mismatch(&theory);
-        assert_eq!(
-            l004.len(),
-            1,
-            "L004 must still fire on overconfident empirical theory"
-        );
-        assert_eq!(l004[0].rule_id, "L004");
+        assert_eq!(all_rules().len(), 5);
     }
 
     #[test]
