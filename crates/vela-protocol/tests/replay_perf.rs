@@ -89,7 +89,6 @@ fn make_finding(idx: usize) -> FindingBundle {
         score: 0.5,
         basis: "synthetic".into(),
         method: ConfidenceMethod::LlmInitial,
-        components: None,
         extraction_confidence: 0.5,
     };
     let mut f = FindingBundle::new(

@@ -174,7 +174,6 @@ mod tests {
             score: 0.5,
             basis: "test".into(),
             method: ConfidenceMethod::LlmInitial,
-            components: None,
             extraction_confidence: 0.5,
         }
     }

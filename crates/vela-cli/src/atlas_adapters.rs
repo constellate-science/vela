@@ -80,7 +80,6 @@ pub fn build_finding(rec: &SourceRecord, source_tag: &str) -> FindingBundle {
         score: 0.5,
         basis: "external catalogue record".into(),
         method: ConfidenceMethod::LlmInitial,
-        components: None,
         extraction_confidence: 1.0,
     };
     let provenance = Provenance {

@@ -12,7 +12,6 @@ use vela_protocol::cli_style as style;
 
 use crate::observer;
 use vela_protocol::bundle::*;
-use vela_protocol::confidence;
 use vela_protocol::link;
 use vela_protocol::project;
 use vela_protocol::propagate::{self, PropagationAction};
@@ -87,7 +86,6 @@ pub fn run(dir: &Path) -> (usize, usize) {
             let result = match suite_name {
                 "id-generation" => run_id_generation(input, expected),
                 "link-inference" => run_link_inference(input, expected),
-                "confidence-scoring" => run_confidence_scoring(input, expected),
                 "retraction-propagation" => run_retraction_propagation(input, expected),
                 "replication-cascade" => run_retraction_propagation(input, expected),
                 "observer-policies" => run_observer_policies(input, expected),
@@ -325,138 +323,6 @@ fn run_link_inference(
                 }
             }
         }
-    }
-
-    Ok(())
-}
-
-// ── Confidence scoring ──────────────────────────────────────────────────
-
-fn make_confidence_bundle(v: &serde_json::Value) -> FindingBundle {
-    let score = v
-        .get("seed_score")
-        .and_then(|value| value.as_f64())
-        .or_else(|| v.get("llm_score").and_then(|value| value.as_f64()))
-        .unwrap_or(0.7);
-    let year = v["year"].as_i64().unwrap_or(2020) as i32;
-    let etype = v["evidence_type"].as_str().unwrap_or("experimental");
-    let has_spans = v["has_evidence_spans"].as_bool().unwrap_or(false);
-
-    let bundle = FindingBundle {
-        id: "test".into(),
-        version: 1,
-        previous_version: None,
-        assertion: Assertion {
-            text: "Test".into(),
-            assertion_type: "mechanism".into(),
-            entities: vec![],
-            relation: None,
-            direction: None,
-            causal_claim: None,
-            causal_evidence_grade: None,
-        },
-        evidence: Evidence {
-            evidence_type: etype.into(),
-            model_system: String::new(),
-            method: String::new(),
-            replicated: false,
-            replication_count: None,
-            evidence_spans: if has_spans {
-                vec![serde_json::json!({"text": "span"})]
-            } else {
-                vec![]
-            },
-        },
-        conditions: Conditions {
-            text: String::new(),
-            duration: None,
-        },
-        confidence: Confidence::raw(score, "seeded prior", 0.85),
-        provenance: Provenance {
-            source_type: "published_paper".into(),
-            doi: None,
-            url: None,
-            title: "Test".into(),
-            authors: vec![],
-            year: Some(year),
-            license: None,
-            publisher: None,
-            funders: vec![],
-            extraction: Extraction::default(),
-            review: None,
-        },
-        flags: default_flags(),
-        links: vec![],
-        annotations: vec![],
-        attachments: vec![],
-        created: String::new(),
-        updated: None,
-        access_tier: vela_protocol::access_tier::AccessTier::Public,
-    };
-
-    #[allow(clippy::let_and_return)]
-    bundle
-}
-
-fn run_confidence_scoring(
-    input: &serde_json::Value,
-    expected: &serde_json::Value,
-) -> Result<(), String> {
-    // Check if this is a comparison test.
-    if input["comparison"].as_bool().unwrap_or(false) {
-        let mut bundle_a = make_confidence_bundle(&input["finding_a"]);
-        let mut bundle_b = make_confidence_bundle(&input["finding_b"]);
-        bundle_a.id = "a".into();
-        bundle_b.id = "b".into();
-        let mut bundles = vec![bundle_a, bundle_b];
-        confidence::ground_confidence(&mut bundles);
-
-        if expected["a_higher_than_b"].as_bool().unwrap_or(false)
-            && bundles[0].confidence.score <= bundles[1].confidence.score
-        {
-            return Err(format!(
-                "expected a ({:.3}) > b ({:.3})",
-                bundles[0].confidence.score, bundles[1].confidence.score
-            ));
-        }
-        return Ok(());
-    }
-
-    let bundle = make_confidence_bundle(input);
-    let mut bundles = vec![bundle];
-    confidence::ground_confidence(&mut bundles);
-    let score = bundles[0].confidence.score;
-
-    if let Some(range) = expected["score_range"].as_array() {
-        let lo = range[0].as_f64().unwrap_or(0.0);
-        let hi = range[1].as_f64().unwrap_or(1.0);
-        if score < lo || score > hi {
-            return Err(format!("score {score:.3} not in range [{lo}, {hi}]"));
-        }
-    }
-
-    if let Some(floor) = expected["score_at_least"].as_f64()
-        && score < floor
-    {
-        return Err(format!("score {score:.3} below floor {floor}"));
-    }
-
-    if let Some(ceil) = expected["score_at_most"].as_f64()
-        && score > ceil
-    {
-        return Err(format!("score {score:.3} above ceiling {ceil}"));
-    }
-
-    if let Some(lower) = expected["score_lower_than"].as_f64()
-        && score >= lower
-    {
-        return Err(format!("expected score < {lower}, got {score:.3}"));
-    }
-
-    if let Some(higher) = expected["score_higher_than"].as_f64()
-        && score <= higher
-    {
-        return Err(format!("expected score > {higher}, got {score:.3}"));
     }
 
     Ok(())

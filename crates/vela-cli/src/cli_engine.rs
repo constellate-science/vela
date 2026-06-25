@@ -2731,7 +2731,6 @@ pub(crate) fn cmd_normalize(
     let before_stats = serde_json::to_value(&frontier.stats).unwrap_or(Value::Null);
     let (entity_type_fixes, entity_name_fixes) =
         normalize::normalize_findings(&mut frontier.findings);
-    let confidence_updates = bundle::recompute_all_confidence(&mut frontier.findings);
     // Phase N: optionally rewrite finding.provenance from the canonical
     // SourceRecord. The source registry is the authority; provenance is
     // the denormalized cache.
@@ -2809,7 +2808,6 @@ pub(crate) fn cmd_normalize(
     let wrote = wrote_to.is_some();
     let planned_changes = entity_type_fixes
         + entity_name_fixes
-        + confidence_updates
         + id_rewrite_count
         + source_records_materialized
         + evidence_atoms_materialized
@@ -2834,7 +2832,6 @@ pub(crate) fn cmd_normalize(
         "changes": {
             "entity_type_fixes": entity_type_fixes,
             "entity_name_fixes": entity_name_fixes,
-            "confidence_updates": confidence_updates,
             "id_rewrites": id_rewrite_count,
             "source_records_materialized": source_records_materialized,
             "evidence_atoms_materialized": evidence_atoms_materialized,
@@ -2855,14 +2852,14 @@ pub(crate) fn cmd_normalize(
     } else if let Some(path) = payload.get("wrote_to").and_then(Value::as_str) {
         println!("{} normalized frontier written to {path}", style::ok("ok"));
         println!(
-            "  entity type fixes: {}, entity name fixes: {}, confidence updates: {}, id rewrites: {}",
-            entity_type_fixes, entity_name_fixes, confidence_updates, id_rewrite_count
+            "  entity type fixes: {}, entity name fixes: {}, id rewrites: {}",
+            entity_type_fixes, entity_name_fixes, id_rewrite_count
         );
     } else {
         println!("normalize dry run for {}", source.display());
         println!(
-            "  would apply entity type fixes: {}, entity name fixes: {}, confidence updates: {}, id rewrites: {}",
-            entity_type_fixes, entity_name_fixes, confidence_updates, id_rewrite_count
+            "  would apply entity type fixes: {}, entity name fixes: {}, id rewrites: {}",
+            entity_type_fixes, entity_name_fixes, id_rewrite_count
         );
     }
 }

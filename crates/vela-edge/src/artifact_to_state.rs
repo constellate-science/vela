@@ -656,7 +656,6 @@ fn claim_to_finding(
             score: claim.confidence,
             basis: "agent-imported candidate claim; reviewer acceptance required".to_string(),
             method: ConfidenceMethod::ExpertJudgment,
-            components: None,
             extraction_confidence: 0.7,
         },
         packet_provenance(

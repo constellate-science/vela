@@ -52,7 +52,6 @@ fn finding(id_text: &str) -> FindingBundle {
             score: 0.5,
             basis: "fixture".to_string(),
             method: ConfidenceMethod::ExpertJudgment,
-            components: None,
             extraction_confidence: 1.0,
         },
         provenance,

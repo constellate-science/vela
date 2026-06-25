@@ -606,7 +606,6 @@ pub(crate) mod reverse_dep_index_tests {
             score: 0.5,
             basis: "test".into(),
             method: ConfidenceMethod::LlmInitial,
-            components: None,
             extraction_confidence: 0.9,
         };
         let provenance = Provenance {

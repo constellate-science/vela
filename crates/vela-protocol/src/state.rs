@@ -1095,7 +1095,6 @@ fn build_finding_bundle(options: &FindingDraftOptions) -> FindingBundle {
         score: options.confidence,
         basis: "operator-supplied frontier prior; review required".to_string(),
         method: ConfidenceMethod::ExpertJudgment,
-        components: None,
         extraction_confidence: 1.0,
     };
     let source_authors = if options.source_authors.is_empty() {
@@ -1236,7 +1235,6 @@ fn build_add_finding_proposal(options: FindingDraftOptions) -> Result<StatePropo
         score: options.confidence,
         basis: "operator-supplied frontier prior; review required".to_string(),
         method: ConfidenceMethod::ExpertJudgment,
-        components: None,
         extraction_confidence: 1.0,
     };
     // v0.11: structured provenance. Source authors (the paper's authors)

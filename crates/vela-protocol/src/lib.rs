@@ -9,7 +9,6 @@ pub mod bundle;
 pub mod canonical;
 pub mod causal_graph;
 pub mod cli_style;
-pub mod confidence;
 pub mod contradiction;
 pub mod diff;
 pub mod diff_pack_review;

@@ -13,7 +13,7 @@ use crate::lint;
 use crate::normalize;
 use crate::packet;
 use vela_protocol::bundle::{
-    ConfidenceMethod, FindingBundle, VALID_ASSERTION_TYPES, VALID_EVIDENCE_TYPES, VALID_LINK_TYPES,
+    FindingBundle, VALID_ASSERTION_TYPES, VALID_EVIDENCE_TYPES, VALID_LINK_TYPES,
     VALID_PROVENANCE_SOURCE_TYPES,
 };
 use vela_protocol::repo;
@@ -633,15 +633,6 @@ fn validate_finding(
         });
     }
 
-    if finding.confidence.method == ConfidenceMethod::Computed
-        && finding.confidence.components.is_none()
-    {
-        errors.push(ValidationError {
-            file: file_label.to_string(),
-            error: "Computed confidence must include components".to_string(),
-        });
-    }
-
     // Link targets must either reference an existing in-frontier vf_id
     // (`vf_…`) or, in v0.8+, a vf_id in a declared cross-frontier dep
     // (`vf_…@vfr_…`).
@@ -1017,20 +1008,6 @@ mod tests {
                 .iter()
                 .any(|e| e.error.contains("Invalid extraction method"))
         );
-    }
-
-    #[test]
-    fn invalid_computed_confidence_components_detected() {
-        let tmp = TempDir::new().unwrap();
-        let mut f = make_valid_finding("vf_0000000000000001");
-        f.confidence.method = ConfidenceMethod::Computed;
-        f.confidence.components = None;
-        let path = write_frontier(tmp.path(), vec![f]);
-        let report = validate(&path);
-        assert!(report.errors.iter().any(|e| {
-            e.error
-                .contains("Computed confidence must include components")
-        }));
     }
 
     #[test]

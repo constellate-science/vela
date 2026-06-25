@@ -87,7 +87,6 @@ fn make_finding(frontier_idx: usize, finding_idx: usize) -> FindingBundle {
         score: 0.7,
         basis: "Synthetic test fixture".into(),
         method: ConfidenceMethod::LlmInitial,
-        components: None,
         extraction_confidence: 0.9,
     };
 

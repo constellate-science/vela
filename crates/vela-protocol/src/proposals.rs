@@ -4389,7 +4389,6 @@ mod tests {
                 score: 0.7,
                 basis: "test".to_string(),
                 method: ConfidenceMethod::ExpertJudgment,
-                components: None,
                 extraction_confidence: 1.0,
             },
             provenance: Provenance {
