@@ -41,10 +41,12 @@ runs:
         ver="${{ inputs.vela-version }}"
         # install.sh fetches the right platform asset from the GitHub release
         # and verifies its sha256 before placing the binary on PATH.
+        # install.sh uses bash features (set -o pipefail), so run it with bash,
+        # never `sh` (dash on ubuntu-latest rejects pipefail).
         if [ -x "./install.sh" ]; then
-          VELA_VERSION="$ver" ./install.sh
+          VELA_VERSION="$ver" bash ./install.sh
         else
-          curl -fsSL https://raw.githubusercontent.com/constellate-science/vela/main/install.sh | VELA_VERSION="$ver" sh
+          curl -fsSL https://raw.githubusercontent.com/constellate-science/vela/main/install.sh | VELA_VERSION="$ver" bash
         fi
         vela --version
 
