@@ -1,10 +1,48 @@
 # ADR 0001: A frontier should be a git repo, not a parallel git
 
 - Status: Accepted 2026-06-24. Phase 0 landed (agent-doable); Phase 1+ pending
-  Will key-custody.
+  Will key-custody. Target sharpened 2026-06-25 to **repo-native Vela** (below).
 - Deciders: Will (key custody), substrate
 - Question that triggered it: "Why are we rebuilding git ourselves instead of
   referencing a GitHub repo?"
+
+## Target (2026-06-25): repo-native Vela
+
+> Vela's long-term target is repo-native scientific state: Git-compatible,
+> cloneable, forkable frontiers whose canonical truth is the accepted Vela event
+> history, not the hub database. Git provides commodity transport and
+> collaboration; Vela provides the scientific state machine. **Git is the
+> substrate. Vela is the protocol.**
+
+This is NOT "frontier = a normal git repo" (git does not know what a claim, a
+receipt, a reducer, or a valid frontier transition is) and NOT "hub is authority"
+(a centralized hub with a custom transport is the wrong shape for a science
+protocol that needs portability, mirrors, institutional custody, and offline
+audit). Git owns transport, fork, branch, diff, PR, blob references, and human
+inspection; Vela owns what counts as a valid event, accepted vs proposed state,
+replay, reducers, receipts, verifier meaning, trust policy, review gates,
+materialization, semantic diff, provenance, retractions, and public/private
+overlays. The frontier must survive without the hub.
+
+Two corrections to the "delete list" below, from reading the live code:
+
+- **`storage.rs` STAYS.** It is already a ~190-LOC wrapper over the AWS S3 SDK
+  (Tigris/R2), content-addressed by sha256. It is not a reinvented wheel; it
+  becomes the git-LFS custom-transport mirror.
+- **`merkle.rs` STAYS.** It is a self-contained RFC-6962 transparency log,
+  validated against the published CT test vectors. Replacing it with
+  sigstore/rekor would add a hosted network dependency that breaks "survives
+  without the hub." A self-contained, offline-verifiable CT log is aligned with
+  the target, not a wheel to discard.
+
+The genuine reinvention to retire is the **transport** (`cli_registry`
+clone/pull/push, `registry.rs` remote, `workspace.rs`, `hydrate-frontiers.sh`,
+the `db.rs` write-path-as-authority). That is retired by the git-native cutover
+(Phase 1+2), not a library swap. The near-term, re-sign-free Phase A win is
+making the frontier **self-describing** (`.vela/{schemas,reducers,policies,
+receipts,attestations}/` + a `materialization-manifest.json` that pins the
+schema/reducer/policy/verifier-rule versions) so it replays from a clean git
+checkout with no hub and no assumption about which binary you have.
 
 ## Execution status (2026-06-24)
 
@@ -90,8 +128,8 @@ Measured against the live code. These go to git, GitHub, and git-LFS.
 |---|---|---|---|
 | clone/pull/push/status/registry verbs | `vela-cli/src/cli_registry.rs` | 1,882 | `git clone/pull/push/status` + a ~150-LOC materialize+parity shim |
 | publish/append/pull plumbing, signed ref | `vela-protocol/src/registry.rs` | 1,825 | git remote + LFS + signed tags; `pull_transitive` becomes a pinned submodule |
-| RFC-6962 Merkle tree | `vela-protocol/src/merkle.rs` | 492 | git's native Merkle DAG + a ~80-LOC Ed25519 signed-head helper |
-| blob tier (Tigris, sha256 key) | `vela-hub/src/storage.rs` | 191 | git-LFS keyed by the same sha256 (keep as an LFS mirror) |
+| ~~RFC-6962 Merkle tree~~ **KEEP** | `vela-protocol/src/merkle.rs` | 492 | self-contained offline CT log; rekor/sigstore would add a hosted dependency that breaks "survives without the hub" |
+| ~~blob tier (Tigris, sha256 key)~~ **KEEP** | `vela-hub/src/storage.rs` | 191 | already the AWS S3 SDK; becomes the git-LFS custom-transport mirror |
 | workspace registry | `vela-protocol/src/workspace.rs` | 144 | git remotes + submodule config |
 | append/promote write path | `vela-hub/src/db.rs` (write path) | ~1,000 | GitHub receive-pack + branch protection + the Action |
 | hydrate (= `git checkout`) | `scripts/hydrate-frontiers.sh` | 80 | `git clone` + `git lfs pull` + `vela frontier materialize` |
@@ -190,7 +228,7 @@ behind a green Phase 0.
 | 0d. Bind accept to history | Add the parent chain hash to `accept_preimage_bytes` (`proposals.rs:463`) | new accepts bind history; replay test fails to forge |
 | 0e. Vela-binary-as-required-Action (shadow) | Mirror frontiers read-only to GitHub; PR Action runs `vela reproduce` + recompute hashes vs lock + `authorize_proposal_accept` on `review.accepted` diffs | a dual-key dry-run PR carrying a witness + a Will-signed `review.accepted` goes green and matches the bespoke hub accept byte-for-byte. **This is the conversion event for goal #66, with no store migration.** |
 | 1. Re-sign + git-backed cutover (Will) | Will re-signs all six locks under the order-canonical hash; un-gitignore `.vela/events/`; witnesses to LFS; `frontier.json`/`vela.lock` stay derived; `clone` becomes `git clone` + `lfs pull` + materialize | each frontier clones from GitHub, reproduces, re-derives hashes equal to the re-signed locks; Track-A conflict count not increased vs baseline |
-| 2. Retire the bespoke transport | Delete the `cli_registry` git-verbs, `registry.rs` remote, `storage.rs`, `merkle.rs` (keep the signed-head helper), the `db.rs` write path, `hydrate-frontiers.sh`, `workspace.rs`; hub becomes the read/query index | full conformance + frozen verifiers green sourced entirely from git + LFS; a cold clone reproduces all six; a grep gate proves no caller of the deleted transport remains |
+| 2. Retire the bespoke transport | Delete the `cli_registry` git-verbs, `registry.rs` remote, the `db.rs` write path, `hydrate-frontiers.sh`, `workspace.rs`; hub becomes the read/query index. **KEEP** `merkle.rs` (offline CT log) and `storage.rs` (S3 → LFS mirror) | full conformance + frozen verifiers green sourced entirely from git + LFS; a cold clone reproduces all six; a grep gate proves no caller of the deleted transport remains |
 
 ## Risks and what we lose
 
@@ -212,8 +250,10 @@ behind a green Phase 0.
 - **Producer ergonomics could regress** (fork, clone, lfs install, branch,
   author canonical JSON, commit, push, PR) versus a flagless `vela propose`.
   Ship a `vela propose --github` one-command shim.
-- The intended loss: ~4,500 to 5,200 lines of hand-rolled git, GitHub, and LFS.
-  That deletion is the point.
+- The intended loss: ~3,500 to 4,500 lines of hand-rolled git transport (the
+  `cli_registry` verbs, `registry.rs` remote, `workspace.rs`, the `db.rs` write
+  path, `hydrate`). `merkle.rs` (492) and `storage.rs` (191) stay, per the
+  repo-native target above. That deletion is the point.
 
 ## Open questions for Will
 

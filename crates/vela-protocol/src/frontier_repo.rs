@@ -158,6 +158,8 @@ pub struct FrontierLock {
     #[serde(default)]
     pub reducer: LockPackage,
     #[serde(default)]
+    pub verifiers: LockVerifiers,
+    #[serde(default)]
     pub carina: LockKernel,
     pub snapshot_hash: String,
     pub event_log_hash: String,
@@ -238,6 +240,21 @@ pub struct LockPackage {
 pub struct LockKernel {
     pub kernel: String,
     pub digest: String,
+}
+
+/// 2026-06-25 (repo-native): the frozen-verifier pin. The lock already pins the
+/// reducer that replays events into state; this pins the `vela-verify` package
+/// that re-derives the frontier's witnesses and the set of verifier `kind`s those
+/// witnesses declare. Together they make the frontier self-describing: a
+/// different binary can replay AND re-verify it from the repo alone, with no hub
+/// and no assumption about which version produced it. `kinds` is empty for
+/// claim/cert frontiers that carry no witnesses.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct LockVerifiers {
+    pub package: String,
+    pub digest: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub kinds: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
@@ -838,6 +855,7 @@ fn write_lock(
 ) -> Result<FrontierLock, String> {
     let locked = project_with_frontier_id(project)?;
     let reducer_package = format!("vela@{}", env!("CARGO_PKG_VERSION"));
+    let verifier_package = format!("vela-verify@{}", env!("CARGO_PKG_VERSION"));
     let lock = FrontierLock {
         schema: FRONTIER_LOCK_SCHEMA.to_string(),
         generated_at: generated_at.to_string(),
@@ -848,6 +866,11 @@ fn write_lock(
         reducer: LockPackage {
             package: reducer_package.clone(),
             digest: identity_digest(&reducer_package),
+        },
+        verifiers: LockVerifiers {
+            package: verifier_package.clone(),
+            digest: identity_digest(&verifier_package),
+            kinds: collect_verifier_kinds(path),
         },
         carina: LockKernel {
             kernel: DEFAULT_CARINA_KERNEL.to_string(),
@@ -894,6 +917,56 @@ fn write_lock(
     fs::write(path.join("vela.lock"), yaml)
         .map_err(|e| format!("Failed to write vela.lock: {e}"))?;
     Ok(lock)
+}
+
+/// Collect the sorted, unique verifier `kind`s this frontier's witnesses
+/// declare, mirroring how `vela reproduce` finds witnesses: scan the top-level
+/// `witnesses/` subdir if present, else the whole working tree (skipping `.vela`
+/// and `.git`). Deterministic via the BTreeSet, so it does not perturb the
+/// materialize-determinism gate. Empty for claim/cert frontiers with no witnesses.
+fn collect_verifier_kinds(path: &Path) -> Vec<String> {
+    let witnesses_dir = path.join("witnesses");
+    let root = if witnesses_dir.is_dir() {
+        witnesses_dir
+    } else {
+        path.to_path_buf()
+    };
+    let mut files = Vec::new();
+    collect_witness_json(&root, &mut files);
+    let mut kinds: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for f in files {
+        if let Ok(text) = fs::read_to_string(&f)
+            && let Ok(v) = serde_json::from_str::<serde_json::Value>(&text)
+            && let Some(k) = v.get("kind").and_then(|k| k.as_str())
+        {
+            kinds.insert(k.to_string());
+        }
+    }
+    kinds.into_iter().collect()
+}
+
+fn collect_witness_json(dir: &Path, out: &mut Vec<std::path::PathBuf>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let p = entry.path();
+        if p.is_dir() {
+            if matches!(
+                p.file_name().and_then(|n| n.to_str()),
+                Some(".vela") | Some(".git")
+            ) {
+                continue;
+            }
+            collect_witness_json(&p, out);
+        } else if p
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| n.ends_with(".witness.json"))
+        {
+            out.push(p);
+        }
+    }
 }
 
 fn materialization_generated_at(path: &Path, project: &Project) -> String {
