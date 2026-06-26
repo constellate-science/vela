@@ -10,32 +10,22 @@ use colored::Colorize;
 // library. These were `vela_protocol::{cli, serve, workbench, cli_*}`
 // before; they now live here and reach into the substrate via
 // `vela_protocol::*`.
-mod atlas_adapters;
-mod campaign;
+mod atlas;
+pub(crate) use atlas::{atlas_adapters, cli_atlas};
+mod frontier;
+pub(crate) use frontier::{cli_frontier, cli_read, cli_registry};
+mod write;
+pub(crate) use write::{cli_claim, cli_finding, cli_write, review_work, solve_diff_triangle};
+mod discovery;
+pub(crate) use discovery::{campaign, cli_campaign, cli_source_fetch};
+mod tools;
+pub(crate) use tools::{cli_check, cli_lean, cli_log_verify, cli_proof};
+mod config;
+pub(crate) use config::{cli_admin, cli_agents, cli_experiment, cli_identity, cli_policy};
+mod server;
+pub(crate) use server::{cli_commands, cli_engine, serve};
+
 pub mod cli;
-mod cli_admin;
-mod cli_agents;
-mod cli_atlas;
-mod cli_campaign;
-mod cli_check;
-mod cli_claim;
-mod cli_commands;
-mod cli_engine;
-mod cli_experiment;
-mod cli_finding;
-mod cli_frontier;
-mod cli_identity;
-mod cli_lean;
-mod cli_log_verify;
-mod cli_policy;
-mod cli_proof;
-mod cli_read;
-mod cli_registry;
-mod cli_source_fetch;
-mod cli_write;
-mod review_work;
-mod serve;
-mod solve_diff_triangle;
 
 pub fn run() {
     // Atlas R.2 intercept: read-only verifier subcommands for the
