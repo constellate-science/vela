@@ -41,8 +41,6 @@ publish = false
 dotenvy = "0.15"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
-ctrlc = { version = "3", features = ["termination"] }
-libc = "0.2"
 # rustls-tls (not the default native-tls) so the tree builds a single
 # TLS stack — sqlx already uses rustls — and drops the openssl C build.
 reqwest = { version = "0.12", default-features = false, features = ["json", "blocking", "rustls-tls", "charset", "http2"] }
@@ -52,7 +50,6 @@ serde_yaml = "0.9"
 sha2 = "0.10"
 tokio = { version = "1", features = ["full"] }
 chrono = { version = "0.4", features = ["serde"] }
-indicatif = "0.18"
 hex = "0.4"
 regex = "1"
 urlencoding = "2"
@@ -69,9 +66,6 @@ base64 = "0.22"
 unicode-normalization = "0.1"
 rand = "0.8"
 toml = "0.8"
-quick-xml = "0.37"
-tokio-stream = "0.1"
-futures = "0.3"
 tempfile = "3"
 
 # Internal crates. `version` is required so cargo publish can resolve

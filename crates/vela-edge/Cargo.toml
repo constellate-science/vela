@@ -22,7 +22,6 @@ sha2.workspace = true
 tokio.workspace = true
 chrono.workspace = true
 hex.workspace = true
-regex.workspace = true
 urlencoding.workspace = true
 colored.workspace = true
 sqlx.workspace = true

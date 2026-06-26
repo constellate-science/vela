@@ -15,15 +15,6 @@ use vela_protocol::events::{StateEvent, event_log_hash, snapshot_hash};
 use vela_protocol::project::Project;
 use vela_protocol::registry::RegistryEntry;
 
-const LATEST_PER_VFR_SQL: &str = r#"
-SELECT raw_json FROM registry_entries r
-WHERE r.signed_publish_at = (
-    SELECT MAX(signed_publish_at) FROM registry_entries
-    WHERE vfr_id = r.vfr_id
-)
-ORDER BY r.signed_publish_at DESC
-"#;
-
 /// Backend-agnostic hub database handle. Variant is picked at startup
 /// based on the `VELA_HUB_DATABASE_URL` prefix.
 #[derive(Clone)]
@@ -125,24 +116,6 @@ impl HubDb {
             .await
             .map(|n| n > 0)
             .map_err(|e| e.to_string()),
-        }
-    }
-
-    pub async fn list_latest_entries(&self) -> Result<Vec<Value>, String> {
-        match self {
-            Self::Postgres(p) => sqlx::query_scalar::<_, Value>(LATEST_PER_VFR_SQL)
-                .fetch_all(p)
-                .await
-                .map_err(|e| e.to_string()),
-            Self::Sqlite(p) => {
-                let rows: Vec<String> = sqlx::query_scalar(LATEST_PER_VFR_SQL)
-                    .fetch_all(p)
-                    .await
-                    .map_err(|e| e.to_string())?;
-                rows.into_iter()
-                    .map(|s| serde_json::from_str::<Value>(&s).map_err(|e| e.to_string()))
-                    .collect()
-            }
         }
     }
 
@@ -687,24 +660,6 @@ impl HubDb {
                 .await
                 .map_err(|e| e.to_string())?;
                 Ok(result.rows_affected() > 0)
-            }
-        }
-    }
-
-    /// v0.201: count of registered `vsd_*` packs.
-    pub async fn count_diff_packs(&self) -> Result<i64, String> {
-        match self {
-            Self::Postgres(p) => {
-                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM registry_diff_packs")
-                    .fetch_one(p)
-                    .await
-                    .map_err(|e| e.to_string())
-            }
-            Self::Sqlite(p) => {
-                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM registry_diff_packs")
-                    .fetch_one(p)
-                    .await
-                    .map_err(|e| e.to_string())
             }
         }
     }
