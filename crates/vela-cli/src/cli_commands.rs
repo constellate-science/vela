@@ -795,9 +795,10 @@ pub(crate) enum SignAction {
     /// Sign unsigned findings in a frontier
     Apply {
         frontier: PathBuf,
-        /// Path to the Ed25519 private key.
+        /// Path to the Ed25519 private key. Optional: defaults to your
+        /// `vela id` identity key (or `$VELA_KEY_PATH`), like publish/accept/propose.
         #[arg(long = "key")]
-        private_key: PathBuf,
+        key: Option<PathBuf>,
         #[arg(long)]
         json: bool,
     },

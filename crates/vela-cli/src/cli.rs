@@ -1916,16 +1916,20 @@ fn cmd_sign(action: SignAction) {
         }
         SignAction::Apply {
             frontier,
-            private_key,
+            key,
             json,
         } => {
+            let key_path =
+                crate::cli_identity::resolve_key_path(key.as_deref()).unwrap_or_else(|| {
+                    fail_return("no signing key: pass --key <path> or run `vela id create` once")
+                });
             let count =
-                sign::sign_frontier(&frontier, &private_key).unwrap_or_else(|e| fail_return(&e));
+                sign::sign_frontier(&frontier, &key_path).unwrap_or_else(|e| fail_return(&e));
             let payload = json!({
                 "ok": true,
                 "command": "sign.apply",
                 "frontier": frontier.display().to_string(),
-                "private_key": private_key.display().to_string(),
+                "private_key": key_path.display().to_string(),
                 "signed": count,
             });
             if json {

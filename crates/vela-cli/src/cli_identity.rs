@@ -132,7 +132,7 @@ pub(crate) fn resolve_hub(flag: Option<&str>) -> String {
 
 /// Resolve a signing key path. `--key` flag wins, then `$VELA_KEY_PATH`,
 /// then the profile's `key_path`.
-fn resolve_key_path(flag: Option<&Path>) -> Option<PathBuf> {
+pub(crate) fn resolve_key_path(flag: Option<&Path>) -> Option<PathBuf> {
     if let Some(p) = flag {
         return Some(p.to_path_buf());
     }
