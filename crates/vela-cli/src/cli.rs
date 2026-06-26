@@ -4038,8 +4038,6 @@ Verify:
   verify        Re-hash and validate a proof packet (manifest + proof-trace chain)
 
 Work next (discovery):
-  attack        Ranked "what to work on next" queue from the dark-matter boundary
-  explore       A finding's neighbourhood: what it rests on / what rests on it, within --hops
   campaign      Discovery engine: search verifier-gated constructions, verify, propose
   foundry       One unattended compounding turn: produce -> frozen-verify -> auto-admit
 

@@ -1626,9 +1626,10 @@ The **bilattice/Belnap status** computed from the support and refute provenance
 polynomials and their exact κ coordinates. The formal trust calculus underneath
 the product words.
 
-- Words: `True` · `False` · `Both` · `None` (Belnap corners) + support κ /
-  refutation κ (exact rationals)
-- Type: `status_provenance::BelnapStatus`, `frontier_calculus::BilatticePoint`
+- Words: `True` · `False` · `Both` · `None` (Belnap corners); the graded
+  support / refutation κ interior is a reference model, not computed in the
+  runtime (THEORY.md §40)
+- Type: `status_provenance::BelnapStatus`
 - Surfaced on: `vela claim state`; the trust internals
 - Authority: a pure function of the recorded support/refute monomials
   (Theorem 3). Never persisted. `Both` here is the formal join of support and
