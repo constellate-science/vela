@@ -175,18 +175,6 @@ pub async fn run_command() {
         Commands::Campaign { action } => crate::cli_campaign::cmd_campaign(action),
         Commands::Foundry { action } => crate::cli_engine::cmd_foundry(action),
         Commands::Experiment { action } => crate::cli_experiment::cmd_experiment(action),
-        Commands::Attack {
-            frontier,
-            top,
-            json,
-        } => crate::cli_atlas::run_attack(&frontier, top, json),
-        Commands::Explore {
-            frontier,
-            finding,
-            hops,
-            json,
-        } => crate::cli_atlas::run_explore(&frontier, &finding, hops, json),
-
         Commands::Completions { shell } => {
             use clap::CommandFactory;
             let mut cmd = Cli::command();

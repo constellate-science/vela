@@ -349,7 +349,7 @@ contested          a contradiction or verdict-conflict touches it
 stale_open         long-open with no recent attempt
 ```
 
-This ranked edge is what `vela attack` surfaces and what a producer
+This ranked edge is what the dark-matter boundary (`boundary::derive`) surfaces and what a producer
 (human or agent) pulls work from.
 
 ## 4.1 Discord is one detector, not the definition
@@ -4605,7 +4605,7 @@ about 1,624 edges and about 2,541 findings. The map was almost all pins and almo
 no wires, and the one question a producer actually asks ("what is the most
 attackable open target?") had no command. The fix was never "ingest more nodes."
 Nodes are cheap and already plentiful. The work is edges (the connective graph),
-queryability (`vela attack`, `vela explore`), and wiring what is already ingested
+queryability (the `boundary` + MCP `frontier_explore` surfaces), and wiring what is already ingested
 into the view. The trusted finding layer stays small on purpose: it is the part
 Vela personally checked.
 

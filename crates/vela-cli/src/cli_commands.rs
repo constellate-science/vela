@@ -254,30 +254,6 @@ pub(crate) enum Commands {
         #[command(subcommand)]
         action: ExperimentAction,
     },
-    /// The ranked "what should I work on next" queue: the dark-matter boundary
-    /// (one-premise-away first, then brittle single-points-of-failure, fragile,
-    /// contested, stale-open) as a flat, ordered, actionable list.
-    Attack {
-        /// Frontier directory (e.g. examples/erdos-problems).
-        frontier: PathBuf,
-        /// Show at most this many targets.
-        #[arg(long, default_value_t = 12)]
-        top: usize,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Explore a finding's neighbourhood: what it rests on and what rests on it,
-    /// within `--hops` (the MCP frontier_explore as a CLI verb).
-    Explore {
-        /// Frontier directory.
-        frontier: PathBuf,
-        /// Finding id (vf_...) to explore around.
-        finding: String,
-        #[arg(long, default_value_t = 2)]
-        hops: usize,
-        #[arg(long)]
-        json: bool,
-    },
     /// Optional signing and signature verification
     Sign {
         #[command(subcommand)]
