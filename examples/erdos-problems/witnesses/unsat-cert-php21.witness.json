@@ -1,0 +1,28 @@
+{
+ "kind": "unsat_cert",
+ "problem": 617,
+ "note": "PHP_2^1 (2 pigeons, 1 hole): (x1)&(x2)&(-x1|-x2). The verification SHAPE for a finite case reduced to SAT \u2014 NOT the #617 K26 certificate (which is large and uses symmetry-breaking/RAT). Demonstrates that the frozen verifier checks an LRAT/RUP proof derives UNSAT; the SAT solver is untrusted.",
+ "cnf": [
+  [
+   1
+  ],
+  [
+   2
+  ],
+  [
+   -1,
+   -2
+  ]
+ ],
+ "proof": [
+  {
+   "id": 4,
+   "literals": [],
+   "hints": [
+    1,
+    2,
+    3
+   ]
+  }
+ ]
+}

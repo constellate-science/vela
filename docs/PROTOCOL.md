@@ -1957,7 +1957,7 @@ bytes of every other field, computed by `compute_event_id` in
 Run the substrate's integrity checker on a frontier:
 
 ```
-$ vela check examples/sidon-sets --strict --json
+$ vela check <frontier> --strict --json
 ```
 
 Output (illustrative):

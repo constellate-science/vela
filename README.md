@@ -100,8 +100,8 @@ cargo build --release
 vela completions zsh > ~/.zfunc/_vela   # shell completions (bash/zsh/fish)
 ```
 
-Or install a prebuilt binary (macOS now; Linux x86_64 once the release CI
-publishes; falls back to building from source for other platforms):
+Or install a prebuilt binary (macOS and Linux x86_64; falls back to building
+from source for other platforms):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/constellate-science/vela/main/install.sh | bash
@@ -115,8 +115,7 @@ vela serve <frontier>           # MCP tools incl. task_packet (the agent entry c
 vela claim <frontier> <id> ...  # lease an obligation before long work
 vela reproduce <frontier>       # frozen verifiers re-check every witness
 vela accept <frontier> <vpr> --key ...        # keyed authority lands state
-vela attest-statement ...       # signed human faithfulness verdict (vsa_)
-vela export --venue oeis|nanopub <frontier>   # venue-native projections
+vela attest <frontier> --scope formalism-fidelity --key ...   # signed human faithfulness verdict (vsa_)
 ```
 
 An agent may propose; only a key-holding human accepts. Failures are

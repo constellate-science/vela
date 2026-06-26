@@ -157,14 +157,20 @@ Vela is version control for scientific state: signed append-only event logs per 
 
 ### Sixty seconds: verify what we claim
 
+The public `examples/` ship the witness sets, so `vela reproduce` works straight
+from a clone. The full event log (for `check`, `status`, and `serve`) is the
+maintained frontier on the hub; fetch it with `vela clone` first.
+
 ```bash
 cargo build --release --bin vela            # in vendor/vela
-vela check examples/erdos-problems          # full event-log replay
-vela reproduce examples/erdos-problems      # frozen verifiers re-check every witness
-vela status examples/erdos-problems         # one-screen truth
+vela reproduce examples/erdos-problems      # frozen verifiers re-check every witness (32/32)
+vela reproduce examples/sidon-sets          # and the Sidon witnesses (18/18)
+# then, against a frontier cloned from the hub:
+vela check  <frontier>                      # full event-log replay
+vela status <frontier>                      # one-screen truth
 ```
 
-`check` replays 1,200+ events through the one reducer and confirms the materialized state matches byte-for-byte. `reproduce` re-verifies every banked witness (Sidon sets, LRAT certificates, balanced colorings) from scratch in under a second. Nothing asks you to trust us.
+`reproduce` re-verifies every banked witness (Sidon sets, LRAT certificates, balanced colorings) from scratch in under a second, with nothing to trust. `check` replays the full event log through the one reducer and confirms the materialized state matches byte-for-byte; it runs against the maintained frontier, which carries the 1,200+ signed events the public witness set summarizes.
 
 ### Ten minutes: the working loop
 

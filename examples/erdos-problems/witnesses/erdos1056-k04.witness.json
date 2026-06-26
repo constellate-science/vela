@@ -1,0 +1,13 @@
+{
+ "kind": "interval_product",
+ "problem": 1056,
+ "k": 4,
+ "p": 23,
+ "cuts": [
+  1,
+  4,
+  8,
+  11,
+  21
+ ]
+}
