@@ -25,7 +25,6 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use serde::Serialize;
 
 use crate::evidence_diff::derive_status_provenance;
-use crate::frontier_calculus::Rational;
 use crate::project::Project;
 
 /// The canonical T7 relation vocabulary. Each variant maps to one or
@@ -329,10 +328,28 @@ impl BlastRadius {
     }
 }
 
-/// `num/den` string for a rational coordinate (matches the atlas's kappa
-/// serialization so the two reads are comparable byte-for-byte).
-fn rat_string(r: &Rational) -> String {
-    format!("{}/{}", r.numer(), r.denom())
+/// `"num/den"` string for a `{0,1}` support coordinate (`"1/1"` present, `"0/1"`
+/// absent) — matches the atlas's coordinate serialization so the two reads are
+/// comparable byte-for-byte. The status layer is corner-valued (support is just
+/// "the support set is non-empty"), so these are the only two coordinates.
+fn coord_string(present: bool) -> String {
+    if present {
+        "1/1".to_string()
+    } else {
+        "0/1".to_string()
+    }
+}
+
+/// The Belnap corner letter of a `(support, refutation)` `{0,1}` pair.
+fn corner_letter(support: bool, refute: bool) -> char {
+    use crate::status_provenance::BelnapStatus;
+    match (support, refute) {
+        (true, true) => BelnapStatus::Both,
+        (true, false) => BelnapStatus::True,
+        (false, true) => BelnapStatus::False,
+        (false, false) => BelnapStatus::None,
+    }
+    .letter()
 }
 
 /// The graded status of the center finding: the canonical bilattice point
@@ -423,16 +440,19 @@ impl GradedBlast {
     }
 }
 
-/// Memoized Bottleneck-semiring propagation of canonical support kappa along the
-/// dependency edges. `zeroed` is the retracted center (its support kappa is 0,
+/// Memoized Bottleneck-semiring propagation of canonical support along the
+/// dependency edges. On the corner-valued status layer support is `{0,1}`
+/// ("the support set is non-empty"), so the Bottleneck `min` along a chain is
+/// boolean AND — a dependent has propagated support iff itself and every
+/// required premise do. `zeroed` is the retracted center (its support is `false`,
 /// the retraction theorem's effect); pass `""` for the unperturbed pass.
 struct PropCtx<'a> {
     graph: &'a FrontierGraph,
     project: &'a Project,
     kinds: &'a [EdgeKind],
     zeroed: &'a str,
-    own: HashMap<String, Rational>,
-    memo: HashMap<String, Rational>,
+    own: HashMap<String, bool>,
+    memo: HashMap<String, bool>,
 }
 
 impl<'a> PropCtx<'a> {
@@ -452,31 +472,30 @@ impl<'a> PropCtx<'a> {
         }
     }
 
-    /// The finding's OWN support kappa (canonical, per-finding), or 0 if it is
-    /// the retracted center. Memoized.
-    fn own_kappa(&mut self, d: &str) -> Rational {
+    /// The finding's OWN support (canonical, per-finding): `true` iff its support
+    /// set is non-empty, or `false` if it is the retracted center. Memoized.
+    fn own_support(&mut self, d: &str) -> bool {
         if d == self.zeroed {
-            return Rational::zero();
+            return false;
         }
         if let Some(v) = self.own.get(d) {
             return *v;
         }
-        let conf: BTreeMap<String, Rational> = BTreeMap::new();
-        let k = derive_status_provenance(&self.project.events, d)
-            .derive_graded_status(&conf)
-            .x;
+        let k = !derive_status_provenance(&self.project.events, d)
+            .support
+            .is_empty();
         self.own.insert(d.to_string(), k);
         k
     }
 
-    /// `kappa_prop(d) = min(own(d), min over d's dependency premises p of
-    /// kappa_prop(p))`. Cycle-safe: a node already on the path contributes only
-    /// its own support (no infinite descent).
-    fn prop(&mut self, d: &str, on_path: &mut BTreeSet<String>) -> Rational {
+    /// `prop(d) = own(d) AND (AND over d's dependency premises p of prop(p))`.
+    /// The Bottleneck `min` on `{0,1}` support. Cycle-safe: a node already on the
+    /// path contributes only its own support (no infinite descent).
+    fn prop(&mut self, d: &str, on_path: &mut BTreeSet<String>) -> bool {
         if let Some(v) = self.memo.get(d) {
             return *v;
         }
-        let own = self.own_kappa(d);
+        let own = self.own_support(d);
         if !on_path.insert(d.to_string()) {
             return own; // d is already on the current path: a cycle
         }
@@ -489,7 +508,7 @@ impl<'a> PropCtx<'a> {
             .collect();
         let mut k = own;
         for p in premises {
-            k = k.min(self.prop(&p, on_path));
+            k = k && self.prop(&p, on_path);
         }
         on_path.remove(d);
         self.memo.insert(d.to_string(), k);
@@ -1014,37 +1033,39 @@ impl FrontierGraph {
         direction: BlastDirection,
     ) -> GradedBlast {
         let structural = self.blast_radius(start, kinds, direction);
-        let conf: BTreeMap<String, Rational> = BTreeMap::new();
-        let center_pt =
-            derive_status_provenance(&project.events, start).derive_graded_status(&conf);
+        let center_sp = derive_status_provenance(&project.events, start);
+        let center_support = !center_sp.support.is_empty();
+        let center_refute = !center_sp.refute.is_empty();
         let center_status = GradedStatus {
-            support_kappa: rat_string(&center_pt.x),
-            refute_kappa: rat_string(&center_pt.y),
-            conflict: rat_string(&center_pt.conflict()),
-            belnap: center_pt.corner().letter(),
+            support_kappa: coord_string(center_support),
+            refute_kappa: coord_string(center_refute),
+            // conflict = min(support, refute) on {0,1} = AND.
+            conflict: coord_string(center_support && center_refute),
+            belnap: corner_letter(center_support, center_refute),
         };
 
-        // The graded cascade min-propagates over REQUIRED premises only (the
-        // structural `kinds` govern reachability, but corroborating `supports` is
-        // not a bottleneck). A dependent reachable only via `supports` therefore
-        // has delta_kappa = 0 and is pruned.
+        // The cascade min-propagates over REQUIRED premises only (the structural
+        // `kinds` govern reachability, but corroborating `supports` is not a
+        // bottleneck). A dependent reachable only via `supports` therefore does
+        // not lose support and is pruned.
         let mut before = PropCtx::new(self, project, &Self::REQUIRED_PREMISE_KINDS, "");
         let mut after = PropCtx::new(self, project, &Self::REQUIRED_PREMISE_KINDS, start);
-        let mut scored: Vec<(Rational, GradedImpact)> = Vec::new();
+        // `true` first so the support-losing dependents sort ahead; then id.
+        let mut scored: Vec<(bool, GradedImpact)> = Vec::new();
         for node in &structural.downstream {
             let b = before.prop(&node.id, &mut BTreeSet::new());
             let a = after.prop(&node.id, &mut BTreeSet::new());
-            if b > a {
-                let delta = b.sub(&a);
+            // Support genuinely drops only when it was present and is now gone.
+            if b && !a {
                 scored.push((
-                    delta,
+                    true,
                     GradedImpact {
                         id: node.id.clone(),
                         label: node.label.clone(),
-                        kappa_before: rat_string(&b),
-                        kappa_after: rat_string(&a),
-                        delta_kappa: rat_string(&delta),
-                        support_killed: a == Rational::zero(),
+                        kappa_before: coord_string(b),
+                        kappa_after: coord_string(a),
+                        delta_kappa: coord_string(b && !a),
+                        support_killed: !a,
                     },
                 ));
             }

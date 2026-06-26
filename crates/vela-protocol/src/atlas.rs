@@ -6,11 +6,13 @@
 //!
 //! This is a pure, deterministic projection over already-accepted state (no new
 //! authority, no writes): same frontiers in → same atlas out. It reuses the
-//! calculus directly: per-finding Belnap status and the graded bilattice point
-//! `(x, y) = (κ(π_T), κ(π_F))` come from `status_provenance` / `frontier_calculus`,
-//! computed in exact `Rational`s and serialized as `"num/den"`. (κ here uses the
-//! unit-confidence valuation, so the coordinates sit on the Belnap corners; the
-//! interior-graded κ with per-source confidence is the boundary step, step 5.)
+//! status layer directly: per-finding Belnap status comes from
+//! `status_provenance`, and the two coordinates `(support, refutation)` are the
+//! trivial `{0,1}` reading of that status (`1/1` when the corresponding support
+//! set is non-empty, `0/1` when empty), serialized as `"num/den"`. The status
+//! is a function only of whether the support/refute sets are non-empty
+//! (`docs/THEORY.md` Section 7), so the cell coordinates sit exactly on the
+//! Belnap corners.
 //!
 //! Step 3 scope: cells only — no equivalence overlays, no edges, no obligations.
 //! Those are steps 4+ (the hypergraph and the boundary).
@@ -22,7 +24,6 @@ use sha2::{Digest, Sha256};
 
 use crate::anchor::{Anchor, JoinPolicy};
 use crate::evidence_diff::derive_status_provenance;
-use crate::frontier_calculus::Rational;
 use crate::project::Project;
 use crate::status_provenance::BelnapStatus;
 
@@ -92,8 +93,10 @@ struct Member {
     label: String,
     context_key: String,
     hard_anchors: Vec<Anchor>,
-    support_x: Rational,
-    refute_y: Rational,
+    /// The `{0,1}` support coordinate: `true` iff the support set is non-empty.
+    support_x: bool,
+    /// The `{0,1}` refutation coordinate: `true` iff the refute set is non-empty.
+    refute_y: bool,
     belnap: BelnapStatus,
     status: Option<&'static str>,
     /// Outgoing links as (target_global_id, kind).
@@ -122,17 +125,15 @@ fn context_key_of(conditions: &crate::bundle::Conditions) -> String {
     }
 }
 
-fn rat_str(r: &Rational) -> String {
-    format!("{}/{}", r.numer(), r.denom())
-}
-
-/// `a >= b` for non-negative rationals with positive denominators.
-fn rat_geq(a: &Rational, b: &Rational) -> bool {
-    a.numer() * b.denom() >= b.numer() * a.denom()
-}
-
-fn rat_max(a: Rational, b: Rational) -> Rational {
-    if rat_geq(&a, &b) { a } else { b }
+/// Serialize a `{0,1}` coordinate as the exact `"num/den"` string the cell has
+/// always carried (`"1/1"` for present support, `"0/1"` for absent). The status
+/// layer is corner-valued, so these are the only two coordinates that occur.
+fn coord_str(present: bool) -> String {
+    if present {
+        "1/1".to_string()
+    } else {
+        "0/1".to_string()
+    }
 }
 
 fn belnap_str(b: BelnapStatus) -> &'static str {
@@ -167,7 +168,6 @@ fn declared_status(text: &str) -> Option<&'static str> {
 pub fn project(projects: &[&Project]) -> Atlas {
     let mut members: Vec<Member> = Vec::new();
     let mut frontiers: Vec<String> = Vec::new();
-    let empty_conf: BTreeMap<String, Rational> = BTreeMap::new();
 
     for proj in projects {
         let vfr = proj
@@ -178,7 +178,10 @@ pub fn project(projects: &[&Project]) -> Atlas {
         for f in &proj.findings {
             let sp = derive_status_provenance(&proj.events, &f.id);
             let belnap = sp.derive_status();
-            let pt = sp.derive_graded_status(&empty_conf);
+            // The {0,1} corner coordinates: support present iff the support set
+            // is non-empty, refutation present iff the refute set is non-empty.
+            let support_x = !sp.support.is_empty();
+            let refute_y = !sp.refute.is_empty();
             let hard_anchors: Vec<Anchor> = proj
                 .anchor_links
                 .iter()
@@ -190,8 +193,8 @@ pub fn project(projects: &[&Project]) -> Atlas {
                 label: f.assertion.text.chars().take(120).collect(),
                 context_key: context_key_of(&f.conditions),
                 hard_anchors,
-                support_x: pt.x,
-                refute_y: pt.y,
+                support_x,
+                refute_y,
                 belnap,
                 status: declared_status(&f.assertion.text),
                 links: f
@@ -291,17 +294,10 @@ pub fn project(projects: &[&Project]) -> Atlas {
                 (false, false) => BelnapStatus::None,
             };
 
-            // Coordinatewise knowledge-order max over members.
-            let support_kappa = idxs
-                .iter()
-                .map(|&i| members[i].support_x)
-                .reduce(rat_max)
-                .unwrap_or_else(Rational::zero);
-            let refutation_kappa = idxs
-                .iter()
-                .map(|&i| members[i].refute_y)
-                .reduce(rat_max)
-                .unwrap_or_else(Rational::zero);
+            // Coordinatewise knowledge-order max over members: on `{0,1}`
+            // coordinates this is boolean OR (any member with that polarity).
+            let support_kappa = idxs.iter().any(|&i| members[i].support_x);
+            let refutation_kappa = idxs.iter().any(|&i| members[i].refute_y);
 
             let stable_handle = anchors
                 .first()
@@ -338,8 +334,8 @@ pub fn project(projects: &[&Project]) -> Atlas {
                 members: member_ids,
                 anchors,
                 belnap: belnap_str(belnap),
-                support_kappa: rat_str(&support_kappa),
-                refutation_kappa: rat_str(&refutation_kappa),
+                support_kappa: coord_str(support_kappa),
+                refutation_kappa: coord_str(refutation_kappa),
                 label,
                 status,
             }
@@ -420,35 +416,38 @@ pub struct DomainAtlas {
     pub domains: Vec<DomainState>,
 }
 
-/// Parse a `rat_str` ("num/den") back into a `Rational`.
-fn parse_rat(s: &str) -> Rational {
-    let mut it = s.split('/');
-    let n = it
-        .next()
-        .and_then(|x| x.trim().parse::<i128>().ok())
-        .unwrap_or(0);
-    let d = it
-        .next()
-        .and_then(|x| x.trim().parse::<i128>().ok())
-        .unwrap_or(1);
-    Rational::new(n, if d == 0 { 1 } else { d })
+/// Whether a `"num/den"` coordinate string carries present support (`"1/1"`).
+/// On the corner-valued status layer the only coordinates are `"1/1"` and
+/// `"0/1"`, so a non-`"0/1"` string is present support.
+fn coord_present(s: &str) -> bool {
+    s != "0/1"
+}
+
+/// The Belnap corner of a `(support, refutation)` `{0,1}` pair.
+fn corner(support: bool, refute: bool) -> BelnapStatus {
+    match (support, refute) {
+        (true, true) => BelnapStatus::Both,
+        (true, false) => BelnapStatus::True,
+        (false, true) => BelnapStatus::False,
+        (false, false) => BelnapStatus::None,
+    }
 }
 
 /// Project a per-domain frontier state from an atlas. `problem_domains` maps an
 /// Erdős problem id (the `erdos` anchor id, e.g. "102") to the domains it lives
 /// in; each cell is attributed to every domain of its `erdos` anchor. The state
-/// folds the cells' bilattice points by `join_k` (the knowledge-order join) and
-/// tallies the Belnap + status distributions. The calculus that gives one claim
-/// a trust state now gives a whole field one — the load-bearing step toward the
-/// math atlas as the trusted *state* of a domain, not a list of problems.
+/// folds the cells' `{0,1}` coordinates by the knowledge-order join (boolean OR
+/// per coordinate) and tallies the Belnap + status distributions. The status
+/// that gives one claim a trust state now gives a whole field one — the
+/// load-bearing step toward the math atlas as the trusted *state* of a domain,
+/// not a list of problems.
 pub fn project_domains(
     atlas: &Atlas,
     problem_domains: &BTreeMap<String, Vec<String>>,
 ) -> DomainAtlas {
-    use crate::frontier_calculus::BilatticePoint;
     struct Acc {
-        point: BilatticePoint,
-        seen: bool,
+        support: bool,
+        refute: bool,
         belnap: BTreeMap<String, usize>,
         status: BTreeMap<String, usize>,
         contested: usize,
@@ -467,21 +466,19 @@ pub fn project_domains(
         let Some(domains) = problem_domains.get(&pid) else {
             continue;
         };
-        let pt = BilatticePoint::new(
-            parse_rat(&cell.support_kappa),
-            parse_rat(&cell.refutation_kappa),
-        );
+        let support = coord_present(&cell.support_kappa);
+        let refute = coord_present(&cell.refutation_kappa);
         for dom in domains {
             let e = acc.entry(dom.clone()).or_insert_with(|| Acc {
-                point: BilatticePoint::new(Rational::zero(), Rational::zero()),
-                seen: false,
+                support: false,
+                refute: false,
                 belnap: BTreeMap::new(),
                 status: BTreeMap::new(),
                 contested: 0,
                 count: 0,
             });
-            e.point = if e.seen { e.point.join_k(&pt) } else { pt };
-            e.seen = true;
+            e.support |= support;
+            e.refute |= refute;
             *e.belnap.entry(cell.belnap.to_string()).or_insert(0) += 1;
             if cell.belnap == "B" {
                 e.contested += 1;
@@ -497,9 +494,9 @@ pub fn project_domains(
         .map(|(name, a)| DomainState {
             name,
             claim_count: a.count,
-            belnap: belnap_str(a.point.corner()),
-            support_kappa: rat_str(&a.point.x),
-            refutation_kappa: rat_str(&a.point.y),
+            belnap: belnap_str(corner(a.support, a.refute)),
+            support_kappa: coord_str(a.support),
+            refutation_kappa: coord_str(a.refute),
             belnap_counts: a.belnap,
             status_counts: a.status,
             contested: a.contested,

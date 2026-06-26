@@ -3,12 +3,11 @@
 //! Two derived projections, both read-only over the accepted event log —
 //! they never write, never store, and mint no new event kinds:
 //!
-//!   - [`state_cell`] — the Claim-State Cell (frontier_calculus §4.2 /
-//!     STATE_PLANE_MEMO §7.1): claim, context, Belnap-style status,
-//!     status provenance (support/refute polynomials + graded bilattice),
-//!     supersession, dependencies, open obligations, priority. This is the
-//!     pure core relocated out of the CLI so the hub can compute the
-//!     identical cell.
+//!   - [`state_cell`] — the Claim-State Cell (STATE_PLANE_MEMO §7.1):
+//!     claim, context, Belnap-style status, status provenance
+//!     (support/refute id sets), supersession, dependencies, open
+//!     obligations, priority. This is the pure core relocated out of the
+//!     CLI so the hub can compute the identical cell.
 //!   - [`claim_state_delta`] — applies one pending proposal in-memory
 //!     (the same `apply_proposal` the preview uses, never saved) and
 //!     reports the target claim's state *before* and *after*, plus the
@@ -31,7 +30,6 @@ use crate::bundle::{FindingBundle, ReviewState};
 use crate::contradiction::ContradictionStatus;
 use crate::events::StateEvent;
 use crate::project::{Project, StatementRegistration};
-use crate::provenance_poly::ProvenancePoly;
 use crate::status_provenance::{BelnapStatus, StatusProvenance};
 use crate::verifier_attachment::{
     AttachmentOutcome, GateStatus, MethodIntegrity, VerifierAttachment, claim_digest,
@@ -99,20 +97,19 @@ pub fn find_priority_registration<'a>(
         })
 }
 
-/// Gap 2: derive the support/refute provenance polynomials for a
-/// finding from its event history — a READ-SIDE projection, computed
-/// at projection time and never stored. Zero reducer or state changes.
+/// Gap 2: derive the support/refute provenance sets for a finding from
+/// its event history — a READ-SIDE projection, computed at projection
+/// time and never stored. Zero reducer or state changes.
 ///
 /// Contribution rules over the canonical log (in log order):
 ///   - `finding.asserted` and accept events (`finding.reviewed` with
-///     status accepted/approved) contribute support variables — the
-///     event ids themselves.
-///   - `finding.superseded` and `finding.retracted` apply the
-///     retraction homomorphism `rho_Y` with Y = the support variables
-///     accumulated so far, so every supporting derivation path dies
+///     status accepted/approved) add support ids — the event ids
+///     themselves.
+///   - `finding.superseded` and `finding.retracted` retract every
+///     support id accumulated so far, so all supporting evidence dies
 ///     (Theorem 2/3: no zombie findings — superseded implies the
-///     support polynomial is zero, hence the status cannot be T).
-///   - `finding.dependency_invalidated` contributes a refute variable.
+///     support set is empty, hence the status cannot be T).
+///   - `finding.dependency_invalidated` adds a refute id.
 pub fn derive_status_provenance(events: &[StateEvent], id: &str) -> StatusProvenance {
     derive_status_provenance_tiered(events, id, crate::access_tier::AccessTier::Public)
 }
@@ -132,23 +129,23 @@ pub fn derive_status_provenance_tiered(
 ) -> StatusProvenance {
     use crate::status_provenance::tag_visibility;
     let mut sp = StatusProvenance::empty();
-    let var = |e: &StateEvent| ProvenancePoly::singleton(tag_visibility(e.id.as_str(), tier));
+    let var = |e: &StateEvent| tag_visibility(e.id.as_str(), tier);
     for e in events.iter().filter(|e| e.target.id == id) {
         match e.kind.as_str() {
-            "finding.asserted" => sp.add_support(&var(e)),
+            "finding.asserted" => sp.add_support(var(e)),
             "finding.reviewed" => {
                 if matches!(
                     e.payload.get("status").and_then(Value::as_str),
                     Some("accepted") | Some("approved")
                 ) {
-                    sp.add_support(&var(e));
+                    sp.add_support(var(e));
                 }
             }
             "finding.dependency_invalidated" => {
-                sp.add_refute(&var(e));
+                sp.add_refute(var(e));
             }
             "finding.superseded" | "finding.retracted" => {
-                let retracted: BTreeSet<String> = sp.support.support();
+                let retracted: BTreeSet<String> = sp.support.clone();
                 sp = sp.retract(&retracted);
             }
             _ => {}
@@ -167,7 +164,7 @@ fn belnap_meaning(status: BelnapStatus) -> &'static str {
 }
 
 /// Derive the Claim-State Cell — a projection over the event log, never
-/// a stored object. (frontier_calculus §4.2, STATE_PLANE_MEMO §7.1.)
+/// a stored object. (STATE_PLANE_MEMO §7.1.)
 ///
 /// Relocated verbatim from `vela-cli::cli_claim::derive_state_cell` so
 /// both the CLI projection and the hub Evidence-Diff endpoint compute
@@ -294,45 +291,21 @@ pub fn state_cell(project: &Project, finding: &FindingBundle) -> Value {
         })
     });
 
-    // Gap 2: the provenance-semiring view of the same status — derived
-    // from the event history at read time, never stored. Printed NEXT
-    // TO the signal-derived status with an explicit divergence flag:
-    // measurement, not silent replacement.
+    // Gap 2: the support/refute provenance view of the same status — derived
+    // from the event history at read time, never stored. Printed NEXT TO the
+    // signal-derived status with an explicit divergence flag: measurement, not
+    // silent replacement. The Belnap status depends only on whether the two
+    // support sets are non-empty (`docs/THEORY.md` Section 7, Theorem 3).
     let sp = derive_status_provenance(&project.events, id);
-    let poly_status = sp.derive_status();
-    let poly_letter = poly_status.letter().to_string();
-    // v2 frontier calculus: the graded bilattice status (kappa of support,
-    // kappa of refute), derived from the SAME polynomials at read time. Absent
-    // per-source confidence it defaults to 1, so the corner reproduces the
-    // Belnap status exactly — the conservative extension, live.
-    let graded = sp.derive_graded_status(&std::collections::BTreeMap::new());
+    let prov_status = sp.derive_status();
+    let prov_letter = prov_status.letter().to_string();
     let status_provenance = json!({
-        "support_poly": sp.support.to_string(),
-        "refute_poly": sp.refute.to_string(),
-        "letter": poly_letter,
-        "meaning": belnap_meaning(poly_status),
-        "divergence": poly_letter != status,
-        "graded_status": {
-            "support_degree": graded.x.to_f64(),
-            "opposition_degree": graded.y.to_f64(),
-            "information": graded.information().to_f64(),
-            "conflict": graded.conflict().to_f64(),
-            "corner": graded.corner().letter().to_string(),
-            "note": "v2 bilattice point [0,1]x[0,1] (frontier_calculus); confidence defaults to 1 so the corner equals the Belnap letter (conservative extension). Per-source confidence is the deferred refinement.",
-        },
-        // Projection provenance (T16): the derived graded flag is auditable, not
-        // authoritative. This record names the evaluator, valuation, and source
-        // so anyone can recompute the flag from the declared inputs above. It is
-        // a proof packet for a projection, never stored state.
-        "projection_provenance": {
-            "projection_kind": "graded_bilattice_status",
-            "evaluator": "kappa = Eval_Viterbi . env (square-free environment quotient of N[X], v3); corner thresholds each coordinate at > 0",
-            "valuation": "per-source confidence in [0,1]; absent sources default to 1",
-            "source": { "support_poly": sp.support.to_string(), "refute_poly": sp.refute.to_string() },
-            "policy": "frontier_calculus v3 (env-quotient kappa; conservative extension is Theorem 20, lean/Vela/Frontier/FrontierCalculus.lean)",
-            "reproduce": "kappa(support_poly) and kappa(refute_poly) under the valuation give (support_degree, opposition_degree); the corner letter is deriveStatus(support_degree > 0, opposition_degree > 0)",
-        },
-        "note": "read-side projection over the event log (asserted/accept -> support vars, supersession/retraction -> rho_Y, dependency_invalidated -> refute); never stored",
+        "support": sp.support,
+        "refute": sp.refute,
+        "letter": prov_letter,
+        "meaning": belnap_meaning(prov_status),
+        "divergence": prov_letter != status,
+        "note": "read-side projection over the event log (asserted/accept -> support ids, supersession/retraction -> drop accumulated support, dependency_invalidated -> refute); never stored. The Belnap letter is deriveStatus(support nonempty, refute nonempty).",
     });
 
     json!({
@@ -527,16 +500,15 @@ mod tests {
         ];
         let sp = derive_status_provenance(&log, "vf_a");
         assert_eq!(sp.derive_status(), BelnapStatus::True);
-        assert_eq!(sp.support.term_count(), 2);
-        assert!(sp.refute.is_zero());
+        assert_eq!(sp.support.len(), 2);
+        assert!(sp.refute.is_empty());
     }
 
-    /// Polynomial no-zombie (Theorem 3 at the projection layer):
-    /// supersession applies rho_Y over every accumulated support
-    /// variable, so the support polynomial is zero and the derived
-    /// status cannot remain T.
+    /// No-zombie (Theorem 3 at the projection layer): supersession
+    /// retracts every accumulated support id, so the support set is empty
+    /// and the derived status cannot remain T.
     #[test]
-    fn polynomial_no_zombie_superseded_support_is_zero_not_t() {
+    fn no_zombie_superseded_support_is_empty_not_t() {
         let log = vec![
             ev(0, "finding.asserted", "vf_a", json!({})),
             ev(1, "finding.reviewed", "vf_a", json!({"status": "accepted"})),
@@ -548,7 +520,7 @@ mod tests {
             ),
         ];
         let sp = derive_status_provenance(&log, "vf_a");
-        assert!(sp.support.is_zero());
+        assert!(sp.support.is_empty());
         assert_ne!(sp.derive_status(), BelnapStatus::True);
         assert_eq!(sp.derive_status(), BelnapStatus::None);
     }
@@ -560,7 +532,7 @@ mod tests {
             ev(1, "finding.retracted", "vf_a", json!({})),
         ];
         let sp = derive_status_provenance(&log, "vf_a");
-        assert!(sp.support.is_zero());
+        assert!(sp.support.is_empty());
         assert_eq!(sp.derive_status(), BelnapStatus::None);
     }
 
@@ -585,7 +557,7 @@ mod tests {
             json!({"new_finding_id": "vf_c"}),
         ));
         let sp2 = derive_status_provenance(&log2, "vf_b");
-        assert!(sp2.support.is_zero());
+        assert!(sp2.support.is_empty());
         assert_eq!(sp2.derive_status(), BelnapStatus::False);
     }
 
@@ -598,7 +570,7 @@ mod tests {
         ];
         let sp = derive_status_provenance(&log, "vf_a");
         assert_eq!(sp.derive_status(), BelnapStatus::True);
-        assert_eq!(sp.support.term_count(), 1);
+        assert_eq!(sp.support.len(), 1);
     }
 
     #[test]
@@ -613,8 +585,8 @@ mod tests {
             ),
         ];
         let sp = derive_status_provenance(&log, "vf_a");
-        assert_eq!(sp.support.term_count(), 1);
-        assert!(sp.refute.is_zero());
+        assert_eq!(sp.support.len(), 1);
+        assert!(sp.refute.is_empty());
         assert_eq!(sp.derive_status(), BelnapStatus::True);
     }
 
@@ -627,7 +599,7 @@ mod tests {
         ];
         let sp = derive_status_provenance(&log, "vf_a");
         assert_eq!(sp.derive_status(), BelnapStatus::True);
-        assert_eq!(sp.support.term_count(), 1);
+        assert_eq!(sp.support.len(), 1);
     }
 
     #[test]

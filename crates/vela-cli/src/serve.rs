@@ -1643,37 +1643,35 @@ async fn http_finding_by_id(
                     "belnap_letter".to_string(),
                     json!(belnap.letter().to_string()),
                 );
-                map.insert(
-                    "support_term_count".to_string(),
-                    json!(sp.support.term_count()),
-                );
-                map.insert(
-                    "refute_term_count".to_string(),
-                    json!(sp.refute.term_count()),
-                );
-                // v0.88: surface the actual provenance-polynomial
-                // structure per docs/THEORY.md §2.2. The serde-
-                // friendly form is `[{monomial, coefficient}]`,
-                // suitable for audit trails and downstream tooling
+                map.insert("support_term_count".to_string(), json!(sp.support.len()));
+                map.insert("refute_term_count".to_string(), json!(sp.refute.len()));
+                // Surface the support/refute id sets per docs/THEORY.md
+                // §7, suitable for audit trails and downstream tooling
                 // that needs to know which events derive support.
                 map.insert(
-                    "support_polynomial".to_string(),
+                    "support_provenance".to_string(),
                     serde_json::to_value(&sp.support).unwrap_or_default(),
                 );
                 map.insert(
-                    "refute_polynomial".to_string(),
+                    "refute_provenance".to_string(),
                     serde_json::to_value(&sp.refute).unwrap_or_default(),
                 );
-                // Display strings render polynomials in standard
-                // additive form: `2*p1*d3 + r7*e2`. Suitable for
-                // debug surfaces and Workbench tooltips.
+                // Display strings join the ids additively (`vev_a + vev_b`).
+                // Suitable for debug surfaces and Workbench tooltips.
+                let join = |s: &std::collections::BTreeSet<String>| -> String {
+                    if s.is_empty() {
+                        "0".to_string()
+                    } else {
+                        s.iter().cloned().collect::<Vec<_>>().join(" + ")
+                    }
+                };
                 map.insert(
-                    "support_polynomial_display".to_string(),
-                    json!(format!("{}", sp.support)),
+                    "support_provenance_display".to_string(),
+                    json!(join(&sp.support)),
                 );
                 map.insert(
-                    "refute_polynomial_display".to_string(),
-                    json!(format!("{}", sp.refute)),
+                    "refute_provenance_display".to_string(),
+                    json!(join(&sp.refute)),
                 );
             }
             (StatusCode::OK, Json(value))

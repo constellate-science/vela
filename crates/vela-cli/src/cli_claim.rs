@@ -9,8 +9,8 @@
 //! repo (`repo::load_from_path`) and recomputes a view from objects the
 //! reducer already produced:
 //!
-//!   - `state`  — the Claim-State Cell (frontier_calculus §4.2 /
-//!     STATE_PLANE_MEMO §7.1): claim, context, Belnap-style status,
+//!   - `state`  — the Claim-State Cell (STATE_PLANE_MEMO §7.1):
+//!     claim, context, Belnap-style status,
 //!     supersession, dependencies, open obligations, priority. The core
 //!     derivation lives in `vela_protocol::evidence_diff::state_cell` so
 //!     the hub computes the identical cell.

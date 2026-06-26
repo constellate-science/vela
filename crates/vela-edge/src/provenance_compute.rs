@@ -1,35 +1,33 @@
-//! Compute provenance polynomials and Belnap status from an
+//! Compute provenance support sets and Belnap status from an
 //! event log.
 //!
-//! Bridges the algebraic primitives in
-//! [`vela_protocol::provenance_poly`] and [`vela_protocol::status_provenance`] to
-//! the running substrate's `StateEvent` log. Implements the
-//! computational side of `docs/THEORY.md` Section 7
-//! ("status derivation from provenance") in read-only form: this
-//! module does not mutate any on-disk state, it only computes a
-//! derived view from existing events.
+//! Bridges [`vela_protocol::status_provenance`] to the running
+//! substrate's `StateEvent` log. Implements the computational side of
+//! `docs/THEORY.md` Section 7 ("status derivation from provenance") in
+//! read-only form: this module does not mutate any on-disk state, it
+//! only computes a derived view from existing events.
 //!
 //! ## Mapping
 //!
 //! For a target claim-context pair (in v0.84 we identify this with
 //! a finding id; per-context attribution lands when the formal
-//! context category does, target v0.8), each event contributes to
-//! either the supporting or refuting polynomial:
+//! context category does, target v0.8), each event contributes its
+//! event id to either the supporting or refuting set:
 //!
 //! | Event kind          | Status payload         | Effect                        |
 //! |---------------------|------------------------|-------------------------------|
-//! | `finding.asserted`  | n/a                    | support += singleton(event_id) |
-//! | `finding.reviewed`  | accepted               | support += singleton(event_id) |
-//! | `finding.reviewed`  | needs_revision         | support += singleton(event_id) |
-//! | `finding.reviewed`  | contested              | refute  += singleton(event_id) |
-//! | `finding.reviewed`  | rejected               | refute  += singleton(event_id) |
-//! | `finding.rejected`  | n/a                    | refute  += singleton(event_id) |
+//! | `finding.asserted`  | n/a                    | support += event_id           |
+//! | `finding.reviewed`  | accepted               | support += event_id           |
+//! | `finding.reviewed`  | needs_revision         | support += event_id           |
+//! | `finding.reviewed`  | contested              | refute  += event_id           |
+//! | `finding.reviewed`  | rejected               | refute  += event_id           |
+//! | `finding.rejected`  | n/a                    | refute  += event_id           |
 //! | `finding.retracted` | n/a                    | retract event-id from both     |
 //!
 //! The retraction case interprets `finding.retracted` as: the
 //! finding-level retraction event removes the finding's previous
-//! supporting derivations from scope. In the polynomial layer
-//! this is the homomorphism `rho` over the prior support set.
+//! supporting evidence from scope by dropping the prior event ids from
+//! both sets.
 //!
 //! ## Scope
 //!
@@ -38,12 +36,11 @@
 //!   on a richer Carina-payload type system (target v0.85+).
 //! - The result is purely a function of the events passed in.
 //!   Callers control which events are in scope; this lets the
-//!   substrate compute the polynomial under different review
-//!   policies without baking policy into the algebra.
+//!   substrate compute the status under different review policies
+//!   without baking policy into the derivation.
 
 use serde_json::Value;
 
-use vela_protocol::provenance_poly::ProvenancePoly;
 use vela_protocol::status_provenance::{BelnapStatus, StatusProvenance};
 
 /// A minimal projection of a [`vela_protocol::events::StateEvent`] needed
@@ -54,8 +51,7 @@ use vela_protocol::status_provenance::{BelnapStatus, StatusProvenance};
 /// future event-shape changes without rippling.
 #[derive(Debug, Clone)]
 pub struct ProvenanceEventRef<'a> {
-    /// Content-addressed event id (`vev_*`). Becomes a variable in
-    /// the polynomial.
+    /// Content-addressed event id (`vev_*`). An id in the support or refute set.
     pub id: &'a str,
     /// Event kind string (e.g. `finding.asserted`).
     pub kind: &'a str,
@@ -66,7 +62,7 @@ pub struct ProvenanceEventRef<'a> {
     pub payload: &'a Value,
 }
 
-/// Compute the support/refute provenance polynomials for a single
+/// Compute the support/refute provenance sets for a single
 /// finding from a sequence of events targeting that finding.
 ///
 /// The caller is responsible for filtering events to the right
@@ -80,9 +76,9 @@ where
     let mut sp = StatusProvenance::empty();
 
     // Track retractions in canonical order so we can apply them
-    // after the polynomials have been built. A retraction event
-    // removes its target finding's prior derivations from scope by
-    // mapping the prior event ids to zero. We model this by
+    // after the support sets have been built. A retraction event
+    // removes its target finding's prior evidence from scope by
+    // dropping the prior event ids from both sets. We model this by
     // collecting the set of pre-retraction event ids as the
     // retraction target.
     let mut prior_event_ids: Vec<String> = Vec::new();
@@ -94,7 +90,7 @@ where
 
         match kind {
             "finding.asserted" => {
-                sp.add_support(&ProvenancePoly::singleton(event_id));
+                sp.add_support(event_id);
                 prior_event_ids.push(event_id.to_string());
             }
             "finding.reviewed" => {
@@ -105,10 +101,10 @@ where
                     .unwrap_or("");
                 match status {
                     "accepted" | "needs_revision" => {
-                        sp.add_support(&ProvenancePoly::singleton(event_id));
+                        sp.add_support(event_id);
                     }
                     "contested" | "rejected" => {
-                        sp.add_refute(&ProvenancePoly::singleton(event_id));
+                        sp.add_refute(event_id);
                     }
                     _ => {
                         // Unknown status string: do nothing rather
@@ -118,7 +114,7 @@ where
                 prior_event_ids.push(event_id.to_string());
             }
             "finding.rejected" => {
-                sp.add_refute(&ProvenancePoly::singleton(event_id));
+                sp.add_refute(event_id);
                 prior_event_ids.push(event_id.to_string());
             }
             "finding.retracted" => {
@@ -233,8 +229,8 @@ mod tests {
         ];
         let sp = compute_status_provenance(events);
         assert_eq!(sp.derive_status(), BelnapStatus::True);
-        assert_eq!(sp.support.term_count(), 2);
-        assert!(sp.refute.is_zero());
+        assert_eq!(sp.support.len(), 2);
+        assert!(sp.refute.is_empty());
     }
 
     #[test]
@@ -322,7 +318,7 @@ mod tests {
         // fabricating polarity.
         let sp = compute_status_provenance(events);
         assert_eq!(sp.derive_status(), BelnapStatus::True);
-        assert_eq!(sp.support.term_count(), 1);
+        assert_eq!(sp.support.len(), 1);
     }
 
     #[test]
@@ -335,8 +331,8 @@ mod tests {
             ev("vev_003", "finding.reviewed", "vf_x", &accepted),
         ];
         let sp = compute_status_provenance(events);
-        assert_eq!(sp.support.term_count(), 3);
-        let support_vars = sp.support.support();
+        assert_eq!(sp.support.len(), 3);
+        let support_vars = sp.support;
         assert!(support_vars.contains("vev_001"));
         assert!(support_vars.contains("vev_002"));
         assert!(support_vars.contains("vev_003"));
@@ -406,9 +402,9 @@ mod tests {
         let sp = status_provenance_for_finding(&p, "vf_x");
         assert_eq!(sp.derive_status(), BelnapStatus::True);
         // Only one event contributed — the vf_x one.
-        assert_eq!(sp.support.term_count(), 1);
-        assert!(sp.support.support().contains("vev_001"));
-        assert!(!sp.support.support().contains("vev_002"));
+        assert_eq!(sp.support.len(), 1);
+        assert!(sp.support.contains("vev_001"));
+        assert!(!sp.support.contains("vev_002"));
     }
 
     #[test]
@@ -438,6 +434,6 @@ mod tests {
         ];
         let sp = compute_status_provenance(events);
         assert_eq!(sp.derive_status(), BelnapStatus::True);
-        assert_eq!(sp.support.term_count(), 1);
+        assert_eq!(sp.support.len(), 1);
     }
 }
