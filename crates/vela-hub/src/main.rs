@@ -752,6 +752,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Browsers send `Accept: text/html,…`; CLI clients (curl, reqwest, jq)
+/// Signature-gate helper for the owner/maintainer/deprecation write handlers.
+/// `None` means the record verifies and the handler should proceed; `Some(resp)`
+/// is the ready-to-return error response (401 if the signature is invalid, 422
+/// if verification itself errored). Collapses three byte-identical match blocks.
+fn ensure_verified<E: std::fmt::Display>(
+    result: Result<bool, E>,
+    invalid_msg: &str,
+) -> Option<Response> {
+    match result {
+        Ok(true) => None,
+        Ok(false) => Some(
+            (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"ok": false, "error": invalid_msg})),
+            )
+                .into_response(),
+        ),
+        Err(e) => Some(
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                Json(json!({"ok": false, "error": format!("verify: {e}")})),
+            )
+                .into_response(),
+        ),
+    }
+}
+
 /// usually omit the header or send `*/*`. We render HTML only when the
 /// client explicitly asks for it.
 fn wants_html(headers: &HeaderMap) -> bool {
@@ -1406,22 +1433,11 @@ async fn rotate_owner(
         )
             .into_response();
     }
-    match vela_protocol::registry::verify_rotation(&rec) {
-        Ok(true) => {}
-        Ok(false) => {
-            return (
-                StatusCode::UNAUTHORIZED,
-                Json(json!({"ok": false, "error": "rotation signature does not verify"})),
-            )
-                .into_response();
-        }
-        Err(e) => {
-            return (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                Json(json!({"ok": false, "error": format!("verify: {e}")})),
-            )
-                .into_response();
-        }
+    if let Some(resp) = ensure_verified(
+        vela_protocol::registry::verify_rotation(&rec),
+        "rotation signature does not verify",
+    ) {
+        return resp;
     }
     match state.db.effective_owner_pubkey(&vfr_id).await {
         Ok(Some(owner)) if owner.eq_ignore_ascii_case(&rec.signer_pubkey_hex) => {}
@@ -1512,22 +1528,11 @@ async fn maintainer_action(
         )
             .into_response();
     }
-    match vela_protocol::registry::verify_maintainer_action(&rec) {
-        Ok(true) => {}
-        Ok(false) => {
-            return (
-                StatusCode::UNAUTHORIZED,
-                Json(json!({"ok": false, "error": "signature does not verify"})),
-            )
-                .into_response();
-        }
-        Err(e) => {
-            return (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                Json(json!({"ok": false, "error": format!("verify: {e}")})),
-            )
-                .into_response();
-        }
+    if let Some(resp) = ensure_verified(
+        vela_protocol::registry::verify_maintainer_action(&rec),
+        "signature does not verify",
+    ) {
+        return resp;
     }
     let authorized = match state.db.effective_accept_keys(&vfr_id).await {
         Ok(keys) => keys
@@ -1823,22 +1828,11 @@ async fn deprecate_entry(
         )
             .into_response();
     }
-    match vela_protocol::registry::verify_deprecation(&rec) {
-        Ok(true) => {}
-        Ok(false) => {
-            return (
-                StatusCode::UNAUTHORIZED,
-                Json(json!({"ok": false, "error": "deprecation signature does not verify"})),
-            )
-                .into_response();
-        }
-        Err(e) => {
-            return (
-                StatusCode::UNPROCESSABLE_ENTITY,
-                Json(json!({"ok": false, "error": format!("verify: {e}")})),
-            )
-                .into_response();
-        }
+    if let Some(resp) = ensure_verified(
+        vela_protocol::registry::verify_deprecation(&rec),
+        "deprecation signature does not verify",
+    ) {
+        return resp;
     }
     // Owner continuity: only the registered owner key can deprecate.
     match state.db.effective_owner_pubkey(&vfr_id).await {
