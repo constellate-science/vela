@@ -1495,7 +1495,7 @@ name = "minimal"
         .unwrap();
         std::fs::write(
             dir.join(".vela/reviews/rev_001_bbb_correction.json"),
-            include_str!("../embedded/tests/fixtures/legacy/rev_001_bbb_correction.json"),
+            include_str!("../../embedded/tests/fixtures/legacy/rev_001_bbb_correction.json"),
         )
         .unwrap();
 

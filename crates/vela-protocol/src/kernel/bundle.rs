@@ -2040,7 +2040,7 @@ mod tests {
 
     #[test]
     fn parses_bbb_review_event_with_richer_schema() {
-        let raw = include_str!("../embedded/tests/fixtures/legacy/rev_001_bbb_correction.json");
+        let raw = include_str!("../../embedded/tests/fixtures/legacy/rev_001_bbb_correction.json");
         let review: ReviewEvent = serde_json::from_str(raw).unwrap();
 
         assert_eq!(review.id, "rev_001_bbb_correction");

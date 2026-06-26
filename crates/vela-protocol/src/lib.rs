@@ -18,54 +18,29 @@
 //! transfer, `vva_` verifier attachment, `vsa_` statement attestation. Authority
 //! is key custody: an agent may draft, only a key-holding human signs an accept.
 
-pub mod acceptance_policy;
-pub mod access_tier;
-pub mod activity;
-pub mod anchor;
-pub mod atlas;
-pub mod attempt;
-pub mod boundary;
-pub mod bundle;
-pub mod canonical;
-pub mod cli_style;
-pub mod contradiction;
-pub mod diff;
-pub mod diff_pack_review;
-pub mod endorsement;
-pub mod events;
-pub mod evidence_ci;
-pub mod evidence_diff;
-pub mod frontier_bound;
-pub mod frontier_graph;
-pub mod frontier_policy;
-pub mod frontier_repo;
-pub mod frontier_template;
-pub mod identity;
-pub mod lean_verification;
-pub mod merkle;
-pub mod nanopub;
-pub mod pathfind;
-pub mod project;
-pub mod proof_verification;
-pub mod propagate;
+mod kernel;
+pub use kernel::{bundle, canonical, events, reducer, repo, sign};
+mod computed;
+pub use computed::{
+    frontier_repo, project, registry, sources, state, transfer_registry, workspace,
+};
+mod analysis;
+pub use analysis::{
+    atlas, boundary, contradiction, diff, diff_pack_review, evidence_ci, evidence_diff,
+    frontier_bound, frontier_graph, pathfind, propagate, released_diff_pack, scientific_diff,
+    status_provenance, transfer, verdict_conflict, verifier_attachment,
+};
+mod policy;
+pub use policy::{acceptance_policy, access_tier, endorsement, frontier_policy, tcb_policy};
+mod domains;
+pub use domains::{lean_verification, proof_verification, sidon_profile};
+mod objects;
+pub use objects::{
+    activity, anchor, attempt, cli_style, frontier_template, identity, merkle, nanopub,
+    statement_attestation,
+};
+
 pub mod proposals;
-pub mod reducer;
-pub mod registry;
-pub mod released_diff_pack;
-pub mod repo;
-pub mod scientific_diff;
-pub mod sidon_profile;
-pub mod sign;
-pub mod sources;
-pub mod state;
-pub mod statement_attestation;
-pub mod status_provenance;
-pub mod tcb_policy;
-pub mod transfer;
-pub mod transfer_registry;
-pub mod verdict_conflict;
-pub mod verifier_attachment;
-pub mod workspace;
 
 #[cfg(any(test, feature = "test-support"))]
 pub mod test_support;
