@@ -750,8 +750,32 @@ fn extract_id(namespace: &str, text: &str) -> Option<String> {
     }
 }
 
+/// Build a `HardIdentity` catalogue anchor from its varying coordinates,
+/// filling the three constant fields (`HardIdentity`, no namespace version, no
+/// statement fingerprint). Shared by `ingest`, `ingest-source`, and the
+/// cross-namespace `extra_anchors` pass so the struct literal can't drift.
+fn make_anchor(
+    namespace: &str,
+    id: String,
+    role: &str,
+    kind: vela_protocol::anchor::AnchorKind,
+    source_revision: Option<String>,
+) -> vela_protocol::anchor::Anchor {
+    use vela_protocol::anchor::{Anchor, JoinPolicy};
+    Anchor {
+        namespace: namespace.to_string(),
+        id,
+        role: role.to_string(),
+        kind,
+        join_policy: JoinPolicy::HardIdentity,
+        namespace_version: None,
+        source_revision,
+        statement_fingerprint: None,
+    }
+}
+
 fn run_ingest(args: &[String]) {
-    use vela_protocol::anchor::{Anchor, AnchorKind, JoinPolicy};
+    use vela_protocol::anchor::{Anchor, AnchorKind};
 
     let positionals: Vec<&str> = args
         .iter()
@@ -805,19 +829,7 @@ fn run_ingest(args: &[String]) {
             already += 1;
             continue;
         }
-        plan.push((
-            f.id.clone(),
-            Anchor {
-                namespace: ns.clone(),
-                id,
-                role: role.clone(),
-                kind,
-                join_policy: JoinPolicy::HardIdentity,
-                namespace_version: None,
-                source_revision: None,
-                statement_fingerprint: None,
-            },
-        ));
+        plan.push((f.id.clone(), make_anchor(&ns, id, &role, kind, None)));
     }
 
     if dry {
@@ -900,7 +912,7 @@ fn anchor_findings(
 /// regenerable, not byte-pinned (the byte-pinned trust is the canonical witness
 /// frontiers under `vela reproduce`).
 fn run_ingest_source(args: &[String]) {
-    use vela_protocol::anchor::{Anchor, AnchorKind, JoinPolicy};
+    use vela_protocol::anchor::{Anchor, AnchorKind};
 
     let flag = |name: &str| -> Option<String> {
         args.iter()
@@ -950,16 +962,7 @@ fn run_ingest_source(args: &[String]) {
         findings.push(finding);
         plan.push((
             fid.clone(),
-            Anchor {
-                namespace: ns.clone(),
-                id: rec.external_id.clone(),
-                role: role.to_string(),
-                kind,
-                join_policy: JoinPolicy::HardIdentity,
-                namespace_version: None,
-                source_revision: Some(rev.clone()),
-                statement_fingerprint: None,
-            },
+            make_anchor(&ns, rec.external_id.clone(), role, kind, Some(rev.clone())),
         ));
         // Secondary CROSS-namespace anchors (e.g. an Erdős-tagged FC formalization
         // also anchoring into `erdos`), so the same finding joins the canonical
@@ -967,16 +970,13 @@ fn run_ingest_source(args: &[String]) {
         for (extra_ns, extra_id) in &rec.extra_anchors {
             plan.push((
                 fid.clone(),
-                Anchor {
-                    namespace: extra_ns.clone(),
-                    id: extra_id.clone(),
-                    role: "problem".to_string(),
-                    kind: AnchorKind::ProblemEntry,
-                    join_policy: JoinPolicy::HardIdentity,
-                    namespace_version: None,
-                    source_revision: Some(rev.clone()),
-                    statement_fingerprint: None,
-                },
+                make_anchor(
+                    extra_ns,
+                    extra_id.clone(),
+                    "problem",
+                    AnchorKind::ProblemEntry,
+                    Some(rev.clone()),
+                ),
             ));
         }
     }

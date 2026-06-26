@@ -758,13 +758,18 @@ time rather than zero. The field is additive: pre-v0.67 proposals load
 with `drafted_at: None` and round-trip byte-identically (the field is
 serialized only when present).
 
-### 6.8 Federation push-resolution (v0.70)
+### 6.8 Cross-hub conflict-resolution push (v0.70)
 
-`vela federation push-resolution` is the cross-hub propagation path
-for `frontier.conflict_resolved` events. The CLI loads the paired
-event from the local frontier, signs the canonical preimage with the
-reviewer's Ed25519 key, and POSTs it to the peer hub at
-`POST /entries/<vfr_id>/events`. The protocol-level wire surface
+The `frontier.conflict_resolved` event kind remains valid and replays,
+and the hub still accepts it over the cross-hub
+`POST /entries/<vfr_id>/events` path documented below. The
+`vela federation push-resolution` CLI verb that minted and pushed it
+was removed in the v0.700 cut (see the removed-verbs banner); no
+command in the current binary mints this event. The signed-event wire
+surface — canonical preimage, Ed25519 auth headers, and verification
+rules — remains the normative contract for any producer that
+constructs the event directly: sign the canonical preimage with the
+reviewer's Ed25519 key and POST it to the peer hub. The wire surface
 follows.
 
 Auth headers (the body omits the `signature` field so the bytes the
@@ -812,7 +817,7 @@ Earlier releases are documented inline in the sections above.
 - **v0.67**: `bridge.reviewed` event (§6.5); `StateProposal.drafted_at` optional field (§6.7).
 - **v0.68**: internal hardening; no new event kinds or schema fields.
 - **v0.69**: internal hardening; no new event kinds or schema fields.
-- **v0.70**: `replication.deposited` and `prediction.deposited` events (§6.6); `vela federation push-resolution` cross-hub path (§6.8).
+- **v0.70**: `replication.deposited` and `prediction.deposited` events (§6.6); the `frontier.conflict_resolved` cross-hub push surface (§6.8). *(The `vela federation`, replication, and prediction CLI verbs were retired in the v0.700 cut; the event kinds remain valid in replay — see the removed-verbs banner.)*
 - **v0.71**: Workbench review surfaces `/review/replication-add/{finding_id}` and `/review/prediction-add/{finding_id}` for the v0.70 deposit events.
 - **v0.72**: cross-impl fixture coverage for v0.67 to v0.71 events; `docs/PROTOCOL.md` backfill; `CONTRIBUTING.md` and `clients/python/README.md` added.
 - **v0.73**: `bridge.reviewed` validator gains `validate_bridge_reviewed_against_state` for state-aware tightening (§6.5); cross-impl JSON fixture export extended to cover v0.67 to v0.71 event kinds; developer walkthrough of the event log (now §The canonical event log).

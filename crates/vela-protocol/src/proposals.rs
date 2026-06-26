@@ -3099,62 +3099,6 @@ pub fn reject_proposal_in_frontier_signed(
     Ok(())
 }
 
-/// Send a proposal back for revision, recording a signed
-/// `review.revision_requested` event. Same accountability contract as
-/// reject.
-pub fn request_revision_in_frontier_signed(
-    frontier: &mut Project,
-    proposal_id: &str,
-    reviewer: &str,
-    reason: &str,
-    signing_key: Option<&ed25519_dalek::SigningKey>,
-    custody_verified: bool,
-) -> Result<(), String> {
-    validate_reviewer_identity(reviewer)?;
-    if reason.trim().is_empty() {
-        return Err("Decision reason must be non-empty".to_string());
-    }
-    enforce_reviewer_key_custody(frontier, reviewer, signing_key, custody_verified)?;
-    let index = frontier
-        .proposals
-        .iter()
-        .position(|proposal| proposal.id == proposal_id)
-        .ok_or_else(|| format!("Proposal not found: {proposal_id}"))?;
-    match frontier.proposals[index].status.as_str() {
-        "pending_review" => {}
-        "needs_revision" => {
-            return Err(format!("Proposal {} already needs revision", proposal_id));
-        }
-        "rejected" => {
-            return Err(format!("Proposal {} is already rejected", proposal_id));
-        }
-        "applied" => {
-            return Err(format!("Proposal {} is already applied", proposal_id));
-        }
-        other => {
-            return Err(format!("Unsupported proposal status '{}'", other));
-        }
-    }
-    let decided_at = Utc::now().to_rfc3339();
-    let proposal_kind = frontier.proposals[index].kind.clone();
-    frontier.proposals[index].status = "needs_revision".to_string();
-    frontier.proposals[index].reviewed_by = Some(reviewer.to_string());
-    frontier.proposals[index].reviewed_at = Some(decided_at.clone());
-    frontier.proposals[index].decision_reason = Some(reason.to_string());
-    push_signed_review_event(
-        frontier,
-        proposal_id,
-        &proposal_kind,
-        "revision_requested",
-        None,
-        reviewer,
-        reason,
-        &decided_at,
-        signing_key,
-    )?;
-    Ok(())
-}
-
 pub(crate) fn apply_proposal(
     frontier: &mut Project,
     proposal: &StateProposal,
