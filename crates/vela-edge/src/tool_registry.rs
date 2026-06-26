@@ -85,16 +85,6 @@ pub fn all_tools() -> Vec<ToolDefinition> {
             vec!["PubMed counts are rough prior-art signals, not proof of novelty."],
         ),
         tool(
-            "apply_observer",
-            "Rerank findings under an observer policy such as pharma, academic, regulatory, clinical, or exploration.",
-            json!({"type": "object", "properties": {
-                "policy": {"type": "string"}, "limit": {"type": "integer"}
-            }, "required": ["policy"]}),
-            PermissionLevel::ReadOnly,
-            false,
-            vec!["Observer policy output is a weighted view, not definitive disagreement."],
-        ),
-        tool(
             "propagate_retraction",
             "Simulate retraction cascade impact over declared dependency/support links.",
             json!({"type": "object", "properties": {"finding_id": {"type": "string"}}, "required": ["finding_id"]}),

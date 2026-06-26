@@ -9,9 +9,7 @@ use std::path::Path;
 use serde::Serialize;
 
 use vela_edge::frontier_health;
-use vela_edge::frontier_task;
 use vela_edge::index_db_schema;
-use vela_edge::source_inbox;
 use vela_protocol::project::Project;
 use vela_protocol::repo;
 
@@ -224,23 +222,9 @@ fn local_diff_pack_ids(repo_path: &Path) -> Vec<String> {
 
 fn build_review_work_payload(repo_path: &Path) -> Result<ReviewWorkPayload, String> {
     let project = repo::load_from_path(repo_path)?;
-    let source_list = source_inbox::list_records(repo_path)?;
-    let task_list = frontier_task::list_tasks(repo_path)?;
     let health = frontier_health::analyze(repo_path)?;
     let frontier_index = build_review_work_frontier_index(repo_path, &project);
 
-    let source_review: Vec<String> = source_list
-        .records
-        .iter()
-        .filter(|record| {
-            matches!(
-                record.state,
-                source_inbox::SourceInboxState::Discovered
-                    | source_inbox::SourceInboxState::Retrieved
-            )
-        })
-        .map(|record| record.id.clone())
-        .collect();
     let entity_review: Vec<String> = project
         .findings
         .iter()
@@ -270,12 +254,6 @@ fn build_review_work_payload(repo_path: &Path) -> Result<ReviewWorkPayload, Stri
     } else {
         diff_pack_examples
     };
-    let task_closure: Vec<String> = task_list
-        .tasks
-        .iter()
-        .filter(|task| !task.status.is_terminal())
-        .map(|task| task.id.clone())
-        .collect();
     let outside_review = outside_review_files(repo_path);
     let proof_refresh_count = if matches!(
         project.proof_state.latest_packet.status.as_str(),
@@ -291,18 +269,6 @@ fn build_review_work_payload(repo_path: &Path) -> Result<ReviewWorkPayload, Stri
     let frontier_name = project.project.name.clone();
 
     let queues = vec![
-        ReviewWorkQueue {
-            lane_id: "source_review",
-            title: "source review",
-            count: source_review.len(),
-            examples: source_review.iter().take(8).cloned().collect(),
-            operator_artifacts: vec!["review/decision-corpus-queue.v1.md"],
-            validation_commands: review_work_queue_validation_commands("source_review"),
-            boundary: "Source records are not evidence until reviewed into frontier state.",
-            next_href: "/source-inbox",
-            next_label: "Open source inbox",
-            reviewer_authority_required: true,
-        },
         ReviewWorkQueue {
             lane_id: "entity_review",
             title: "entity review",
@@ -368,18 +334,6 @@ fn build_review_work_payload(repo_path: &Path) -> Result<ReviewWorkPayload, Stri
             boundary: "Strict signals are candidates for source-grounded review, not accepted frontier truth.",
             next_href: "/review/inbox",
             next_label: "Open review inbox",
-            reviewer_authority_required: true,
-        },
-        ReviewWorkQueue {
-            lane_id: "task_closure",
-            title: "task closure",
-            count: task_closure.len(),
-            examples: task_closure.iter().take(12).cloned().collect(),
-            operator_artifacts: vec!["review/task-closure.v1.md"],
-            validation_commands: review_work_queue_validation_commands("task_closure"),
-            boundary: "Tasks are operational work units; closure does not rewrite reviewed findings.",
-            next_href: "/tasks",
-            next_label: "Open tasks",
             reviewer_authority_required: true,
         },
         ReviewWorkQueue {

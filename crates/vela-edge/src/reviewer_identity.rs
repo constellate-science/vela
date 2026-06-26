@@ -12,11 +12,23 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
 use vela_protocol::canonical;
-
-use crate::frontier_task;
+use vela_protocol::repo;
 
 use vela_protocol::state;
 pub const SCIENTIFIC_ATTESTATION_SCHEMA: &str = "vela.scientific_attestation.v0.1";
+
+/// Resolve the local `.vela/` repository root for a frontier path.
+/// Scientific attestations require a local repo; project files and
+/// packet directories are rejected.
+fn repo_root(frontier_path: &Path) -> Result<PathBuf, String> {
+    match repo::detect(frontier_path)? {
+        repo::VelaSource::VelaRepo(root) => Ok(root),
+        repo::VelaSource::ProjectFile(_) | repo::VelaSource::PacketDir(_) => Err(format!(
+            "scientific attestations require a local .vela/ repository; got {}",
+            frontier_path.display()
+        )),
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "snake_case")]
@@ -120,7 +132,7 @@ pub fn record(
     input: AttestationInput,
 ) -> Result<ScientificAttestationReport, String> {
     validate_input(&input)?;
-    let root = frontier_task::repo_root(frontier_path)?;
+    let root = repo_root(frontier_path)?;
     let target_kind = target_kind(&input.target_id)?;
     let mut attestation = ScientificAttestation {
         schema: SCIENTIFIC_ATTESTATION_SCHEMA.to_string(),
@@ -179,7 +191,7 @@ pub fn record(
 }
 
 pub fn list(frontier_path: &Path) -> Result<Vec<ScientificAttestation>, String> {
-    let root = frontier_task::repo_root(frontier_path)?;
+    let root = repo_root(frontier_path)?;
     let dir = attestations_dir(&root);
     if !dir.is_dir() {
         return Ok(Vec::new());

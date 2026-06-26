@@ -3,14 +3,12 @@
 //! Reads JSON test vector files from a directory and runs each case against
 //! Vela's actual implementation, reporting pass/fail for each.
 
-use std::collections::HashSet;
 use std::path::Path;
 
 use colored::Colorize;
 
 use vela_protocol::cli_style as style;
 
-use crate::observer;
 use vela_protocol::bundle::*;
 use vela_protocol::link;
 use vela_protocol::project;
@@ -88,7 +86,6 @@ pub fn run(dir: &Path) -> (usize, usize) {
                 "link-inference" => run_link_inference(input, expected),
                 "retraction-propagation" => run_retraction_propagation(input, expected),
                 "replication-cascade" => run_retraction_propagation(input, expected),
-                "observer-policies" => run_observer_policies(input, expected),
                 "directory-layout" => run_directory_layout(input, expected),
                 "proposal-idempotency" => run_proposal_idempotency(input, expected),
                 "note-provenance" => run_proposal_idempotency(input, expected),
@@ -499,169 +496,6 @@ fn run_retraction_propagation(
             } else {
                 return Err(format!("finding {cid_str} not found"));
             }
-        }
-    }
-
-    Ok(())
-}
-
-// ── Observer policies ───────────────────────────────────────────────────
-
-fn make_observer_finding(v: &serde_json::Value) -> FindingBundle {
-    let id = v["id"].as_str().unwrap_or("").to_string();
-    let conf = v["confidence"].as_f64().unwrap_or(0.7);
-    let replicated = v["replicated"].as_bool().unwrap_or(false);
-    let year = v["year"].as_i64().unwrap_or(2020) as i32;
-    let has_spans = v["has_spans"].as_bool().unwrap_or(false);
-    let assertion_type = v["assertion_type"]
-        .as_str()
-        .unwrap_or("mechanism")
-        .to_string();
-    let gap = v["gap"].as_bool().unwrap_or(false);
-    let negative_space = v["negative_space"].as_bool().unwrap_or(false);
-
-    FindingBundle {
-        id,
-        version: 1,
-        previous_version: None,
-        assertion: Assertion {
-            text: "Test assertion".to_string(),
-            assertion_type,
-            entities: vec![],
-            relation: None,
-            direction: None,
-            causal_claim: None,
-            causal_evidence_grade: None,
-        },
-        evidence: Evidence {
-            evidence_type: "experimental".into(),
-            model_system: String::new(),
-            method: String::new(),
-            replicated,
-            replication_count: None,
-            evidence_spans: if has_spans {
-                vec![serde_json::json!({"text": "span"})]
-            } else {
-                vec![]
-            },
-        },
-        conditions: Conditions {
-            text: String::new(),
-            duration: None,
-        },
-        confidence: Confidence::raw(conf, "test", 0.85),
-        provenance: Provenance {
-            source_type: "published_paper".into(),
-            doi: None,
-            url: None,
-            title: "Test".into(),
-            authors: vec![],
-            year: Some(year),
-            license: None,
-            publisher: None,
-            funders: vec![],
-            extraction: Extraction::default(),
-            review: None,
-        },
-        flags: Flags {
-            gap,
-            negative_space,
-            ..Flags::default()
-        },
-        links: vec![],
-        annotations: vec![],
-        attachments: vec![],
-        created: String::new(),
-        updated: None,
-        access_tier: vela_protocol::access_tier::AccessTier::Public,
-    }
-}
-
-fn run_observer_policies(
-    input: &serde_json::Value,
-    expected: &serde_json::Value,
-) -> Result<(), String> {
-    let policy_name = input["policy"].as_str().ok_or("missing policy name")?;
-    let findings_val = input["findings"]
-        .as_array()
-        .ok_or("missing findings array")?;
-
-    let bundles: Vec<FindingBundle> = findings_val.iter().map(make_observer_finding).collect();
-
-    let policy = observer::policy_by_name(policy_name)
-        .ok_or_else(|| format!("unknown policy: {policy_name}"))?;
-
-    let view = observer::observe(&bundles, &policy);
-
-    if let Some(count) = expected["hidden_count"].as_u64()
-        && view.hidden != count as usize
-    {
-        return Err(format!("expected {count} hidden, got {}", view.hidden));
-    }
-
-    if let Some(all_visible) = expected["all_visible"].as_bool()
-        && all_visible
-        && view.hidden != 0
-    {
-        return Err(format!("expected all visible, got {} hidden", view.hidden));
-    }
-
-    if let Some(ranking) = expected["ranking"].as_array() {
-        let view_ids: Vec<&str> = view
-            .findings
-            .iter()
-            .map(|f| f.finding_id.as_str())
-            .collect();
-        for (i, expected_id) in ranking.iter().enumerate() {
-            let eid = expected_id.as_str().unwrap_or("");
-            if i >= view_ids.len() {
-                return Err(format!(
-                    "expected rank {} to be {eid}, but only {} visible",
-                    i + 1,
-                    view_ids.len()
-                ));
-            }
-            if view_ids[i] != eid {
-                return Err(format!(
-                    "expected rank {} to be {eid}, got {}",
-                    i + 1,
-                    view_ids[i]
-                ));
-            }
-        }
-    }
-
-    if let Some(hidden_ids) = expected["hidden_ids"].as_array() {
-        let visible: HashSet<&str> = view
-            .findings
-            .iter()
-            .map(|f| f.finding_id.as_str())
-            .collect();
-        for hid in hidden_ids {
-            let hid_str = hid.as_str().unwrap_or("");
-            if visible.contains(hid_str) {
-                return Err(format!("{hid_str} should be hidden but is visible"));
-            }
-        }
-    }
-
-    if let Some(true) = expected["f1_rank_better_than_f2"].as_bool() {
-        let f1_rank = view
-            .findings
-            .iter()
-            .find(|f| f.finding_id == "f1")
-            .map(|f| f.rank);
-        let f2_rank = view
-            .findings
-            .iter()
-            .find(|f| f.finding_id == "f2")
-            .map(|f| f.rank);
-        match (f1_rank, f2_rank) {
-            (Some(r1), Some(r2)) if r1 < r2 => {}
-            (Some(r1), Some(r2)) => {
-                return Err(format!("expected f1 (rank {r1}) < f2 (rank {r2})"));
-            }
-            _ => return Err("f1 or f2 not found in visible findings".into()),
         }
     }
 

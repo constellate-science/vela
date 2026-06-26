@@ -107,9 +107,6 @@ pub(crate) enum Commands {
         /// Proof packet template
         #[arg(long, default_value = "generic")]
         template: String,
-        /// Optional benchmark suite to include
-        #[arg(long)]
-        gold: Option<PathBuf>,
         /// Record latest proof packet state back into the input frontier
         #[arg(long)]
         record_proof_state: bool,
@@ -445,12 +442,6 @@ pub(crate) enum Commands {
     Transfer {
         #[command(subcommand)]
         action: TransferAction,
-    },
-    /// Local frontier tasks. Tasks organize scientific work before any
-    /// accepted event changes frontier truth state.
-    Task {
-        #[command(subcommand)]
-        action: TaskAction,
     },
     /// Manage finding bundles as the core frontier primitive
     Finding {
@@ -1620,126 +1611,6 @@ pub(crate) enum TransferAction {
 }
 
 #[derive(Subcommand)]
-pub(crate) enum TaskAction {
-    /// Create a local frontier task under `.vela/tasks/`.
-    Create {
-        /// Frontier repo directory.
-        frontier: PathBuf,
-        /// Task type, such as source_ingestion or contradiction_resolution.
-        #[arg(long = "type")]
-        task_type: String,
-        /// Bounded objective for the work unit.
-        #[arg(long)]
-        objective: String,
-        /// Source, finding, proposal, or artifact input id. Repeatable.
-        #[arg(long = "input")]
-        inputs: Vec<String>,
-        /// Review risk class used by local policy.
-        #[arg(long, default_value = "low_risk")]
-        risk_class: String,
-        /// Blocking task id or condition. Repeatable.
-        #[arg(long = "blocker")]
-        blockers: Vec<String>,
-        /// Acceptance criterion. Repeatable.
-        #[arg(long = "acceptance")]
-        acceptance_criteria: Vec<String>,
-        /// Initial task state.
-        #[arg(long, default_value = "backlog")]
-        status: String,
-        #[arg(long)]
-        json: bool,
-    },
-    /// List local frontier tasks.
-    List {
-        /// Frontier repo directory.
-        frontier: PathBuf,
-        /// Filter by task status.
-        #[arg(long)]
-        status: Option<String>,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Show one local frontier task.
-    Show {
-        /// Frontier repo directory.
-        frontier: PathBuf,
-        /// `vtask_*` task id.
-        task_id: String,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Compose one root-pinned Frontier Packet for a target: the obligation,
-    /// the accepted state at the root, the minimal kernel-premise slice (the
-    /// decl-graph CodeGraph bridge), failed-route memory, open obligations, the
-    /// attempt ledger, and the submission contract. The producer's entry
-    /// contract, as a CLI verb (was MCP-only).
-    Packet {
-        /// Frontier repo directory (or a `frontier.json`).
-        frontier: PathBuf,
-        /// Target: a `vf_` id, a problem number (`617`), or a text substring.
-        target: String,
-        /// Built Mathlib decl-graph for the premise slice (default:
-        /// `data/mathlib/decl-graph.v1.json` if present).
-        #[arg(long)]
-        decl_graph: Option<PathBuf>,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Claim a task for local review or execution.
-    Claim {
-        /// Frontier repo directory.
-        frontier: PathBuf,
-        /// `vtask_*` task id.
-        task_id: String,
-        /// Typed reviewer or operator id, for example `reviewer:you`.
-        #[arg(long)]
-        reviewer: String,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Run a task's reproduction entrypoint (run.sh) in its isolated workspace
-    /// and import the captured result as pending proposals (reviewer-gated).
-    Execute {
-        /// Frontier repo directory.
-        frontier: PathBuf,
-        /// `vtask_*` task id.
-        task_id: String,
-        /// Actor recording the run.
-        #[arg(long, default_value = "agent:repro-executor")]
-        actor: String,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Close a task with a terminal status.
-    Close {
-        /// Frontier repo directory.
-        frontier: PathBuf,
-        /// `vtask_*` task id.
-        task_id: String,
-        /// Terminal status: accepted, rejected, superseded, or archived.
-        #[arg(long)]
-        status: String,
-        /// Reason for the terminal decision.
-        #[arg(long)]
-        reason: String,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Move a task to a non-terminal operational state.
-    SetStatus {
-        /// Frontier repo directory.
-        frontier: PathBuf,
-        /// `vtask_*` task id.
-        task_id: String,
-        /// New task status.
-        #[arg(long)]
-        status: String,
-        #[arg(long)]
-        json: bool,
-    },
-}
-
-#[derive(Subcommand)]
 pub(crate) enum FrontierAction {
     /// Scaffold a fresh, publishable `frontier.json` stub. The result
     /// passes `vela check --strict` immediately and is ready to accept
@@ -2393,34 +2264,6 @@ pub(crate) enum FindingCommands {
         /// Immediately accept and apply the proposal locally
         #[arg(long)]
         apply: bool,
-    },
-    /// v0.38: Set or revise the Pearlian causal type and study-design
-    /// grade for a finding. Appends an `assertion.reinterpreted_causal`
-    /// event capturing the prior reading, the new reading, and the
-    /// reviewer who re-graded. Pre-v0.38 findings carry no causal
-    /// metadata; the first call materializes both fields.
-    CausalSet {
-        /// Frontier JSON file or Vela repo
-        frontier: PathBuf,
-        /// `vf_<id>` of the finding to re-grade.
-        finding_id: String,
-        /// Causal claim kind: correlation | mediation | intervention.
-        #[arg(long)]
-        claim: String,
-        /// Optional study-design grade: rct | quasi_experimental |
-        /// observational | theoretical.
-        #[arg(long)]
-        grade: Option<String>,
-        /// Reviewer/curator id (must match a registered actor under
-        /// `--strict`). Recorded on the appended event.
-        #[arg(long)]
-        actor: String,
-        /// One-paragraph reason. Becomes the event's `reason` field
-        /// and ships with the proposal.
-        #[arg(long)]
-        reason: String,
-        #[arg(long)]
-        json: bool,
     },
     /// Attach a lightweight note to a finding.
     Note {

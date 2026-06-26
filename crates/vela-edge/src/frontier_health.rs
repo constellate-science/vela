@@ -10,9 +10,7 @@ use std::path::{Path, PathBuf};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::frontier_task::{self, FrontierTaskStatus};
 use crate::reviewer_identity;
-use crate::source_inbox::{self, SourceInboxState};
 use vela_protocol::evidence_ci::{self, EvidenceCiSeverity};
 use vela_protocol::frontier_policy;
 use vela_protocol::project::Project;
@@ -95,77 +93,6 @@ pub fn analyze(frontier_path: &Path) -> Result<FrontierHealthReport, String> {
     let evidence = evidence_ci::run_frontier(frontier_path)?;
     let policy = frontier_policy::load_policy_summary(frontier_path).ok();
 
-    let task_list = repo_root
-        .as_deref()
-        .and_then(|root| frontier_task::list_tasks(root).ok());
-    let active_tasks = task_list
-        .as_ref()
-        .map(|list| {
-            list.tasks
-                .iter()
-                .filter(|task| !task.status.is_terminal())
-                .count()
-        })
-        .unwrap_or(0);
-    let blocked_tasks = task_list
-        .as_ref()
-        .map(|list| {
-            list.tasks
-                .iter()
-                .filter(|task| !task.blockers.is_empty())
-                .count()
-        })
-        .unwrap_or(0);
-    let awaiting_review_tasks = task_list
-        .as_ref()
-        .map(|list| {
-            list.tasks
-                .iter()
-                .filter(|task| task.status == FrontierTaskStatus::AwaitingReview)
-                .count()
-        })
-        .unwrap_or(0);
-    let retraction_task_impacts = task_list
-        .as_ref()
-        .map(|list| {
-            list.tasks
-                .iter()
-                .filter(|task| {
-                    !task.status.is_terminal()
-                        && (task.risk_class == "retraction_impact"
-                            || task.task_type.contains("retraction"))
-                })
-                .count()
-        })
-        .unwrap_or(0);
-
-    let source_list = repo_root
-        .as_deref()
-        .and_then(|root| source_inbox::list_records(root).ok());
-    let source_inbox_issues = source_list
-        .as_ref()
-        .map(|list| {
-            list.records
-                .iter()
-                .filter(|record| {
-                    matches!(
-                        record.state,
-                        SourceInboxState::Quarantined | SourceInboxState::Retracted
-                    ) || is_source_stale(record)
-                })
-                .count()
-        })
-        .unwrap_or(0);
-    let source_retractions = source_list
-        .as_ref()
-        .map(|list| {
-            list.records
-                .iter()
-                .filter(|record| record.state == SourceInboxState::Retracted)
-                .count()
-        })
-        .unwrap_or(0);
-
     let (
         pending_diff_packs,
         accepted_diff_packs,
@@ -182,25 +109,23 @@ pub fn analyze(frontier_path: &Path) -> Result<FrontierHealthReport, String> {
     let proof_status = project.proof_state.latest_packet.status.clone();
     let stale_proof = !matches!(proof_status.as_str(), "fresh" | "current" | "ready");
     let max_review_latency_days = max_review_latency_days(&project);
-    let retraction_impacts = source_retractions
-        + retraction_task_impacts
-        + project
-            .events
-            .iter()
-            .filter(|event| event.kind.as_str().contains("retract"))
-            .count();
+    let retraction_impacts = project
+        .events
+        .iter()
+        .filter(|event| event.kind.as_str().contains("retract"))
+        .count();
 
     let metrics = FrontierHealthMetrics {
-        active_tasks,
-        blocked_tasks,
-        awaiting_review_tasks,
+        active_tasks: 0,
+        blocked_tasks: 0,
+        awaiting_review_tasks: 0,
         pending_diff_packs,
         accepted_diff_packs,
         rejected_diff_packs,
         revision_requested_diff_packs,
         proof_status,
         stale_proof,
-        source_inbox_issues,
+        source_inbox_issues: 0,
         evidence_ci_failures,
         evidence_ci_warnings,
         stale_claims,
@@ -361,13 +286,6 @@ fn age_days(timestamp: &str) -> i64 {
                 .max(0)
         })
         .unwrap_or(0)
-}
-
-fn is_source_stale(record: &source_inbox::SourceInboxRecord) -> bool {
-    if record.state == SourceInboxState::Retracted {
-        return false;
-    }
-    age_days(&record.updated_at) > 30
 }
 
 fn threshold_classes(

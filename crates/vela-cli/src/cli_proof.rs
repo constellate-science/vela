@@ -1,10 +1,9 @@
 use crate::cli::{
-    append_packet_json_file, fail, fail_return, hash_path_or_fail, load_frontier_or_fail,
-    print_json, save_recorded_proof_state,
+    fail, fail_return, hash_path_or_fail, load_frontier_or_fail, print_json,
+    save_recorded_proof_state,
 };
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
-use vela_edge::benchmark;
 use vela_edge::export;
 use vela_edge::packet;
 use vela_edge::signals;
@@ -16,7 +15,6 @@ pub(crate) fn cmd_proof(
     frontier: &Path,
     out: &Path,
     template: &str,
-    gold: Option<&Path>,
     record_proof_state: bool,
     json_output: bool,
 ) {
@@ -34,24 +32,6 @@ pub(crate) fn cmd_proof(
     let source_hash = hash_path_or_fail(&proof_frontier);
     let export_record = export::export_packet_with_source(&loaded, Some(frontier), out)
         .unwrap_or_else(|e| fail(&e));
-    let benchmark_summary = gold.map(|gold_path| {
-        let summary = benchmark::run_suite(gold_path).unwrap_or_else(|e| {
-            fail(&format!(
-                "Failed to run proof benchmark '{}': {e}",
-                gold_path.display()
-            ))
-        });
-        append_packet_json_file(out, "benchmark-summary.json", &summary).unwrap_or_else(|e| {
-            fail(&format!("Failed to write benchmark summary: {e}"));
-        });
-        if summary.get("ok").and_then(Value::as_bool) != Some(true) {
-            fail(&format!(
-                "Proof benchmark failed for {}",
-                gold_path.display()
-            ));
-        }
-        summary
-    });
     let validation_summary = packet::validate(out).unwrap_or_else(|e| {
         fail(&format!("Proof packet validation failed: {e}"));
     });
@@ -82,8 +62,6 @@ pub(crate) fn cmd_proof(
                 "hash": format!("sha256:{source_hash}"),
             },
             "template": template,
-            "gold": gold.map(|p| p.display().to_string()),
-            "benchmark": benchmark_summary,
             "output": out.display().to_string(),
             "packet": {
                 "manifest_path": out.join("manifest.json").display().to_string(),

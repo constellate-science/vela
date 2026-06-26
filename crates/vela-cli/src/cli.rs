@@ -1,6 +1,5 @@
 use crate::serve;
 use vela_edge::frontier_health;
-use vela_edge::frontier_task;
 use vela_edge::lint;
 use vela_edge::reviewer_identity;
 use vela_edge::signals;
@@ -116,17 +115,9 @@ pub async fn run_command() {
             frontier,
             out,
             template,
-            gold,
             record_proof_state,
             json,
-        } => cmd_proof(
-            &frontier,
-            &out,
-            &template,
-            gold.as_deref(),
-            record_proof_state,
-            json,
-        ),
+        } => cmd_proof(&frontier, &out, &template, record_proof_state, json),
         Commands::Serve {
             frontier,
             frontiers,
@@ -423,7 +414,6 @@ pub async fn run_command() {
         Commands::Lean { action } => cmd_lean(action),
         Commands::Attempt { action } => crate::cli_lean::cmd_attempt(action),
         Commands::Transfer { action } => crate::cli_lean::cmd_transfer(action),
-        Commands::Task { action } => cmd_task(action),
         Commands::Finding { command } => match command {
             FindingCommands::Add {
                 frontier,
@@ -569,40 +559,6 @@ pub async fn run_command() {
                         replication_attestation: None,
                     },
                     apply,
-                )
-                .unwrap_or_else(|e| fail_return(&e));
-                print_state_report(&report, json);
-            }
-            FindingCommands::CausalSet {
-                frontier,
-                finding_id,
-                claim,
-                grade,
-                actor,
-                reason,
-                json,
-            } => {
-                if !bundle::VALID_CAUSAL_CLAIMS.contains(&claim.as_str()) {
-                    fail(&format!(
-                        "invalid --claim '{claim}'; valid: {:?}",
-                        bundle::VALID_CAUSAL_CLAIMS
-                    ));
-                }
-                if let Some(g) = grade.as_deref()
-                    && !bundle::VALID_CAUSAL_EVIDENCE_GRADES.contains(&g)
-                {
-                    fail(&format!(
-                        "invalid --grade '{g}'; valid: {:?}",
-                        bundle::VALID_CAUSAL_EVIDENCE_GRADES
-                    ));
-                }
-                let report = state::set_causal(
-                    &frontier,
-                    &finding_id,
-                    &claim,
-                    grade.as_deref(),
-                    &actor,
-                    &reason,
                 )
                 .unwrap_or_else(|e| fail_return(&e));
                 print_state_report(&report, json);
@@ -1155,20 +1111,19 @@ pub(crate) fn wrap_line(text: &str, max_chars: usize) -> String {
     out
 }
 
-/// File-extension dispatcher for `vela ingest`. Routes one path or
-/// stable identifier URI to the right deterministic backing path:
+/// Dispatcher for `vela ingest`. Routes a stable identifier URI to the
+/// deterministic metadata-fetch path:
 ///
 /// - `doi:` / `pmid:` / `nct:` URI -> `cmd_source_fetch` (metadata only).
-/// - JSON file or folder of JSON (Carina-shaped artifact packet) ->
-///   `cmd_artifact_to_state`.
 ///
-/// The LLM compile routes (.pdf/.md/.csv/code-dir) were removed with the
-/// agent layer: ingest is a deterministic verb, not a model call.
+/// The artifact-packet importer and the LLM compile routes
+/// (.pdf/.md/.csv/code-dir) were removed: ingest is a deterministic
+/// metadata verb, not a model call or a packet importer.
 async fn cmd_ingest(
     path: &str,
     frontier: &Path,
     _backend: Option<&str>,
-    actor: Option<&str>,
+    _actor: Option<&str>,
     _dry_run: bool,
     json: bool,
 ) {
@@ -1189,58 +1144,8 @@ async fn cmd_ingest(
         return;
     }
 
-    let p = std::path::PathBuf::from(path);
-    if !p.exists() {
-        fail(&format!(
-            "ingest: path '{path}' does not exist (and is not a doi:/pmid:/nct: URI)"
-        ));
-    }
-
-    let actor_id = actor.unwrap_or("agent:vela-ingest-bot");
-    if p.is_file() {
-        let is_json = p
-            .extension()
-            .and_then(|s| s.to_str())
-            .map(|s| s.eq_ignore_ascii_case("json"))
-            .unwrap_or(false);
-        if !is_json {
-            fail(
-                "ingest: only .json artifact packets and doi:/pmid:/nct: URIs are ingestable; \
-                 the LLM compile routes (.pdf/.md/.csv) were removed with the agent layer",
-            );
-        }
-        cmd_artifact_to_state(frontier, &p, actor_id, false, json);
-        return;
-    }
-
-    if p.is_dir() {
-        let mut json_count = 0usize;
-        if let Ok(entries) = std::fs::read_dir(&p) {
-            for entry in entries.flatten() {
-                let path = entry.path();
-                if path.is_file()
-                    && path
-                        .extension()
-                        .and_then(|s| s.to_str())
-                        .map(|s| s.eq_ignore_ascii_case("json"))
-                        .unwrap_or(false)
-                {
-                    cmd_artifact_to_state(frontier, &path, actor_id, false, json);
-                    json_count += 1;
-                }
-            }
-        }
-        if json_count == 0 {
-            fail(
-                "ingest: no .json artifact packets in folder; only JSON packets and \
-                 doi:/pmid:/nct: URIs are ingestable",
-            );
-        }
-        return;
-    }
-
     fail(&format!(
-        "ingest: path '{path}' is neither a file nor a directory"
+        "ingest: '{path}' is not a doi:/pmid:/nct: URI; ingest only fetches source metadata for stable-identifier URIs"
     ));
 }
 
@@ -1889,59 +1794,6 @@ pub(crate) fn answer(project: &vela_protocol::project::Project, q: &str, json: b
         return;
     }
 
-    // Pattern: underidentified / conditional / audit.
-    if lower.contains("underident")
-        || lower.contains("audit")
-        || lower.contains("identif")
-        || lower.contains("causal")
-    {
-        let entries = vela_edge::causal_reasoning::audit_frontier(project);
-        let summary = vela_edge::causal_reasoning::summarize_audit(&entries);
-        if json {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({
-                    "answer": "audit",
-                    "summary": {
-                        "identified": summary.identified,
-                        "conditional": summary.conditional,
-                        "underidentified": summary.underidentified,
-                        "underdetermined": summary.underdetermined,
-                    },
-                }))
-                .unwrap()
-            );
-        } else {
-            println!(
-                "  Causal audit: {} identified · {} conditional · {} underidentified · {} underdetermined.",
-                summary.identified,
-                summary.conditional,
-                summary.underidentified,
-                summary.underdetermined,
-            );
-            if summary.underidentified > 0 {
-                println!(
-                    "  The {} underidentified findings are concrete review items:",
-                    summary.underidentified
-                );
-                for e in entries
-                    .iter()
-                    .filter(|e| {
-                        matches!(
-                            e.verdict,
-                            vela_edge::causal_reasoning::Identifiability::Underidentified
-                        )
-                    })
-                    .take(8)
-                {
-                    let txt: String = e.assertion_text.chars().take(70).collect();
-                    println!("    · {}  {}", e.finding_id, txt);
-                }
-            }
-        }
-        return;
-    }
-
     // Pattern: recent / changed / log.
     if lower.contains("recent")
         || lower.contains("changed")
@@ -2026,40 +1878,6 @@ pub(crate) fn fmt_timestamp(ts: &str) -> String {
     chrono::DateTime::parse_from_rfc3339(ts)
         .map(|dt| dt.format("%m-%d %H:%M").to_string())
         .unwrap_or_else(|_| ts.chars().take(16).collect())
-}
-
-fn cmd_artifact_to_state(
-    frontier: &Path,
-    packet: &Path,
-    actor: &str,
-    apply_artifacts: bool,
-    json: bool,
-) {
-    let report = vela_edge::artifact_to_state::import_packet_at_path(
-        frontier,
-        packet,
-        actor,
-        apply_artifacts,
-    )
-    .unwrap_or_else(|e| fail_return(&e));
-    if json {
-        print_json(&report);
-    } else {
-        println!("vela artifact-to-state");
-        println!("  packet: {}", report.packet_id);
-        println!("  frontier: {}", report.frontier);
-        println!("  artifact proposals: {}", report.artifact_proposals);
-        println!("  finding proposals: {}", report.finding_proposals);
-        println!("  gap proposals: {}", report.gap_proposals);
-        println!(
-            "  applied artifact events: {}",
-            report.applied_artifact_events
-        );
-        println!(
-            "  pending truth proposals: {}",
-            report.pending_truth_proposals
-        );
-    }
 }
 
 /// Shared success print for `vela id create` / `vela id import`: shows the
@@ -3330,47 +3148,6 @@ fn iso_week_bounds(
     Ok((start, end))
 }
 
-pub(crate) fn parse_task_status(status: &str) -> frontier_task::FrontierTaskStatus {
-    status
-        .parse()
-        .unwrap_or_else(|e| fail_return(&format!("invalid task status: {e}")))
-}
-
-pub(crate) fn print_task(task: &frontier_task::FrontierTask, json: bool) {
-    if json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(task).expect("serialize task")
-        );
-    } else {
-        println!(
-            "{} {} {} · {}",
-            style::ok("task"),
-            task.id,
-            task.status,
-            task.objective
-        );
-        println!("  frontier: {}", task.frontier_id);
-        println!("  type:     {}", task.task_type);
-        println!("  risk:     {}", task.risk_class);
-        if !task.inputs.is_empty() {
-            println!("  inputs:   {}", task.inputs.join(", "));
-        }
-        if !task.blockers.is_empty() {
-            println!("  blockers: {}", task.blockers.join(", "));
-        }
-        if !task.acceptance_criteria.is_empty() {
-            println!("  accept:   {}", task.acceptance_criteria.join(" · "));
-        }
-        if let Some(reviewer) = &task.claimed_by {
-            println!("  claimed:  {reviewer}");
-        }
-        if let Some(reason) = &task.closed_reason {
-            println!("  reason:   {reason}");
-        }
-    }
-}
-
 /// v0.153: handle `vela registry verify-all`.
 pub(crate) fn cmd_verify_all(from: Option<PathBuf>, json: bool) {
     use vela_protocol::registry;
@@ -3873,87 +3650,6 @@ pub(crate) fn print_signal_summary(report: &signals::SignalReport, strict: bool)
     }
 }
 
-pub(crate) fn append_packet_json_file(
-    packet_dir: &Path,
-    relative_path: &str,
-    value: &Value,
-) -> Result<(), String> {
-    let content = serde_json::to_vec_pretty(value)
-        .map_err(|e| format!("Failed to serialize packet JSON file: {e}"))?;
-    let path = packet_dir.join(relative_path);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create {}: {e}", parent.display()))?;
-    }
-    std::fs::write(&path, &content)
-        .map_err(|e| format!("Failed to write {}: {e}", path.display()))?;
-    let entry = json!({
-        "path": relative_path,
-        "sha256": hex::encode(Sha256::digest(&content)),
-        "bytes": content.len(),
-    });
-
-    for manifest_name in ["manifest.json", "packet.lock.json"] {
-        let manifest_path = packet_dir.join(manifest_name);
-        let data = std::fs::read_to_string(&manifest_path)
-            .map_err(|e| format!("Failed to read {}: {e}", manifest_path.display()))?;
-        let mut manifest: Value = serde_json::from_str(&data)
-            .map_err(|e| format!("Failed to parse {}: {e}", manifest_path.display()))?;
-        let array_key = if manifest_name == "manifest.json" {
-            "included_files"
-        } else {
-            "files"
-        };
-        let files = manifest
-            .get_mut(array_key)
-            .and_then(Value::as_array_mut)
-            .ok_or_else(|| format!("{} missing {array_key} array", manifest_path.display()))?;
-        files.retain(|file| {
-            file.get("path")
-                .and_then(Value::as_str)
-                .is_none_or(|path| path != relative_path)
-        });
-        files.push(entry.clone());
-        std::fs::write(
-            &manifest_path,
-            serde_json::to_vec_pretty(&manifest)
-                .map_err(|e| format!("Failed to serialize {}: {e}", manifest_path.display()))?,
-        )
-        .map_err(|e| format!("Failed to write {}: {e}", manifest_path.display()))?;
-    }
-
-    let lock_path = packet_dir.join("packet.lock.json");
-    let lock_content = std::fs::read(&lock_path)
-        .map_err(|e| format!("Failed to read {}: {e}", lock_path.display()))?;
-    let lock_entry = json!({
-        "path": "packet.lock.json",
-        "sha256": hex::encode(Sha256::digest(&lock_content)),
-        "bytes": lock_content.len(),
-    });
-    let manifest_path = packet_dir.join("manifest.json");
-    let data = std::fs::read_to_string(&manifest_path)
-        .map_err(|e| format!("Failed to read {}: {e}", manifest_path.display()))?;
-    let mut manifest: Value = serde_json::from_str(&data)
-        .map_err(|e| format!("Failed to parse {}: {e}", manifest_path.display()))?;
-    let files = manifest
-        .get_mut("included_files")
-        .and_then(Value::as_array_mut)
-        .ok_or_else(|| format!("{} missing included_files array", manifest_path.display()))?;
-    files.retain(|file| {
-        file.get("path")
-            .and_then(Value::as_str)
-            .is_none_or(|path| path != "packet.lock.json")
-    });
-    files.push(lock_entry);
-    std::fs::write(
-        &manifest_path,
-        serde_json::to_vec_pretty(&manifest)
-            .map_err(|e| format!("Failed to serialize {}: {e}", manifest_path.display()))?,
-    )
-    .map_err(|e| format!("Failed to write {}: {e}", manifest_path.display()))?;
-    Ok(())
-}
-
 fn print_tool_check_report(report: &Value) {
     let summary = report.get("summary").unwrap_or(&Value::Null);
     let frontier = report.get("frontier").unwrap_or(&Value::Null);
@@ -4374,7 +4070,6 @@ Nouns (subcommand groups; run `vela <noun> --help`):
   sign          Signing and signature verification
   agents        Generate agent-config adapters from VELA.md (sync | doctor | diff)
   workspace     List/add/remove checked-out frontiers + their hub remotes (the gate reads this)
-  task          Create, list, claim, and close local frontier tasks
   atlas         Cross-frontier projection: lift one frontier's calculus over a whole field
   policy        Inspect / evaluate the policy-bound acceptance engine (permit/defer/deny)
   serve         Serve a read-only frontier over MCP stdio or HTTP (the local review server)
@@ -4499,8 +4194,6 @@ fn print_session_help() {
 }
 
 pub(crate) fn print_session_dashboard(project: &vela_protocol::project::Project, repo_path: &Path) {
-    use vela_edge::causal_reasoning::{audit_frontier, summarize_audit};
-
     let label = frontier_label(project);
     let vfr = project.frontier_id();
     let vfr_short = vfr.chars().take(16).collect::<String>();
@@ -4513,9 +4206,6 @@ pub(crate) fn print_session_dashboard(project: &vela_protocol::project::Project,
             *by_kind.entry(p.kind.clone()).or_insert(0) += 1;
         }
     }
-
-    let audit = audit_frontier(project);
-    let audit_summary = summarize_audit(&audit);
 
     println!();
     let version = vela_protocol::project::VELA_COMPILER_VERSION
@@ -4543,18 +4233,6 @@ pub(crate) fn print_session_dashboard(project: &vela_protocol::project::Project,
     if pending > 0 {
         let parts: Vec<String> = by_kind.iter().map(|(k, n)| format!("{n} {k}")).collect();
         println!("  {}     · {}", style::warn("inbox"), parts.join("  "));
-    }
-    if audit_summary.underidentified > 0 || audit_summary.conditional > 0 {
-        println!(
-            "  {}     · {} underidentified · {} conditional",
-            if audit_summary.underidentified > 0 {
-                style::lost("audit")
-            } else {
-                style::warn("audit")
-            },
-            audit_summary.underidentified,
-            audit_summary.conditional,
-        );
     }
     println!();
     println!("  type a verb or ask anything:");
@@ -5018,7 +4696,6 @@ mod surface_tests {
         "serve",
         "sign",
         "status",
-        "task",
         "transfer",
         "verify",
     ];

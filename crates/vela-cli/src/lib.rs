@@ -87,7 +87,7 @@ fn handle_conjecture_verify(args: &[String]) {
             std::process::exit(1);
         }
     };
-    let conj: vela_edge::conjecture::Conjecture = match serde_json::from_str(&body) {
+    let conj: vela_protocol_core::conjecture::Conjecture = match serde_json::from_str(&body) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("{} parse {path}: {e}", "err ·".red());

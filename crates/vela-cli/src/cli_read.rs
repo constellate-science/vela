@@ -48,10 +48,6 @@ pub(crate) fn cmd_status(path: &Path, json: bool) {
         }
     }
 
-    // Causal audit summary.
-    let audit = vela_edge::causal_reasoning::audit_frontier(&project);
-    let audit_summary = vela_edge::causal_reasoning::summarize_audit(&audit);
-
     if json {
         println!(
             "{}",
@@ -66,12 +62,6 @@ pub(crate) fn cmd_status(path: &Path, json: bool) {
                 "inbox": {
                     "pending_total": pending_total,
                     "pending_by_kind": pending_by_kind,
-                },
-                "causal_audit": {
-                    "identified": audit_summary.identified,
-                    "conditional": audit_summary.conditional,
-                    "underidentified": audit_summary.underidentified,
-                    "underdetermined": audit_summary.underdetermined,
                 },
             }))
             .expect("serialize status")
@@ -130,41 +120,6 @@ pub(crate) fn cmd_status(path: &Path, json: bool) {
         }
     } else {
         println!("  {}  inbox clean", style::ok("ok"));
-    }
-    println!();
-    if audit_summary.underidentified > 0 || audit_summary.conditional > 0 {
-        let chip = if audit_summary.underidentified > 0 {
-            style::lost("audit")
-        } else {
-            style::warn("audit")
-        };
-        println!(
-            "  {}  identified {} · conditional {} · underidentified {} · underdetermined {}",
-            chip,
-            audit_summary.identified,
-            audit_summary.conditional,
-            audit_summary.underidentified,
-            audit_summary.underdetermined,
-        );
-        if audit_summary.underidentified > 0 {
-            println!(
-                "    next: vela causal audit {} --problems-only",
-                path.display()
-            );
-        }
-    } else if audit_summary.underdetermined == 0 {
-        println!(
-            "  {}  causal audit: all {} identified",
-            style::ok("ok"),
-            audit_summary.identified
-        );
-    } else {
-        println!(
-            "  {}  causal audit: {} identified, {} ungraded",
-            style::warn("audit"),
-            audit_summary.identified,
-            audit_summary.underdetermined,
-        );
     }
     println!();
 }

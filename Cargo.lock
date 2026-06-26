@@ -3310,6 +3310,7 @@ dependencies = [
  "urlencoding",
  "vela-edge",
  "vela-protocol",
+ "vela-protocol-core",
  "vela-verify",
 ]
 

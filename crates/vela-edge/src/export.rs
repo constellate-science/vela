@@ -1023,7 +1023,6 @@ pub fn export_packet_with_source(
             "check_pubmed".to_string(),
             "list_contradictions".to_string(),
             "propagate_retraction".to_string(),
-            "apply_observer".to_string(),
         ],
         tool_catalog: crate::tool_registry::mcp_tools_json(),
         notes: caveats.clone(),

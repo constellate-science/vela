@@ -19,7 +19,6 @@ use serde_json::{Value, json};
 use tokio::sync::Mutex;
 use tower_http::cors::CorsLayer;
 
-use vela_edge::observer;
 use vela_edge::signals;
 use vela_edge::tool_registry;
 use vela_protocol::bundle::FindingBundle;
@@ -398,16 +397,11 @@ pub async fn run_http(
         .route("/api/findings", get(http_findings))
         .route("/api/findings/{id}", get(http_finding_by_id))
         .route("/api/contradictions", get(http_contradictions))
-        // v0.97: HTTP mirror of `vela discord` CLI. Frontier-wide
-        // discord report computed read-only from the live event log.
-        // Optional ?kind=<DiscordKind> filter.
-        .route("/api/discord", get(http_discord))
         .route("/api/tensions", get(http_tensions))
         .route("/api/gaps", get(http_gaps))
         .route("/api/artifacts", get(http_artifacts))
         .route("/api/artifact-audit", get(http_artifact_audit))
         .route("/api/proof", get(http_proof))
-        .route("/api/observer/{policy}", get(http_observer))
         .route("/api/propagate/{id}", get(http_propagate))
         .route("/api/stats", get(http_stats))
         .route("/api/frontiers", get(http_frontiers))
@@ -422,12 +416,6 @@ pub async fn run_http(
         // them into signed canonical state. The Ed25519 key never
         // enters the browser.
         .route("/api/queue", post(http_queue_append))
-        // v0.92: agent write target. POST a Carina ArtifactPacket
-        // JSON; substrate validates, writes proposals to disk,
-        // returns the new vpr_* ids. The single integration
-        // surface for AI agents that produce structured
-        // scientific output.
-        .route("/api/proposals/from-carina", post(http_from_carina))
         .route("/api/tools", get(http_tools_list))
         .route("/mcp/tools", get(http_tools_list))
         .route("/api/tool", post(http_tool_call));
@@ -464,15 +452,13 @@ pub async fn run_http(
     eprintln!("    events:     GET  /api/events");
     eprintln!("    artifacts:  GET  /api/artifacts     /api/artifact-audit");
     eprintln!("    proof:      GET  /api/proof");
-    eprintln!("    discord:    GET  /api/contradictions /api/tensions     /api/gaps");
-    eprintln!("                     /api/discord (frontier-wide discord report)");
+    eprintln!("    tensions:   GET  /api/contradictions /api/tensions     /api/gaps");
     eprintln!(
         "    projections:GET  /api/decision-brief /api/trials       /api/source-verification"
     );
-    eprintln!("                     /api/source-ingest-plan /api/observer/{{policy}}");
+    eprintln!("                     /api/source-ingest-plan");
     eprintln!("                     /api/propagate/{{id}}     /api/pubmed");
     eprintln!("    queue:      POST /api/queue");
-    eprintln!("    agent:      POST /api/proposals/from-carina (Carina artifact -> proposals)");
     eprintln!("    tools:      POST /api/tool/{{name}} (MCP-style tool dispatch)");
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
@@ -520,11 +506,6 @@ pub fn check_tools(source: ProjectSource, adoption: bool) -> Result<Value, Strin
         check_tool_result(
             "frontier_compare",
             tool_frontier_compare(&json!({"limit": 10}), &frontier),
-            started,
-        ),
-        check_tool_result(
-            "apply_observer",
-            tool_apply_observer(&json!({"policy": "academic", "limit": 5}), &frontier),
             started,
         ),
         check_tool_result(
@@ -865,13 +846,6 @@ async fn execute_tool(
             let project = frontier.lock().await;
             (
                 tool_propagate_retraction(args, &project),
-                Some(clone_project(&project)),
-            )
-        }
-        "apply_observer" => {
-            let project = frontier.lock().await;
-            (
-                tool_apply_observer(args, &project),
                 Some(clone_project(&project)),
             )
         }
@@ -1545,140 +1519,6 @@ async fn http_queue_append(
     )
 }
 
-/// v0.92: agent write target.
-///
-/// POST a Carina `ArtifactPacket` JSON. The substrate validates it,
-/// imports it as proposals via `artifact_to_state::import_packet_at_path`,
-/// reloads the in-memory project so subsequent reads see the new
-/// proposals, and returns the new `vpr_*` ids plus the full report.
-///
-/// Optional query params:
-/// - `actor`: actor id to attribute the import to (defaults to
-///   `agent:carina-write-target`).
-/// - `apply_artifacts`: if `true`, applies the Carina artifacts as
-///   accepted-state events instead of pending proposals. Default `false`.
-async fn http_from_carina(
-    State(state): State<AppState>,
-    axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
-    Json(body): Json<Value>,
-) -> (StatusCode, Json<Value>) {
-    let path = match &state.source_path {
-        Some(p) => p.clone(),
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({
-                    "error": "agent write target requires a single-file or single-repo frontier (`vela serve <path> --http <port>`)"
-                })),
-            );
-        }
-    };
-    let actor = params
-        .get("actor")
-        .cloned()
-        .unwrap_or_else(|| "agent:carina-write-target".to_string());
-    let apply_artifacts = params
-        .get("apply_artifacts")
-        .map(|v| v == "true" || v == "1")
-        .unwrap_or(false);
-
-    // Validate the body against the ArtifactPacket schema before
-    // touching disk. Decoupling validation from filesystem write
-    // means a malformed packet returns 400 cheaply.
-    let packet: vela_edge::artifact_to_state::ArtifactPacket =
-        match serde_json::from_value(body.clone()) {
-            Ok(p) => p,
-            Err(e) => {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({"error": format!("packet parse: {e}")})),
-                );
-            }
-        };
-    let packet = match packet.validate() {
-        Ok(p) => p,
-        Err(e) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"error": format!("packet validate: {e}")})),
-            );
-        }
-    };
-
-    // Write the validated packet to a temp file, since the existing
-    // `import_packet_at_path` takes a path. Future cleanup: a
-    // direct in-memory variant that skips this hop.
-    let tmp = match tempfile::NamedTempFile::new() {
-        Ok(t) => t,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("tempfile: {e}")})),
-            );
-        }
-    };
-    let canonical = match serde_json::to_vec_pretty(&packet) {
-        Ok(b) => b,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("re-serialize: {e}")})),
-            );
-        }
-    };
-    if let Err(e) = std::fs::write(tmp.path(), &canonical) {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("write tempfile: {e}")})),
-        );
-    }
-
-    // Drop the project lock around the import call so the import's
-    // own loads/writes don't deadlock against ongoing reads.
-    drop(state.project.lock().await);
-    let report = match vela_edge::artifact_to_state::import_packet_at_path(
-        &path,
-        tmp.path(),
-        &actor,
-        apply_artifacts,
-    ) {
-        Ok(r) => r,
-        Err(e) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"error": format!("import: {e}")})),
-            );
-        }
-    };
-
-    // Reload the project so later GET /api/findings, GET /api/findings/{id},
-    // etc. see the new proposals.
-    let mut reloaded = match vela_protocol::repo::load_from_path(&path) {
-        Ok(p) => p,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("reload after import: {e}")})),
-            );
-        }
-    };
-    vela_protocol::sources::materialize_project(&mut reloaded);
-    {
-        let mut guard = state.project.lock().await;
-        *guard = reloaded;
-    }
-
-    (
-        StatusCode::OK,
-        Json(json!({
-            "ok": true,
-            "actor": actor,
-            "apply_artifacts": apply_artifacts,
-            "report": report,
-        })),
-    )
-}
-
 /// v0.51: Resolve the requesting actor's read-side access clearance
 /// from the `X-Vela-Actor` request header. The header value, if
 /// present, is matched against `Project.actors` by id; the actor's
@@ -1793,13 +1633,6 @@ async fn http_finding_by_id(
             let sp =
                 vela_edge::provenance_compute::status_provenance_for_finding(&project, &finding.id);
             let belnap = sp.derive_status();
-            // v0.87: surface the substrate-derived discord set per
-            // docs/THEORY.md Section 4. Detectors run read-only
-            // against the live Project state; results are advisory.
-            let discord =
-                vela_edge::discord_compute::compute_discord_for_finding(&project, &finding.id);
-            let discord_kinds: Vec<String> =
-                discord.iter().map(|k| k.as_str().to_string()).collect();
             let mut value = serde_json::to_value(finding).unwrap_or_default();
             if let Some(map) = value.as_object_mut() {
                 map.insert(
@@ -1818,8 +1651,6 @@ async fn http_finding_by_id(
                     "refute_term_count".to_string(),
                     json!(sp.refute.term_count()),
                 );
-                map.insert("discord_kinds".to_string(), json!(discord_kinds));
-                map.insert("discord_count".to_string(), json!(discord.len()));
                 // v0.88: surface the actual provenance-polynomial
                 // structure per docs/THEORY.md §2.2. The serde-
                 // friendly form is `[{monomial, coefficient}]`,
@@ -1862,67 +1693,6 @@ async fn http_contradictions(State(state): State<AppState>) -> Json<Value> {
                 |_| json!({"result": tool_list_contradictions(&project).unwrap_or_default()}),
             ),
     )
-}
-
-/// v0.97: HTTP mirror of `vela discord`. Returns the frontier-wide
-/// discord assignment computed read-only against live Project state
-/// per docs/THEORY.md §4. Body shape matches the CLI's --json output.
-///
-/// Query params:
-/// - `kind`: optional filter to a single discord kind (e.g.
-///   `provenance_fragile`, `evidence_gap`, `status_divergent`).
-async fn http_discord(
-    State(state): State<AppState>,
-    axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
-) -> Json<Value> {
-    use vela_edge::discord::DiscordKind;
-    use vela_edge::discord_compute::compute_discord_assignment;
-
-    let project = state.project.lock().await;
-    let assignment = compute_discord_assignment(&project);
-    let support = assignment.frontier_support();
-    let filter = params.get("kind").cloned();
-
-    let mut rows: Vec<Value> = Vec::new();
-    for context in support.iter() {
-        let set = assignment.get(context);
-        let kinds: Vec<String> = set.iter().map(|k| k.as_str().to_string()).collect();
-        if let Some(f) = &filter
-            && !kinds.iter().any(|k| k == f)
-        {
-            continue;
-        }
-        rows.push(json!({
-            "finding_id": context,
-            "discord_kinds": kinds,
-        }));
-    }
-
-    let mut histogram = serde_json::Map::new();
-    for kind in DiscordKind::ALL {
-        let count = assignment
-            .iter()
-            .filter(|(_, set)| set.contains(*kind))
-            .count();
-        if count > 0 {
-            histogram.insert(kind.as_str().to_string(), json!(count));
-        }
-    }
-
-    let frontier_id = project
-        .frontier_id
-        .clone()
-        .unwrap_or_else(|| String::from("<unknown>"));
-
-    Json(json!({
-        "frontier_id": frontier_id,
-        "total_findings": project.findings.len(),
-        "frontier_support_size": support.len(),
-        "filtered_row_count": rows.len(),
-        "filter_kind": filter,
-        "histogram": Value::Object(histogram),
-        "rows": rows,
-    }))
 }
 
 async fn http_health(State(state): State<AppState>) -> Json<Value> {
@@ -2053,22 +1823,6 @@ async fn http_tensions(State(state): State<AppState>) -> Json<Value> {
         "tensions": tensions,
         "caveats": ["Candidate tensions are review surfaces, not definitive contradictions."],
     }))
-}
-
-async fn http_observer(
-    State(state): State<AppState>,
-    axum::extract::Path(policy): axum::extract::Path<String>,
-    axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
-) -> Json<Value> {
-    let project = state.project.lock().await;
-    let args = json!({
-        "policy": policy,
-        "limit": params.get("limit").and_then(|v| v.parse::<u64>().ok()).unwrap_or(20),
-    });
-    match tool_apply_observer(&args, &project) {
-        Ok(text) => Json(serde_json::from_str(&text).unwrap_or_else(|_| json!({"result": text}))),
-        Err(error) => Json(json!({"error": error})),
-    }
 }
 
 async fn http_propagate(
@@ -3405,39 +3159,6 @@ fn tool_blast_radius(args: &Value, frontier: &Project) -> Result<String, String>
         .ok_or_else(|| format!("Finding '{q}' not found"))?;
     let br = graph.blast_radius_graded(frontier, &center, &kinds, direction);
     serde_json::to_string_pretty(&br.to_json()).map_err(|e| format!("Serialization error: {e}"))
-}
-
-fn tool_apply_observer(args: &Value, frontier: &Project) -> Result<String, String> {
-    let policy_name = args["policy"].as_str().ok_or("Missing 'policy' argument")?;
-    let limit = args["limit"].as_u64().unwrap_or(15) as usize;
-    let policy = observer::policy_by_name(policy_name).unwrap_or_else(observer::academic);
-    let view = observer::observe(&frontier.findings, &policy);
-    let top = view
-        .findings
-        .iter()
-        .take(limit)
-        .map(|scored| {
-            let finding = frontier
-                .findings
-                .iter()
-                .find(|finding| finding.id == scored.finding_id);
-            json!({
-                "id": scored.finding_id,
-                "original_confidence": scored.original_confidence,
-                "observer_score": scored.observer_score,
-                "rank": scored.rank,
-                "assertion": finding.map(|f| trunc(&f.assertion.text, 100)).unwrap_or_default(),
-            })
-        })
-        .collect::<Vec<_>>();
-    serde_json::to_string_pretty(&json!({
-        "policy": policy_name,
-        "shown": top.len(),
-        "hidden": view.hidden,
-        "top_findings": top,
-        "caveat": "Observer output is policy-weighted reranking, not definitive disagreement.",
-    }))
-    .map_err(|e| format!("Serialization error: {e}"))
 }
 
 async fn tool_check_pubmed(args: &Value, client: &Client) -> Result<String, String> {
