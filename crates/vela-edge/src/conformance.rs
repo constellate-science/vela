@@ -10,7 +10,6 @@ use colored::Colorize;
 use vela_protocol::cli_style as style;
 
 use vela_protocol::bundle::*;
-use vela_protocol::link;
 use vela_protocol::project;
 use vela_protocol::propagate::{self, PropagationAction};
 
@@ -83,7 +82,6 @@ pub fn run(dir: &Path) -> (usize, usize) {
 
             let result = match suite_name {
                 "id-generation" => run_id_generation(input, expected),
-                "link-inference" => run_link_inference(input, expected),
                 "retraction-propagation" => run_retraction_propagation(input, expected),
                 "replication-cascade" => run_retraction_propagation(input, expected),
                 "directory-layout" => run_directory_layout(input, expected),
@@ -173,153 +171,6 @@ fn run_id_generation(
         && !bundle.id.starts_with(prefix)
     {
         return Err(format!("expected prefix {prefix}, got {}", &bundle.id[..3]));
-    }
-
-    Ok(())
-}
-
-// ── Link inference ──────────────────────────────────────────────────────
-
-fn make_test_finding(v: &serde_json::Value) -> FindingBundle {
-    let id = v["id"].as_str().unwrap_or("unknown").to_string();
-    let direction = v["direction"].as_str().map(|s| s.to_string());
-    let doi = v["doi"].as_str().map(|s| s.to_string());
-    let year = v["year"].as_i64().unwrap_or(2020) as i32;
-    let conf = v["confidence"].as_f64().unwrap_or(0.7);
-
-    let entities: Vec<Entity> = v["entities"]
-        .as_array()
-        .map(|arr| {
-            arr.iter()
-                .map(|e| {
-                    let aliases: Vec<String> = e["aliases"]
-                        .as_array()
-                        .map(|a| {
-                            a.iter()
-                                .filter_map(|s| s.as_str().map(|s| s.to_string()))
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    Entity {
-                        name: e["name"].as_str().unwrap_or("").to_string(),
-                        entity_type: e["type"].as_str().unwrap_or("other").to_string(),
-                        identifiers: serde_json::Map::new(),
-                        canonical_id: None,
-                        candidates: vec![],
-                        aliases,
-                        resolution_provenance: None,
-                        resolution_confidence: 1.0,
-                        resolution_method: None,
-                        species_context: None,
-                        needs_review: false,
-                    }
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-
-    FindingBundle {
-        id,
-        version: 1,
-        previous_version: None,
-        assertion: Assertion {
-            text: "Test finding".to_string(),
-            assertion_type: "mechanism".into(),
-            entities,
-            relation: None,
-            direction,
-            causal_claim: None,
-            causal_evidence_grade: None,
-        },
-        evidence: Evidence {
-            evidence_type: "experimental".into(),
-            model_system: String::new(),
-            method: String::new(),
-            replicated: false,
-            replication_count: None,
-            evidence_spans: vec![],
-        },
-        conditions: Conditions {
-            text: String::new(),
-            duration: None,
-        },
-        confidence: Confidence::raw(conf, "test", 0.85),
-        provenance: Provenance {
-            source_type: "published_paper".into(),
-            doi,
-            url: None,
-            title: "Test".into(),
-            authors: vec![],
-            year: Some(year),
-            license: None,
-            publisher: None,
-            funders: vec![],
-            extraction: Extraction::default(),
-            review: None,
-        },
-        flags: default_flags(),
-        links: vec![],
-        annotations: vec![],
-        attachments: vec![],
-        created: String::new(),
-        updated: None,
-        access_tier: vela_protocol::access_tier::AccessTier::Public,
-    }
-}
-
-fn run_link_inference(
-    input: &serde_json::Value,
-    expected: &serde_json::Value,
-) -> Result<(), String> {
-    let findings_val = input["findings"]
-        .as_array()
-        .ok_or("missing findings array")?;
-
-    let mut bundles: Vec<FindingBundle> = findings_val.iter().map(make_test_finding).collect();
-    let count = link::deterministic_links(&mut bundles);
-
-    let expected_count = expected["link_count"].as_u64().unwrap_or(0) as usize;
-    if count != expected_count {
-        return Err(format!("expected {expected_count} links, got {count}"));
-    }
-
-    if let Some(expected_links) = expected["links"].as_array() {
-        for el in expected_links {
-            let from_id = el["from"].as_str().unwrap_or("");
-            let to_id = el["to"].as_str().unwrap_or("");
-            let link_type = el["type"].as_str().unwrap_or("");
-            let inferred_by = el["inferred_by"].as_str().unwrap_or("");
-
-            let found = bundles.iter().any(|b| {
-                b.id == from_id
-                    && b.links.iter().any(|l| {
-                        l.target == to_id
-                            && l.link_type == link_type
-                            && (inferred_by.is_empty() || l.inferred_by == inferred_by)
-                    })
-            });
-
-            if !found {
-                return Err(format!(
-                    "expected link {from_id} -> {to_id} ({link_type}) not found"
-                ));
-            }
-
-            // Check note_contains if present.
-            if let Some(note_contains) = el["note_contains"].as_str() {
-                let has_note = bundles.iter().any(|b| {
-                    b.id == from_id
-                        && b.links
-                            .iter()
-                            .any(|l| l.target == to_id && l.note.contains(note_contains))
-                });
-                if !has_note {
-                    return Err(format!(
-                        "link {from_id} -> {to_id} note does not contain '{note_contains}'"
-                    ));
-                }
-            }
-        }
     }
 
     Ok(())
@@ -461,27 +312,6 @@ fn run_retraction_propagation(
                 "expected source confidence {conf}, got {}",
                 s.confidence.score
             ));
-        }
-    }
-
-    if let Some(expected_flags) = expected["flag_types"].as_array() {
-        let actual_flags: Vec<String> = result
-            .events
-            .iter()
-            .filter_map(|e| match &e.action {
-                vela_protocol::bundle::ReviewAction::Flagged { flag_type } => {
-                    Some(flag_type.clone())
-                }
-                _ => None,
-            })
-            .collect();
-        for ef in expected_flags {
-            let want = ef.as_str().unwrap_or("");
-            if !actual_flags.iter().any(|a| a == want) {
-                return Err(format!(
-                    "expected flag '{want}' not found in events: {actual_flags:?}"
-                ));
-            }
         }
     }
 

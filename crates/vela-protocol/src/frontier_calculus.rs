@@ -106,85 +106,27 @@ impl Ord for Rational {
 }
 
 // ===========================================================================
-// The Viterbi confidence semiring and the Eval_v homomorphism
+// The kappa readout (Viterbi confidence, square-free environment quotient)
 // ===========================================================================
 
-/// A commutative semiring `(K, add, mul, zero, one)`.
-///
-/// `idempotent_add` marks the class where path-style readings are DAG-safe: a
-/// shared sub-derivation reused by several alternative paths contributes once,
-/// because `add(a, a) = a` (Jøsang's discount is canonical on series-parallel
-/// graphs only; idempotent `max` repairs general DAGs).
-pub trait Semiring {
-    type Elem: Clone + PartialEq;
-    fn name(&self) -> &'static str;
-    fn zero(&self) -> Self::Elem;
-    fn one(&self) -> Self::Elem;
-    fn add(&self, a: &Self::Elem, b: &Self::Elem) -> Self::Elem;
-    fn mul(&self, a: &Self::Elem, b: &Self::Elem) -> Self::Elem;
-    fn idempotent_add(&self) -> bool;
-}
-
-/// Viterbi confidence: best-path confidence (`max`, `·`) — the kappa carrier.
-pub struct Viterbi;
-impl Semiring for Viterbi {
-    type Elem = Rational;
-    fn name(&self) -> &'static str {
-        "viterbi"
-    }
-    fn zero(&self) -> Rational {
-        Rational::zero()
-    }
-    fn one(&self) -> Rational {
-        Rational::one()
-    }
-    fn add(&self, a: &Rational, b: &Rational) -> Rational {
-        (*a).max(*b)
-    }
-    fn mul(&self, a: &Rational, b: &Rational) -> Rational {
-        a.mul(b)
-    }
-    fn idempotent_add(&self) -> bool {
-        true
-    }
-}
-
-/// The canonical image of a natural-number coefficient in `K`.
-fn nat_image<K: Semiring>(k: &K, n: u64) -> K::Elem {
-    if n == 0 {
-        return k.zero();
-    }
-    if k.idempotent_add() {
-        return k.one();
-    }
-    let mut acc = k.zero();
-    for _ in 0..n {
-        acc = k.add(&acc, &k.one());
-    }
-    acc
-}
-
-/// `Eval_v`: the unique homomorphism `N[X] -> K` extending the valuation.
-///
-/// `collapse_exponents = true` evaluates each monomial over its variable SET
-/// (`x^k` read as `x`) — the correlated-provenance correction used by kappa.
-pub fn eval_poly<K: Semiring, F: Fn(&str) -> K::Elem>(
-    k: &K,
-    valuation: F,
-    poly: &ProvenancePoly,
-    collapse_exponents: bool,
-) -> K::Elem {
-    let mut total = k.zero();
-    for (mono, coeff) in poly.terms() {
-        let mut term = nat_image(k, *coeff);
-        for (var, exp) in mono.factors() {
-            let v = valuation(var);
-            let reps = if collapse_exponents { 1 } else { *exp };
-            for _ in 0..reps {
-                term = k.mul(&term, &v);
-            }
+/// `Eval_v` into the Viterbi confidence semiring `(max, ·, 0, 1)`, evaluating
+/// each monomial over its variable SET (`x^k` read as `x`) — the square-free
+/// collapse that makes kappa correlation-aware. Natural-number coefficients
+/// collapse to `1` under the idempotent `max` (a thousand citations of one
+/// source count once). This is the single concrete reading the calculus needs;
+/// the general provenance-semiring family is specified in the Lean kernel and
+/// the Python reference, not carried in production Rust.
+fn eval_poly_viterbi<F: Fn(&str) -> Rational>(valuation: F, poly: &ProvenancePoly) -> Rational {
+    let mut total = Rational::zero();
+    for (mono, &coeff) in poly.terms() {
+        if coeff == 0 {
+            continue;
         }
-        total = k.add(&total, &term);
+        let mut term = Rational::one();
+        for var in mono.factors().keys() {
+            term = term.mul(&valuation(var));
+        }
+        total = total.max(term);
     }
     total
 }
@@ -194,21 +136,17 @@ pub fn eval_poly<K: Semiring, F: Fn(&str) -> K::Elem>(
 /// absent from the confidence map default to 1 (assumptions carry conditions,
 /// not decay).
 ///
-/// v3 framing (`lean/Vela/Frontier/FrontierCalculus.lean`): the `collapse_exponents`
-/// flag is `kappa` reading the *environment quotient* `EnvProv = Env(p)` rather
-/// than raw `N[X]`. On that layer `env` is the homomorphism (multiplication is
-/// assumption-set union) and `kappa = weight . env` is the TERMINAL weighted
-/// readout (max over environments of the product of assumption weights), NOT a
-/// homomorphism into scalar Viterbi (that would force `w^2 = w`). The square-free
-/// collapse (`envWeight_idem`) and the env quotient's multiplicativity
-/// (`env_mul_support`, T4) are machine-checked there.
+/// v3 framing (`lean/Vela/Frontier/FrontierCalculus.lean`): the square-free
+/// collapse is `kappa` reading the *environment quotient* `EnvProv = Env(p)`
+/// rather than raw `N[X]`. On that layer `env` is the homomorphism
+/// (multiplication is assumption-set union) and `kappa = weight . env` is the
+/// TERMINAL weighted readout (max over environments of the product of
+/// assumption weights), NOT a homomorphism into scalar Viterbi (that would
+/// force `w^2 = w`). The square-free collapse (`envWeight_idem`) and the env
+/// quotient's multiplicativity (`env_mul_support`, T4) are machine-checked
+/// there.
 pub fn kappa(p: &ProvenancePoly, conf: &BTreeMap<String, Rational>) -> Rational {
-    eval_poly(
-        &Viterbi,
-        |v| conf.get(v).copied().unwrap_or_else(Rational::one),
-        p,
-        true,
-    )
+    eval_poly_viterbi(|v| conf.get(v).copied().unwrap_or_else(Rational::one), p)
 }
 
 // ===========================================================================
@@ -254,17 +192,6 @@ impl BilatticePoint {
     }
 }
 
-/// The canonical corner point of each v1 Belnap status.
-pub fn corner_point(s: BelnapStatus) -> BilatticePoint {
-    let (z, o) = (Rational::zero(), Rational::one());
-    match s {
-        BelnapStatus::None => BilatticePoint::new(z, z),
-        BelnapStatus::True => BilatticePoint::new(o, z),
-        BelnapStatus::False => BilatticePoint::new(z, o),
-        BelnapStatus::Both => BilatticePoint::new(o, o),
-    }
-}
-
 /// The v2 status of a claim: one bilattice point derived from the two
 /// provenance polynomials by the kappa projection.
 pub fn status_point(
@@ -300,24 +227,17 @@ mod tests {
         assert!(r(72, 100) > r(56, 100));
     }
 
-    // --- correlated provenance: free confidence double-counts, kappa does not --
+    // --- correlated provenance: kappa collapses exponents, doesn't double-count -
     #[test]
-    fn correlated_provenance_diverges() {
+    fn correlated_provenance_collapses_exponents() {
         // a^2 : a single derivation that depends on source `a` twice (correlated).
         let a2 = &var("a") * &var("a");
         let cmap = conf(&[("a", (1, 2))]);
-        // free confidence (no exponent collapse) reads a^2 as conf(a)^2 = 1/4.
-        let free = eval_poly(
-            &Viterbi,
-            |v| cmap.get(v).copied().unwrap_or_else(Rational::one),
-            &a2,
-            false,
-        );
-        assert_eq!(free, r(1, 4));
-        // kappa collapses exponents: reads a^2 as conf(a) = 1/2 (counts a once).
+        // kappa reads a^2 over its variable SET, so conf(a) = 1/2 (counts a once),
+        // NOT the double-counted conf(a)^2 = 1/4 a free reading would give.
         assert_eq!(kappa(&a2, &cmap), r(1, 2));
         assert!(
-            kappa(&a2, &cmap) > free,
+            kappa(&a2, &cmap) > r(1, 4),
             "kappa must not double-count correlated evidence"
         );
     }
@@ -348,6 +268,14 @@ mod tests {
     #[test]
     fn corner_conservativity() {
         use BelnapStatus::*;
+        let (z, o) = (Rational::zero(), Rational::one());
+        // The canonical corner point of each v1 Belnap status.
+        let corner_point = |s| match s {
+            None => BilatticePoint::new(z, z),
+            True => BilatticePoint::new(o, z),
+            False => BilatticePoint::new(z, o),
+            Both => BilatticePoint::new(o, o),
+        };
         for s in [None, True, False, Both] {
             // each corner point thresholds back to its v1 status.
             assert_eq!(corner_point(s).corner(), s);

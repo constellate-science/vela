@@ -2267,12 +2267,12 @@ fn tool_list_dependents(args: &Value, frontier: &Project) -> Result<String, Stri
     });
 
     if transitive {
-        // Causal closure walks depends/supports edges only (the
-        // CausalGraph excludes contradicts/extends), so transitive
-        // dependents are the findings that ultimately rest on the
-        // target through its evidence chain.
-        let graph = vela_protocol::causal_graph::CausalGraph::from_project(frontier);
-        let mut closure: Vec<String> = graph.descendants(&target.id).into_iter().collect();
+        // Causal closure walks depends/supports edges only (contradicts/extends
+        // are excluded), so transitive dependents are the findings that
+        // ultimately rest on the target through its evidence chain.
+        let mut closure: Vec<String> = downstream_dependents(frontier, &target.id)
+            .into_iter()
+            .collect();
         closure.sort();
         let transitive_total = closure.len();
         closure.truncate(limit);
@@ -2282,6 +2282,55 @@ fn tool_list_dependents(args: &Value, frontier: &Project) -> Result<String, Stri
     }
 
     serde_json::to_string_pretty(&payload).map_err(|e| format!("Serialization error: {e}"))
+}
+
+/// Transitive downstream-dependent closure of `start`: every finding that
+/// (transitively) `depends`/`supports` `start` through the declared link graph.
+/// Cross-frontier `vf_X@vfr_Y` targets resolve to the bare `vf_X` node when it
+/// is present in the merged project (`serve --frontiers <dir>`). Excludes
+/// `start` itself.
+///
+/// This is the exact downstream-reachable closure the former `CausalGraph`
+/// computed: same edge predicate (`depends`/`supports` only), same bare-id
+/// resolution, same transitive children walk.
+fn downstream_dependents(frontier: &Project, start: &str) -> std::collections::HashSet<String> {
+    use std::collections::{HashMap, HashSet, VecDeque};
+
+    let nodes: HashSet<&str> = frontier.findings.iter().map(|f| f.id.as_str()).collect();
+
+    // children[target] = findings that directly depend on / support `target`.
+    let mut children: HashMap<&str, Vec<&str>> = HashMap::new();
+    for f in &frontier.findings {
+        for link in &f.links {
+            if !matches!(link.link_type.as_str(), "depends" | "supports") {
+                continue;
+            }
+            let resolved = vela_protocol::bundle::bare_finding_id(&link.target);
+            if !nodes.contains(resolved) {
+                continue;
+            }
+            children.entry(resolved).or_default().push(f.id.as_str());
+        }
+    }
+
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut queue: VecDeque<&str> = VecDeque::new();
+    if let Some(cs) = children.get(start) {
+        queue.extend(cs.iter().copied());
+    }
+    while let Some(node) = queue.pop_front() {
+        if !seen.insert(node.to_string()) {
+            continue;
+        }
+        if let Some(cs) = children.get(node) {
+            for &c in cs {
+                if !seen.contains(c) {
+                    queue.push_back(c);
+                }
+            }
+        }
+    }
+    seen
 }
 
 /// One-shot orientation around a finding: the node, what it rests on
@@ -3244,8 +3293,8 @@ fn tool_trace_evidence_chain(args: &Value, frontier: &Project) -> Result<String,
         .iter()
         .take(depth.saturating_mul(10).max(10))
         .map(|link| {
-            // Cross-frontier resolution, consistent with FrontierGraph /
-            // CausalGraph: a `vf_X@vfr_Y` target resolves to the bare
+            // Cross-frontier resolution, consistent with FrontierGraph and
+            // the causal closure: a `vf_X@vfr_Y` target resolves to the bare
             // `vf_X` node when present (as under `serve --frontiers`).
             let bare = vela_protocol::bundle::bare_finding_id(&link.target);
             let target = lookup
@@ -3515,6 +3564,31 @@ mod list_dependents_tests {
         let v: Value = serde_json::from_str(&out).unwrap();
         assert_eq!(v["direct_dependents"], 0);
         assert_eq!(v["dependents"].as_array().unwrap().len(), 0);
+    }
+
+    /// The rewired transitive closure follows only `depends`/`supports`,
+    /// ignoring `implies` (cross-problem reductions) and `contradicts`.
+    #[test]
+    fn transitive_closure_excludes_implies_and_contradicts() {
+        let typed = |target: &str, kind: &str| {
+            let mut l = link_to(target);
+            l.link_type = kind.into();
+            l
+        };
+        // f3 (root). f2 supports f3. f1 depends f2. fX implies f3 (ignored).
+        // fY contradicts f3 (ignored).
+        let f3 = synth_finding(3, vec![]);
+        let f2 = synth_finding(2, vec![typed(&f3.id, "supports")]);
+        let f1 = synth_finding(1, vec![typed(&f2.id, "depends")]);
+        let fx = synth_finding(10, vec![typed(&f3.id, "implies")]);
+        let fy = synth_finding(11, vec![typed(&f3.id, "contradicts")]);
+        let f3_id = f3.id.clone();
+        let mut project = assemble("equiv", vec![], 0, 0, "test");
+        project.findings = vec![f3, f2, f1, fx, fy];
+
+        // f3's downstream is {f2, f1}; implies/contradicts dependents excluded.
+        let d3 = downstream_dependents(&project, &f3_id);
+        assert_eq!(d3.len(), 2);
     }
 
     #[test]

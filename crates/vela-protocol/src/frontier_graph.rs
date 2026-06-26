@@ -9,11 +9,10 @@
 //! GENERALIZES / SPECIALIZES / SUPERSEDES`, plus the legacy `EXTENDS`
 //! and `REPLICATES`) as typed edges.
 //!
-//! It is a derived view, like [`crate::causal_graph::CausalGraph`] and
-//! [`crate::project::ReverseDepIndex`]: built from the canonical
-//! findings + links, never an authority. The CausalGraph keeps only
-//! the causal subset (`depends`/`supports`); the FrontierGraph keeps
-//! *every* typed relation so queries like "which contradictions are
+//! It is a derived view, like [`crate::project::ReverseDepIndex`]: built
+//! from the canonical findings + links, never an authority. Where a causal
+//! closure keeps only the `depends`/`supports` subset, the FrontierGraph
+//! keeps *every* typed relation so queries like "which contradictions are
 //! open" and "what improves this result" are first-class.
 //!
 //! Cross-frontier (`vf_…@vfr_…`) targets are recorded as edges to an

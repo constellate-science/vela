@@ -41,7 +41,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
-use std::ops::{Add, AddAssign, Mul, MulAssign};
+use std::ops::{Add, AddAssign, Mul};
 
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -70,32 +70,9 @@ impl Monomial {
         m
     }
 
-    /// Build from `(variable, exponent)` pairs. Exponents must be
-    /// strictly positive; pairs with exponent 0 are dropped.
-    pub fn from_factors(factors: impl IntoIterator<Item = (impl Into<String>, u32)>) -> Self {
-        let mut m = Self::default();
-        for (var, exp) in factors {
-            if exp > 0 {
-                let entry = m.factors.entry(var.into()).or_insert(0);
-                *entry = entry.saturating_add(exp);
-            }
-        }
-        m
-    }
-
     /// Variables appearing in this monomial (with exponents).
     pub fn factors(&self) -> &BTreeMap<String, u32> {
         &self.factors
-    }
-
-    /// Set of variable names appearing in this monomial.
-    pub fn variables(&self) -> BTreeSet<String> {
-        self.factors.keys().cloned().collect()
-    }
-
-    /// Whether `var` appears in this monomial with positive exponent.
-    pub fn contains(&self, var: &str) -> bool {
-        self.factors.contains_key(var)
     }
 
     /// Whether this is the empty (identity) monomial.
@@ -224,11 +201,6 @@ impl ProvenancePoly {
         self.terms.is_empty()
     }
 
-    /// Coefficient of a specific monomial, or 0 if not present.
-    pub fn coefficient(&self, monomial: &Monomial) -> u64 {
-        self.terms.get(monomial).copied().unwrap_or(0)
-    }
-
     /// Support: the set of variables appearing in any monomial with
     /// positive coefficient.
     ///
@@ -355,12 +327,6 @@ impl Mul for ProvenancePoly {
     }
 }
 
-impl MulAssign<&ProvenancePoly> for ProvenancePoly {
-    fn mul_assign(&mut self, other: &ProvenancePoly) {
-        *self = &*self * other;
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -411,9 +377,10 @@ mod tests {
         // Two reviewers independently derive the same finding through p1*d3.
         let derivation = &ProvenancePoly::singleton("p1") * &ProvenancePoly::singleton("d3");
         let combined = &derivation + &derivation;
+        // The two derivations merge into one monomial with coefficient 2.
         assert_eq!(combined.term_count(), 1);
-        let key = Monomial::from_factors([("d3", 1u32), ("p1", 1)]);
-        assert_eq!(combined.coefficient(&key), 2);
+        let (_mono, coeff) = combined.terms().next().expect("one term");
+        assert_eq!(*coeff, 2);
         // Idempotent collapse is NOT assumed: p + p != p.
         assert_ne!(combined, derivation);
     }
@@ -438,39 +405,40 @@ mod tests {
             + &(&ProvenancePoly::singleton("r7") * &ProvenancePoly::singleton("e2"));
 
         let retracted = p.retract(&vars(&["p1"]));
-        // The p1*d3 monomial should be gone; r7*e2 remains.
+        // The p1*d3 monomial should be gone; r7*e2 remains with coefficient 1.
         assert_eq!(retracted.term_count(), 1);
         assert_eq!(retracted.support(), vars(&["e2", "r7"]));
-        // The p1*d3 monomial coefficient is now 0.
-        let p1d3 = Monomial::from_factors([("d3", 1u32), ("p1", 1)]);
-        assert_eq!(retracted.coefficient(&p1d3), 0);
-        // The r7*e2 monomial coefficient is unchanged.
-        let r7e2 = Monomial::from_factors([("e2", 1u32), ("r7", 1)]);
-        assert_eq!(retracted.coefficient(&r7e2), 1);
+        let (mono, coeff) = retracted.terms().next().expect("one term");
+        assert_eq!(*coeff, 1);
+        assert_eq!(
+            mono.factors().keys().cloned().collect::<BTreeSet<_>>(),
+            vars(&["e2", "r7"])
+        );
     }
 
     #[test]
     fn theorem_2_monomials_without_retracted_var_are_unchanged() {
         // p = 2*p1*d3 + r7
         let mut p = ProvenancePoly::zero();
-        p.insert_term(Monomial::from_factors([("p1", 1u32), ("d3", 1)]), 2);
+        p.insert_term(Monomial::singleton("p1").mul(&Monomial::singleton("d3")), 2);
         p.insert_term(Monomial::singleton("r7"), 1);
 
         let retracted = p.retract(&vars(&["p1"]));
         // The 2*p1*d3 monomial is dropped; r7 remains with coefficient 1.
         assert_eq!(retracted.term_count(), 1);
-        assert_eq!(retracted.coefficient(&Monomial::singleton("r7")), 1);
+        let (mono, coeff) = retracted.terms().next().expect("one term");
+        assert_eq!(*coeff, 1);
+        assert_eq!(*mono, Monomial::singleton("r7"));
     }
 
     #[test]
     fn theorem_2_no_new_monomials_after_retraction() {
         // Build a complex polynomial: 3*p1*d3 + 2*p1*d3*e2 + r7
+        let p1d3 = Monomial::singleton("p1").mul(&Monomial::singleton("d3"));
+        let p1d3e2 = p1d3.mul(&Monomial::singleton("e2"));
         let mut p = ProvenancePoly::zero();
-        p.insert_term(Monomial::from_factors([("p1", 1u32), ("d3", 1)]), 3);
-        p.insert_term(
-            Monomial::from_factors([("p1", 1u32), ("d3", 1), ("e2", 1)]),
-            2,
-        );
+        p.insert_term(p1d3, 3);
+        p.insert_term(p1d3e2, 2);
         p.insert_term(Monomial::singleton("r7"), 1);
 
         let original_monomials: BTreeSet<Monomial> = p.terms.keys().cloned().collect();
@@ -531,7 +499,7 @@ mod tests {
     fn display_renders_canonical_form() {
         // 2*p1*d3 + r7
         let mut p = ProvenancePoly::zero();
-        p.insert_term(Monomial::from_factors([("p1", 1u32), ("d3", 1)]), 2);
+        p.insert_term(Monomial::singleton("p1").mul(&Monomial::singleton("d3")), 2);
         p.insert_term(Monomial::singleton("r7"), 1);
         // Monomials are sorted alphabetically by their first variable name:
         // d3*p1 (sorts before r7), then r7.

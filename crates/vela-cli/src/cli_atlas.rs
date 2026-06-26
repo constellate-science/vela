@@ -16,7 +16,7 @@ use serde_json::json;
 use vela_protocol::{
     atlas, boundary,
     frontier_graph::{BlastDirection, EdgeKind, FrontierGraph},
-    pathfind, repo,
+    repo,
 };
 
 use crate::cli::{fail, print_json};
@@ -31,20 +31,8 @@ pub(crate) fn run(args: &[String]) {
         run_ingest_source(args);
         return;
     }
-    if args.get(2).map(String::as_str) == Some("frontier") {
-        run_frontier(args);
-        return;
-    }
-    if args.get(2).map(String::as_str) == Some("graph") {
-        run_graph(args);
-        return;
-    }
     if args.get(2).map(String::as_str) == Some("boundary") {
         run_boundary(args);
-        return;
-    }
-    if args.get(2).map(String::as_str) == Some("pathfind") {
-        run_pathfind(args);
         return;
     }
     if args.get(2).map(String::as_str) == Some("blast-radius") {
@@ -57,10 +45,6 @@ pub(crate) fn run(args: &[String]) {
     }
     if args.get(2).map(String::as_str) == Some("decl-blast") {
         run_decl_blast(args);
-        return;
-    }
-    if args.get(2).map(String::as_str) == Some("contradictions") {
-        run_contradictions(args);
         return;
     }
     if args.get(2).map(String::as_str) == Some("gluing") {
@@ -158,55 +142,8 @@ fn digits_after(text: &str, keyword: &str, max_skip: usize) -> Option<String> {
     (!digits.is_empty()).then_some(digits)
 }
 
-/// `vela atlas frontier <frontier>...` — the router view: the status landscape,
-/// the edge count, and the **stale-open frontier** (problems marked open in one
-/// source but resolved in another — the registry-stale wedge, an adoption queue).
-fn run_frontier(args: &[String]) {
-    let frontiers: Vec<&str> = args
-        .iter()
-        .skip(3)
-        .filter(|a| !a.starts_with('-'))
-        .map(String::as_str)
-        .collect();
-    if frontiers.is_empty() {
-        fail("usage: vela atlas frontier <frontier> [<frontier> ...]");
-    }
-    let projects: Vec<_> = frontiers
-        .iter()
-        .map(|f| {
-            repo::load_from_path(Path::new(f)).unwrap_or_else(|e| fail(&format!("load {f}: {e}")))
-        })
-        .collect();
-    let refs: Vec<&_> = projects.iter().collect();
-    let out = atlas::project(&refs);
-
-    let mut by_status: std::collections::BTreeMap<String, usize> =
-        std::collections::BTreeMap::new();
-    let mut stale_open: Vec<serde_json::Value> = Vec::new();
-    for c in &out.cells {
-        let s = c.status.clone().unwrap_or_else(|| "undeclared".to_string());
-        *by_status.entry(s.clone()).or_default() += 1;
-        if s == "contested" {
-            stale_open.push(json!({
-                "handle": c.stable_handle, "members": c.members.len(), "label": c.label,
-            }));
-        }
-    }
-    print_json(&json!({
-        "frontiers": out.frontiers,
-        "cells": out.cells.len(),
-        "edges": out.edges.len(),
-        "status_landscape": by_status,
-        "stale_open_frontier": {
-            "note": "open in one source, resolved in another — the registry-stale wedge (an adoption queue)",
-            "count": stale_open.len(),
-            "cells": stale_open,
-        },
-    }));
-}
-
 /// Load a single frontier project from the path that follows the subcommand,
-/// failing with a usage message when absent. Shared by graph/boundary/pathfind.
+/// failing with a usage message when absent. Shared by the read-side verbs.
 fn load_one(args: &[String], usage: &str) -> vela_protocol::project::Project {
     let frontier = args
         .iter()
@@ -215,16 +152,6 @@ fn load_one(args: &[String], usage: &str) -> vela_protocol::project::Project {
         .unwrap_or_else(|| fail(usage));
     repo::load_from_path(Path::new(frontier))
         .unwrap_or_else(|e| fail(&format!("load {frontier}: {e}")))
-}
-
-/// `vela atlas graph <frontier>` — the typed claim-level graph (memo §11):
-/// findings as nodes carrying their derived state (open/established/refuted/
-/// contested/fragile), typed edges, contradiction-pair count. The richer emit
-/// the map renders.
-fn run_graph(args: &[String]) {
-    let project = load_one(args, "usage: vela atlas graph <frontier>");
-    let graph = FrontierGraph::from_project(&project);
-    print_json(&graph.to_json());
 }
 
 /// `vela atlas boundary <frontier>` — the dark-matter boundary (memo §3):
@@ -381,32 +308,6 @@ pub(crate) fn run_explore(frontier: &Path, finding: &str, hops: usize, json: boo
         for (k, c) in ex.edge_kind_counts() {
             println!("  {k}: {c}");
         }
-    }
-}
-
-/// `vela atlas pathfind <frontier> <from> <to>` — the golden thread (memo
-/// §11.7): the shortest support/reduction path between two findings. Emits the
-/// path, or a `found: false` object when none exists.
-fn run_pathfind(args: &[String]) {
-    let positional: Vec<&str> = args
-        .iter()
-        .skip(3)
-        .filter(|a| !a.starts_with('-'))
-        .map(String::as_str)
-        .collect();
-    let [frontier, from, to] = positional.as_slice() else {
-        fail("usage: vela atlas pathfind <frontier> <from-finding> <to-finding>");
-    };
-    let project = repo::load_from_path(Path::new(frontier))
-        .unwrap_or_else(|e| fail(&format!("load {frontier}: {e}")));
-    let graph = FrontierGraph::from_project(&project);
-    match pathfind::shortest_path(&graph, from, to, &pathfind::SUPPORT_KINDS) {
-        Some(path) => print_json(&path.to_json()),
-        None => print_json(&json!({
-            "schema": "vela.golden_thread.v0.1",
-            "from": from, "to": to, "found": false,
-            "note": "no support/reduction path between these findings",
-        })),
     }
 }
 
@@ -819,118 +720,6 @@ fn declared_status(text: &str) -> Option<&'static str> {
     None
 }
 
-/// `vela atlas contradictions <frontier>... [--json]` — cross-source concordance
-/// (memo tier 3-4): find atlas cells whose members, joined under one anchor
-/// (e.g. an Erdős problem and its Formal-Conjectures formalization), declare an
-/// INCOMPATIBLE status — one "open", another "solved/proved/disproved". Each is
-/// minted as a CANDIDATE `Contradiction` (`vcx_`). Per the contradiction doctrine
-/// these are never auto-adjudicated: this is read-only detection, a signal for
-/// human review, never a verdict.
-fn run_contradictions(args: &[String]) {
-    use vela_protocol::bundle::bare_finding_id;
-    use vela_protocol::contradiction::Contradiction;
-
-    let frontiers: Vec<&str> = args
-        .iter()
-        .skip(3)
-        .filter(|a| !a.starts_with('-'))
-        .map(String::as_str)
-        .collect();
-    let json_out = args.iter().any(|a| a == "--json");
-    if frontiers.is_empty() {
-        fail("usage: vela atlas contradictions <frontier> [<frontier> ...] [--json]");
-    }
-    let projects: Vec<_> = frontiers
-        .iter()
-        .map(|f| {
-            repo::load_from_path(Path::new(f)).unwrap_or_else(|e| fail(&format!("load {f}: {e}")))
-        })
-        .collect();
-    let mut status_of: std::collections::HashMap<String, &'static str> =
-        std::collections::HashMap::new();
-    for p in &projects {
-        for f in &p.findings {
-            if let Some(s) = declared_status(&f.assertion.text) {
-                status_of.insert(f.id.clone(), s);
-            }
-        }
-    }
-    let refs: Vec<&_> = projects.iter().collect();
-    let out = atlas::project(&refs);
-
-    let mut found: Vec<serde_json::Value> = Vec::new();
-    for cell in &out.cells {
-        let mut by_status: std::collections::BTreeMap<&str, String> =
-            std::collections::BTreeMap::new();
-        for m in &cell.members {
-            let bare = bare_finding_id(m);
-            if let Some(s) = status_of.get(bare) {
-                by_status.entry(*s).or_insert_with(|| bare.to_string());
-            }
-        }
-        let open = by_status.get("open").cloned();
-        let resolved = by_status
-            .iter()
-            .find(|(s, _)| **s != "open")
-            .map(|(s, id)| (*s, id.clone()));
-        if let (Some(a), Some((rstat, b))) = (open, resolved) {
-            let anchor = cell
-                .anchors
-                .first()
-                .map(|an| format!("{}:{}", an.namespace, an.id))
-                .unwrap_or_else(|| "spine".to_string());
-            let cx = Contradiction::candidate(
-                &anchor,
-                &a,
-                &b,
-                &format!("cross-source status conflict: one member 'open', another '{rstat}'"),
-            );
-            found.push(json!({
-                "contradiction_id": cx.contradiction_id,
-                "anchor": anchor,
-                "label": cell.label.chars().take(80).collect::<String>(),
-                "open_member": a,
-                "resolved_member": b,
-                "resolved_status": rstat,
-                "status": "candidate",
-            }));
-        }
-    }
-
-    if json_out {
-        print_json(&json!({
-            "object": "vela.contradiction_scan.v1",
-            "frontiers": frontiers,
-            "cells_scanned": out.cells.len(),
-            "candidate_contradictions": found.len(),
-            "doctrine": "candidates only — never auto-adjudicated; a signal for human review",
-            "contradictions": found,
-        }));
-        return;
-    }
-    println!(
-        "cross-source contradiction scan — {} cells, {} candidate conflicts",
-        out.cells.len(),
-        found.len()
-    );
-    for c in &found {
-        println!(
-            "  {} [{}] {} : open vs {}",
-            c["contradiction_id"].as_str().unwrap_or(""),
-            c["anchor"].as_str().unwrap_or(""),
-            c["label"].as_str().unwrap_or(""),
-            c["resolved_status"].as_str().unwrap_or("")
-        );
-    }
-    if found.is_empty() {
-        println!("  (no cross-source status conflicts — sources agree where they overlap)");
-    } else {
-        println!(
-            "\ncandidates only — never auto-adjudicated; surfaced for human review (the doctrine)."
-        );
-    }
-}
-
 /// `vela atlas gluing <frontier>... [--json]` — the presheaf-with-discord view
 /// (plan B2 / THEORY §11.1). An atlas cell is the GLUING of local domain states
 /// (the `vf_` members sharing a HardIdentity anchor across sources/contexts). The
@@ -940,10 +729,10 @@ fn run_contradictions(args: &[String]) {
 /// gluing fails, §11.1); the honest object is a presheaf with a discord `D_A`, and
 /// `Frontier = supp(D_A)` is exactly the set of obstructed cells. Two discord
 /// kinds: `verifier_discord` (belnap B — one member supported, another refuted, the
-/// strong form) and `status_discord` (declared status conflict, open vs resolved,
-/// the weak form `run_contradictions` finds). Read-side projection over
-/// `atlas::project` + the bilattice; never auto-adjudicated (a discord links a
-/// candidate `Contradiction`, a signal for key-custody review).
+/// strong form) and `status_discord` (the weak form: a declared status conflict,
+/// open vs resolved). Read-side projection over `atlas::project` + the bilattice;
+/// never auto-adjudicated (a discord links a candidate `Contradiction`, a signal
+/// for key-custody review).
 fn run_gluing(args: &[String]) {
     use vela_protocol::bundle::bare_finding_id;
     use vela_protocol::contradiction::Contradiction;

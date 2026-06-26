@@ -1,15 +1,14 @@
 //! Correction propagation through the frontier link graph.
 //!
 //! When a finding is corrected or retracted, everything that depends on it
-//! should know. This module walks the link graph and flags downstream findings,
-//! creating ReviewEvent records for each propagation step.
+//! should know. This module walks the link graph, mutates the in-memory
+//! frontier (retracted/contested flags, reduced confidence), and reports the
+//! affected dependents per depth. Callers mint their own signed StateEvents
+//! from that cascade.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 
-use chrono::Utc;
-use sha2::{Digest, Sha256};
-
-use crate::bundle::{FindingBundle, ReviewAction, ReviewEvent};
+use crate::bundle::FindingBundle;
 use crate::project::Project;
 
 /// The type of correction being propagated.
@@ -33,8 +32,6 @@ pub struct PropagationResult {
     pub affected: usize,
     /// Finding IDs affected at each depth level.
     pub cascade: Vec<Vec<String>>,
-    /// Review events created during propagation.
-    pub events: Vec<ReviewEvent>,
 }
 
 /// Maximum recursion depth to prevent runaway cascades.
@@ -47,74 +44,20 @@ pub fn propagate_correction(
     finding_id: &str,
     action: PropagationAction,
 ) -> PropagationResult {
-    let now = Utc::now().to_rfc3339();
-
-    // Build a reverse adjacency map: target_id -> list of (source_idx, link_type).
-    // We want findings that link TO the corrected finding via supports or depends.
-    let mut reverse_links: HashMap<String, Vec<(usize, String)>> = HashMap::new();
-    for (idx, finding) in frontier.findings.iter().enumerate() {
-        for link in &finding.links {
-            if link.link_type == "supports" || link.link_type == "depends" {
-                reverse_links
-                    .entry(link.target.clone())
-                    .or_default()
-                    .push((idx, link.link_type.clone()));
-            }
-        }
-    }
-
-    // Also build forward links: source finding has links with target.
-    // Findings that the corrected finding supports or that depend on it.
-    let mut forward_deps: HashMap<String, Vec<(usize, String)>> = HashMap::new();
-    for (idx, finding) in frontier.findings.iter().enumerate() {
-        for link in &finding.links {
-            forward_deps
-                .entry(finding.id.clone())
-                .or_default()
-                .push((idx, link.link_type.clone()));
-        }
-    }
-
     // Find the source finding index.
     let source_idx = frontier.findings.iter().position(|f| f.id == finding_id);
 
-    let mut events: Vec<ReviewEvent> = Vec::new();
     let mut cascade: Vec<Vec<String>> = Vec::new();
 
-    // Step 1: Apply the action to the source finding itself.
+    // Step 1: Apply the action to the source finding itself. Callers mint
+    // their own signed StateEvents from the returned cascade; this pass only
+    // mutates the in-memory frontier and reports the affected set.
     if let Some(idx) = source_idx {
         match &action {
             PropagationAction::Retracted => {
                 frontier.findings[idx].flags.retracted = true;
-                let event = make_event(
-                    finding_id,
-                    "propagation_engine",
-                    &now,
-                    ReviewAction::Flagged {
-                        flag_type: "retracted".into(),
-                    },
-                    "Source paper retracted",
-                );
-                events.push(event);
             }
-            PropagationAction::Corrected {
-                field,
-                original,
-                corrected,
-            } => {
-                let event = make_event(
-                    finding_id,
-                    "propagation_engine",
-                    &now,
-                    ReviewAction::Corrected {
-                        field: field.clone(),
-                        original: original.clone(),
-                        corrected: corrected.clone(),
-                    },
-                    "Upstream correction applied",
-                );
-                events.push(event);
-            }
+            PropagationAction::Corrected { .. } => {}
             PropagationAction::ConfidenceReduced { new_score } => {
                 let old = frontier.findings[idx].confidence.score;
                 frontier.findings[idx].confidence.score = *new_score;
@@ -122,16 +65,6 @@ pub fn propagate_correction(
                     "Reduced from {:.3} to {:.3} (manual correction)",
                     old, new_score
                 );
-                let event = make_event(
-                    finding_id,
-                    "propagation_engine",
-                    &now,
-                    ReviewAction::Flagged {
-                        flag_type: format!("confidence_reduced_to_{:.2}", new_score),
-                    },
-                    &format!("Confidence reduced from {:.3} to {:.3}", old, new_score),
-                );
-                events.push(event);
             }
         }
     }
@@ -164,52 +97,13 @@ pub fn propagate_correction(
             }
             visited.insert(dep_id.clone());
 
-            // Flag the dependent finding.
-            let (flag_type, reason) = match &action {
-                PropagationAction::Retracted => (
-                    "upstream_retracted".to_string(),
-                    format!(
-                        "Upstream finding {} was retracted (depth {})",
-                        finding_id,
-                        depth + 1
-                    ),
-                ),
-                PropagationAction::Corrected { field, .. } => (
-                    "upstream_corrected".to_string(),
-                    format!(
-                        "Upstream finding {} had field '{}' corrected (depth {})",
-                        finding_id,
-                        field,
-                        depth + 1
-                    ),
-                ),
-                PropagationAction::ConfidenceReduced { new_score } => {
-                    if *new_score < 0.5 {
-                        (
-                            "upstream_at_risk".to_string(),
-                            format!(
-                                "Upstream finding {} confidence reduced to {:.2} (depth {})",
-                                finding_id,
-                                new_score,
-                                depth + 1
-                            ),
-                        )
-                    } else {
-                        continue; // Only propagate if below 0.5
-                    }
-                }
-            };
-
-            let event = make_event(
-                &dep_id,
-                "propagation_engine",
-                &now,
-                ReviewAction::Flagged {
-                    flag_type: flag_type.clone(),
-                },
-                &reason,
-            );
-            events.push(event);
+            // Confidence reductions only cascade when they cross below 0.5;
+            // retractions and corrections always cascade to dependents.
+            if let PropagationAction::ConfidenceReduced { new_score } = &action
+                && *new_score >= 0.5
+            {
+                continue;
+            }
             level_ids.push(dep_id.clone());
 
             // If retracted, also mark the dependent as contested.
@@ -231,11 +125,7 @@ pub fn propagate_correction(
 
     let affected = cascade.iter().map(|level| level.len()).sum();
 
-    PropagationResult {
-        affected,
-        cascade,
-        events,
-    }
+    PropagationResult { affected, cascade }
 }
 
 /// Find indices of findings that have a supports or depends link targeting the
@@ -251,40 +141,6 @@ fn find_dependents(findings: &[FindingBundle], target_id: &str) -> Vec<usize> {
         })
         .map(|(idx, _)| idx)
         .collect()
-}
-
-/// Create a content-addressed review event.
-fn make_event(
-    finding_id: &str,
-    reviewer: &str,
-    timestamp: &str,
-    action: ReviewAction,
-    reason: &str,
-) -> ReviewEvent {
-    let content = serde_json::json!({
-        "finding_id": finding_id,
-        "reviewer": reviewer,
-        "reviewed_at": timestamp,
-        "action": action,
-        "reason": reason,
-    });
-    let canonical = serde_json::to_string(&content).unwrap_or_default();
-    let hash = Sha256::digest(canonical.as_bytes());
-    let id = format!("rev_{}", &hex::encode(hash)[..16]);
-
-    ReviewEvent {
-        id,
-        workspace: None,
-        finding_id: finding_id.to_string(),
-        reviewer: reviewer.to_string(),
-        reviewed_at: timestamp.to_string(),
-        scope: None,
-        status: None,
-        action,
-        reason: reason.to_string(),
-        evidence_considered: Vec::new(),
-        state_change: None,
-    }
 }
 
 #[cfg(test)]
