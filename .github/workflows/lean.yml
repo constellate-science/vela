@@ -1,0 +1,41 @@
+# Public Lean CI: cold-builds the machine-checked theorem tree (lean/Vela) on top
+# of the pinned Mathlib (v4.29.1), using Mathlib's prebuilt olean cache so the run
+# is minutes, not hours. A `sorry`, a broken proof, or a Lean/Mathlib version
+# drift fails here — not only on a maintainer's laptop. Complements the Rust
+# `conformance` workflow; together they are the public trust badge.
+name: lean
+
+on:
+  push:
+    branches: [main]
+    paths: ["lean/**", ".github/workflows/lean.yml"]
+  pull_request:
+    paths: ["lean/**", ".github/workflows/lean.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: lean-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lean:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: lean
+    steps:
+      - uses: actions/checkout@v5
+      - name: install elan (Lean toolchain manager)
+        run: |
+          curl -sSfL https://elan.lean-lang.org/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: cache .lake (Mathlib oleans + build artifacts)
+        uses: actions/cache@v4
+        with:
+          path: lean/.lake
+          key: lake-${{ runner.os }}-${{ hashFiles('lean/lake-manifest.json', 'lean/lean-toolchain') }}
+          restore-keys: lake-${{ runner.os }}-
+      - name: fetch Mathlib build cache (prebuilt oleans for the pinned commit)
+        run: lake exe cache get
+      - name: build Vela (machine-checked theorems, no sorry)
+        run: lake build Vela

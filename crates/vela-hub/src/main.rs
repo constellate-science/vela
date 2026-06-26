@@ -3130,14 +3130,13 @@ async fn publish_entry(
     // row gets written. The publish stays atomic. Skipped when
     // substrate is absent (manifest-only registry publish) or
     // when the hub has no S3 backend configured.
-    let blob_url = if let Some((hash, _, _, _)) = &prepared_snapshot {
+    let blob_url = if let Some((hash, _, snapshot_payload, _)) = &prepared_snapshot {
         if let Some(storage) = &state.storage {
             // size guard: the canonical bytes from prepare_inline_snapshot
             // are what we actually upload (so the public bytes byte-match
             // what was hashed). 100 MB cap mirrors the old DB constraint.
             let bytes = match canonical::to_canonical_bytes(
-                &serde_json::to_value(&prepared_snapshot.as_ref().unwrap().2)
-                    .unwrap_or(Value::Null),
+                &serde_json::to_value(snapshot_payload).unwrap_or(Value::Null),
             ) {
                 Ok(b) => b,
                 Err(e) => {

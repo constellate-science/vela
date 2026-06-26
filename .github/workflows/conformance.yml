@@ -32,3 +32,8 @@ jobs:
         run: cargo build --release --workspace
       - name: test (incl. verifier reproduce + reducer parity)
         run: cargo test --workspace
+      - name: reproduce (frozen verifiers re-derive every shipped witness)
+        run: |
+          ./target/release/vela reproduce examples/sidon-a309370
+          ./target/release/vela reproduce examples/sidon-sets
+          ./target/release/vela reproduce examples/erdos-problems

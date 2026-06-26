@@ -24,6 +24,9 @@ members = [
 resolver = "3"
 
 [workspace.package]
+# Release numbering, not semver: `0.RRR.0` where RRR increments once per release
+# (0.700, 0.710, ...). The patch field stays 0. The older `v0.X` micro-version
+# markers in comments/docs are historical provenance and do not compare to this.
 version = "0.710.0"
 edition = "2024"
 license = "Apache-2.0 OR MIT"

@@ -1,3 +1,23 @@
+//! The Vela protocol kernel: the typed, content-addressed substrate that turns
+//! scientific activity into signed, replayable state.
+//!
+//! Layering (a module's tier, not its file location):
+//! - **kernel** — the trust-critical core: `events` (canonical event types),
+//!   `reducer` (the deterministic frontier state machine), `sign` (Ed25519),
+//!   `bundle` (proof packets), `canonical` (canonical bytes/ids), `repo` (I/O).
+//! - **state** — computed views over the log: `state`, `registry`, `frontier_repo`.
+//! - **analysis** — derived, non-authoritative projections: `atlas`, `transfer`,
+//!   `verifier_attachment`, `status_provenance`, `frontier_graph`, `boundary`,
+//!   `contradiction`, `evidence_diff`.
+//! - **policy** — governance: `acceptance_policy`, `frontier_policy`, `tcb_policy`,
+//!   `access_tier`.
+//! - **domains** — domain profiles: `sidon_profile`, `lean_verification`.
+//!
+//! Id prefixes (content-addressed unless noted): `vf_` finding, `vev_` signed
+//! event, `vfr_` frontier, `vpr_` proposal, `val_` signed anchor, `vtr_` signed
+//! transfer, `vva_` verifier attachment, `vsa_` statement attestation. Authority
+//! is key custody: an agent may draft, only a key-holding human signs an accept.
+
 pub mod acceptance_policy;
 pub mod access_tier;
 pub mod activity;
