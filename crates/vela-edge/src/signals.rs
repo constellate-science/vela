@@ -76,10 +76,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         if severity == "error"
             || matches!(
                 rule_id,
-                "missing_source_record"
-                    | "missing_evidence_atom"
-                    | "missing_evidence_locator"
-                    | "condition_record_missing"
+                "missing_source_record" | "missing_evidence_atom" | "condition_record_missing"
             )
         {
             let id = format!("sig_diagnostic_{}", signals.len() + 1);
@@ -89,7 +86,6 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
                     "event_replay" => "event_replay_conflict",
                     "missing_source_record" => "missing_source_record",
                     "missing_evidence_atom" => "missing_evidence_atom",
-                    "missing_evidence_locator" => "missing_evidence_locator",
                     "condition_record_missing" => "condition_record_missing",
                     "reviewer_identity_missing" => "reviewer_identity_missing",
                     _ => "check_error",
@@ -118,11 +114,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
                     .and_then(Value::as_str)
                     .unwrap_or("Inspect and correct the referenced frontier field.")
                     .to_string(),
-                blocks: if rule_id == "missing_evidence_locator" {
-                    vec!["proof_ready".to_string()]
-                } else {
-                    vec!["strict_check".to_string(), "proof_ready".to_string()]
-                },
+                blocks: vec!["strict_check".to_string(), "proof_ready".to_string()],
                 caveats: vec![],
             });
         }
@@ -227,28 +219,6 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
     }
 
     for atom in &projection.evidence_atoms {
-        if atom.locator.is_none() {
-            signals.push(SignalItem {
-                id: signal_id("missing_evidence_locator", &atom.id),
-                kind: "missing_evidence_locator".into(),
-                severity: "warning".to_string(),
-                target: SignalTarget {
-                    r#type: "finding".to_string(),
-                    id: atom.finding_id.clone(),
-                },
-                reason:
-                    "Evidence atom lacks a span, table row, page, section, run, or metric locator."
-                        .to_string(),
-                recommended_action:
-                    "Verify the exact source location or keep this as a weak review lead."
-                        .to_string(),
-                blocks: vec!["proof_ready".to_string()],
-                caveats: vec![
-                    "A source citation is weaker than a located evidence atom.".to_string(),
-                ],
-            });
-        }
-
         if !atom.human_verified
             && source_by_id
                 .get(atom.source_id.as_str())
@@ -482,24 +452,6 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
                     "Agent traces, expert assertions, and model outputs are sources, not truth."
                         .to_string(),
                 ],
-            });
-        }
-
-        if finding.evidence.evidence_spans.is_empty() {
-            signals.push(SignalItem {
-                id: signal_id("missing_evidence_span", &finding.id),
-                kind: "missing_evidence_span".into(),
-                severity: "warning".to_string(),
-                target: SignalTarget {
-                    r#type: "finding".to_string(),
-                    id: finding.id.clone(),
-                },
-                reason: "Finding has no verified evidence span attached.".to_string(),
-                recommended_action:
-                    "Verify the assertion against source text and add evidence spans where possible."
-                        .to_string(),
-                blocks: vec!["proof_ready".to_string()],
-                caveats: vec!["Missing spans do not imply the assertion is false.".to_string()],
             });
         }
 
@@ -1120,7 +1072,6 @@ fn signal_weight(signal: &SignalItem) -> u32 {
         "proposal_conflict" => 80,
         "pending_proposal_review" => 50,
         "weak_provenance" => 45,
-        "missing_evidence_span" => 35,
         _ => 10,
     };
     let blocker = if signal.blocks.iter().any(|block| block == "strict_check") {
@@ -1267,12 +1218,6 @@ mod tests {
         let frontier = project::assemble("test", vec![minimal_finding("vf_abc")], 1, 0, "test");
         let report = analyze(&frontier, &[]);
         assert!(report.signals.iter().any(|s| s.kind == "weak_provenance"));
-        assert!(
-            report
-                .signals
-                .iter()
-                .any(|s| s.kind == "missing_evidence_span")
-        );
         assert!(
             report
                 .signals

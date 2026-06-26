@@ -1405,23 +1405,6 @@ pub(crate) fn check_json_payload(src: &Path, schema_only: bool, strict: bool) ->
                 "normalize_action": "materialize_evidence_atom",
             }));
         }
-        for atom in projection
-            .evidence_atoms
-            .iter()
-            .filter(|atom| atom.locator.is_none())
-        {
-            diagnostics.push(json!({
-                "severity": "warning",
-                "rule_id": "missing_evidence_locator",
-                "check": "evidence_atoms",
-                "finding_id": atom.finding_id,
-                "field_path": "evidence_atoms[].locator",
-                "message": format!("Evidence atom {} has no source locator.", atom.id),
-                "suggestion": "Add or verify evidence spans, table rows, pages, sections, or run locators.",
-                "fixable": false,
-                "normalize_action": null,
-            }));
-        }
         for condition in projection
             .condition_records
             .iter()
