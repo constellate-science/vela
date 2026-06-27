@@ -271,10 +271,6 @@ pub(crate) enum Commands {
     /// the common path is just `vela publish <frontier>`. A full,
     /// idempotent publish (it replaces the hub's view), so it always
     /// succeeds regardless of how the hub's log diverged.
-    ///
-    /// `vela push` is the git-style alias: clone -> reproduce -> propose ->
-    /// push is the producer loop, with `clone` and `push` as its bookends.
-    #[command(visible_alias = "push")]
     Publish {
         /// Path to the frontier (`.vela/` repo or frontier.json).
         frontier: PathBuf,
@@ -757,8 +753,6 @@ pub(crate) enum IdAction {
         json: bool,
     },
     /// Show the current identity (actor id, public key, key path, hub).
-    /// Aliased as `vela whoami`.
-    #[command(alias = "whoami")]
     Show {
         #[arg(long)]
         json: bool,
@@ -2053,9 +2047,8 @@ pub(crate) enum RegistryAction {
     VerifyLog {
         /// The frontier (vfr_…) whose log to verify.
         vfr_id: String,
-        /// Hub base URL (e.g. https://hub.constellate.science). `--to` is an accepted
-        /// alias (harmonized with `registry propose --to`).
-        #[arg(long, visible_alias = "to")]
+        /// Hub base URL (e.g. https://hub.constellate.science).
+        #[arg(long)]
         hub: String,
         /// Optional event id (vev_…) to also prove inclusion of.
         #[arg(long)]

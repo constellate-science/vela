@@ -184,6 +184,7 @@ mod tests {
             source_attachments: vec![],
             target_claim: tgt.to_string(),
             target_premise_digest: "1".repeat(16),
+            target_attachments: vec![],
             homomorphism: HomomorphismDescriptor {
                 kind: TransferKind::LeanHomomorphism,
                 map_decl: format!("Vela.Transfer{src_type}to{tgt_type}.map"),

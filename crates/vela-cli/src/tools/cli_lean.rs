@@ -810,19 +810,30 @@ fn cmd_transfer_admit(
     let t: Transfer = serde_json::from_value(rv.clone())
         .unwrap_or_else(|e| fail_return(&format!("parse transfer: {e}")));
 
-    // T1: A's gate, derived from the source frontier's accepted attachments.
-    let source_gate: GateOutcome = match frontier {
+    // T1 + T6: both verifier receipts, derived from the frontier's accepted
+    // attachments — A's gate (V_A on A) and the target receipt (V_B on φ(A), the
+    // FrozenVerifier 2-verifier rule; ignored by the LeanHomomorphism lane).
+    let (source_gate, target_gate): (GateOutcome, GateOutcome) = match frontier {
         Some(fr) => {
-            let source = vela_protocol::repo::detect(fr).unwrap_or_else(|e| fail_return(&e));
-            let proj = vela_protocol::repo::load(&source).unwrap_or_else(|e| fail_return(&e));
-            derive_gate_status(&t.source_claim_digest, &proj.verifier_attachments)
+            let repo = vela_protocol::repo::detect(fr).unwrap_or_else(|e| fail_return(&e));
+            let proj = vela_protocol::repo::load(&repo).unwrap_or_else(|e| fail_return(&e));
+            (
+                derive_gate_status(&t.source_claim_digest, &proj.verifier_attachments),
+                derive_gate_status(&t.target_premise_digest, &proj.verifier_attachments),
+            )
         }
-        None => GateOutcome {
-            status: GateStatus::NeedsVerification,
-            reasons: vec![
-                "no --frontier given: A's gate could not be resolved from state".to_string(),
-            ],
-        },
+        None => {
+            let unresolved = |what: &str| GateOutcome {
+                status: GateStatus::NeedsVerification,
+                reasons: vec![format!(
+                    "no --frontier given: {what} could not be resolved from state"
+                )],
+            };
+            (
+                unresolved("A's gate"),
+                unresolved("the target receipt on φ(A)"),
+            )
+        }
     };
 
     // T2: the transfer theorem's vlv_ (Mint with `vela foundry lean-run`).
@@ -843,7 +854,7 @@ fn cmd_transfer_admit(
             .to_string(),
     };
 
-    let outcome = derive_transfer_status(&t, &source_gate, vlv.as_ref(), &tags);
+    let outcome = derive_transfer_status(&t, &source_gate, &target_gate, vlv.as_ref(), &tags);
 
     if json {
         print_json(&json!({

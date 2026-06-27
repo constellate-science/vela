@@ -100,6 +100,12 @@ pub struct Transfer {
     /// `sha256(premise.trim())[:16]` of the *exact* premise A discharges — not
     /// all of B. Pins the link to one obligation.
     pub target_premise_digest: String,
+    /// The `vva_` attachment ids proving the TARGET verifier gate-verified the
+    /// mapped object φ(A) — the second of the two verifier receipts a
+    /// `FrozenVerifier` link stands on. `derive_transfer_status` requires the
+    /// gate over these to be `Verified`. Always present (an empty list for a
+    /// `LeanHomomorphism` link, whose theorem already covers every input).
+    pub target_attachments: Vec<String>,
 
     // --- THE LINK ---
     pub homomorphism: HomomorphismDescriptor,
@@ -129,6 +135,8 @@ pub struct TransferDraft {
     pub source_attachments: Vec<String>,
     pub target_claim: String,
     pub target_premise_digest: String,
+    #[serde(default)]
+    pub target_attachments: Vec<String>,
     pub homomorphism: HomomorphismDescriptor,
     #[serde(default)]
     pub provenance: crate::attempt::Provenance,
@@ -176,6 +184,7 @@ impl Transfer {
             source_attachments: draft.source_attachments,
             target_claim: draft.target_claim,
             target_premise_digest: draft.target_premise_digest,
+            target_attachments: draft.target_attachments,
             homomorphism: draft.homomorphism,
             provenance: draft.provenance,
             note: draft.note,
@@ -325,6 +334,10 @@ const ALLOWED_FROZEN_VERIFIERS: &[&str] = &[
 ///
 /// - `source_gate`: A's gate outcome, derived by the caller over the `vva_`
 ///   attachments matching `transfer.source_claim_digest`.
+/// - `target_gate`: the TARGET verifier's outcome over the mapped object φ(A),
+///   derived over `transfer.target_attachments` / `target_premise_digest`. The
+///   `FrozenVerifier` lane requires this `Verified` (the 2-verifier rule);
+///   `LeanHomomorphism` ignores it (its theorem covers every input).
 /// - `theorem_verification`: the `vlv_` of the transfer theorem (for
 ///   `LeanHomomorphism`); `None` is allowed only for `FrozenVerifier`.
 /// - `domain_tags`: A's actual domain and B's premise's domain, resolved from state.
@@ -332,6 +345,7 @@ const ALLOWED_FROZEN_VERIFIERS: &[&str] = &[
 pub fn derive_transfer_status(
     transfer: &Transfer,
     source_gate: &crate::verifier_attachment::GateOutcome,
+    target_gate: &crate::verifier_attachment::GateOutcome,
     theorem_verification: Option<&crate::lean_verification::LeanVerification>,
     domain_tags: &DomainTags,
 ) -> TransferOutcome {
@@ -399,6 +413,28 @@ pub fn derive_transfer_status(
                     "T2: FrozenVerifier `{}` is not in the audited allowlist",
                     transfer.homomorphism.map_decl
                 ));
+            }
+            // T6 (the 2-verifier rule): the FrozenVerifier lane does not trust the
+            // map φ, so it requires the TARGET verifier to have INDEPENDENTLY
+            // gate-verified the mapped object φ(A). Two verifiers, two receipts:
+            // `source_gate` (V_A on A) above, and `target_gate` (V_B on φ(A)) here.
+            // The map is only a hint; the target receipt is the proof.
+            // (LeanHomomorphism needs no such receipt — its theorem covers every input.)
+            match target_gate.status {
+                GateStatus::Verified => {}
+                GateStatus::Refuted => {
+                    rejected = true;
+                    reasons.push(
+                        "T6: the target verifier REFUTED the mapped object φ(A) — the link cannot \
+                         discharge B"
+                            .to_string(),
+                    );
+                }
+                GateStatus::NeedsVerification => reasons.push(
+                    "T6: FrozenVerifier transfer requires a Verified target-verifier receipt on \
+                     φ(A) (target_attachments); none resolved"
+                        .to_string(),
+                ),
             }
         }
     }
@@ -469,6 +505,9 @@ mod tests {
             target_premise_digest: crate::verifier_attachment::claim_digest(
                 "a DNA code of size >= 12 exists",
             ),
+            // Empty: a LeanHomomorphism link needs no target receipt (its theorem
+            // is universal). The admits_* tests confirm it still reaches Admitted.
+            target_attachments: vec![],
             homomorphism: lean_decl_descriptor(theorem_verification),
             provenance: crate::attempt::Provenance::default(),
             note: String::new(),
@@ -538,7 +577,7 @@ mod tests {
             source: "constant_weight_code".into(),
             target: "dna_code".into(),
         };
-        let out = derive_transfer_status(&t, &verified_gate(), Some(&v), &tags);
+        let out = derive_transfer_status(&t, &verified_gate(), &verified_gate(), Some(&v), &tags);
         assert_eq!(
             out.status,
             TransferStatus::Admitted,
@@ -555,7 +594,7 @@ mod tests {
             source: "constant_weight_code".into(),
             target: "dna_code".into(),
         };
-        let out = derive_transfer_status(&t, &verified_gate(), Some(&v), &tags);
+        let out = derive_transfer_status(&t, &verified_gate(), &verified_gate(), Some(&v), &tags);
         assert_eq!(out.status, TransferStatus::Rejected);
     }
 
@@ -571,7 +610,7 @@ mod tests {
             status: GateStatus::Refuted,
             reasons: vec!["probe refuted".into()],
         };
-        let out = derive_transfer_status(&t, &refuted, Some(&v), &tags);
+        let out = derive_transfer_status(&t, &refuted, &verified_gate(), Some(&v), &tags);
         assert_eq!(out.status, TransferStatus::Rejected);
     }
 
@@ -583,7 +622,7 @@ mod tests {
             source: "sidon".into(),
             target: "dna_code".into(),
         }; // wrong source
-        let out = derive_transfer_status(&t, &verified_gate(), Some(&v), &tags);
+        let out = derive_transfer_status(&t, &verified_gate(), &verified_gate(), Some(&v), &tags);
         assert_eq!(out.status, TransferStatus::NeedsVerification);
         assert!(out.reasons.iter().any(|r| r.starts_with("T3")));
     }
@@ -600,7 +639,86 @@ mod tests {
             status: GateStatus::NeedsVerification,
             reasons: vec![],
         };
-        let out = derive_transfer_status(&t, &needs, Some(&v), &tags);
+        let out = derive_transfer_status(&t, &needs, &verified_gate(), Some(&v), &tags);
         assert_eq!(out.status, TransferStatus::NeedsVerification);
+    }
+
+    // --- The 2-verifier rule (T6) for the FrozenVerifier lane ---
+
+    fn frozen_draft() -> TransferDraft {
+        TransferDraft {
+            source_claim: "vf_sidon_a7".to_string(),
+            source_claim_digest: crate::verifier_attachment::claim_digest("a Sidon set of size 7"),
+            source_gate_status_claimed: "verified".to_string(),
+            source_attachments: vec!["vva_source_sidon".to_string()],
+            target_claim: "vfr_golomb".to_string(),
+            target_premise_digest: crate::verifier_attachment::claim_digest(
+                "a Golomb ruler of size 7 exists",
+            ),
+            target_attachments: vec!["vva_target_golomb".to_string()],
+            homomorphism: HomomorphismDescriptor {
+                kind: TransferKind::FrozenVerifier,
+                map_decl: "vela-verify:golomb".to_string(),
+                source_type: "sidon".to_string(),
+                target_type: "golomb".to_string(),
+                theorem_verification: String::new(),
+                theorem_id: None,
+            },
+            provenance: Default::default(),
+            note: String::new(),
+        }
+    }
+
+    fn golomb_tags() -> DomainTags {
+        DomainTags {
+            source: "sidon".into(),
+            target: "golomb".into(),
+        }
+    }
+
+    fn needs_gate() -> GateOutcome {
+        GateOutcome {
+            status: GateStatus::NeedsVerification,
+            reasons: vec![],
+        }
+    }
+
+    #[test]
+    fn frozen_admits_only_with_both_verifier_receipts() {
+        let t = Transfer::build(frozen_draft(), &key()).unwrap();
+        // Source verified + target verified -> the two-verifier rule is satisfied.
+        let out =
+            derive_transfer_status(&t, &verified_gate(), &verified_gate(), None, &golomb_tags());
+        assert_eq!(
+            out.status,
+            TransferStatus::Admitted,
+            "reasons: {:?}",
+            out.reasons
+        );
+    }
+
+    #[test]
+    fn frozen_without_target_receipt_is_not_admitted() {
+        let t = Transfer::build(frozen_draft(), &key()).unwrap();
+        // Source verified but NO target receipt: must NOT admit on the verifier's
+        // name alone. This is the hole the 2-verifier rule closes.
+        let out = derive_transfer_status(&t, &verified_gate(), &needs_gate(), None, &golomb_tags());
+        assert_eq!(out.status, TransferStatus::NeedsVerification);
+        assert!(
+            out.reasons.iter().any(|r| r.starts_with("T6")),
+            "reasons: {:?}",
+            out.reasons
+        );
+    }
+
+    #[test]
+    fn frozen_with_refuted_target_is_rejected() {
+        let t = Transfer::build(frozen_draft(), &key()).unwrap();
+        let refuted = GateOutcome {
+            status: GateStatus::Refuted,
+            reasons: vec!["golomb verifier refuted φ(A)".into()],
+        };
+        let out = derive_transfer_status(&t, &verified_gate(), &refuted, None, &golomb_tags());
+        assert_eq!(out.status, TransferStatus::Rejected);
     }
 }
