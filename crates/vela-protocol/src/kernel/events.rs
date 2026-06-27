@@ -564,10 +564,7 @@ pub fn new_revocation_event(
 /// reviewer; the event's `signature` (set by the caller) is the
 /// non-repudiable proof the key holder made the call. `applied_event_id`
 /// is set only for accepts and points at the domain event the accept
-/// graduated into. `legacy_backfill` marks a decision reconstructed from
-/// a pre-`review.*` frontier (status was stored before signed-review
-/// events existed): such events are necessarily unsigned and are exempt
-/// from the strict-mode "decided proposals must be signed" check.
+/// graduated into.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReviewDecisionPayload {
     /// The proposal this decision applies to (`vpr_…`, content-addressed).
@@ -582,10 +579,6 @@ pub struct ReviewDecisionPayload {
     /// For accepts: the domain event id (`vev_…`) the accept produced.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub applied_event_id: Option<String>,
-    /// True when this event was synthesized by the migration backfill for
-    /// a decision made before signed-review events existed.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub legacy_backfill: bool,
 }
 
 /// Construct an unsigned `review.*` event for a proposal decision. The
@@ -603,7 +596,6 @@ pub fn new_review_decision_event(
     reviewer_id: &str,
     reason: &str,
     timestamp: Option<&str>,
-    legacy_backfill: bool,
 ) -> Result<StateEvent, String> {
     let kind = match verdict {
         "accepted" => EVENT_KIND_REVIEW_ACCEPTED,
@@ -616,7 +608,6 @@ pub fn new_review_decision_event(
         proposal_kind: proposal_kind.to_string(),
         verdict: verdict.to_string(),
         applied_event_id,
-        legacy_backfill,
     };
     let payload_value =
         serde_json::to_value(&payload).expect("ReviewDecisionPayload serializes to a JSON object");

@@ -272,26 +272,6 @@ pub(crate) fn cmd_proposals(action: ProposalAction) {
                 );
             }
         }
-        ProposalAction::BackfillReviews { frontier, json } => {
-            let count =
-                proposals::backfill_reviews_at_path(&frontier).unwrap_or_else(|e| fail_return(&e));
-            let payload = json!({
-                "ok": true,
-                "command": "proposals.backfill-reviews",
-                "frontier": frontier.display().to_string(),
-                "synthesized": count,
-            });
-            if json {
-                print_json(&payload);
-            } else {
-                println!(
-                    "{} backfilled {} legacy review event(s) on {}",
-                    style::ok("ok"),
-                    count,
-                    frontier.display()
-                );
-            }
-        }
     }
 }
 

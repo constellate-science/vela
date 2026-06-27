@@ -2212,36 +2212,6 @@ fn parity_flags_status_with_no_backing_event() {
 }
 
 #[test]
-fn backfill_makes_parity_hold_and_is_idempotent() {
-    let (mut project, proposal) = frontier_with_proposal(vec![]);
-    let idx = project
-        .proposals
-        .iter()
-        .position(|p| p.id == proposal.id)
-        .unwrap();
-    project.proposals[idx].status = "rejected".to_string();
-    project.proposals[idx].reviewed_by = Some("reviewer:legacy".to_string());
-    project.proposals[idx].reviewed_at = Some("2026-06-01T00:00:00Z".to_string());
-    project.proposals[idx].decision_reason = Some("old reject".to_string());
-
-    assert!(!verify_proposal_decision_parity(&project).is_empty());
-    let n = backfill_legacy_review_events(&mut project).unwrap();
-    assert_eq!(n, 1);
-    assert!(verify_proposal_decision_parity(&project).is_empty());
-
-    // The backfilled event is honest about provenance: legacy + unsigned.
-    let ev = review_events_for(&project, &proposal.id)[0];
-    assert_eq!(ev.kind, events::EVENT_KIND_REVIEW_REJECTED);
-    assert!(ev.signature.is_none());
-    assert_eq!(
-        ev.payload.get("legacy_backfill").and_then(Value::as_bool),
-        Some(true)
-    );
-    // Idempotent: a second run adds nothing.
-    assert_eq!(backfill_legacy_review_events(&mut project).unwrap(), 0);
-}
-
-#[test]
 fn accept_decision_is_recognized_by_its_domain_event() {
     // An accept's trace is the domain event it produces; parity must
     // recognize that without requiring a separate review.accepted.
@@ -2278,7 +2248,6 @@ fn review_event_targeting_missing_proposal_is_flagged() {
         "reviewer:x",
         "orphan",
         Some("2026-06-01T00:00:00Z"),
-        false,
     )
     .unwrap();
     project.events.push(orphan);

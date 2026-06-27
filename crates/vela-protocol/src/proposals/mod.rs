@@ -1386,18 +1386,6 @@ pub fn reject_at_path_signed(
     repo::save_to_path(path, &frontier)?;
     Ok(())
 }
-/// Load a frontier, backfill legacy review events for already-decided
-/// proposals lacking one, and save only if anything was synthesized.
-/// Returns the number of events added. Idempotent: a second run adds zero.
-pub fn backfill_reviews_at_path(path: &Path) -> Result<usize, String> {
-    let mut frontier = repo::load_from_path(path)?;
-    let count = backfill_legacy_review_events(&mut frontier)?;
-    if count > 0 {
-        project::recompute_stats(&mut frontier);
-        repo::save_to_path(path, &frontier)?;
-    }
-    Ok(count)
-}
 
 pub fn record_proof_export(frontier: &mut Project, record: ProofPacketRecord) {
     frontier.proof_state.latest_packet = ProofPacketState {
@@ -2710,7 +2698,6 @@ fn push_signed_review_event(
         reviewer,
         reason,
         Some(decided_at),
-        false,
     )?;
     if let Some(key) = signing_key {
         event.signature = Some(crate::sign::sign_event(&event, key)?);
@@ -3744,8 +3731,6 @@ pub struct DerivedDecision {
     /// `None` for an accept whose only trace is its domain event (the
     /// pre-`review.accepted` accept path; see module note).
     pub review_event_id: Option<String>,
-    /// True when the backing review event is a legacy (unsigned) backfill.
-    pub legacy: bool,
 }
 
 /// Reduce the event log to the current decision for a single proposal.
@@ -3780,17 +3765,11 @@ pub fn proposal_status_from_log(
                 events::EVENT_KIND_REVIEW_REJECTED => "rejected",
                 _ => "needs_revision",
             };
-            let legacy = event
-                .payload
-                .get("legacy_backfill")
-                .and_then(Value::as_bool)
-                .unwrap_or(false);
             decisions.push(DerivedDecision {
                 status: status.to_string(),
                 reviewer: event.actor.id.clone(),
                 decided_at: event.timestamp.clone(),
                 review_event_id: Some(event.id.clone()),
-                legacy,
             });
             continue;
         }
@@ -3804,7 +3783,6 @@ pub fn proposal_status_from_log(
                 reviewer: event.actor.id.clone(),
                 decided_at: event.timestamp.clone(),
                 review_event_id: None,
-                legacy: false,
             });
         }
     }
@@ -3886,76 +3864,6 @@ pub fn verify_proposal_decision_parity(frontier: &Project) -> Vec<String> {
     }
 
     conflicts
-}
-
-/// Backfill signed-review history for a frontier whose decisions predate
-/// `review.*` events. For every proposal that is already `rejected` or
-/// `needs_revision` but has no backing review event, synthesize an
-/// UNSIGNED legacy event (`legacy_backfill: true`) so parity holds and the
-/// decision is at least replayable. Legacy events are honest about
-/// provenance: they are unsigned because no signature was ever produced
-/// for these pre-feature decisions, and `legacy_backfill` exempts them
-/// from the strict "decided proposals must be signed" check.
-///
-/// `applied` proposals are NOT backfilled: their accept already produced a
-/// domain event in the log, which `proposal_status_from_log` recognizes as
-/// the decision trace. Returns the number of events synthesized.
-pub fn backfill_legacy_review_events(frontier: &mut Project) -> Result<usize, String> {
-    // Collect the work first (immutable borrow), then mutate.
-    let mut to_add: Vec<(String, String, String, String, String)> = Vec::new();
-    for proposal in &frontier.proposals {
-        let verdict = match proposal.status.as_str() {
-            "rejected" => "rejected",
-            "needs_revision" => "revision_requested",
-            _ => continue,
-        };
-        let already = proposal_status_from_log(frontier, &proposal.id, None).is_some();
-        if already {
-            continue;
-        }
-        let reviewer = proposal
-            .reviewed_by
-            .clone()
-            .unwrap_or_else(|| "reviewer:unknown".to_string());
-        let decided_at = proposal
-            .reviewed_at
-            .clone()
-            .unwrap_or_else(|| proposal.created_at.clone());
-        let reason = proposal
-            .decision_reason
-            .clone()
-            .filter(|r| !r.trim().is_empty())
-            .unwrap_or_else(|| "legacy decision (backfilled; reason not recorded)".to_string());
-        to_add.push((
-            proposal.id.clone(),
-            proposal.kind.clone(),
-            verdict.to_string(),
-            reviewer,
-            format!("{decided_at}\u{0}{reason}"),
-        ));
-    }
-    let count = to_add.len();
-    for (proposal_id, proposal_kind, verdict, reviewer, packed) in to_add {
-        let (decided_at, reason) = packed.split_once('\u{0}').unwrap_or((&packed, ""));
-        let event = events::new_review_decision_event(
-            &proposal_id,
-            &proposal_kind,
-            &verdict,
-            None,
-            &reviewer,
-            reason,
-            Some(decided_at),
-            true, // legacy_backfill
-        )?;
-        frontier.events.push(event);
-    }
-    if count > 0 {
-        mark_proof_stale(
-            frontier,
-            format!("Backfilled {count} legacy review events after latest proof export"),
-        );
-    }
-    Ok(count)
 }
 
 fn build_changed_finding_details(

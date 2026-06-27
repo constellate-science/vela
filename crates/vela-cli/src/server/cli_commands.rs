@@ -2390,13 +2390,4 @@ pub(crate) enum ProposalAction {
         #[arg(long)]
         json: bool,
     },
-    /// Reconstruct signed-review history for decisions made before
-    /// `review.*` events existed. Synthesizes an unsigned legacy event for
-    /// every already-rejected / needs-revision proposal that lacks one, so
-    /// `verify_proposal_decision_parity` holds. Idempotent.
-    BackfillReviews {
-        frontier: PathBuf,
-        #[arg(long)]
-        json: bool,
-    },
 }
