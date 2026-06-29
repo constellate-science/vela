@@ -1,0 +1,35 @@
+{
+  "schema": "vela.event.v0.1",
+  "id": "vev_b8879b9524e84af6",
+  "kind": "statement.attested",
+  "target": {
+    "type": "finding",
+    "id": "vf_476e53ba112753c1"
+  },
+  "actor": {
+    "id": "reviewer:will-blair",
+    "type": "human"
+  },
+  "timestamp": "2026-06-29T21:57:10.727308+00:00",
+  "reason": "statement faithfulness attestation",
+  "before_hash": "sha256:null",
+  "after_hash": "sha256:null",
+  "payload": {
+    "attestation": {
+      "attested_at": "2026-06-29T21:57:10.727193+00:00",
+      "attested_by": "reviewer:will-blair",
+      "formal_ref": "google-deepmind/formal-conjectures@HEAD:FormalConjectures/ErdosProblems/214.lean",
+      "formal_statement_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "id": "vsa_cce05f44f38a76ed",
+      "informal_ref": "erdosproblems.com/214",
+      "note": "Hosted proof is complete, but proves an existential coloring result rather than the universal boxed problem.",
+      "schema": "vela.statement_attestation.v0.1",
+      "signature": "cf84ad62f41d78ce477375284866e03fe4574206670748b0f09c4ec6453002f008cb653d8484281b7a699d93dfd52db7350678542a1d721fcb870783171a7c04",
+      "signer_pubkey_hex": "4892f93877e637b5f59af31d9ec6704814842fb278cacb0eb94704baef99455e",
+      "target": "vf_476e53ba112753c1",
+      "verdict": "unfaithful"
+    }
+  },
+  "caveats": [],
+  "signature": "b36f01750afe084e0cb6c5ddb8a6bf48c579bb5a754c1f6460fc5d963b103e672c2bd2c467d9c105bdf2383f2435f4aefe37f4bc1c32727b86d045291c6e4f06"
+}

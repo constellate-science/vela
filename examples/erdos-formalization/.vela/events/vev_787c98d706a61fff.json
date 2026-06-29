@@ -1,0 +1,35 @@
+{
+  "schema": "vela.event.v0.1",
+  "id": "vev_787c98d706a61fff",
+  "kind": "statement.attested",
+  "target": {
+    "type": "finding",
+    "id": "vf_2ba3963823b23478"
+  },
+  "actor": {
+    "id": "reviewer:will-blair",
+    "type": "human"
+  },
+  "timestamp": "2026-06-29T21:57:10.753363+00:00",
+  "reason": "statement faithfulness attestation",
+  "before_hash": "sha256:null",
+  "after_hash": "sha256:null",
+  "payload": {
+    "attestation": {
+      "attested_at": "2026-06-29T21:57:10.753324+00:00",
+      "attested_by": "reviewer:will-blair",
+      "formal_ref": "google-deepmind/formal-conjectures@HEAD:FormalConjectures/ErdosProblems/337.lean",
+      "formal_statement_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "id": "vsa_ffc0e460741d5d1b",
+      "informal_ref": "erdosproblems.com/337",
+      "note": "Hosted proof is a counterexample/existence theorem and needs a fresh match-check before linking to the FC statement.",
+      "schema": "vela.statement_attestation.v0.1",
+      "signature": "3bbf2a756328752bcfb2dc7cf34c049b7402ab1e7d42570d98576fa34d11bcfe332272e18b09a6cd5761d3a250e8b5404d0d5305a087c71786492cd461c68209",
+      "signer_pubkey_hex": "4892f93877e637b5f59af31d9ec6704814842fb278cacb0eb94704baef99455e",
+      "target": "vf_2ba3963823b23478",
+      "verdict": "unfaithful"
+    }
+  },
+  "caveats": [],
+  "signature": "778b4192d6c4c5c3858912a11c415cfc8d0441c08c63534060244af331ccffac2727c94cb362161c7b2dedaef3f31ef4f38b91f19fefadaa5b861c2bcf2fb900"
+}

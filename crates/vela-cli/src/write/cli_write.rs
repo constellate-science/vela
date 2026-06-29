@@ -541,3 +541,97 @@ pub(crate) fn cmd_claim(
         );
     }
 }
+
+/// `vela attest <frontier> <finding_id> --verdict ...`: write a signed
+/// statement-faithfulness attestation (`vsa_`) — the human judgment that a
+/// FORMAL statement faithfully encodes an INFORMAL problem. Reserved for
+/// `reviewer:` actors by design: `StatementAttestation::build` refuses any
+/// agent, so a model can PROPOSE a finding but never attest that a
+/// formalization means what a human meant. Mirrors `cmd_claim`'s
+/// load -> event -> apply -> sign -> save path; the reducer
+/// (`apply_statement_attested`) re-verifies the attestation signature.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn cmd_attest_faithfulness(
+    frontier: PathBuf,
+    target: String,
+    verdict: String,
+    informal_ref: String,
+    formal_ref: String,
+    formal_statement_hash: String,
+    note: String,
+    reviewer: Option<String>,
+    key: Option<PathBuf>,
+    json: bool,
+) {
+    use vela_protocol::statement_attestation::{
+        AttestationDraft, FaithfulnessVerdict, StatementAttestation,
+    };
+    let by = crate::cli_identity::resolve_actor(reviewer.as_deref());
+    if !by.starts_with("reviewer:") {
+        fail(&format!(
+            "attest: statement faithfulness is human judgment by design; reviewer must be a reviewer: actor, got '{by}'"
+        ));
+    }
+    let signing_key = crate::cli_identity::resolve_signing_key(key.as_deref());
+    let verdict_enum = match verdict.to_ascii_lowercase().as_str() {
+        "faithful" => FaithfulnessVerdict::Faithful,
+        "variant" => FaithfulnessVerdict::Variant,
+        "unfaithful" => FaithfulnessVerdict::Unfaithful,
+        other => fail_return(&format!(
+            "attest: --verdict must be faithful|variant|unfaithful, got '{other}'"
+        )),
+    };
+    let mut project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
+    if !project.findings.iter().any(|f| f.id == target) {
+        fail(&format!(
+            "attest: target finding {target} not found in frontier"
+        ));
+    }
+    let att = StatementAttestation::build(
+        AttestationDraft {
+            target: target.clone(),
+            informal_ref,
+            formal_ref,
+            formal_statement_hash,
+            verdict: verdict_enum,
+            note,
+            attested_by: by.clone(),
+            attested_at: chrono::Utc::now().to_rfc3339(),
+        },
+        &signing_key,
+    )
+    .unwrap_or_else(|e| fail_return(&format!("attest: {e}")));
+    let attestation_id = att.id.clone();
+    let mut event =
+        vela_protocol::events::new_finding_event(vela_protocol::events::FindingEventInput {
+            kind: "statement.attested",
+            finding_id: &target,
+            actor_id: &by,
+            actor_type: vela_protocol::events::actor_kind(&by),
+            reason: "statement faithfulness attestation",
+            before_hash: "sha256:null",
+            after_hash: "sha256:null",
+            payload: serde_json::json!({ "attestation": att }),
+            caveats: Vec::new(),
+            timestamp: None,
+        });
+    vela_protocol::reducer::apply_event(&mut project, &event).unwrap_or_else(|e| fail_return(&e));
+    event.signature = Some(
+        vela_protocol::sign::sign_event(&event, &signing_key).unwrap_or_else(|e| fail_return(&e)),
+    );
+    project.events.push(event);
+    repo::save_to_path(&frontier, &project).unwrap_or_else(|e| fail_return(&e));
+    let payload = json!({
+        "ok": true, "command": "attest.faithfulness",
+        "attestation_id": attestation_id, "target": target,
+        "verdict": verdict, "by": by,
+    });
+    if json {
+        print_json(&payload);
+    } else {
+        println!(
+            "{} attested {attestation_id} for {target} ({verdict}) by {by} (signed)",
+            style::ok("ok"),
+        );
+    }
+}

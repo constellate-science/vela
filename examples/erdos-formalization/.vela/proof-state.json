@@ -1,0 +1,9 @@
+{
+  "latest_packet": {
+    "generated_at": null,
+    "snapshot_hash": null,
+    "event_log_hash": null,
+    "packet_manifest_hash": null,
+    "status": "never_exported"
+  }
+}

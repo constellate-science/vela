@@ -1,0 +1,35 @@
+{
+  "schema": "vela.event.v0.1",
+  "id": "vev_eac9cbac8a11ad7a",
+  "kind": "statement.attested",
+  "target": {
+    "type": "finding",
+    "id": "vf_b9e82eeed266af04"
+  },
+  "actor": {
+    "id": "reviewer:will-blair",
+    "type": "human"
+  },
+  "timestamp": "2026-06-29T21:57:10.780512+00:00",
+  "reason": "statement faithfulness attestation",
+  "before_hash": "sha256:null",
+  "after_hash": "sha256:null",
+  "payload": {
+    "attestation": {
+      "attested_at": "2026-06-29T21:57:10.780480+00:00",
+      "attested_by": "reviewer:will-blair",
+      "formal_ref": "google-deepmind/formal-conjectures@HEAD:FormalConjectures/ErdosProblems/205.lean",
+      "formal_statement_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "id": "vsa_5d51352f74dfddf4",
+      "informal_ref": "erdosproblems.com/205",
+      "note": "Treat as conditional until the hosted theorem is confirmed to have no non-problem hypothesis.",
+      "schema": "vela.statement_attestation.v0.1",
+      "signature": "067fa84e74e5fe4061b8217cbf6d2ae406e8e60d85634ab60d4451b65048eb407e0c60bad8db5e13844888b5fccfbc3fdcddfe7c788b42eb56d810f1e2872c06",
+      "signer_pubkey_hex": "4892f93877e637b5f59af31d9ec6704814842fb278cacb0eb94704baef99455e",
+      "target": "vf_b9e82eeed266af04",
+      "verdict": "variant"
+    }
+  },
+  "caveats": [],
+  "signature": "4b9c0b620626eeee01f84e056270ea82a3c7c241e622fe34a106ef5185754ceaa0f0837cdb3c9642727388b916d6bc44b3fd9b7c91b7f7cba46dafbb05e1ec0e"
+}

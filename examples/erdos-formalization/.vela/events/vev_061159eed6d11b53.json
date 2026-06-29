@@ -1,0 +1,35 @@
+{
+  "schema": "vela.event.v0.1",
+  "id": "vev_061159eed6d11b53",
+  "kind": "statement.attested",
+  "target": {
+    "type": "finding",
+    "id": "vf_3b7922fd5410caac"
+  },
+  "actor": {
+    "id": "reviewer:will-blair",
+    "type": "human"
+  },
+  "timestamp": "2026-06-29T21:57:10.981942+00:00",
+  "reason": "statement faithfulness attestation",
+  "before_hash": "sha256:null",
+  "after_hash": "sha256:null",
+  "payload": {
+    "attestation": {
+      "attested_at": "2026-06-29T21:57:10.981906+00:00",
+      "attested_by": "reviewer:will-blair",
+      "formal_ref": "google-deepmind/formal-conjectures@HEAD:FormalConjectures/ErdosProblems/1148.lean",
+      "formal_statement_hash": "001fdfa65cf1289cdbeeb1e6cd16e7c53560342271e1eb2bc0b2d56b2be62dff",
+      "id": "vsa_0d768df62282d1e4",
+      "informal_ref": "erdosproblems.com/1148",
+      "note": "Hosted theorem takes Duke's theorem as a hypothesis; #print axioms alone would not catch this.",
+      "schema": "vela.statement_attestation.v0.1",
+      "signature": "d3c50de6d7d1469e15050cbda77662e85fa77009d82d01bf0006ab156f28189aacd14fed89f4eb944e74f5ee5e42b4577af65d6a4bb27a7f4dbf24ace86fe703",
+      "signer_pubkey_hex": "4892f93877e637b5f59af31d9ec6704814842fb278cacb0eb94704baef99455e",
+      "target": "vf_3b7922fd5410caac",
+      "verdict": "variant"
+    }
+  },
+  "caveats": [],
+  "signature": "7d84289e4c2eaf182790df6a695af84cfff72a9a268ce6ac13fd0f3747c616eaa9bda019df6bff9bbc67071a793fa342abc427d3ea4690933505c7814c81ba0b"
+}

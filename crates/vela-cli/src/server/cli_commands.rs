@@ -724,6 +724,30 @@ pub(crate) enum Commands {
         /// Ignored in per-event mode.
         #[arg(long)]
         key: Option<PathBuf>,
+        /// Statement-faithfulness mode: the attester's verdict on whether
+        /// the FORMAL statement encodes the INFORMAL problem
+        /// (`faithful`, `variant`, or `unfaithful`). When present, writes a
+        /// signed `vsa_` statement attestation against the positional
+        /// target finding id. Reserved for `reviewer:` actors by design.
+        #[arg(long)]
+        verdict: Option<String>,
+        /// Faithfulness: where the informal problem lives
+        /// (e.g. `erdosproblems.com/214`).
+        #[arg(long = "informal-ref")]
+        informal_ref: Option<String>,
+        /// Faithfulness: where the formal statement lives
+        /// (repo path / URL at a commit).
+        #[arg(long = "formal-ref")]
+        formal_ref: Option<String>,
+        /// Faithfulness: sha256 (64 hex chars) of the formal statement's
+        /// exact bytes.
+        #[arg(long = "formal-statement-hash")]
+        formal_statement_hash: Option<String>,
+        /// Faithfulness: the attester's reasoning — what was compared and
+        /// what diverges. Required; an attestation without reasoning is a
+        /// rubber stamp.
+        #[arg(long)]
+        note: Option<String>,
         #[arg(long)]
         json: bool,
     },

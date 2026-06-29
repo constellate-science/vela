@@ -970,8 +970,43 @@ pub async fn run_command() {
             proof_id,
             signature,
             key,
+            verdict,
+            informal_ref,
+            formal_ref,
+            formal_statement_hash,
+            note,
             json,
         } => {
+            // Statement-faithfulness mode: a signed `vsa_` human verdict on
+            // whether the formal statement encodes the informal problem.
+            // Keyed on --verdict so the reviewer-identity and per-event
+            // modes below are untouched.
+            if let Some(verdict) = verdict {
+                let target = target_id.clone().unwrap_or_else(|| {
+                    fail_return("attest: positional <finding-id> is required with --verdict")
+                });
+                cmd_attest_faithfulness(
+                    frontier,
+                    target,
+                    verdict,
+                    informal_ref.unwrap_or_else(|| {
+                        fail_return("attest: --informal-ref is required with --verdict")
+                    }),
+                    formal_ref.unwrap_or_else(|| {
+                        fail_return("attest: --formal-ref is required with --verdict")
+                    }),
+                    formal_statement_hash.unwrap_or_else(|| {
+                        fail_return("attest: --formal-statement-hash is required with --verdict")
+                    }),
+                    note.unwrap_or_else(|| {
+                        fail_return("attest: --note is required with --verdict")
+                    }),
+                    reviewer,
+                    key,
+                    json,
+                );
+                return;
+            }
             if let Some(target_id) = target_id {
                 let parsed_scopes = reviewer_identity::parse_scopes(&scopes)
                     .unwrap_or_else(|e| fail_return(&format!("attest: {e}")));

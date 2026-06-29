@@ -1,0 +1,7 @@
+[project]
+name = "Erdős formalization fidelity"
+frontier_id = "vfr_0a25edabc16db143"
+compiled_at = "2026-06-29T21:57:10Z"
+description = ""
+compiler = "vela/0.710.0"
+papers_processed = 0

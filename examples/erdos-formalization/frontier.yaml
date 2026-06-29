@@ -1,0 +1,33 @@
+schema: vela.frontier_manifest.v0.1
+layout: vela.frontier_repo.v0.1
+mode: split
+frontier_id: vfr_0a25edabc16db143
+name: Erdős formalization fidelity
+description: ''
+visibility: public
+scope:
+  question: ''
+  includes: []
+  excludes: []
+carina:
+  kernel: carina@0.1.0
+vela:
+  reducer: vela@0.710.0
+paths:
+  state: frontier.json
+  sources: sources/
+  artifacts: artifacts/
+  review: review/
+  proof: proof/
+  exports: exports/
+policies:
+  review: review/policy.yaml
+  proof: proof/policy.yaml
+license:
+  content: CC-BY-4.0
+  code: Apache-2.0
+  data: varies
+dependencies:
+  frontiers: []
+  packages: []
+  adapters: []
