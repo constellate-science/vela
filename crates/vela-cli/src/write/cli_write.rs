@@ -635,3 +635,100 @@ pub(crate) fn cmd_attest_faithfulness(
         );
     }
 }
+
+/// `vela attest <frontier> <finding_id> --proof ...`: attach a `lean_kernel`
+/// CI verification to a proof finding. It records that the hosted Lean proof
+/// compiled clean against its pinned toolchain (axiom footprint kernel-only),
+/// as attested by CI, NOT an independent reproduction. A single such attachment
+/// carries no `independent_of` and no adversarial probe, so it deliberately
+/// fails the verifier gate's G1/G3: it reads "attested by CI", never "verified".
+/// Drafts a `verifier.attach` proposal exactly like `vela attach`.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn cmd_attest_proof(
+    frontier: PathBuf,
+    target: String,
+    solver: String,
+    verifier_actor: String,
+    axioms_clean: bool,
+    note: String,
+    reviewer: Option<String>,
+    json: bool,
+) {
+    use vela_protocol::verifier_attachment::{
+        claim_digest, AttachmentDraft, AttachmentOutcome, MatchToClaim, MethodIntegrity,
+        VerifierAttachment, VerifierMethod,
+    };
+    let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
+    let project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
+    let claim = match project.findings.iter().find(|f| f.id == target) {
+        Some(f) => f.assertion.text.clone(),
+        None => fail_return(&format!("attest: target finding {target} not found in frontier")),
+    };
+    let integrity = if axioms_clean {
+        MethodIntegrity::Sound
+    } else {
+        MethodIntegrity::Compromised
+    };
+    let att = VerifierAttachment::build(AttachmentDraft {
+        target: target.clone(),
+        claim_digest: claim_digest(&claim),
+        verifier_method: VerifierMethod::LeanKernel,
+        solver_id: solver,
+        independent_of: Vec::new(),
+        match_to_claim: MatchToClaim {
+            matches: true,
+            checker_actor: verifier_actor.clone(),
+        },
+        adversarial_probes: Vec::new(),
+        outcome: AttachmentOutcome::Passed,
+        verifier_actor,
+        note,
+    })
+    .and_then(|a| a.with_method_integrity(integrity))
+    .unwrap_or_else(|e| fail_return(&format!("attest: {e}")));
+    let attachment_id = att.id.clone();
+    let att_value = serde_json::to_value(&att)
+        .unwrap_or_else(|e| fail_return(&format!("serialize attachment: {e}")));
+    let actor_type = if reviewer.starts_with("agent:") {
+        "agent"
+    } else {
+        "human"
+    };
+    let proposal = vela_protocol::proposals::new_proposal(
+        "verifier.attach",
+        vela_protocol::events::StateTarget {
+            r#type: "finding".to_string(),
+            id: target.clone(),
+        },
+        reviewer,
+        actor_type,
+        "lean_kernel CI attestation",
+        serde_json::json!({ "attachment": att_value }),
+        Vec::new(),
+        Vec::new(),
+    );
+    let result = vela_protocol::proposals::create_or_apply(&frontier, proposal, true)
+        .unwrap_or_else(|e| fail_return(&e));
+    let applied = result.applied_event_id.is_some();
+    let payload = json!({
+        "ok": true, "command": "attest.proof",
+        "attachment_id": attachment_id, "target": target,
+        "method": "lean_kernel", "integrity": integrity.as_str(),
+        "proposal_id": result.proposal_id, "applied": applied,
+    });
+    if json {
+        print_json(&payload);
+    } else {
+        println!(
+            "{} attached {attachment_id} (lean_kernel, {}) to {target}\n  proposal {}{}",
+            style::ok("ok"),
+            integrity.as_str(),
+            result.proposal_id,
+            if applied {
+                " (applied)"
+            } else {
+                " (pending, run vela accept)"
+            },
+        );
+    }
+}

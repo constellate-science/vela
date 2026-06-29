@@ -975,8 +975,34 @@ pub async fn run_command() {
             formal_ref,
             formal_statement_hash,
             note,
+            proof,
+            solver,
+            verifier_actor,
+            axioms_clean,
             json,
         } => {
+            // Proof-attestation mode: a `lean_kernel` CI verifier attachment on
+            // a proof finding. Keyed on --proof so the other modes are untouched.
+            if proof {
+                let target = target_id.clone().unwrap_or_else(|| {
+                    fail_return("attest: positional <finding-id> is required with --proof")
+                });
+                cmd_attest_proof(
+                    frontier,
+                    target,
+                    solver.unwrap_or_else(|| "lean4@4.29.1".to_string()),
+                    verifier_actor.unwrap_or_else(|| {
+                        fail_return("attest: --verifier-actor is required with --proof")
+                    }),
+                    axioms_clean,
+                    note.clone().unwrap_or_else(|| {
+                        fail_return("attest: --note is required with --proof")
+                    }),
+                    reviewer,
+                    json,
+                );
+                return;
+            }
             // Statement-faithfulness mode: a signed `vsa_` human verdict on
             // whether the formal statement encodes the informal problem.
             // Keyed on --verdict so the reviewer-identity and per-event

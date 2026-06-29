@@ -748,6 +748,25 @@ pub(crate) enum Commands {
         /// rubber stamp.
         #[arg(long)]
         note: Option<String>,
+        /// Proof-attestation mode: attach a `lean_kernel` CI verification to
+        /// the positional target finding (the hosted Lean proof compiled clean
+        /// against its pinned toolchain). Attested by CI, not an independent
+        /// reproduction; a lone such attachment fails the gate's G1/G3 by
+        /// design.
+        #[arg(long)]
+        proof: bool,
+        /// Proof: solver id, for example `lean4@4.29.1`.
+        #[arg(long)]
+        solver: Option<String>,
+        /// Proof: the verifier actor, for example
+        /// `ci:github-actions:willblair0708/lean-proofs`.
+        #[arg(long = "verifier-actor")]
+        verifier_actor: Option<String>,
+        /// Proof: the axiom footprint is kernel-clean
+        /// (`[propext, Classical.choice, Quot.sound]`), setting method
+        /// integrity to Sound; omit for Compromised.
+        #[arg(long = "axioms-clean")]
+        axioms_clean: bool,
         #[arg(long)]
         json: bool,
     },
