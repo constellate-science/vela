@@ -29,19 +29,22 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 # --- builder: cook deps (cached layer), then build the app ---
 FROM chef AS builder
+# CARGO_JOBS: rustc parallelism. Defaults to 1 to fit the remote Fly builder's
+# memory (a parallel release build of vela-protocol OOM-killed it once). Override
+# on a roomier host — e.g. a local build on a workstation — with
+# `--build-arg CARGO_JOBS=16` to use all cores.
+ARG CARGO_JOBS=1
 COPY --from=planner /build/recipe.json recipe.json
 # Build + cache every dependency. This layer is invalidated only when the recipe
 # changes (Cargo.toml / Cargo.lock), not on source edits.
-# CARGO_BUILD_JOBS=1: serialize to fit the remote builder's memory (a parallel
-# release build of vela-protocol OOM-killed it once).
-RUN CARGO_BUILD_JOBS=1 cargo chef cook --release -p vela-hub --recipe-path recipe.json
+RUN CARGO_BUILD_JOBS=${CARGO_JOBS} cargo chef cook --release -p vela-hub --recipe-path recipe.json
 # Now the real source. Deps are already compiled above, so this step only
 # recompiles the workspace crates that actually changed.
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 COPY web ./web
 COPY assets ./assets
-RUN CARGO_BUILD_JOBS=1 cargo build --release -p vela-hub
+RUN CARGO_BUILD_JOBS=${CARGO_JOBS} cargo build --release -p vela-hub
 
 FROM debian:bookworm-slim AS runtime
 RUN apt-get update \
