@@ -3,7 +3,7 @@ use crate::cli::{fail, fail_return, print_json};
 use crate::cli_commands::*;
 use colored::Colorize;
 use serde_json::json;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use vela_protocol::cli_style as style;
 use vela_protocol::proposals;
 use vela_protocol::repo;
@@ -550,6 +550,90 @@ pub(crate) fn cmd_claim(
 /// formalization means what a human meant. Mirrors `cmd_claim`'s
 /// load -> event -> apply -> sign -> save path; the reducer
 /// (`apply_statement_attested`) re-verifies the attestation signature.
+/// One faithfulness verdict applied into an already-loaded project: build the
+/// `vsa_`, emit and sign the `statement.attested` event under the reviewer's
+/// key, push it. Does NOT save, so the single and `--batch` paths share it and
+/// the batch path signs N verdicts under one key read and one save. Returns the
+/// attestation id, or a human-readable error (never exits).
+#[allow(clippy::too_many_arguments)]
+fn apply_one_faithfulness(
+    project: &mut vela_protocol::project::Project,
+    target: &str,
+    verdict: &str,
+    informal_ref: String,
+    formal_ref: String,
+    formal_statement_hash: String,
+    note: String,
+    by: &str,
+    signing_key: &ed25519_dalek::SigningKey,
+) -> Result<String, String> {
+    use vela_protocol::statement_attestation::{
+        AttestationDraft, FaithfulnessVerdict, StatementAttestation,
+    };
+    let verdict_enum = match verdict.to_ascii_lowercase().as_str() {
+        "faithful" => FaithfulnessVerdict::Faithful,
+        "variant" => FaithfulnessVerdict::Variant,
+        "unfaithful" => FaithfulnessVerdict::Unfaithful,
+        other => {
+            return Err(format!(
+                "--verdict must be faithful|variant|unfaithful, got '{other}'"
+            ));
+        }
+    };
+    if !project.findings.iter().any(|f| f.id == target) {
+        return Err(format!("target finding {target} not found in frontier"));
+    }
+    let att = StatementAttestation::build(
+        AttestationDraft {
+            target: target.to_string(),
+            informal_ref,
+            formal_ref,
+            formal_statement_hash,
+            verdict: verdict_enum,
+            note,
+            attested_by: by.to_string(),
+            attested_at: chrono::Utc::now().to_rfc3339(),
+        },
+        signing_key,
+    )?;
+    let attestation_id = att.id.clone();
+    let mut event =
+        vela_protocol::events::new_finding_event(vela_protocol::events::FindingEventInput {
+            kind: "statement.attested",
+            finding_id: target,
+            actor_id: by,
+            actor_type: vela_protocol::events::actor_kind(by),
+            reason: "statement faithfulness attestation",
+            before_hash: "sha256:null",
+            after_hash: "sha256:null",
+            payload: serde_json::json!({ "attestation": att }),
+            caveats: Vec::new(),
+            timestamp: None,
+        });
+    vela_protocol::reducer::apply_event(project, &event)?;
+    event.signature = Some(vela_protocol::sign::sign_event(&event, signing_key)?);
+    project.events.push(event);
+    Ok(attestation_id)
+}
+
+/// Guard shared by both faithfulness paths: statement faithfulness is human
+/// judgment, so the attester must be a `reviewer:` actor and a human key must
+/// be present. `StatementAttestation::build` refuses any agent, but failing
+/// early here gives a clearer message than a build error.
+fn resolve_faithfulness_signer(
+    reviewer: Option<String>,
+    key: Option<&Path>,
+) -> (String, ed25519_dalek::SigningKey) {
+    let by = crate::cli_identity::resolve_actor(reviewer.as_deref());
+    if !by.starts_with("reviewer:") {
+        fail(&format!(
+            "attest: statement faithfulness is human judgment by design; reviewer must be a reviewer: actor, got '{by}'"
+        ));
+    }
+    let signing_key = crate::cli_identity::resolve_signing_key(key);
+    (by, signing_key)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn cmd_attest_faithfulness(
     frontier: PathBuf,
@@ -563,63 +647,20 @@ pub(crate) fn cmd_attest_faithfulness(
     key: Option<PathBuf>,
     json: bool,
 ) {
-    use vela_protocol::statement_attestation::{
-        AttestationDraft, FaithfulnessVerdict, StatementAttestation,
-    };
-    let by = crate::cli_identity::resolve_actor(reviewer.as_deref());
-    if !by.starts_with("reviewer:") {
-        fail(&format!(
-            "attest: statement faithfulness is human judgment by design; reviewer must be a reviewer: actor, got '{by}'"
-        ));
-    }
-    let signing_key = crate::cli_identity::resolve_signing_key(key.as_deref());
-    let verdict_enum = match verdict.to_ascii_lowercase().as_str() {
-        "faithful" => FaithfulnessVerdict::Faithful,
-        "variant" => FaithfulnessVerdict::Variant,
-        "unfaithful" => FaithfulnessVerdict::Unfaithful,
-        other => fail_return(&format!(
-            "attest: --verdict must be faithful|variant|unfaithful, got '{other}'"
-        )),
-    };
+    let (by, signing_key) = resolve_faithfulness_signer(reviewer, key.as_deref());
     let mut project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
-    if !project.findings.iter().any(|f| f.id == target) {
-        fail(&format!(
-            "attest: target finding {target} not found in frontier"
-        ));
-    }
-    let att = StatementAttestation::build(
-        AttestationDraft {
-            target: target.clone(),
-            informal_ref,
-            formal_ref,
-            formal_statement_hash,
-            verdict: verdict_enum,
-            note,
-            attested_by: by.clone(),
-            attested_at: chrono::Utc::now().to_rfc3339(),
-        },
+    let attestation_id = apply_one_faithfulness(
+        &mut project,
+        &target,
+        &verdict,
+        informal_ref,
+        formal_ref,
+        formal_statement_hash,
+        note,
+        &by,
         &signing_key,
     )
     .unwrap_or_else(|e| fail_return(&format!("attest: {e}")));
-    let attestation_id = att.id.clone();
-    let mut event =
-        vela_protocol::events::new_finding_event(vela_protocol::events::FindingEventInput {
-            kind: "statement.attested",
-            finding_id: &target,
-            actor_id: &by,
-            actor_type: vela_protocol::events::actor_kind(&by),
-            reason: "statement faithfulness attestation",
-            before_hash: "sha256:null",
-            after_hash: "sha256:null",
-            payload: serde_json::json!({ "attestation": att }),
-            caveats: Vec::new(),
-            timestamp: None,
-        });
-    vela_protocol::reducer::apply_event(&mut project, &event).unwrap_or_else(|e| fail_return(&e));
-    event.signature = Some(
-        vela_protocol::sign::sign_event(&event, &signing_key).unwrap_or_else(|e| fail_return(&e)),
-    );
-    project.events.push(event);
     repo::save_to_path(&frontier, &project).unwrap_or_else(|e| fail_return(&e));
     let payload = json!({
         "ok": true, "command": "attest.faithfulness",
@@ -633,6 +674,94 @@ pub(crate) fn cmd_attest_faithfulness(
             "{} attested {attestation_id} for {target} ({verdict}) by {by} (signed)",
             style::ok("ok"),
         );
+    }
+}
+
+/// `vela attest faithfulness --batch <file>`: sign a whole list of faithfulness
+/// verdicts under ONE key read and ONE save, instead of one keyed command per
+/// verdict. Each verdict is still a human judgment signed by the reviewer's own
+/// key; batching only removes the per-verdict repetition (the migration of the
+/// overrides table is the motivating case). The file is JSON, either a bare
+/// array or `{ "verdicts": [ ... ] }`, each row:
+/// `{ target, verdict, informal_ref, formal_ref, formal_statement_hash, note }`.
+/// All-or-nothing: if any row fails to build, nothing is saved.
+pub(crate) fn cmd_attest_faithfulness_batch(
+    frontier: PathBuf,
+    batch_path: PathBuf,
+    reviewer: Option<String>,
+    key: Option<PathBuf>,
+    json: bool,
+) {
+    #[derive(serde::Deserialize)]
+    struct VerdictRow {
+        target: String,
+        verdict: String,
+        #[serde(default)]
+        informal_ref: String,
+        #[serde(default)]
+        formal_ref: String,
+        #[serde(default)]
+        formal_statement_hash: String,
+        #[serde(default)]
+        note: String,
+    }
+    #[derive(serde::Deserialize)]
+    #[serde(untagged)]
+    enum Batch {
+        Wrapped { verdicts: Vec<VerdictRow> },
+        Bare(Vec<VerdictRow>),
+    }
+    let raw = std::fs::read_to_string(&batch_path)
+        .unwrap_or_else(|e| fail_return(&format!("attest: read {}: {e}", batch_path.display())));
+    let rows = match serde_json::from_str::<Batch>(&raw)
+        .unwrap_or_else(|e| fail_return(&format!("attest: parse {}: {e}", batch_path.display())))
+    {
+        Batch::Wrapped { verdicts } => verdicts,
+        Batch::Bare(v) => v,
+    };
+    if rows.is_empty() {
+        fail(&format!("attest: {} has no verdicts", batch_path.display()));
+    }
+    let (by, signing_key) = resolve_faithfulness_signer(reviewer, key.as_deref());
+    let mut project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
+    let mut applied = Vec::with_capacity(rows.len());
+    for (i, row) in rows.into_iter().enumerate() {
+        let target = row.target.clone();
+        let verdict = row.verdict.clone();
+        let id = apply_one_faithfulness(
+            &mut project,
+            &row.target,
+            &row.verdict,
+            row.informal_ref,
+            row.formal_ref,
+            row.formal_statement_hash,
+            row.note,
+            &by,
+            &signing_key,
+        )
+        .unwrap_or_else(|e| fail_return(&format!("attest: verdict {i} ({target}): {e}")));
+        applied.push(json!({ "attestation_id": id, "target": target, "verdict": verdict }));
+    }
+    repo::save_to_path(&frontier, &project).unwrap_or_else(|e| fail_return(&e));
+    if json {
+        print_json(&json!({
+            "ok": true, "command": "attest.faithfulness.batch",
+            "count": applied.len(), "by": by, "attestations": applied,
+        }));
+    } else {
+        println!(
+            "{} signed {} faithfulness verdict(s) by {by} in one batch",
+            style::ok("ok"),
+            applied.len(),
+        );
+        for a in &applied {
+            println!(
+                "  {} {} ({})",
+                a["attestation_id"].as_str().unwrap_or(""),
+                a["target"].as_str().unwrap_or(""),
+                a["verdict"].as_str().unwrap_or(""),
+            );
+        }
     }
 }
 

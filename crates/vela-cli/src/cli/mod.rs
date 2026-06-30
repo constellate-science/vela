@@ -979,6 +979,7 @@ pub async fn run_command() {
             solver,
             verifier_actor,
             axioms_clean,
+            batch,
             json,
         } => {
             // Proof-attestation mode: a `lean_kernel` CI verifier attachment on
@@ -1000,6 +1001,12 @@ pub async fn run_command() {
                     key,
                     json,
                 );
+                return;
+            }
+            // Faithfulness batch mode: sign a whole verdict file under one key
+            // read and one save. Checked before the single --verdict path.
+            if let Some(batch) = batch {
+                cmd_attest_faithfulness_batch(frontier, batch, reviewer, key, json);
                 return;
             }
             // Statement-faithfulness mode: a signed `vsa_` human verdict on

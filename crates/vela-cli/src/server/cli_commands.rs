@@ -767,6 +767,14 @@ pub(crate) enum Commands {
         /// integrity to Sound; omit for Compromised.
         #[arg(long = "axioms-clean")]
         axioms_clean: bool,
+        /// Faithfulness batch mode: a JSON file of verdicts to sign under one
+        /// key read and one save (a bare array or `{"verdicts": [...]}`, each
+        /// row `{target, verdict, informal_ref, formal_ref,
+        /// formal_statement_hash, note}`). Each verdict is still a human
+        /// judgment signed by the reviewer's key; this only removes the
+        /// per-verdict repetition.
+        #[arg(long = "batch")]
+        batch: Option<PathBuf>,
         #[arg(long)]
         json: bool,
     },
