@@ -161,7 +161,12 @@ pub fn accept_preimage_bytes(
         // packet / directory / git-per-file layouts.
         "parent_event_log_hash": parent_event_log_hash,
     });
-    canonical::to_canonical_bytes(&preimage)
+    let body = canonical::to_canonical_bytes(&preimage)?;
+    Ok(crate::signing_input::signing_input(
+        crate::signing_input::SigVersion::V0,
+        crate::signing_input::payload_type::ACCEPT,
+        &body,
+    ))
 }
 
 /// v0.128: protocol-side authority gate for the public accept boundary.

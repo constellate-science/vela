@@ -130,7 +130,12 @@ pub fn deprecation_signing_bytes(rec: &DeprecationRecord) -> Result<Vec<u8>, Str
         "deprecated_at": rec.deprecated_at,
         "reason": rec.reason,
     });
-    crate::canonical::to_canonical_bytes(&preimage)
+    let body = crate::canonical::to_canonical_bytes(&preimage)?;
+    Ok(crate::signing_input::signing_input(
+        crate::signing_input::SigVersion::V0,
+        crate::signing_input::payload_type::REGISTRY_DEPRECATION,
+        &body,
+    ))
 }
 
 pub fn sign_deprecation(
@@ -192,7 +197,12 @@ pub fn rotation_signing_bytes(rec: &OwnerRotationRecord) -> Result<Vec<u8>, Stri
         "rotated_at": rec.rotated_at,
         "reason": rec.reason,
     });
-    crate::canonical::to_canonical_bytes(&preimage)
+    let body = crate::canonical::to_canonical_bytes(&preimage)?;
+    Ok(crate::signing_input::signing_input(
+        crate::signing_input::SigVersion::V0,
+        crate::signing_input::payload_type::REGISTRY_ROTATION,
+        &body,
+    ))
 }
 
 pub fn sign_rotation(
@@ -258,7 +268,12 @@ pub fn maintainer_signing_bytes(rec: &MaintainerActionRecord) -> Result<Vec<u8>,
         "authorized_at": rec.authorized_at,
         "reason": rec.reason,
     });
-    crate::canonical::to_canonical_bytes(&preimage)
+    let body = crate::canonical::to_canonical_bytes(&preimage)?;
+    Ok(crate::signing_input::signing_input(
+        crate::signing_input::SigVersion::V0,
+        crate::signing_input::payload_type::REGISTRY_MAINTAINER,
+        &body,
+    ))
 }
 
 pub fn sign_maintainer_action(
@@ -321,7 +336,12 @@ pub fn entry_signing_bytes(entry: &RegistryEntry) -> Result<Vec<u8>, String> {
     if let Some(h) = &entry.extras_manifest_hash {
         preimage.insert("extras_manifest_hash".into(), json!(h));
     }
-    crate::canonical::to_canonical_bytes(&serde_json::Value::Object(preimage))
+    let body = crate::canonical::to_canonical_bytes(&serde_json::Value::Object(preimage))?;
+    Ok(crate::signing_input::signing_input(
+        crate::signing_input::SigVersion::V0,
+        crate::signing_input::payload_type::REGISTRY_ENTRY,
+        &body,
+    ))
 }
 
 /// Sign an unsigned entry (with `signature` as empty string), returning

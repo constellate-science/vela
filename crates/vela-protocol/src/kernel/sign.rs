@@ -389,7 +389,12 @@ pub fn event_signing_bytes(event: &crate::events::StateEvent) -> Result<Vec<u8>,
         "payload": event.payload,
         "caveats": event.caveats,
     });
-    crate::canonical::to_canonical_bytes(&preimage)
+    let body = crate::canonical::to_canonical_bytes(&preimage)?;
+    Ok(crate::signing_input::signing_input(
+        crate::signing_input::SigVersion::V0,
+        crate::signing_input::payload_type::EVENT,
+        &body,
+    ))
 }
 
 /// Sign a canonical event with an Ed25519 private key, returning a
@@ -450,7 +455,12 @@ pub fn proposal_signing_bytes(
         "source_refs": proposal.source_refs,
         "caveats": proposal.caveats,
     });
-    crate::canonical::to_canonical_bytes(&preimage)
+    let body = crate::canonical::to_canonical_bytes(&preimage)?;
+    Ok(crate::signing_input::signing_input(
+        crate::signing_input::SigVersion::V0,
+        crate::signing_input::payload_type::PROPOSAL,
+        &body,
+    ))
 }
 
 /// Sign a proposal with an Ed25519 private key, returning a hex-encoded

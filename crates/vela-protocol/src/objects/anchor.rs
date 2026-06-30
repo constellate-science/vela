@@ -142,7 +142,12 @@ impl AnchorLink {
     pub fn signing_bytes(&self) -> Result<Vec<u8>, String> {
         let mut c = self.clone();
         c.signature = String::new();
-        crate::canonical::to_canonical_bytes(&c)
+        let body = crate::canonical::to_canonical_bytes(&c)?;
+        Ok(crate::signing_input::signing_input(
+            crate::signing_input::SigVersion::V0,
+            crate::signing_input::payload_type::ANCHOR,
+            &body,
+        ))
     }
 
     pub fn derive_id(&self) -> Result<String, String> {

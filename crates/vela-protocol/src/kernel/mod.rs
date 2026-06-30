@@ -7,3 +7,4 @@ pub mod events;
 pub mod reducer;
 pub mod repo;
 pub mod sign;
+pub mod signing_input;
