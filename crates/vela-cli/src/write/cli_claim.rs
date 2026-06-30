@@ -397,10 +397,15 @@ fn derive_trust_vector(project: &Project, finding: &FindingBundle) -> Value {
         })
     };
 
-    // verifier_gate: the derived G1–G4 gate status (never stored).
+    // verifier_gate: the derived G1–G5 gate status (never stored). It names the
+    // content-addressed policy it was derived under, so "verified" is replayable
+    // in meaning, not just in the log.
+    let gate_policy = vela_protocol::verification_policy::canonical_gate_policy();
     let verifier_gate = json!({
         "status": format!("{:?}", gate.status),
         "reasons": gate.reasons,
+        "policy_id": gate_policy.id,
+        "policy_digest": gate_policy.canonical_digest,
     });
 
     // statement_faithfulness: a vsa_ verdict targeting this finding.
