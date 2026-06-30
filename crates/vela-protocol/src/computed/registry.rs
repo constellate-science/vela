@@ -895,8 +895,10 @@ pub struct ExtrasManifest {
 }
 
 /// `.vela/` top-level dirs a snapshot+artifact-blob clone already rebuilds.
-/// Kept next to the loader's write-set (`repo::save_vela_repo`); the
-/// `check-vela-coverage.sh` gate is the fail-closed backstop for any drift.
+/// Kept next to the loader's write-set (`repo::save_vela_repo`). Used only by the
+/// hub-clone reconstruction path (the bespoke transport being retired in favor of
+/// git-native frontiers, where `.vela/events` is committed and nothing is
+/// reconstructed).
 const SNAPSHOT_RECONSTRUCTED_DIRS: &[&str] = &[
     "events",
     "findings",

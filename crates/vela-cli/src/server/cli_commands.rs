@@ -875,35 +875,13 @@ pub(crate) enum SignAction {
         #[arg(long)]
         json: bool,
     },
-    /// Sign unsigned findings in a frontier
+    /// Sign your unsigned events in a frontier with your registered actor key
     Apply {
         frontier: PathBuf,
         /// Path to the Ed25519 private key. Optional: defaults to your
         /// `vela id` identity key (or `$VELA_KEY_PATH`), like publish/accept/propose.
         #[arg(long = "key")]
         key: Option<PathBuf>,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Verify frontier signatures
-    Verify {
-        frontier: PathBuf,
-        #[arg(long)]
-        public_key: Option<PathBuf>,
-        #[arg(long)]
-        json: bool,
-    },
-    /// v0.37: Attach a multi-signature threshold to a finding. Once
-    /// `k` distinct registered actors have each signed the finding, it
-    /// is marked `jointly_accepted`. Setting `--to 1` is equivalent to
-    /// the default single-sig regime.
-    ThresholdSet {
-        frontier: PathBuf,
-        /// Target finding id (`vf_<hash>`).
-        finding_id: String,
-        /// Number of unique valid signatures required (>= 1).
-        #[arg(long)]
-        to: u32,
         #[arg(long)]
         json: bool,
     },

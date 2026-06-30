@@ -1181,8 +1181,8 @@ pub async fn run_command() {
                     "attest: --key is required in frontier-wide mode (or pass --event for per-event mode)",
                 )
             });
-            let count =
-                sign::sign_frontier(&frontier, &key_path).unwrap_or_else(|e| fail_return(&e));
+            let count = sign::sign_registered_events(&frontier, &key_path)
+                .unwrap_or_else(|e| fail_return(&e));
             let payload = json!({
                 "ok": true,
                 "command": "attest",
@@ -1194,7 +1194,7 @@ pub async fn run_command() {
                 print_json(&payload);
             } else {
                 println!(
-                    "{} {count} findings in {}",
+                    "{} {count} event(s) in {}",
                     style::ok("attested"),
                     frontier.display()
                 );
@@ -1478,9 +1478,6 @@ pub(crate) fn check_json_payload(src: &Path, schema_only: bool, strict: bool) ->
                 Value::Null,
             )
         });
-    let signature_report = loaded
-        .as_ref()
-        .and_then(|frontier| sign::verify_frontier_data(frontier, None).ok());
     if let Some(frontier) = loaded.as_ref()
         && !schema_only
     {
@@ -1683,7 +1680,6 @@ pub(crate) fn check_json_payload(src: &Path, schema_only: bool, strict: bool) ->
         "conditions": conditions,
         "proposals": proposal_summary,
         "proof_state": proof_state,
-        "signatures": signature_report,
         "diagnostics": diagnostics,
         "signals": signal_report.signals,
         "review_queue": signal_report.review_queue,
@@ -1924,8 +1920,8 @@ fn cmd_sign(action: SignAction) {
                 crate::cli_identity::resolve_key_path(key.as_deref()).unwrap_or_else(|| {
                     fail_return("no signing key: pass --key <path> or run `vela id create` once")
                 });
-            let count =
-                sign::sign_frontier(&frontier, &key_path).unwrap_or_else(|e| fail_return(&e));
+            let count = sign::sign_registered_events(&frontier, &key_path)
+                .unwrap_or_else(|e| fail_return(&e));
             let payload = json!({
                 "ok": true,
                 "command": "sign.apply",
@@ -1937,84 +1933,9 @@ fn cmd_sign(action: SignAction) {
                 print_json(&payload);
             } else {
                 println!(
-                    "{} {count} findings in {}",
+                    "{} {count} event(s) in {}",
                     style::ok("signed"),
                     frontier.display()
-                );
-            }
-        }
-        SignAction::Verify {
-            frontier,
-            public_key,
-            json,
-        } => {
-            let report = sign::verify_frontier(&frontier, public_key.as_deref())
-                .unwrap_or_else(|e| fail_return(&e));
-            if json {
-                print_json(&report);
-            } else {
-                println!();
-                println!(
-                    "  {}",
-                    format!("VELA · SIGN · VERIFY · {}", frontier.display())
-                        .to_uppercase()
-                        .dimmed()
-                );
-                println!("  {}", style::tick_row(60));
-                println!("  total findings:   {}", report.total_findings);
-                println!("  signed:           {}", report.signed);
-                println!("  unsigned:         {}", report.unsigned);
-                println!("  valid:            {}", report.valid);
-                println!("  invalid:          {}", report.invalid);
-                if report.findings_with_threshold > 0 {
-                    println!("  with threshold:   {}", report.findings_with_threshold);
-                    println!("  jointly accepted: {}", report.jointly_accepted);
-                }
-            }
-        }
-        SignAction::ThresholdSet {
-            frontier,
-            finding_id,
-            to,
-            json,
-        } => {
-            if to == 0 {
-                fail("--to must be >= 1");
-            }
-            let mut project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
-            let Some(idx) = project.findings.iter().position(|f| f.id == finding_id) else {
-                fail(&format!("finding '{finding_id}' not present in frontier"));
-            };
-            project.findings[idx].flags.signature_threshold = Some(to);
-            // Re-derive the joint-accept flag immediately; if the
-            // existing signature pool already meets the threshold, the
-            // finding becomes jointly_accepted on the same write.
-            sign::refresh_jointly_accepted(&mut project);
-            let met = project.findings[idx].flags.jointly_accepted;
-            repo::save_to_path(&frontier, &project).unwrap_or_else(|e| fail_return(&e));
-
-            if json {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&json!({
-                        "ok": true,
-                        "command": "sign.threshold-set",
-                        "finding_id": finding_id,
-                        "threshold": to,
-                        "jointly_accepted": met,
-                        "frontier": frontier.display().to_string(),
-                    }))
-                    .expect("failed to serialize sign.threshold-set")
-                );
-            } else {
-                println!(
-                    "{} signature_threshold={to} on {finding_id} ({})",
-                    style::ok("set"),
-                    if met {
-                        "jointly accepted"
-                    } else {
-                        "awaiting signatures"
-                    }
                 );
             }
         }

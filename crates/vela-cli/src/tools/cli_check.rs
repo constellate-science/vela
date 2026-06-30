@@ -12,7 +12,6 @@ use vela_edge::signals;
 use vela_edge::validate;
 use vela_protocol::cli_style as style;
 use vela_protocol::events;
-use vela_protocol::sign;
 
 pub(crate) fn cmd_check(
     source: Option<&Path>,
@@ -179,14 +178,6 @@ pub(crate) fn cmd_check(
         if unsigned_keyed_accepts > 0 {
             println!(
                 "key custody: {unsigned_keyed_accepts} accept-class event(s) by keyed reviewers carry no signature (history predating key registration; new accepts require --key)"
-            );
-        }
-        if let Ok(signature_report) = sign::verify_frontier_data(&frontier, None)
-            && signature_report.signed > 0
-        {
-            println!(
-                "Signatures: {} valid / {} invalid / {} unsigned",
-                signature_report.valid, signature_report.invalid, signature_report.unsigned
             );
         }
         let signal_report = signals::analyze(&frontier, &[]);
