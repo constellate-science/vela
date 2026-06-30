@@ -1074,7 +1074,7 @@ mod tests {
         use crate::events::{
             EVENT_SCHEMA, NULL_HASH, StateActor, StateEvent, StateTarget, compute_event_id,
         };
-        use crate::provenance::{CoAuthor, Provenance};
+        use crate::provenance::{MachineContribution, Provenance};
 
         let human_key = test_keypair();
         let human_pubkey = hex::encode(human_key.verifying_key().to_bytes());
@@ -1085,17 +1085,22 @@ mod tests {
         crate::provenance::attach_to_payload(
             &mut payload,
             &Provenance {
-                co_authors: vec![CoAuthor {
+                machine_contributions: vec![MachineContribution {
                     id: "agent:claude".to_string(),
                     class: "agent".to_string(),
                     role: "drafted".to_string(),
-                    generated_by: "claude-code (model: claude-opus-4-8)".to_string(),
+                    tool: "claude-code".to_string(),
+                    generated_by: "model: claude-opus-4-8".to_string(),
+                    authority: "none".to_string(),
                 }],
                 ..Default::default()
             },
         )
         .unwrap();
-        assert_eq!(payload["provenance"]["co_authors"][0]["id"], "agent:claude");
+        assert_eq!(
+            payload["provenance"]["machine_contributions"][0]["id"],
+            "agent:claude"
+        );
 
         let mut event = StateEvent {
             schema: EVENT_SCHEMA.to_string(),
@@ -1129,7 +1134,7 @@ mod tests {
         // The block is signed-over, so tampering with the co-author name breaks
         // the human's signature (the attribution is tamper-evident).
         let mut tampered = event.clone();
-        tampered.payload["provenance"]["co_authors"][0]["id"] =
+        tampered.payload["provenance"]["machine_contributions"][0]["id"] =
             serde_json::json!("agent:someone-else");
         assert!(!verify_event_signature(&tampered, &human_pubkey).unwrap());
     }
