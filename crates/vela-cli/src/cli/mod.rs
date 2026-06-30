@@ -648,14 +648,56 @@ pub async fn run_command() {
             reason,
             reviewer,
             apply,
+            sign,
+            key,
+            co_author,
+            generated_by,
             json,
         } => {
-            // Mirror the existing `Commands::Review` arm: emit a
-            // finding.review proposal under reviewer authority. Reviewer and
-            // reason auto-resolve from managed identity / a sane default, so
-            // the happy path is just `vela propose <frontier> <vf> --status …`.
+            // Reviewer and reason auto-resolve from managed identity / a sane
+            // default, so the happy path is just
+            // `vela propose <frontier> <vf> --status …`.
             let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
             let reason = reason.unwrap_or_else(|| format!("marked {status}"));
+            if sign {
+                // One-step solo path: record the proposal, then accept and sign
+                // it under one key in a single command (the git-commit analogue).
+                let options = state::ReviewOptions {
+                    status: status.clone(),
+                    reason: reason.clone(),
+                    reviewer: reviewer.clone(),
+                };
+                let draft = state::review_finding(&frontier, &finding_id, options, false)
+                    .unwrap_or_else(|e| fail_return(&e));
+                let signing_key = crate::cli_identity::resolve_signing_key_opt(key.as_deref());
+                let provenance = crate::cli_identity::resolve_co_author_provenance(
+                    co_author.as_deref(),
+                    generated_by.as_deref(),
+                );
+                let outcome = proposals::accept_at_path_engine(
+                    &frontier,
+                    &draft.proposal_id,
+                    &reviewer,
+                    &reason,
+                    proposals::AcceptOptions {
+                        strict: false,
+                        force: false,
+                        signing_key,
+                        custody_verified: false,
+                        provenance,
+                    },
+                )
+                .unwrap_or_else(|e| fail_return(&e));
+                print_json(&serde_json::json!({
+                    "ok": true,
+                    "command": "propose.sign",
+                    "finding_id": finding_id,
+                    "proposal_id": draft.proposal_id,
+                    "event_id": outcome.event_id,
+                    "signed": true,
+                }));
+                return;
+            }
             let options = state::ReviewOptions {
                 status: status.clone(),
                 reason,

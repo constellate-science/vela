@@ -489,10 +489,31 @@ pub(crate) enum Commands {
         /// Reviewer actor id. Optional: defaults to your configured identity.
         #[arg(long)]
         reviewer: Option<String>,
-        /// Apply the proposal immediately under reviewer authority
-        /// (writes a signed canonical event).
+        /// Apply the proposal locally WITHOUT signing it (a draft applied under
+        /// reviewer authority, no signature). Prefer `--sign` for the one-step
+        /// solo path; an unsigned applied event is not a canonical decision.
         #[arg(long)]
         apply: bool,
+        /// Draft AND sign in one step (the solo git-commit path): records the
+        /// review proposal and immediately accepts it under your key, emitting
+        /// one signed canonical event. Use this when you are both author and
+        /// reviewer. When a different human must approve, omit it and let them
+        /// run `vela accept`.
+        #[arg(long)]
+        sign: bool,
+        /// Path to your Ed25519 key (hex seed) for `--sign`. Optional: defaults
+        /// to your configured identity's key.
+        #[arg(long)]
+        key: Option<PathBuf>,
+        /// Record a non-human co-author (an AI that drafted), e.g.
+        /// `agent:claude`. Defaults to `$VELA_CO_AUTHOR`. Signed-over
+        /// attribution: you remain the accountable signer.
+        #[arg(long = "co-author")]
+        co_author: Option<String>,
+        /// Free-text tool/model string for the co-author. Defaults to
+        /// `$VELA_GENERATED_BY`.
+        #[arg(long = "generated-by")]
+        generated_by: Option<String>,
         #[arg(long)]
         json: bool,
     },
