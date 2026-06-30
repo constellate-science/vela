@@ -289,6 +289,11 @@ pub(crate) enum Commands {
     /// byte-for-byte against the publisher's signed hashes. Unlike
     /// `registry pull` (which writes a single snapshot/export file), the
     /// result is a working frontier you can reproduce, extend, and re-push.
+    ///
+    /// Compatibility shim. The direction (ADR 0001) is Git-native frontiers: a
+    /// frontier IS a git repo, so clone/pull/push are plain `git` and review is
+    /// a GitHub PR gated by the vela-check Action. See docs/FRONTIER_REPO.md.
+    /// This hub transport stays until the Git-native path is the live default.
     Clone {
         /// The frontier to clone: a `vfr_…` id, or a hub URL containing it
         /// (e.g. https://hub.constellate.science/entries/vfr_…).
