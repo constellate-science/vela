@@ -707,28 +707,27 @@ pub(crate) fn cmd_attest_proof(
         Vec::new(),
         Vec::new(),
     );
-    let result = vela_protocol::proposals::create_or_apply(&frontier, proposal, true)
+    // Draft a pending proposal; the keyed accept is a deliberate human act
+    // (`vela accept <frontier> <proposal_id> --key <path>`). An agent mints the
+    // CI evidence; key custody admits it. This is the same boundary as every
+    // other write path, so it never tries to apply with an ambient key.
+    let result = vela_protocol::proposals::create_or_apply(&frontier, proposal, false)
         .unwrap_or_else(|e| fail_return(&e));
-    let applied = result.applied_event_id.is_some();
     let payload = json!({
         "ok": true, "command": "attest.proof",
         "attachment_id": attachment_id, "target": target,
         "method": "lean_kernel", "integrity": integrity.as_str(),
-        "proposal_id": result.proposal_id, "applied": applied,
+        "proposal_id": result.proposal_id, "applied": false,
     });
     if json {
         print_json(&payload);
     } else {
         println!(
-            "{} attached {attachment_id} (lean_kernel, {}) to {target}\n  proposal {}{}",
+            "{} drafted lean_kernel attachment {attachment_id} ({}) for {target}\n  proposal {}; accept with: vela accept <frontier> {} --key <path>",
             style::ok("ok"),
             integrity.as_str(),
             result.proposal_id,
-            if applied {
-                " (applied)"
-            } else {
-                " (pending, run vela accept)"
-            },
+            result.proposal_id,
         );
     }
 }
