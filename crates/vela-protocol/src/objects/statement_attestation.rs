@@ -64,6 +64,13 @@ pub struct StatementAttestation {
     /// MANDATORY: an unsigned attestation does not exist.
     pub signature: String,
     pub signer_pubkey_hex: String,
+    /// Co-authorship attribution: the non-human actor (e.g. an AI) that drafted
+    /// the formalization. The outer `attested_by` stays the accountable human
+    /// reviewer and `build()`'s reviewer-only refusal is unaffected; this only
+    /// records that an AI helped. Absent on pre-redesign attestations, so they
+    /// serialize and content-address byte-identically (`skip_serializing_if`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance: Option<crate::provenance::Provenance>,
 }
 
 pub struct AttestationDraft {
@@ -118,10 +125,36 @@ impl StatementAttestation {
             attested_at: draft.attested_at,
             signature: String::new(),
             signer_pubkey_hex: hex::encode(key.verifying_key().to_bytes()),
+            provenance: None,
         };
         att.id = att.derive_id()?;
         att.signature = hex::encode(key.sign(&att.signing_bytes()?).to_bytes());
         Ok(att)
+    }
+
+    /// Attach co-authorship attribution (the AI that drafted this formalization)
+    /// and re-sign. Kept separate from `build()` so existing call sites are
+    /// untouched and the outer reviewer-only refusal in `build()` is the only
+    /// place a human-vs-non-human check on the SIGNER lives. The provenance ids
+    /// must all be non-human (`Provenance::validate`), so a human can never be
+    /// recorded here instead of as the accountable `attested_by` signer. Since
+    /// `provenance` is part of the signed body, the id and signature are
+    /// re-derived.
+    pub fn with_provenance(
+        mut self,
+        provenance: crate::provenance::Provenance,
+        key: &ed25519_dalek::SigningKey,
+    ) -> Result<Self, String> {
+        if provenance.is_empty() {
+            return Ok(self);
+        }
+        provenance.validate()?;
+        self.provenance = Some(provenance);
+        self.id = String::new();
+        self.signature = String::new();
+        self.id = self.derive_id()?;
+        self.signature = hex::encode(key.sign(&self.signing_bytes()?).to_bytes());
+        Ok(self)
     }
 
     /// Canonical bytes with `signature` cleared (the id is part of the

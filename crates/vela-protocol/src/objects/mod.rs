@@ -9,4 +9,5 @@ pub mod frontier_template;
 pub mod identity;
 pub mod merkle;
 pub mod nanopub;
+pub mod provenance;
 pub mod statement_attestation;

@@ -1064,6 +1064,77 @@ mod tests {
     }
 
     #[test]
+    fn provenance_co_author_confers_no_signing_authority() {
+        // The co-authorship block names a non-human assistant (agent:claude)
+        // inside the SIGNED payload. The structural guarantee: the signature is
+        // verified only against actor.id's key, never against any provenance
+        // name. An AI named as a co-author can therefore never stand in as the
+        // signer, so no model is ever in the trust path even when it is recorded
+        // as having drafted the work.
+        use crate::events::{
+            EVENT_SCHEMA, NULL_HASH, StateActor, StateEvent, StateTarget, compute_event_id,
+        };
+        use crate::provenance::{CoAuthor, Provenance};
+
+        let human_key = test_keypair();
+        let human_pubkey = hex::encode(human_key.verifying_key().to_bytes());
+        let agent_key = test_keypair();
+        let agent_pubkey = hex::encode(agent_key.verifying_key().to_bytes());
+
+        let mut payload = serde_json::json!({"status": "accepted", "proposal_id": "vpr_test"});
+        crate::provenance::attach_to_payload(
+            &mut payload,
+            &Provenance {
+                co_authors: vec![CoAuthor {
+                    id: "agent:claude".to_string(),
+                    class: "agent".to_string(),
+                    role: "drafted".to_string(),
+                    generated_by: "claude-code (model: claude-opus-4-8)".to_string(),
+                }],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(payload["provenance"]["co_authors"][0]["id"], "agent:claude");
+
+        let mut event = StateEvent {
+            schema: EVENT_SCHEMA.to_string(),
+            id: String::new(),
+            kind: "review.accepted".into(),
+            target: StateTarget {
+                r#type: "proposal".to_string(),
+                id: "vpr_test".to_string(),
+            },
+            actor: StateActor {
+                id: "reviewer:will-blair".to_string(),
+                r#type: "human".to_string(),
+            },
+            timestamp: "2026-06-30T00:00:00Z".to_string(),
+            reason: "co-authored accept".to_string(),
+            before_hash: NULL_HASH.to_string(),
+            after_hash: "sha256:abc".to_string(),
+            payload,
+            caveats: vec![],
+            signature: None,
+            schema_artifact_id: None,
+        };
+        event.id = compute_event_id(&event);
+        event.signature = Some(sign_event(&event, &human_key).unwrap());
+
+        // The accountable human's key verifies the co-authored event.
+        assert!(verify_event_signature(&event, &human_pubkey).unwrap());
+        // The co-author's own key does NOT verify it: being named in provenance
+        // grants zero signing authority.
+        assert!(!verify_event_signature(&event, &agent_pubkey).unwrap());
+        // The block is signed-over, so tampering with the co-author name breaks
+        // the human's signature (the attribution is tamper-evident).
+        let mut tampered = event.clone();
+        tampered.payload["provenance"]["co_authors"][0]["id"] =
+            serde_json::json!("agent:someone-else");
+        assert!(!verify_event_signature(&tampered, &human_pubkey).unwrap());
+    }
+
+    #[test]
     fn verify_frontier_data_reports_correctly() {
         let f1 = sample_finding();
         let mut f2 = sample_finding();
