@@ -463,7 +463,7 @@ pub(crate) enum Commands {
         /// Actor recording the ingest. Required for
         /// artifact-to-state; defaults to
         /// `agent:vela-ingest-bot` for agent paths.
-        #[arg(long)]
+        #[arg(long = "as", alias = "actor")]
         actor: Option<String>,
         /// Preview without writing.
         #[arg(long)]
@@ -487,7 +487,7 @@ pub(crate) enum Commands {
         #[arg(long)]
         reason: Option<String>,
         /// Reviewer actor id. Optional: defaults to your configured identity.
-        #[arg(long)]
+        #[arg(long = "as", alias = "reviewer")]
         reviewer: Option<String>,
         /// Apply the proposal locally WITHOUT signing it (a draft applied under
         /// reviewer authority, no signature). Prefer `--sign` for the one-step
@@ -526,7 +526,7 @@ pub(crate) enum Commands {
         proposal_id: String,
         /// Reviewer actor id. Optional: defaults to your configured
         /// identity (`vela id create`).
-        #[arg(long)]
+        #[arg(long = "as", alias = "reviewer")]
         reviewer: Option<String>,
         /// Decision note recorded in the signed event. Optional: defaults to
         /// "accepted via review". Key custody, not the note, is the authority.
@@ -583,7 +583,7 @@ pub(crate) enum Commands {
         #[arg(long)]
         reason: Option<String>,
         /// Reviewer actor id. Optional: defaults to your configured identity.
-        #[arg(long)]
+        #[arg(long = "as", alias = "reviewer")]
         reviewer: Option<String>,
         /// Reviewer key path. Optional: defaults to your configured identity's key.
         #[arg(long)]
@@ -607,7 +607,7 @@ pub(crate) enum Commands {
         attachment_file: PathBuf,
         /// Reviewer authority applying the attachment (e.g. `reviewer:opus`).
         /// Optional: defaults to your `vela id`.
-        #[arg(long)]
+        #[arg(long = "as", alias = "reviewer")]
         reviewer: Option<String>,
         #[arg(long, default_value = "bind verifier attachment")]
         reason: String,
@@ -673,7 +673,7 @@ pub(crate) enum Commands {
         limit: usize,
         /// Reviewer actor id. Optional: defaults to your configured identity
         /// (`vela id create`).
-        #[arg(long)]
+        #[arg(long = "as", alias = "reviewer")]
         reviewer: Option<String>,
         #[arg(long)]
         reason: String,
@@ -716,7 +716,7 @@ pub(crate) enum Commands {
         #[arg(long = "scope")]
         scopes: Vec<String>,
         /// Local reviewer id, for example `reviewer:will-blair`.
-        #[arg(long)]
+        #[arg(long = "as", alias = "reviewer")]
         reviewer: Option<String>,
         /// Reviewer role for this attestation, such as `domain_reviewer`.
         #[arg(long)]
@@ -1329,7 +1329,7 @@ pub(crate) enum GateAction {
         /// Reviewer authority landing the attachments (e.g.
         /// `reviewer:will-blair`). Optional: defaults to your configured
         /// identity (`vela id`). A signing key is required to apply.
-        #[arg(long)]
+        #[arg(long = "as", alias = "reviewer")]
         reviewer: Option<String>,
         /// Report the plan without writing.
         #[arg(long)]
@@ -1803,7 +1803,7 @@ pub(crate) enum QueueAction {
     Sign {
         /// Stable actor id matching a registered entry in the frontier.
         /// Optional: defaults to your configured identity (`vela id`).
-        #[arg(long)]
+        #[arg(long = "as", alias = "actor")]
         actor: Option<String>,
         /// Path to the actor's Ed25519 private key. Optional: defaults to
         /// your configured identity's key.
@@ -1945,7 +1945,7 @@ pub(crate) enum RegistryAction {
         frontier: PathBuf,
         /// Stable owner actor id (must be registered in the frontier).
         /// Optional: defaults to your configured identity.
-        #[arg(long)]
+        #[arg(long = "as", alias = "owner")]
         owner: Option<String>,
         /// Path to the owner's Ed25519 private key. Optional: defaults to
         /// your configured identity's key.
@@ -1996,7 +1996,7 @@ pub(crate) enum RegistryAction {
         #[arg(long)]
         key: Option<PathBuf>,
         /// Proposer actor id. Optional: defaults to your configured identity.
-        #[arg(long)]
+        #[arg(long = "as", alias = "actor")]
         actor: Option<String>,
         /// Actor type: `human` or `agent`.
         #[arg(long, default_value = "human")]
@@ -2446,7 +2446,7 @@ pub(crate) enum ProposalAction {
         frontier: PathBuf,
         proposal_id: String,
         /// Reviewer actor id. Optional: defaults to your configured identity.
-        #[arg(long)]
+        #[arg(long = "as", alias = "reviewer")]
         reviewer: Option<String>,
         #[arg(long)]
         reason: String,
@@ -2462,7 +2462,7 @@ pub(crate) enum ProposalAction {
         frontier: PathBuf,
         proposal_id: String,
         /// Reviewer actor id. Optional: defaults to your configured identity.
-        #[arg(long)]
+        #[arg(long = "as", alias = "reviewer")]
         reviewer: Option<String>,
         #[arg(long)]
         reason: String,
