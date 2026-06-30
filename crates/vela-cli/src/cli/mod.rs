@@ -995,10 +995,9 @@ pub async fn run_command() {
                         fail_return("attest: --verifier-actor is required with --proof")
                     }),
                     axioms_clean,
-                    note.clone().unwrap_or_else(|| {
-                        fail_return("attest: --note is required with --proof")
-                    }),
-                    reviewer,
+                    note.clone()
+                        .unwrap_or_else(|| fail_return("attest: --note is required with --proof")),
+                    key,
                     json,
                 );
                 return;

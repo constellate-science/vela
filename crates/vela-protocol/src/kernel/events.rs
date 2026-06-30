@@ -250,6 +250,7 @@ pub fn actor_kind(id: &str) -> &'static str {
     let handle = id.split(':').next_back().unwrap_or(id);
     if id.starts_with("agent:")
         || id.starts_with("sim:")
+        || id.starts_with("ci:")
         || handle.ends_with("-bot")
         || handle.ends_with("-sim")
     {
@@ -1628,7 +1629,20 @@ pub fn validate_event_payload(kind: &str, payload: &Value) -> Result<(), String>
             }
         }
         "verifier_attachment.added" => {
-            require_str("proposal_id")?;
+            // `proposal_id` is present when the attachment came through the
+            // propose/accept flow, and absent when a verifier (e.g. CI) directly
+            // signs its own evidence event. Evidence carries no signer-authority
+            // claim, so it needs no human accept. Either way the embedded
+            // attachment object is the load-bearing payload, and the reducer
+            // re-verifies its content-addressed id on apply.
+            if let Some(v) = object.get("proposal_id")
+                && !v.is_string()
+            {
+                return Err(
+                    "verifier_attachment.added payload.proposal_id must be a string when present"
+                        .to_string(),
+                );
+            }
             if !object.get("attachment").is_some_and(|v| v.is_object()) {
                 return Err(
                     "verifier_attachment.added payload.attachment must be an object".to_string(),

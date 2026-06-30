@@ -651,18 +651,20 @@ pub(crate) fn cmd_attest_proof(
     verifier_actor: String,
     axioms_clean: bool,
     note: String,
-    reviewer: Option<String>,
+    key: Option<PathBuf>,
     json: bool,
 ) {
     use vela_protocol::verifier_attachment::{
-        claim_digest, AttachmentDraft, AttachmentOutcome, MatchToClaim, MethodIntegrity,
-        VerifierAttachment, VerifierMethod,
+        AttachmentDraft, AttachmentOutcome, MatchToClaim, MethodIntegrity, VerifierAttachment,
+        VerifierMethod, claim_digest,
     };
-    let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
-    let project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
+    let signing_key = crate::cli_identity::resolve_signing_key(key.as_deref());
+    let mut project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
     let claim = match project.findings.iter().find(|f| f.id == target) {
         Some(f) => f.assertion.text.clone(),
-        None => fail_return(&format!("attest: target finding {target} not found in frontier")),
+        None => fail_return(&format!(
+            "attest: target finding {target} not found in frontier"
+        )),
     };
     let integrity = if axioms_clean {
         MethodIntegrity::Sound
@@ -681,7 +683,7 @@ pub(crate) fn cmd_attest_proof(
         },
         adversarial_probes: Vec::new(),
         outcome: AttachmentOutcome::Passed,
-        verifier_actor,
+        verifier_actor: verifier_actor.clone(),
         note,
     })
     .and_then(|a| a.with_method_integrity(integrity))
@@ -689,45 +691,44 @@ pub(crate) fn cmd_attest_proof(
     let attachment_id = att.id.clone();
     let att_value = serde_json::to_value(&att)
         .unwrap_or_else(|e| fail_return(&format!("serialize attachment: {e}")));
-    let actor_type = if reviewer.starts_with("agent:") {
-        "agent"
-    } else {
-        "human"
-    };
-    let proposal = vela_protocol::proposals::new_proposal(
-        "verifier.attach",
-        vela_protocol::events::StateTarget {
-            r#type: "finding".to_string(),
-            id: target.clone(),
-        },
-        reviewer,
-        actor_type,
-        "lean_kernel CI attestation",
-        serde_json::json!({ "attachment": att_value }),
-        Vec::new(),
-        Vec::new(),
+    // A verifier attachment is signed EVIDENCE, not a truth-bearing decision: the
+    // producer (here a CI verifier under its OWN key, never a human's) signs and
+    // adds it directly via a verifier_attachment.added event, with no human
+    // accept. The gate (G1-G4) still governs whether the finding ever reaches
+    // "verified", so a lone CI attachment records evidence and never stands in
+    // for a review. This is what removes the per-attachment key friction.
+    let mut event =
+        vela_protocol::events::new_finding_event(vela_protocol::events::FindingEventInput {
+            kind: "verifier_attachment.added",
+            finding_id: &target,
+            actor_id: &verifier_actor,
+            actor_type: vela_protocol::events::actor_kind(&verifier_actor),
+            reason: "lean_kernel CI attestation",
+            before_hash: "sha256:null",
+            after_hash: "sha256:null",
+            payload: serde_json::json!({ "attachment": att_value }),
+            caveats: Vec::new(),
+            timestamp: None,
+        });
+    vela_protocol::reducer::apply_event(&mut project, &event).unwrap_or_else(|e| fail_return(&e));
+    event.signature = Some(
+        vela_protocol::sign::sign_event(&event, &signing_key).unwrap_or_else(|e| fail_return(&e)),
     );
-    // Draft a pending proposal; the keyed accept is a deliberate human act
-    // (`vela accept <frontier> <proposal_id> --key <path>`). An agent mints the
-    // CI evidence; key custody admits it. This is the same boundary as every
-    // other write path, so it never tries to apply with an ambient key.
-    let result = vela_protocol::proposals::create_or_apply(&frontier, proposal, false)
-        .unwrap_or_else(|e| fail_return(&e));
+    project.events.push(event);
+    repo::save_to_path(&frontier, &project).unwrap_or_else(|e| fail_return(&e));
     let payload = json!({
         "ok": true, "command": "attest.proof",
         "attachment_id": attachment_id, "target": target,
         "method": "lean_kernel", "integrity": integrity.as_str(),
-        "proposal_id": result.proposal_id, "applied": false,
+        "verifier_actor": verifier_actor, "signed": true,
     });
     if json {
         print_json(&payload);
     } else {
         println!(
-            "{} drafted lean_kernel attachment {attachment_id} ({}) for {target}\n  proposal {}; accept with: vela accept <frontier> {} --key <path>",
+            "{} added lean_kernel attachment {attachment_id} ({}) to {target}, signed by {verifier_actor}",
             style::ok("ok"),
             integrity.as_str(),
-            result.proposal_id,
-            result.proposal_id,
         );
     }
 }
