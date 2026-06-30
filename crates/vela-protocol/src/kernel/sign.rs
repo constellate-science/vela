@@ -374,7 +374,10 @@ pub fn verify_finding_with_pubkey(
 ///
 /// A second implementation must produce byte-identical signing bytes
 /// for the same event content; the verification rule depends on it.
-pub fn event_signing_bytes(event: &crate::events::StateEvent) -> Result<Vec<u8>, String> {
+pub fn event_signing_bytes(
+    event: &crate::events::StateEvent,
+    version: crate::signing_input::SigVersion,
+) -> Result<Vec<u8>, String> {
     use serde_json::json;
     let preimage = json!({
         "schema": event.schema,
@@ -391,34 +394,44 @@ pub fn event_signing_bytes(event: &crate::events::StateEvent) -> Result<Vec<u8>,
     });
     let body = crate::canonical::to_canonical_bytes(&preimage)?;
     Ok(crate::signing_input::signing_input(
-        crate::signing_input::SigVersion::V0,
+        version,
         crate::signing_input::payload_type::EVENT,
         &body,
     ))
 }
 
-/// Sign a canonical event with an Ed25519 private key, returning a
-/// hex-encoded signature suitable for `event.signature`.
+/// Sign a canonical event with an Ed25519 private key, returning a signature
+/// suitable for `event.signature`. New signatures are v1 (DSSE/PAE), carried as
+/// a `v1:` prefix on the signature string so historical bare-hex signatures read
+/// as v0. The prefix is not part of the event id or the (content-only)
+/// event_log_hash, so the flip is transparent to addressing.
 pub fn sign_event(
     event: &crate::events::StateEvent,
     signing_key: &SigningKey,
 ) -> Result<String, String> {
-    let bytes = event_signing_bytes(event)?;
+    let bytes = event_signing_bytes(event, crate::signing_input::SigVersion::V1)?;
     let signature = signing_key.sign(&bytes);
-    Ok(hex::encode(signature.to_bytes()))
+    Ok(format!("v1:{}", hex::encode(signature.to_bytes())))
 }
 
-/// Verify that `event.signature` is a valid Ed25519 signature over the
-/// canonical signing bytes of `event`, produced by the holder of the
-/// private key matching `expected_pubkey_hex`.
+/// Verify that `event.signature` is a valid Ed25519 signature over the canonical
+/// signing bytes of `event`, produced by the holder of `expected_pubkey_hex`.
+/// The signing-input version is read from the signature's `v1:` prefix (a bare
+/// hex signature is historical v0); the framing is then fixed, so flipping the
+/// prefix changes the bytes and fails verification (fail-closed).
 pub fn verify_event_signature(
     event: &crate::events::StateEvent,
     expected_pubkey_hex: &str,
 ) -> Result<bool, String> {
-    let signature_hex = event
+    use crate::signing_input::SigVersion;
+    let raw = event
         .signature
         .as_deref()
         .ok_or_else(|| format!("event {} has no signature field", event.id))?;
+    let (version, signature_hex) = match raw.strip_prefix("v1:") {
+        Some(hex) => (SigVersion::V1, hex),
+        None => (SigVersion::V0, raw),
+    };
     let verifying_key = parse_verifying_key(expected_pubkey_hex)?;
     let sig_bytes =
         hex::decode(signature_hex).map_err(|e| format!("invalid signature hex: {e}"))?;
@@ -427,7 +440,7 @@ pub fn verify_event_signature(
             .try_into()
             .map_err(|_| "Signature must be 64 bytes")?,
     );
-    let bytes = event_signing_bytes(event)?;
+    let bytes = event_signing_bytes(event, version)?;
     Ok(verifying_key.verify(&bytes, &signature).is_ok())
 }
 
@@ -1071,6 +1084,67 @@ mod tests {
         let mut tampered = event.clone();
         tampered.reason = "different reason".to_string();
         assert!(!verify_event_signature(&tampered, &pubkey_hex).unwrap());
+    }
+
+    #[test]
+    fn v0_and_v1_event_signatures_both_verify() {
+        // The migration seam (M8): a new signature is v1 (v1:-prefixed) and a
+        // historical signature is v0 (bare hex). Both must verify so the flip
+        // never strands a historical event, and a downgrade (claiming a v1
+        // signature is v0) must fail closed.
+        use crate::events::{
+            EVENT_SCHEMA, NULL_HASH, StateActor, StateEvent, StateTarget, compute_event_id,
+        };
+        use crate::signing_input::SigVersion;
+
+        let key = test_keypair();
+        let pubkey = hex::encode(key.verifying_key().to_bytes());
+        let mut event = StateEvent {
+            schema: EVENT_SCHEMA.to_string(),
+            id: String::new(),
+            kind: "finding.reviewed".into(),
+            target: StateTarget {
+                r#type: "finding".to_string(),
+                id: "vf_test".to_string(),
+            },
+            actor: StateActor {
+                id: "reviewer:registered".to_string(),
+                r#type: "human".to_string(),
+            },
+            timestamp: "2026-06-30T00:00:00Z".to_string(),
+            reason: "v0/v1 dual-verify".to_string(),
+            before_hash: NULL_HASH.to_string(),
+            after_hash: "sha256:abc".to_string(),
+            payload: serde_json::json!({"status": "accepted", "proposal_id": "vpr_test"}),
+            caveats: vec![],
+            signature: None,
+            schema_artifact_id: None,
+        };
+        event.id = compute_event_id(&event);
+
+        // New default: sign_event emits a v1: signature, and it verifies.
+        event.signature = Some(sign_event(&event, &key).unwrap());
+        assert!(event.signature.as_deref().unwrap().starts_with("v1:"));
+        assert!(verify_event_signature(&event, &pubkey).unwrap());
+
+        // Historical v0: a bare-hex signature over the v0 framing still verifies.
+        let v0_bytes = event_signing_bytes(&event, SigVersion::V0).unwrap();
+        let mut v0_event = event.clone();
+        v0_event.signature = Some(hex::encode(key.sign(&v0_bytes).to_bytes()));
+        assert!(verify_event_signature(&v0_event, &pubkey).unwrap());
+
+        // Downgrade attempt: strip the v1: prefix so it claims v0. The framing
+        // then differs from what was signed, so it must fail closed.
+        let mut downgraded = event.clone();
+        let bare = event
+            .signature
+            .as_deref()
+            .unwrap()
+            .strip_prefix("v1:")
+            .unwrap()
+            .to_string();
+        downgraded.signature = Some(bare);
+        assert!(!verify_event_signature(&downgraded, &pubkey).unwrap());
     }
 
     #[test]
