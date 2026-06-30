@@ -12,8 +12,13 @@ ARCH=$(uname -m)
 
 case "${OS}-${ARCH}" in
   darwin-arm64|darwin-aarch64) NAME="vela-macos-aarch64" ;;
-  darwin-x86_64) NAME="vela-macos-x86_64" ;;
   linux-x86_64)  NAME="vela-linux-x86_64" ;;
+  darwin-x86_64)
+    echo "No prebuilt binary for Intel macOS (x86_64) — Apple Silicon and Linux only." >&2
+    echo "Build from source:" >&2
+    echo "  git clone https://github.com/${REPO}.git && cd vela && cargo build --release -p vela-cli" >&2
+    exit 1
+    ;;
   *) echo "Unsupported: ${OS}-${ARCH}"; exit 1 ;;
 esac
 
