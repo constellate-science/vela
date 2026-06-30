@@ -805,6 +805,13 @@ pub(crate) enum Commands {
         /// integrity to Sound; omit for Compromised.
         #[arg(long = "axioms-clean")]
         axioms_clean: bool,
+        /// Proof: an undischarged hypothesis the theorem assumes as a parameter,
+        /// e.g. `h_duke : DukeTheoremStatement`. Repeatable. Even with
+        /// `--axioms-clean`, any such hypothesis makes the proof CONDITIONAL: the
+        /// gate will not let the attachment reach `verified` (`#print axioms`
+        /// cannot see a hypothesis parameter).
+        #[arg(long = "undischarged-hypothesis")]
+        undischarged_hypothesis: Vec<String>,
         /// Faithfulness batch mode: a JSON file of verdicts to sign under one
         /// key read and one save (a bare array or `{"verdicts": [...]}`, each
         /// row `{target, verdict, informal_ref, formal_ref,

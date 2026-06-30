@@ -1032,6 +1032,7 @@ pub async fn run_command() {
             solver,
             verifier_actor,
             axioms_clean,
+            undischarged_hypothesis,
             batch,
             json,
         } => {
@@ -1049,6 +1050,7 @@ pub async fn run_command() {
                         fail_return("attest: --verifier-actor is required with --proof")
                     }),
                     axioms_clean,
+                    undischarged_hypothesis,
                     note.clone()
                         .unwrap_or_else(|| fail_return("attest: --note is required with --proof")),
                     key,

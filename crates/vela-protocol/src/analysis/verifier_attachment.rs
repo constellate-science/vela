@@ -298,6 +298,17 @@ pub struct VerifierAttachment {
     pub implementation_id: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub toolchain_hash: String,
+    /// Undischarged hypotheses the proof assumes (optional; absent on legacy
+    /// records, so their ids are byte-unchanged). For a `lean_kernel` attachment
+    /// these are the problem-defined named propositions the theorem takes as
+    /// parameters — e.g. a `(h : DensityHypothesis)` standing for an unproven
+    /// prime-gaps result, or `(h : DukeTheoremStatement)`. The proof is then
+    /// `sorry`-free and `#print axioms`-clean yet establishes the claim only
+    /// CONDITIONALLY: the hypothesis is a parameter, not an axiom, so the axiom
+    /// check cannot see it. A non-empty list demotes the gate (this attachment
+    /// cannot be an unconditional verification). Each entry is `"name : type"`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub undischarged_hypotheses: Vec<String>,
 }
 
 /// Fields a caller supplies; the id and schema are derived.
@@ -367,6 +378,7 @@ impl VerifierAttachment {
             note: draft.note,
             implementation_id: String::new(),
             toolchain_hash: derive_toolchain_hash(&draft.verifier_method),
+            undischarged_hypotheses: Vec::new(),
         };
         att.id = att.derive_id()?;
         Ok(att)
@@ -392,6 +404,17 @@ impl VerifierAttachment {
     /// `with_method_integrity` (it is the last mutation) so the id is final.
     pub fn with_implementation_id(mut self, implementation_id: &str) -> Result<Self, String> {
         self.implementation_id = implementation_id.to_string();
+        self.id = self.derive_id()?;
+        Ok(self)
+    }
+
+    /// Record the undischarged hypotheses the proof assumes and re-derive the id.
+    /// Part of the canonical body (like `method_integrity`), so it must be set
+    /// through this builder, not by field assignment, or the gate's G4 id-integrity
+    /// check would exclude the attachment. A non-empty list makes the attachment
+    /// CONDITIONAL: `derive_gate_status` will not let it reach `Verified`.
+    pub fn with_undischarged_hypotheses(mut self, hyps: Vec<String>) -> Result<Self, String> {
+        self.undischarged_hypotheses = hyps;
         self.id = self.derive_id()?;
         Ok(self)
     }
@@ -561,6 +584,27 @@ pub fn derive_gate_status(
         reasons.push(format!(
             "G5: {compromised} attachment(s) excluded — method integrity compromised \
              (e.g. forbidden Lean axiom or failed kernel re-check)"
+        ));
+    }
+
+    // Conditional-proof guard: a matched attachment whose proof is conditional on
+    // undischarged hypotheses (a theorem parameter `(h : DensityHypothesis)`
+    // standing for an unproven result) establishes the claim only CONDITIONALLY.
+    // `#print axioms` cannot see this — the hypothesis is a parameter, not an
+    // axiom — so `method_integrity` may be `Sound` and the kernel clean while the
+    // proof still assumes a deep result. The gate refuses to call such an
+    // attachment an unconditional verification. (Empty on every legacy record, so
+    // this never changes a stored finding's status.)
+    let conditional: Vec<&str> = matched
+        .iter()
+        .filter(|a| !a.undischarged_hypotheses.is_empty())
+        .flat_map(|a| a.undischarged_hypotheses.iter().map(String::as_str))
+        .collect();
+    if !conditional.is_empty() {
+        reasons.push(format!(
+            "conditional: matched attachment(s) prove the claim only under undischarged \
+             hypotheses [{}] — `#print axioms`-clean but not an unconditional verification",
+            conditional.join("; ")
         ));
     }
 
@@ -1232,6 +1276,48 @@ mod tests {
             outcome.reasons
         );
         assert!(outcome.reasons.is_empty());
+    }
+
+    #[test]
+    fn undischarged_hypothesis_demotes_to_needs_verification() {
+        // The 678 trap: an otherwise-verifying pair, but one attachment proves the
+        // claim only under an undischarged hypothesis (a theorem parameter standing
+        // for an unproven result). It is sorry-free and `#print axioms`-clean —
+        // nothing in G1-G5 catches it — yet the gate must refuse Verified.
+        let digest = claim_digest("claim X");
+        let a1 = attach(
+            &digest,
+            VerifierMethod::ComputationalSearch,
+            "cp-sat",
+            vec![],
+            vec![surviving_probe()],
+        );
+        let a2 = attach(
+            &digest,
+            VerifierMethod::ExactArithmeticRecompute,
+            "lean4@4.29.1",
+            vec![a1.id.clone()],
+            vec![surviving_probe()],
+        )
+        .with_undischarged_hypotheses(vec!["h_density : DensityHypothesis".to_string()])
+        .unwrap();
+        // id still content-addresses the body after the builder mutation (G4).
+        assert!(a2.verify().is_ok());
+        let outcome = derive_gate_status(&digest, &[a1, a2]);
+        assert_eq!(
+            outcome.status,
+            GateStatus::NeedsVerification,
+            "{:?}",
+            outcome.reasons
+        );
+        assert!(
+            outcome
+                .reasons
+                .iter()
+                .any(|r| r.contains("conditional") && r.contains("DensityHypothesis")),
+            "{:?}",
+            outcome.reasons
+        );
     }
 
     #[test]

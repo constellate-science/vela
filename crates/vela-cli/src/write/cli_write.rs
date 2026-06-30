@@ -779,6 +779,7 @@ pub(crate) fn cmd_attest_proof(
     solver: String,
     verifier_actor: String,
     axioms_clean: bool,
+    undischarged_hypotheses: Vec<String>,
     note: String,
     key: Option<PathBuf>,
     json: bool,
@@ -816,6 +817,13 @@ pub(crate) fn cmd_attest_proof(
         note,
     })
     .and_then(|a| a.with_method_integrity(integrity))
+    .and_then(|a| {
+        if undischarged_hypotheses.is_empty() {
+            Ok(a)
+        } else {
+            a.with_undischarged_hypotheses(undischarged_hypotheses)
+        }
+    })
     .unwrap_or_else(|e| fail_return(&format!("attest: {e}")));
     let attachment_id = att.id.clone();
     let att_value = serde_json::to_value(&att)
