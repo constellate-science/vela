@@ -922,7 +922,23 @@ pub fn finding_hash_by_id(frontier: &Project, finding_id: &str) -> String {
 pub fn event_log_hash(events: &[StateEvent]) -> String {
     let mut sorted: Vec<&StateEvent> = events.iter().collect();
     sorted.sort_by(|a, b| a.id.cmp(&b.id));
-    let bytes = canonical::to_canonical_bytes(&sorted).unwrap_or_default();
+    // Content-only: the log hash binds what the events SAY, not who signed them.
+    // The `signature` field is stripped before hashing, so re-signing (the v0->v1
+    // flip, a key rotation) never perturbs `event_log_hash`. Signing is therefore
+    // orthogonal to content-addressing, the same discipline `snapshot_hash`
+    // already follows (it removes the top-level `signatures` key). The signatures
+    // still live on the events on disk; they are simply not part of this digest.
+    let stripped: Vec<serde_json::Value> = sorted
+        .iter()
+        .map(|event| {
+            let mut value = serde_json::to_value(event).unwrap_or(serde_json::Value::Null);
+            if let serde_json::Value::Object(map) = &mut value {
+                map.remove("signature");
+            }
+            value
+        })
+        .collect();
+    let bytes = canonical::to_canonical_bytes(&stripped).unwrap_or_default();
     hex::encode(Sha256::digest(bytes))
 }
 
