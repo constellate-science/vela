@@ -1,5 +1,15 @@
 # Vela Hub
 
+**Role (build-borrow / ADR 0001): the hub is an INDEX over git-replayed state,
+not the authority.** The authoritative source of a frontier is its git repo (the
+committed `.vela/events` log in `constellate-science/vela-frontiers`), reproducible
+from a clean clone. The hub is a convenience layer: cross-frontier search,
+reverse-dependency lookup, producer/reviewer pages, projection and event-stream
+APIs, and the editorial "live" filter. It does not own byte custody (git + LFS
+do), and it is not the write authority for acceptance (a reviewer's signed
+`review.accepted` event in a PR is). Its remaining write endpoints (publish,
+governance) populate the index and are being superseded by git ingestion.
+
 The hub is the public HTTP surface for signed frontier publications.
 The signed registry entry is the publish receipt. Live reads come from
 verified event and projection tables, and snapshot blobs remain derived
