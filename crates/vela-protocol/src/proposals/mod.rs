@@ -514,6 +514,7 @@ pub fn preview_in_frontier(
         &proposal,
         reviewer,
         "Preview proposal application",
+        None,
     )?;
     let findings_after = preview_state.findings.len();
     let artifacts_after = preview_state.artifacts.len();
@@ -771,6 +772,11 @@ pub struct AcceptOptions {
     /// canonical accept request against the registered key before it
     /// ever reaches this path. Never set this from a local CLI flow.
     pub custody_verified: bool,
+    /// Co-authorship attribution for the signed decision event: the non-human
+    /// (AI / CI) that contributed. The reviewer remains the accountable signer;
+    /// this is signed-over data with no authority. `None` keeps the event
+    /// byte-identical to the pre-redesign shape.
+    pub provenance: Option<crate::provenance::Provenance>,
 }
 
 /// The Engine's read on an acceptance: what Evidence CI says about the
@@ -849,6 +855,7 @@ pub fn accept_at_path_engine(
         reason,
         opts.signing_key.as_ref(),
         opts.custody_verified,
+        opts.provenance.as_ref(),
     )?;
 
     let after = crate::evidence_ci::run_project(&frontier, path);
@@ -1200,6 +1207,7 @@ pub fn accept_in_frontier_engine(
         reason,
         opts.signing_key.as_ref(),
         opts.custody_verified,
+        opts.provenance.as_ref(),
     )
     .map_err(AcceptEngineError::Failed)?;
 
@@ -2614,6 +2622,7 @@ pub fn accept_proposal_in_frontier_signed(
         reason,
         signing_key,
         false,
+        None,
     )
 }
 
@@ -2624,6 +2633,7 @@ pub fn accept_proposal_in_frontier_with_custody(
     reason: &str,
     signing_key: Option<&ed25519_dalek::SigningKey>,
     custody_verified: bool,
+    provenance: Option<&crate::provenance::Provenance>,
 ) -> Result<String, String> {
     validate_reviewer_identity(reviewer)?;
     if reason.trim().is_empty() {
@@ -2656,7 +2666,7 @@ pub fn accept_proposal_in_frontier_with_custody(
     frontier.proposals[index].reviewed_by = Some(reviewer.to_string());
     frontier.proposals[index].reviewed_at = Some(Utc::now().to_rfc3339());
     frontier.proposals[index].decision_reason = Some(reason.to_string());
-    let event_id = apply_proposal(frontier, &proposal, reviewer, reason)?;
+    let event_id = apply_proposal(frontier, &proposal, reviewer, reason, provenance)?;
     frontier.proposals[index].status = "applied".to_string();
     frontier.proposals[index].applied_event_id = Some(event_id.clone());
     // Sign the accept event under the reviewer's key: the signature is
@@ -2769,6 +2779,7 @@ pub(crate) fn apply_proposal(
     proposal: &StateProposal,
     reviewer: &str,
     decision_reason: &str,
+    provenance: Option<&crate::provenance::Provenance>,
 ) -> Result<String, String> {
     // Phase L: retraction emits a fan of events — one for the source
     // and one `finding.dependency_invalidated` per dependent in BFS
@@ -2807,7 +2818,7 @@ pub(crate) fn apply_proposal(
         );
         return Ok(primary_id);
     }
-    let event = match proposal.kind.as_str() {
+    let mut event = match proposal.kind.as_str() {
         "finding.add" => apply_add(frontier, proposal, reviewer, decision_reason)?,
         "finding.review" => apply_review(frontier, proposal, reviewer, decision_reason)?,
         "research_trace.review" | "correction_return.review" => {
@@ -2829,6 +2840,18 @@ pub(crate) fn apply_proposal(
         }
         other => return Err(format!("Unsupported proposal kind '{other}'")),
     };
+    // Co-authorship: when a non-human (an AI that drafted, CI that attested)
+    // contributed, record it as signed-over attribution on this single decision
+    // event. The reviewer stays the accountable signer; the provenance carries
+    // zero authority (validated non-human in `attach_to_payload`). Because the
+    // block enters the signed payload, the content-addressed id is re-derived.
+    // None leaves the event byte-identical, so existing frontiers are untouched.
+    if let Some(prov) = provenance
+        && !prov.is_empty()
+    {
+        crate::provenance::attach_to_payload(&mut event.payload, prov)?;
+        event.id = events::event_id(&event);
+    }
     let event_id = event.id.clone();
     frontier.events.push(event);
     mark_proof_stale(

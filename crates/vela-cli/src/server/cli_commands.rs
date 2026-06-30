@@ -533,6 +533,18 @@ pub(crate) enum Commands {
         /// Hub URL to deliver the accept to (implies `--push`).
         #[arg(long)]
         to: Option<String>,
+        /// Record a non-human co-author of this decision (an AI that drafted, a
+        /// CI that attested), e.g. `agent:claude`. Signed-over attribution: you
+        /// remain the accountable signer. Defaults to `$VELA_CO_AUTHOR` so an
+        /// agent harness credits itself automatically, like a Co-authored-by
+        /// trailer.
+        #[arg(long = "co-author")]
+        co_author: Option<String>,
+        /// Free-text tool/model string for the co-author, e.g.
+        /// `model: claude-opus-4-8`. Defaults to `$VELA_GENERATED_BY`.
+        /// Unverified attribution, never resolved to a key.
+        #[arg(long = "generated-by")]
+        generated_by: Option<String>,
         #[arg(long)]
         json: bool,
     },

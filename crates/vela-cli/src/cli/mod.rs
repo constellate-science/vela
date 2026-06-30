@@ -676,11 +676,17 @@ pub async fn run_command() {
             force,
             push,
             to,
+            co_author,
+            generated_by,
             json,
         } => {
             let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
             let reason = reason.unwrap_or_else(|| "accepted via review".to_string());
             let signing_key = crate::cli_identity::resolve_signing_key_opt(key.as_deref());
+            let provenance = crate::cli_identity::resolve_co_author_provenance(
+                co_author.as_deref(),
+                generated_by.as_deref(),
+            );
             // The Engine runs Evidence CI on the post-accept state and gates
             // the acceptance on the regression it would introduce.
             let outcome = proposals::accept_at_path_engine(
@@ -693,6 +699,7 @@ pub async fn run_command() {
                     force,
                     signing_key,
                     custody_verified: false,
+                    provenance,
                 },
             )
             .unwrap_or_else(|e| fail_return(&e));
@@ -789,6 +796,9 @@ pub async fn run_command() {
                     force: false,
                     signing_key,
                     custody_verified: false,
+                    // env-driven co-authorship: an agent harness exporting
+                    // VELA_CO_AUTHOR credits itself on the one-step land too.
+                    provenance: crate::cli_identity::resolve_co_author_provenance(None, None),
                 },
             )
             .unwrap_or_else(|e| fail_return(&e));
@@ -875,6 +885,7 @@ pub async fn run_command() {
                     force,
                     signing_key,
                     custody_verified: false,
+                    provenance: crate::cli_identity::resolve_co_author_provenance(None, None),
                 },
                 dry_run,
             )

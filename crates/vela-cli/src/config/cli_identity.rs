@@ -161,3 +161,37 @@ pub(crate) fn resolve_signing_key_opt(flag: Option<&Path>) -> Option<SigningKey>
         .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", path.display())));
     Some(parse_signing_key(hex.trim()))
 }
+
+/// Resolve co-authorship provenance for a signed write: the non-human (AI / CI)
+/// that drafted or assisted. This is the GitHub `Co-authored-by` pattern made
+/// automatic. An agent harness exports `VELA_CO_AUTHOR` (an `agent:`/`ci:` id)
+/// and optionally `VELA_GENERATED_BY` (a free-text model string); every signed
+/// write then records the AI as a contribution while the human reviewer stays
+/// the accountable signer. Same precedence as the rest: an explicit flag wins,
+/// then the env var. Returns `None` when neither is set, so the event stays
+/// byte-identical to the pre-redesign shape.
+pub(crate) fn resolve_co_author_provenance(
+    co_author: Option<&str>,
+    generated_by: Option<&str>,
+) -> Option<vela_protocol::provenance::Provenance> {
+    let id = co_author
+        .map(str::to_string)
+        .or_else(|| std::env::var("VELA_CO_AUTHOR").ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())?;
+    let generated_by = generated_by
+        .map(str::to_string)
+        .or_else(|| std::env::var("VELA_GENERATED_BY").ok())
+        .unwrap_or_default();
+    Some(vela_protocol::provenance::Provenance {
+        machine_contributions: vec![vela_protocol::provenance::MachineContribution {
+            id,
+            class: String::new(),
+            role: "drafted".to_string(),
+            tool: String::new(),
+            generated_by,
+            authority: "none".to_string(),
+        }],
+        ..Default::default()
+    })
+}

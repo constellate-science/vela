@@ -1070,6 +1070,7 @@ fn engine_gate_warns_then_strict_blocks_then_force_applies() {
             force: false,
             signing_key: None,
             custody_verified: false,
+            provenance: None,
         },
     );
     assert!(blocked.is_err(), "strict accept should be gated");
@@ -1096,6 +1097,7 @@ fn engine_gate_warns_then_strict_blocks_then_force_applies() {
             force: true,
             signing_key: None,
             custody_verified: false,
+            provenance: None,
         },
     )
     .unwrap();
@@ -1216,6 +1218,7 @@ fn accept_batch_strict_gate_blocks_whole_batch() {
             force: false,
             signing_key: None,
             custody_verified: false,
+            provenance: None,
         },
         false,
     )
@@ -1243,6 +1246,7 @@ fn accept_batch_strict_gate_blocks_whole_batch() {
             force: true,
             signing_key: None,
             custody_verified: false,
+            provenance: None,
         },
         false,
     )

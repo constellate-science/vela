@@ -404,6 +404,7 @@ pub fn claim_state_delta(
         &proposal,
         reviewer,
         "Evidence Diff preview application",
+        None,
     )?;
     let after = after_state
         .findings

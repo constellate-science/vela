@@ -4055,6 +4055,7 @@ async fn accept_proposal(
         // against the reviewer's registered, non-revoked key (steps 1-9
         // above). The hub never holds the raw private key.
         custody_verified: true,
+        provenance: None,
     };
     let outcome = match vela_protocol::proposals::accept_in_frontier_engine(
         &mut project,
