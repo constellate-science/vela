@@ -2738,6 +2738,18 @@ pub fn reject_proposal_in_frontier_signed(
     custody_verified: bool,
 ) -> Result<(), String> {
     validate_reviewer_identity(reviewer)?;
+    // A reject is a truth-bearing review verdict with NO agent carve-out
+    // (accept's process/replicator exceptions do not apply: burying a
+    // proposal is as much a decision as applying one). Reserved for named
+    // human reviewers by design — and the keyless-bootstrap custody path
+    // below must never admit an unregistered agent actor.
+    if reviewer.starts_with("agent:") || reviewer.starts_with("ci:") {
+        return Err(format!(
+            "reviewer '{reviewer}' may not reject proposals: review decisions are \
+             reserved for named human reviewers (key custody). Agents may propose, \
+             attach mechanical evidence, or draft — never decide."
+        ));
+    }
     if reason.trim().is_empty() {
         return Err("Decision reason must be non-empty".to_string());
     }

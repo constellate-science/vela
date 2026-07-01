@@ -2199,6 +2199,32 @@ fn reject_keyless_ok_for_unregistered_reviewer() {
 }
 
 #[test]
+fn reject_refuses_agent_and_ci_actors() {
+    // The keyless bootstrap above must never admit an agent: a reject is a
+    // truth-bearing review verdict with no agent carve-out (burying a
+    // proposal is as much a decision as applying one). Found live: an agent
+    // driving the CLI with VELA_ACTOR_ID=agent:... could reject through the
+    // unregistered-reviewer bootstrap path.
+    let (mut project, proposal) = frontier_with_proposal(vec![]);
+    for actor in ["agent:claude", "ci:github-actions"] {
+        let err = reject_proposal_in_frontier_signed(
+            &mut project,
+            &proposal.id,
+            actor,
+            "probe",
+            None,
+            false,
+        )
+        .unwrap_err();
+        assert!(
+            err.contains("may not reject"),
+            "expected the agent refusal for {actor}, got: {err}"
+        );
+    }
+    assert!(review_events_for(&project, &proposal.id).is_empty());
+}
+
+#[test]
 fn parity_flags_status_with_no_backing_event() {
     // Hand-edit a status to "rejected" with no event behind it — the
     // exact tamper the mutable field used to allow silently.
