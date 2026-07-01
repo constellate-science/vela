@@ -991,6 +991,185 @@ impl HubDb {
         }
     }
 
+    /// Register (or re-point) a frontier's git remote — the one owner-signed
+    /// act in the git-ingestion lane. The caller has already verified the
+    /// GitRemoteRegistration signature against the effective owner; this
+    /// stores it and resets the ingest cursor so the next tick re-ingests.
+    pub async fn set_git_remote(
+        &self,
+        vfr_id: &str,
+        git_remote: &str,
+        git_ref: &str,
+        registered_by_pubkey: &str,
+        registered_at: &str,
+        raw_json: &Value,
+    ) -> Result<(), String> {
+        match self {
+            Self::Postgres(p) => {
+                sqlx::query(
+                    r#"
+                    INSERT INTO frontier_git_remotes
+                        (vfr_id, git_remote, git_ref, registered_by_pubkey, registered_at, raw_json)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    ON CONFLICT (vfr_id) DO UPDATE SET
+                        git_remote = EXCLUDED.git_remote,
+                        git_ref = EXCLUDED.git_ref,
+                        registered_by_pubkey = EXCLUDED.registered_by_pubkey,
+                        registered_at = EXCLUDED.registered_at,
+                        raw_json = EXCLUDED.raw_json,
+                        last_ingested_commit = NULL,
+                        ingest_error = NULL
+                    "#,
+                )
+                .bind(vfr_id)
+                .bind(git_remote)
+                .bind(git_ref)
+                .bind(registered_by_pubkey)
+                .bind(registered_at)
+                .bind(raw_json)
+                .execute(p)
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok(())
+            }
+            Self::Sqlite(p) => {
+                let raw = serde_json::to_string(raw_json).map_err(|e| e.to_string())?;
+                sqlx::query(
+                    r#"
+                    INSERT INTO frontier_git_remotes
+                        (vfr_id, git_remote, git_ref, registered_by_pubkey, registered_at, raw_json)
+                    VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                    ON CONFLICT (vfr_id) DO UPDATE SET
+                        git_remote = excluded.git_remote,
+                        git_ref = excluded.git_ref,
+                        registered_by_pubkey = excluded.registered_by_pubkey,
+                        registered_at = excluded.registered_at,
+                        raw_json = excluded.raw_json,
+                        last_ingested_commit = NULL,
+                        ingest_error = NULL
+                    "#,
+                )
+                .bind(vfr_id)
+                .bind(git_remote)
+                .bind(git_ref)
+                .bind(registered_by_pubkey)
+                .bind(registered_at)
+                .bind(raw)
+                .execute(p)
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok(())
+            }
+        }
+    }
+
+    /// Every registered git-ingestion target with its cursor, for the
+    /// ingestor's tick. Row shape: (vfr_id, git_remote, git_ref,
+    /// last_ingested_commit, registered_by_pubkey).
+    pub async fn git_ingest_targets(
+        &self,
+    ) -> Result<Vec<(String, String, String, Option<String>, String)>, String> {
+        const Q: &str = "SELECT vfr_id, git_remote, git_ref, last_ingested_commit, \
+                         registered_by_pubkey FROM frontier_git_remotes";
+        match self {
+            Self::Postgres(p) => sqlx::query_as(Q)
+                .fetch_all(p)
+                .await
+                .map_err(|e| e.to_string()),
+            Self::Sqlite(p) => sqlx::query_as(Q)
+                .fetch_all(p)
+                .await
+                .map_err(|e| e.to_string()),
+        }
+    }
+
+    /// Record the outcome of one ingest attempt (the cursor on success, the
+    /// error text on failure — surfaced at /entries/{vfr}/status).
+    pub async fn record_git_ingest(
+        &self,
+        vfr_id: &str,
+        commit: Option<&str>,
+        error: Option<&str>,
+    ) -> Result<(), String> {
+        match self {
+            Self::Postgres(p) => {
+                sqlx::query(
+                    "UPDATE frontier_git_remotes SET \
+                       last_ingested_commit = COALESCE($2, last_ingested_commit), \
+                       last_ingested_at = now(), ingest_error = $3 \
+                     WHERE vfr_id = $1",
+                )
+                .bind(vfr_id)
+                .bind(commit)
+                .bind(error)
+                .execute(p)
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok(())
+            }
+            Self::Sqlite(p) => {
+                sqlx::query(
+                    "UPDATE frontier_git_remotes SET \
+                       last_ingested_commit = COALESCE(?2, last_ingested_commit), \
+                       last_ingested_at = datetime('now'), ingest_error = ?3 \
+                     WHERE vfr_id = ?1",
+                )
+                .bind(vfr_id)
+                .bind(commit)
+                .bind(error)
+                .execute(p)
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok(())
+            }
+        }
+    }
+
+    /// The git-remote registration + ingest cursor for one frontier (status surface).
+    pub async fn get_git_remote(&self, vfr_id: &str) -> Result<Option<Value>, String> {
+        const Q_PG: &str = "SELECT json_build_object(\
+            'git_remote', git_remote, 'git_ref', git_ref, \
+            'registered_at', registered_at, 'registered_by_pubkey', registered_by_pubkey, \
+            'last_ingested_commit', last_ingested_commit, \
+            'last_ingested_at', last_ingested_at::text, 'ingest_error', ingest_error) \
+            FROM frontier_git_remotes WHERE vfr_id = $1";
+        match self {
+            Self::Postgres(p) => sqlx::query_scalar::<_, Value>(Q_PG)
+                .bind(vfr_id)
+                .fetch_optional(p)
+                .await
+                .map_err(|e| e.to_string()),
+            Self::Sqlite(p) => {
+                type GitRemoteRow = (
+                    String,
+                    String,
+                    String,
+                    String,
+                    Option<String>,
+                    Option<String>,
+                    Option<String>,
+                );
+                let row: Option<GitRemoteRow> = sqlx::query_as(
+                    "SELECT git_remote, git_ref, registered_at, registered_by_pubkey, \
+                         last_ingested_commit, last_ingested_at, ingest_error \
+                         FROM frontier_git_remotes WHERE vfr_id = ?1",
+                )
+                .bind(vfr_id)
+                .fetch_optional(p)
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok(row.map(|(remote, r#ref, at, by, commit, ing_at, err)| {
+                    serde_json::json!({
+                        "git_remote": remote, "git_ref": r#ref,
+                        "registered_at": at, "registered_by_pubkey": by,
+                        "last_ingested_commit": commit,
+                        "last_ingested_at": ing_at, "ingest_error": err,
+                    })
+                }))
+            }
+        }
+    }
+
     /// The deprecation record for a frontier, if any (the audit receipt).
     pub async fn get_deprecation(&self, vfr_id: &str) -> Result<Option<Value>, String> {
         match self {
@@ -2953,6 +3132,22 @@ pub const POSTGRES_EVENT_FIRST_SCHEMA: &[&str] = &[
         inserted_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )"#,
     "CREATE INDEX IF NOT EXISTS idx_snapshots_inserted_at ON frontier_snapshots (inserted_at DESC)",
+    // Git ingestion (ADR 0001 / HUB.md: the hub is an index over git-replayed
+    // state). One row per frontier whose index is derived from a git remote.
+    // `raw_json` holds the owner-signed GitRemoteRegistration; the ingest
+    // columns are the ingestor's cursor + last error, for /status surfaces.
+    r#"CREATE TABLE IF NOT EXISTS frontier_git_remotes (
+        vfr_id TEXT PRIMARY KEY,
+        git_remote TEXT NOT NULL,
+        git_ref TEXT NOT NULL DEFAULT 'main',
+        registered_by_pubkey TEXT NOT NULL,
+        registered_at TEXT NOT NULL,
+        raw_json JSONB NOT NULL,
+        last_ingested_commit TEXT,
+        last_ingested_at TIMESTAMPTZ,
+        ingest_error TEXT,
+        inserted_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )"#,
 ];
 
 pub async fn ensure_postgres_event_first_schema(pool: &PgPool) -> Result<(), String> {
@@ -3144,6 +3339,19 @@ pub async fn ensure_sqlite_schema(pool: &SqlitePool) -> Result<(), String> {
             recorded_at TEXT NOT NULL DEFAULT (datetime('now'))
         )"#,
         "CREATE INDEX IF NOT EXISTS idx_frontier_revocations_vfr ON frontier_revocations (vfr_id)",
+        // Git ingestion registrations (mirror of the Postgres table).
+        r#"CREATE TABLE IF NOT EXISTS frontier_git_remotes (
+            vfr_id TEXT PRIMARY KEY,
+            git_remote TEXT NOT NULL,
+            git_ref TEXT NOT NULL DEFAULT 'main',
+            registered_by_pubkey TEXT NOT NULL,
+            registered_at TEXT NOT NULL,
+            raw_json TEXT NOT NULL,
+            last_ingested_commit TEXT,
+            last_ingested_at TEXT,
+            ingest_error TEXT,
+            inserted_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )"#,
     ] {
         sqlx::query(stmt)
             .execute(pool)

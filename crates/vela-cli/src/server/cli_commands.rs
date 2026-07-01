@@ -1880,6 +1880,30 @@ pub(crate) enum RegistryAction {
         #[arg(long)]
         json: bool,
     },
+    /// Register a frontier's git remote on a hub — the one owner-signed act
+    /// in the git-ingestion lane (docs/HUB.md: the hub is an index over
+    /// git-replayed state). After this, `git push` IS publication: the hub
+    /// re-derives its index from the repo on every ingest sweep, verifying
+    /// signatures and hash parity on replay. No further signed publishes.
+    RegisterGit {
+        /// The frontier to bind (vfr_…)
+        vfr_id: String,
+        /// The git clone URL (e.g. https://github.com/you/your-frontier.git)
+        #[arg(long)]
+        remote: String,
+        /// Branch or ref the hub ingests
+        #[arg(long, default_value = "main")]
+        r#ref: String,
+        /// Hub base URL. Optional: defaults to your configured identity's hub.
+        #[arg(long)]
+        to: Option<String>,
+        /// Path to the owner's Ed25519 private key. Optional: defaults to
+        /// your configured identity's key (`vela id`).
+        #[arg(long)]
+        key: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
     /// Rotate a published frontier's owner key on a hub. Signed by the
     /// CURRENT effective owner; the named successor key becomes the one
     /// every owner check accepts (re-publish, deprecate, next rotation).

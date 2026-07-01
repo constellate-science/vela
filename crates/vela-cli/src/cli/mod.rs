@@ -239,6 +239,19 @@ pub async fn run_command() {
             // The friendly "share my work" verb: a full publish to the
             // identity hub, with owner+key resolved from the profile inside
             // the registry handler. Full (not delta) so it always succeeds.
+            //
+            // Doctrine note (HUB.md / ADR 0001): for a git-native frontier,
+            // `git push` IS publication — the hub re-derives its index from
+            // the repo once `vela registry register-git` binds the remote.
+            // This verb populates the legacy index lane only.
+            if !json {
+                eprintln!(
+                    "note: for a git-native frontier, `git push` is publication — bind the \
+                     repo once with `vela registry register-git <vfr> --remote <url>` and \
+                     the hub re-derives its index from git; this signed publish populates \
+                     the legacy index lane only."
+                );
+            }
             let hub = crate::cli_identity::resolve_hub(to.as_deref());
             cmd_registry(RegistryAction::Publish {
                 frontier,

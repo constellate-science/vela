@@ -1,0 +1,130 @@
+# vela-check — verify a git-native Vela frontier.
+#
+# Consume from any frontier repo:
+#
+#   - uses: actions/checkout@v4
+#   - uses: constellate-science/vela@main
+#
+# It replays the signed event log from the clean checkout and proves the
+# committed materialized state (frontier.json / vela.lock / proof/) reproduces:
+# the repo IS the authority (docs/HUB.md). Mark the job a required status check
+# and merging is gated on the frozen verifier, never on a click. The action
+# only re-derives and reports — it NEVER signs; the human-key accept stays the
+# reviewer's signed event committed in the repo.
+#
+# Note on parity: `vela frontier materialize` stamps generated_at into the
+# derived files, so a raw `git diff --exit-code` on them would be flaky by
+# design. Parity is therefore proved on the content hashes (snapshot_hash,
+# event_log_hash) recomputed from the event log against the committed
+# vela.lock — timestamp-independent and byte-equivalent in authority.
+
+name: vela-check
+description: >-
+  Verifies a git-native Vela frontier: replays the signed event log from the
+  clean checkout and proves the committed materialized state reproduces.
+
+inputs:
+  frontier:
+    description: Path to the frontier directory within the consumer repo.
+    required: false
+    default: "."
+  strict:
+    description: >-
+      When "true" (default), `vela check --strict` is a blocking gate. Set
+      "false" to demote strict to a non-blocking notice — only for a frontier
+      with acknowledged owner key-custody debt (pending reviewer signatures).
+    required: false
+    default: "true"
+  vela-version:
+    description: >-
+      Vela release tag to install (e.g. v0.720.0). Empty (default) pins to the
+      `vela_version` recorded in the frontier's vela.lock, so the binary that
+      gates is the binary that materialized the committed state; if no lock is
+      present, the latest release is installed.
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Install vela (pinned release binary, no from-source build)
+      shell: bash
+      env:
+        VELA_VERSION_INPUT: ${{ inputs.vela-version }}
+        FRONTIER: ${{ inputs.frontier }}
+        ACTION_PATH: ${{ github.action_path }}
+      run: |
+        set -euo pipefail
+        ver="$VELA_VERSION_INPUT"
+        if [ -z "$ver" ] && [ -f "$FRONTIER/vela.lock" ]; then
+          ver="$(awk '/^vela_version:/{print $2}' "$FRONTIER/vela.lock")"
+          [ -n "$ver" ] && ver="v${ver#v}"
+        fi
+        # install.sh ships with this action (the repo root). It fetches the
+        # platform asset from the GitHub release and verifies its sha256.
+        # Run it with bash, never `sh` (it uses pipefail; dash rejects it).
+        if [ -f "$ACTION_PATH/install.sh" ]; then
+          VELA_VERSION="$ver" bash "$ACTION_PATH/install.sh"
+        else
+          curl -fsSL https://raw.githubusercontent.com/constellate-science/vela/main/install.sh \
+            | VELA_VERSION="$ver" bash
+        fi
+        vela --version
+
+    - name: Replay + verify signatures (structural gate)
+      shell: bash
+      env:
+        FRONTIER: ${{ inputs.frontier }}
+      run: |
+        set -euo pipefail
+        if ! vela check "$FRONTIER"; then
+          echo "::error::vela check failed — the signed event log does not replay cleanly (invalid finding, event, or signature)"
+          exit 1
+        fi
+
+    - name: Hash parity — the committed materialized state reproduces
+      shell: bash
+      env:
+        FRONTIER: ${{ inputs.frontier }}
+      run: |
+        set -uo pipefail
+        lock="$FRONTIER/vela.lock"
+        if [ ! -f "$lock" ]; then
+          echo "::error::$lock not found — cannot prove the working tree matches the signed state"
+          exit 1
+        fi
+        # Read the committed lock FIRST; materialize rewrites it.
+        # vela.lock is YAML with flat `key: value` lines — awk avoids PyYAML.
+        lsnap="$(awk '/^snapshot_hash:/{print $2}' "$lock")"
+        lelog="$(awk '/^event_log_hash:/{print $2}' "$lock")"
+        out="$(vela frontier materialize "$FRONTIER" --json)"
+        snap="$(printf '%s' "$out" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("snapshot_hash",""))')"
+        elog="$(printf '%s' "$out" | python3 -c 'import json,sys;print(json.load(sys.stdin).get("event_log_hash",""))')"
+        echo "committed:  snapshot=$lsnap event_log=$lelog"
+        echo "recomputed: snapshot=$snap event_log=$elog"
+        if [ -z "$snap" ] || [ "$snap" != "$lsnap" ] || [ "$elog" != "$lelog" ]; then
+          echo "::error::the committed materialized state does not reproduce from the event log — regenerate with \`vela frontier materialize\` or investigate tampering"
+          exit 1
+        fi
+        echo "hash parity OK — the working tree IS the signed state"
+        # Undo materialize's generated_at churn so later steps see a clean tree.
+        for p in frontier.json vela.lock proof; do
+          git -C "$FRONTIER" checkout -q -- "$p" 2>/dev/null || true
+        done
+
+    - name: Strict trust gate
+      shell: bash
+      env:
+        FRONTIER: ${{ inputs.frontier }}
+        STRICT: ${{ inputs.strict }}
+      run: |
+        set -uo pipefail
+        if [ "$STRICT" = "true" ]; then
+          if ! vela check "$FRONTIER" --strict; then
+            echo "::error::vela check --strict failed — proof-readiness or state-integrity debt is blocking. If this is acknowledged owner key-custody debt, set the action input strict: \"false\" until the owner signs."
+            exit 1
+          fi
+        else
+          vela check "$FRONTIER" --strict \
+            || echo "::notice::strict proof-readiness debt (non-blocking; resolved when the owner signs the pending reviewer events)"
+        fi

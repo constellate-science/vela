@@ -9,4 +9,5 @@
 //! should grow.
 
 pub mod db;
+pub mod git_ingest;
 pub mod storage;

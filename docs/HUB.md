@@ -7,8 +7,16 @@ from a clean clone. The hub is a convenience layer: cross-frontier search,
 reverse-dependency lookup, producer/reviewer pages, projection and event-stream
 APIs, and the editorial "live" filter. It does not own byte custody (git + LFS
 do), and it is not the write authority for acceptance (a reviewer's signed
-`review.accepted` event in a PR is). Its remaining write endpoints (publish,
-governance) populate the index and are being superseded by git ingestion.
+`review.accepted` event in a PR is). Its write endpoints are now limited to index
+population: the git-ingestion lane is LIVE — an owner binds a repo once
+(`vela registry register-git <vfr> --remote <url>`, or POST
+`/entries/{vfr}/git-remote` with a signed `vela.frontier-git-remote.v0.1`
+record), and the hub re-derives the index by fetching the repo, strictly
+replaying the committed `.vela/events` log (validation + reducer replay +
+signature signals; a tampered signed event is refused with "id does not
+re-derive"), and promoting through the same gate as the legacy publish,
+with `authority_mode='git_ingested'`. `git push` is publication; the
+legacy signed publish remains as a deprecated index-population lane.
 
 The hub is the public HTTP surface for signed frontier publications.
 The signed registry entry is the publish receipt. Live reads come from

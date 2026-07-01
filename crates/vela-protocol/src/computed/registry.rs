@@ -170,6 +170,76 @@ pub fn verify_deprecation(rec: &DeprecationRecord) -> Result<bool, String> {
     Ok(vk.verify(&bytes, &sig).is_ok())
 }
 
+/// A signed git-remote registration: the frontier's effective owner binds a
+/// git repository as the frontier's ingestion source (ADR 0001 / HUB.md: the
+/// hub is an index over git-replayed state; the repo's committed
+/// `.vela/events` log is the authority). This is the ONE owner-signed act in
+/// the git-ingestion lane — after it, the hub re-derives the index from the
+/// repo itself; the ingested state's authority is the individually signed
+/// events, verified on replay, not a manifest signature.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct GitRemoteRegistration {
+    pub schema: String,
+    pub vfr_id: String,
+    /// The clone URL (https://... or git@...). Recorded verbatim.
+    pub git_remote: String,
+    /// Branch or ref to ingest (e.g. `main`).
+    pub git_ref: String,
+    pub registered_at: String,
+    pub signature: String,
+    pub signer_pubkey_hex: String,
+}
+
+pub const GIT_REMOTE_SCHEMA: &str = "vela.frontier-git-remote.v0.1";
+
+pub fn git_remote_signing_bytes(rec: &GitRemoteRegistration) -> Result<Vec<u8>, String> {
+    let preimage = serde_json::json!({
+        "schema": rec.schema,
+        "vfr_id": rec.vfr_id,
+        "git_remote": rec.git_remote,
+        "git_ref": rec.git_ref,
+        "registered_at": rec.registered_at,
+    });
+    let body = crate::canonical::to_canonical_bytes(&preimage)?;
+    Ok(crate::signing_input::signing_input(
+        crate::signing_input::SigVersion::V0,
+        crate::signing_input::payload_type::REGISTRY_GIT_REMOTE,
+        &body,
+    ))
+}
+
+pub fn sign_git_remote(
+    rec: &GitRemoteRegistration,
+    key: &ed25519_dalek::SigningKey,
+) -> Result<String, String> {
+    use ed25519_dalek::Signer;
+    let bytes = git_remote_signing_bytes(rec)?;
+    Ok(hex::encode(key.sign(&bytes).to_bytes()))
+}
+
+pub fn verify_git_remote(rec: &GitRemoteRegistration) -> Result<bool, String> {
+    use ed25519_dalek::Verifier;
+    if rec.schema != GIT_REMOTE_SCHEMA {
+        return Err(format!(
+            "git-remote registration schema must be {GIT_REMOTE_SCHEMA}, got {}",
+            rec.schema
+        ));
+    }
+    let bytes = git_remote_signing_bytes(rec)?;
+    let pk_bytes: [u8; 32] = hex::decode(&rec.signer_pubkey_hex)
+        .map_err(|e| format!("pubkey hex: {e}"))?
+        .try_into()
+        .map_err(|_| "pubkey must be 32 bytes".to_string())?;
+    let vk =
+        ed25519_dalek::VerifyingKey::from_bytes(&pk_bytes).map_err(|e| format!("pubkey: {e}"))?;
+    let sig_bytes: [u8; 64] = hex::decode(&rec.signature)
+        .map_err(|e| format!("signature hex: {e}"))?
+        .try_into()
+        .map_err(|_| "signature must be 64 bytes".to_string())?;
+    let sig = ed25519_dalek::Signature::from_bytes(&sig_bytes);
+    Ok(vk.verify(&bytes, &sig).is_ok())
+}
+
 /// A signed owner-rotation record: the CURRENT owner key authorizes a
 /// successor key for a frontier. Append-only — rotations chain, and the
 /// effective owner at any moment is the latest rotation's successor (or
@@ -1216,6 +1286,30 @@ mod tests {
     use ed25519_dalek::SigningKey;
     use rand::rngs::OsRng;
     use tempfile::TempDir;
+
+    #[test]
+    fn git_remote_registration_signs_and_verifies() {
+        let key = SigningKey::generate(&mut OsRng);
+        let mut rec = GitRemoteRegistration {
+            schema: GIT_REMOTE_SCHEMA.to_string(),
+            vfr_id: "vfr_0a25edabc16db143".to_string(),
+            git_remote: "https://github.com/williamjblair/erdos-frontier.git".to_string(),
+            git_ref: "main".to_string(),
+            registered_at: "2026-07-01T00:00:00Z".to_string(),
+            signature: String::new(),
+            signer_pubkey_hex: hex::encode(key.verifying_key().to_bytes()),
+        };
+        rec.signature = sign_git_remote(&rec, &key).unwrap();
+        assert!(verify_git_remote(&rec).unwrap());
+        // tamper: pointing the registration at a different repo breaks it
+        let mut tampered = rec.clone();
+        tampered.git_remote = "https://github.com/attacker/evil.git".to_string();
+        assert!(!verify_git_remote(&tampered).unwrap());
+        // wrong schema is an error, not a false verify
+        let mut wrong = rec.clone();
+        wrong.schema = "vela.something-else.v0.1".to_string();
+        assert!(verify_git_remote(&wrong).is_err());
+    }
 
     #[test]
     fn extras_manifest_round_trips_and_excludes_snapshot_dirs() {

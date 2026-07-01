@@ -47,8 +47,9 @@ COPY assets ./assets
 RUN CARGO_BUILD_JOBS=${CARGO_JOBS} cargo build --release -p vela-hub
 
 FROM debian:bookworm-slim AS runtime
+# git: the ingestion loop fetches registered frontier repos (git_ingest.rs)
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates \
+ && apt-get install -y --no-install-recommends ca-certificates git \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --system --uid 10001 vela
 

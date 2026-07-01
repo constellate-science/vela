@@ -1005,6 +1005,14 @@ fn build_review_queue(frontier: &Project, signals: &[SignalItem]) -> Vec<ReviewQ
 
     let mut by_target = BTreeMap::<String, Vec<&SignalItem>>::new();
     for signal in signals {
+        // Info-severity signals are visibility, not review debt: they never
+        // enqueue. Without this, `proposal_applied` alone kept the queue
+        // non-empty forever, so `check --strict` could not pass on ANY
+        // frontier that had ever applied a proposal — strict was measuring
+        // activity, not outstanding review.
+        if signal.severity == "info" {
+            continue;
+        }
         if signal.target.r#type == "finding" {
             by_target
                 .entry(signal.target.id.clone())

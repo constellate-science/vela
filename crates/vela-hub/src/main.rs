@@ -525,6 +525,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
+    // Git ingestion (ADR 0001 / HUB.md): re-derive the index from registered
+    // frontier git repos on an interval. The repo is the authority; this
+    // loop only refreshes the projection.
+    vela_hub::git_ingest::spawn(
+        state.db.clone(),
+        vela_hub::git_ingest::GitIngestConfig::from_env(),
+    );
+
     let port: u16 = env::var("VELA_HUB_PORT")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -538,6 +546,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/.well-known/vela", get(well_known_vela))
         .route("/entries", get(list_entries).post(publish_entry))
         .route("/entries/{vfr_id}", get(get_entry))
+        .route(
+            "/entries/{vfr_id}/git-remote",
+            get(get_git_remote).post(register_git_remote),
+        )
         .route("/entries/{vfr_id}/snapshot", get(get_entry_snapshot))
         .route(
             "/entries/{vfr_id}/sidon-frontier-map",
@@ -1246,6 +1258,119 @@ async fn get_entry_status(State(state): State<AppState>, Path(vfr_id): Path<Stri
         "vfr_id": vfr_id,
         "status": if deprecation.is_some() { "deprecated" } else { "live" },
         "deprecation": deprecation,
+    }))
+    .into_response()
+}
+
+/// The git-remote registration + ingest cursor for a frontier (read side of
+/// the git-ingestion lane; docs/HUB.md).
+async fn get_git_remote(State(state): State<AppState>, Path(vfr_id): Path<String>) -> Response {
+    match state.db.get_git_remote(&vfr_id).await {
+        Ok(Some(rec)) => Json(json!({"vfr_id": vfr_id, "git": rec})).into_response(),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("{vfr_id} has no registered git remote")})),
+        )
+            .into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("query: {e}")})),
+        )
+            .into_response(),
+    }
+}
+
+/// Register a frontier's git remote — the ONE owner-signed act in the
+/// git-ingestion lane. The body is a `GitRemoteRegistration`
+/// (vela.frontier-git-remote.v0.1): the signature must verify AND the signer
+/// must be the frontier's effective owner (original publisher or rotation
+/// successor). After this, the ingestor re-derives the index from the repo
+/// itself; no further signed publishes are needed.
+async fn register_git_remote(
+    State(state): State<AppState>,
+    Path(vfr_id): Path<String>,
+    Json(body): Json<Value>,
+) -> Response {
+    use vela_protocol::registry::{GitRemoteRegistration, verify_git_remote};
+    let rec: GitRemoteRegistration = match serde_json::from_value(body.clone()) {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!("registration parse: {e}")})),
+            )
+                .into_response();
+        }
+    };
+    if rec.vfr_id != vfr_id {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"error": "registration vfr_id does not match the path"})),
+        )
+            .into_response();
+    }
+    match verify_git_remote(&rec) {
+        Ok(true) => {}
+        Ok(false) => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(json!({"error": "registration signature does not verify"})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                Json(json!({"error": format!("registration: {e}")})),
+            )
+                .into_response();
+        }
+    }
+    // Owner check: the signer must be the effective owner of an EXISTING
+    // entry. (A brand-new vfr_id may bootstrap by registering its remote —
+    // the signature is then the ownership claim, matching the "anyone can
+    // publish their own vfr_id" doctrine.)
+    match state.db.effective_owner_pubkey(&vfr_id).await {
+        Ok(Some(owner)) if owner != rec.signer_pubkey_hex => {
+            return (
+                StatusCode::FORBIDDEN,
+                Json(json!({"error": "signer is not the frontier's effective owner"})),
+            )
+                .into_response();
+        }
+        Ok(_) => {}
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("owner lookup: {e}")})),
+            )
+                .into_response();
+        }
+    }
+    if let Err(e) = state
+        .db
+        .set_git_remote(
+            &vfr_id,
+            &rec.git_remote,
+            &rec.git_ref,
+            &rec.signer_pubkey_hex,
+            &rec.registered_at,
+            &body,
+        )
+        .await
+    {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"error": format!("store: {e}")})),
+        )
+            .into_response();
+    }
+    Json(json!({
+        "ok": true,
+        "vfr_id": vfr_id,
+        "git_remote": rec.git_remote,
+        "git_ref": rec.git_ref,
+        "note": "registered; the ingestor re-derives the index from the repo on its next sweep",
     }))
     .into_response()
 }
