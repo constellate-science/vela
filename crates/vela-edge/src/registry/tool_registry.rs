@@ -454,6 +454,31 @@ pub fn all_tools() -> Vec<ToolDefinition> {
                 "Resulting pack is reviewer-pending until a reviewer issues a verdict via the local review queue + diff-pack promoter.",
             ],
         ),
+        // The agent's "does this frontier pass the gate right now?"
+        // question, answered by the SAME strict bundle the hub's ingestor
+        // enforces (validation + reducer replay + signature signals).
+        tool(
+            "vela_check_run",
+            "Hold the local frontier to the strict verification bar: content-address validation, strict reducer replay, and signature signals — the same bundle the hub's git ingestor enforces. Returns ok/error; never mutates.",
+            json!({"type": "object", "properties": {
+                "frontier_path": {"type": "string", "description": "Path to the frontier repo."}
+            }, "required": ["frontier_path"]}),
+            PermissionLevel::ReadOnly,
+            false,
+            vec!["Read-only: replays and verifies, writes nothing."],
+        ),
+        // Frozen-verifier reproduction over MCP: the agent re-checks every
+        // stored witness from scratch, no trust in the working tree.
+        tool(
+            "vela_reproduce_run",
+            "Re-verify the frontier's stored witnesses (witnesses/*.witness.json) from scratch with the frozen exact verifiers (vela-verify). Returns pass/fail per witness; never mutates.",
+            json!({"type": "object", "properties": {
+                "frontier_path": {"type": "string", "description": "Path to the frontier repo (or a witness file/dir)."}
+            }, "required": ["frontier_path"]}),
+            PermissionLevel::ReadOnly,
+            false,
+            vec!["Read-only: recomputes witness validity, writes nothing."],
+        ),
         // An agent lands an activity record on the LOCAL frontier as a
         // pending proposal — the git-native write path (the remote
         // hub-propose lane is retired; git push publishes, the hub

@@ -48,6 +48,38 @@ pub(crate) fn cmd_status(path: &Path, json: bool) {
         }
     }
 
+    // The memo's epistemic vector: never collapse into one green check.
+    // claimed / evidence-attached / contested / refuted / retracted / stale
+    // are DIFFERENT states, and an agent reading --json gets each count.
+    let mut by_status: std::collections::BTreeMap<String, usize> = Default::default();
+    let mut with_evidence = 0usize;
+    for f in &project.findings {
+        let s = if f.flags.retracted {
+            "retracted"
+        } else if f.flags.contested {
+            "contested"
+        } else if f.flags.superseded {
+            "superseded"
+        } else {
+            "accepted"
+        };
+        *by_status.entry(s.to_string()).or_default() += 1;
+        if !f.evidence.evidence_spans.is_empty()
+            || f.provenance.url.as_deref().is_some_and(|u| !u.is_empty())
+            || f.provenance.doi.as_deref().is_some_and(|d| !d.is_empty())
+        {
+            with_evidence += 1;
+        }
+    }
+    let verdicts: std::collections::BTreeMap<String, usize> = {
+        let mut m: std::collections::BTreeMap<String, usize> = Default::default();
+        for a in &project.statement_attestations {
+            *m.entry(format!("{:?}", a.verdict).to_lowercase())
+                .or_default() += 1;
+        }
+        m
+    };
+
     if json {
         println!(
             "{}",
@@ -56,12 +88,35 @@ pub(crate) fn cmd_status(path: &Path, json: bool) {
                 "command": "status",
                 "frontier": frontier_label(&project),
                 "vfr_id": project.frontier_id(),
-                "findings": project.findings.len(),
+                "replay": {"ok": replay.ok, "diffs": replay.diffs.len()},
+                "findings": {
+                    "total": project.findings.len(),
+                    "by_status": by_status,
+                    "with_evidence": with_evidence,
+                },
+                "judgment": {
+                    "statement_attestations": project.statement_attestations.len(),
+                    "by_verdict": verdicts,
+                },
+                "proof": {
+                    "status": project.proof_state.latest_packet.status,
+                },
                 "events": project.events.len(),
                 "actors": project.actors.len(),
                 "inbox": {
                     "pending_total": pending_total,
                     "pending_by_kind": pending_by_kind,
+                },
+                "next": if pending_total > 0 {
+                    json!(format!(
+                        "{pending_total} pending proposal(s) await a human key: `vela inbox .` then `vela accept . --all-pending`"
+                    ))
+                } else if !replay.ok {
+                    json!("replay DIVERGED: run `vela check .` and inspect")
+                } else if project.proof_state.latest_packet.status == "stale" {
+                    json!("proof packet stale: `vela frontier materialize .`")
+                } else {
+                    json!(null)
                 },
             }))
             .expect("serialize status")
@@ -102,6 +157,12 @@ pub(crate) fn cmd_status(path: &Path, json: bool) {
         println!(
             "  judgment:    {attestation_count} statement attestation(s), {registration_count} registration(s)"
         );
+    }
+    {
+        let vec_line: Vec<String> = by_status.iter().map(|(k, v)| format!("{v} {k}")).collect();
+        if !vec_line.is_empty() {
+            println!("  state:       {}", vec_line.join(" · "));
+        }
     }
     println!(
         "  findings:    {}    events: {}    actors: {}",

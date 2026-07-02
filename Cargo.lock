@@ -3323,6 +3323,7 @@ dependencies = [
  "urlencoding",
  "vela-protocol",
  "vela-protocol-core",
+ "vela-verify",
 ]
 
 [[package]]

@@ -14,6 +14,7 @@ path = "src/lib.rs"
 [dependencies]
 vela-protocol = { path = "../vela-protocol" }
 vela-protocol-core = { workspace = true }
+vela-verify = { path = "../vela-verify" }
 reqwest.workspace = true
 serde.workspace = true
 serde_json.workspace = true

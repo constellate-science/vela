@@ -538,6 +538,104 @@ pub fn submit_diff_pack(args: &Value) -> Result<String, String> {
     .unwrap_or_default())
 }
 
+/// `vela_check_run` — hold the LOCAL frontier to the one strict bar
+/// (validation + strict reducer replay + signature signals), over MCP. The
+/// agent's "does this frontier pass the gate right now?" question, answered
+/// by the same bundle the hub's ingestor enforces.
+pub fn check_run(args: &Value) -> Result<String, String> {
+    let frontier_path: PathBuf = args
+        .get("frontier_path")
+        .and_then(Value::as_str)
+        .ok_or("frontier_path required")?
+        .into();
+    match crate::verify::verify_frontier_strict(&frontier_path) {
+        Ok((project, fid)) => Ok(serde_json::json!({
+            "ok": true,
+            "frontier_id": fid,
+            "findings": project.findings.len(),
+            "events": project.events.len(),
+            "note": "strict bar held: validation + reducer replay + signature signals",
+        })
+        .to_string()),
+        Err(e) => Ok(serde_json::json!({
+            "ok": false,
+            "error": e,
+        })
+        .to_string()),
+    }
+}
+
+/// `vela_reproduce_run` — re-verify a frontier's stored witnesses from
+/// scratch with the frozen exact verifiers, over MCP. Walks
+/// `witnesses/*.witness.json` (or any `*.witness.json` under the path).
+pub fn reproduce_run(args: &Value) -> Result<String, String> {
+    let path: PathBuf = args
+        .get("frontier_path")
+        .and_then(Value::as_str)
+        .ok_or("frontier_path required")?
+        .into();
+    let mut files: Vec<PathBuf> = Vec::new();
+    let mut roots = vec![path.clone()];
+    if path.join("witnesses").is_dir() {
+        roots.push(path.join("witnesses"));
+    }
+    for root in roots {
+        if root.is_file() {
+            files.push(root);
+            continue;
+        }
+        if let Ok(rd) = std::fs::read_dir(&root) {
+            for e in rd.flatten() {
+                let p = e.path();
+                if p.file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.ends_with(".witness.json"))
+                {
+                    files.push(p);
+                }
+            }
+        }
+    }
+    files.sort();
+    files.dedup();
+    if files.is_empty() {
+        return Ok(serde_json::json!({
+            "ok": false,
+            "error": format!("no *.witness.json under {}", path.display()),
+        })
+        .to_string());
+    }
+    let mut passed = 0usize;
+    let mut failures: Vec<Value> = Vec::new();
+    for f in &files {
+        let outcome = std::fs::read_to_string(f)
+            .map_err(|e| format!("read: {e}"))
+            .and_then(|raw| {
+                serde_json::from_str::<vela_verify::Witness>(&raw)
+                    .map_err(|e| format!("parse: {e}"))
+            })
+            .map(|w| vela_verify::verify_witness(&w));
+        match outcome {
+            Ok(r) if r.ok => passed += 1,
+            Ok(r) => failures.push(serde_json::json!({
+                "witness": f.display().to_string(),
+                "message": r.message,
+            })),
+            Err(e) => failures.push(serde_json::json!({
+                "witness": f.display().to_string(),
+                "message": e,
+            })),
+        }
+    }
+    Ok(serde_json::json!({
+        "ok": failures.is_empty(),
+        "passed": passed,
+        "failed": failures.len(),
+        "failures": failures,
+    })
+    .to_string())
+}
+
 /// `vela_record_propose` — land an activity record (vrc_) on the LOCAL
 /// frontier as a pending proposal. The git-native agent write path: the
 /// agent works in the repo, the record becomes a reviewable proposal,
