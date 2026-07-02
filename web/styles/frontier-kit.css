@@ -36,13 +36,13 @@
 }
 
 /* ── Observatory night — deep prussian indigo; gold stays the one warm
-     light. Every color-bearing token is redefined here so a frontier
+     light. Values match the production app's .dark register (vela-site). Every color-bearing token is redefined here so a frontier
      site follows the OS scheme with full parity. ─────────────────────── */
 @media (prefers-color-scheme: dark) {
   :root {
     --paper-0:    oklch(17.5% 0.035 258);
     --paper-1:    oklch(21.0% 0.040 258);
-    --paper-2:    oklch(14.5% 0.030 258);
+    --paper-2:    oklch(24.0% 0.040 258);
     --paper-edge: oklch(32.0% 0.035 258);
 
     --ink-0: oklch(95.0% 0.010 250);
@@ -55,17 +55,17 @@
     --rule-2: color-mix(in oklch, var(--ink-1) 16%, transparent);
     --rule-3: color-mix(in oklch, var(--ink-1) 26%, transparent);
 
-    --gold:       oklch(80.0% 0.130 86);   /* lantern */
-    --gold-ink:   oklch(80.0% 0.110 84);
+    --gold:       oklch(77.0% 0.120 85);   /* lantern */
+    --gold-ink:   oklch(80.0% 0.100 84);
     --gold-soft:  color-mix(in oklch, var(--gold) 30%, transparent);
     --gold-glow:  color-mix(in oklch, var(--gold) 16%, transparent);
     --focus-ring: oklch(80.0% 0.120 82);
 
-    --moss:     oklch(72.0% 0.075 140);
-    --brass:    oklch(74.0% 0.105 80);
-    --cinnabar: oklch(70.0% 0.130 32);
-    --winter:   oklch(72.0% 0.050 232);
-    --stone:    oklch(62.0% 0.015 250);
+    --moss:     oklch(60.0% 0.055 128);
+    --brass:    oklch(62.0% 0.095 83);
+    --cinnabar: oklch(64.0% 0.130 35);
+    --winter:   oklch(76.0% 0.045 236);
+    --stone:    oklch(68.0% 0.025 80);
     --moss-soft:     color-mix(in oklch, var(--moss) 16%, transparent);
     --brass-soft:    color-mix(in oklch, var(--brass) 16%, transparent);
     --cinnabar-soft: color-mix(in oklch, var(--cinnabar) 12%, transparent);

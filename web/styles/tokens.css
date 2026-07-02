@@ -19,11 +19,12 @@
      values were calibrated against. Source CSS should never hard-code hex.
      ======================================================================= */
 
-  /* ── Surfaces ── cream paper register ─────────────────────────────── */
-  --paper-0:        oklch(96.6% 0.012 88);    /* page ground (≈ #F6F4EF) */
-  --paper-1:        oklch(98.0% 0.013 88);    /* raised — cards, panels (≈ #FBF8F1) */
-  --paper-2:        oklch(91.8% 0.024 78);    /* sunken — hover, sidebar (≈ #ECE3D2) */
-  --paper-edge:     oklch(85.6% 0.020 78);    /* default border (≈ #D6CEBA) */
+  /* ── Surfaces ── first-light register (cool, hue ~248; matches the
+     production app at app.constellate.science — never warm cream) ─── */
+  --paper-0:        oklch(97.2% 0.008 248);   /* page ground — first light, cool */
+  --paper-1:        oklch(99.2% 0.004 248);   /* raised — cards, panels */
+  --paper-2:        oklch(93.2% 0.011 250);   /* sunken well, hover, shell canvas */
+  --paper-edge:     oklch(88.0% 0.012 250);   /* default border */
   --paper-deep:     var(--paper-2);           /* legacy alias */
 
   --background:     var(--paper-0);
@@ -32,14 +33,14 @@
   --border:         var(--paper-edge);
 
   --mist:           oklch(89.0% 0.014 240);   /* atmospheric depth, cool */
-  --stone:          oklch(76.0% 0.012 250);   /* heavier divider, inactive */
+  --stone:          oklch(55.0% 0.022 80);   /* heavier divider, inactive */
 
   /* ── Ink ── Vela midnight family ──────────────────────────────────── */
-  --ink-0:          oklch(20.0% 0.026 252);   /* hero headlines, logo (≈ #081320) */
-  --ink-1:          oklch(24.4% 0.030 252);   /* body (≈ #0E1C2E) */
-  --ink-2:          oklch(34.6% 0.040 250);   /* secondary, subhead (≈ #1E2F44) */
-  --ink-3:          oklch(50.6% 0.030 250);   /* tertiary, captions (≈ #4A5A6F) */
-  --ink-4:          oklch(62.6% 0.026 250);   /* faintest text (≈ #6E7B8B) */
+  --ink-0:          oklch(20.0% 0.030 262);   /* hero headlines, logo (≈ #081320) */
+  --ink-1:          oklch(25.0% 0.030 262);   /* body (≈ #0E1C2E) */
+  --ink-2:          oklch(43.0% 0.026 258);   /* secondary, subhead (≈ #1E2F44) */
+  --ink-3:          oklch(53.5% 0.018 250);   /* tertiary, captions (≈ #4A5A6F) */
+  --ink-4:          oklch(62.0% 0.018 254);   /* faintest text (≈ #6E7B8B) */
   --navy-1:         var(--ink-0);             /* legacy alias */
   --navy-2:         var(--ink-2);
   --navy-deep:      oklch(17.4% 0.024 252);   /* dark-panel ground (≈ #0B1A2E) */
@@ -55,8 +56,8 @@
   --rule-ink:       color-mix(in oklch, var(--ink-1) 86%, transparent);
 
   /* ── Signature — Luminous Gold ────────────────────────────────────── */
-  --gold:           oklch(76.4% 0.156 84);    /* decorative — borders, halos (≈ #D4AF37) */
-  --gold-ink:       oklch(50.0% 0.142 76);    /* WCAG-AA text on paper-0 (≈ #8a6d18) */
+  --gold:           oklch(72.0% 0.130 86);    /* decorative — borders, halos (≈ #D4AF37) */
+  --gold-ink:       oklch(46.8% 0.102 82);    /* WCAG-AA text on paper-0 (≈ #8a6d18) */
   --gold-soft:      color-mix(in oklch, var(--gold) 32%, transparent);
   --gold-glow:      color-mix(in oklch, var(--gold) 20%, transparent);
   --gold-light:     oklch(82.0% 0.082 78);    /* softer accent variant (≈ #D1B98C) */
@@ -71,10 +72,10 @@
   --on-secondary:   var(--paper-1);
 
   /* ── Editorial state — never traffic-light ────────────────────────── */
-  --cinnabar:       oklch(50.4% 0.146 30);    /* retraction, contradiction (≈ #B5443A) */
-  --moss:           oklch(48.4% 0.064 138);   /* replicated, verified (≈ #59634E) */
-  --brass:          oklch(50.6% 0.116 78);    /* contested, dissent (≈ #8A6A1F) */
-  --winter:         oklch(70.0% 0.040 232);   /* inferred, speculative, cross-frontier (≈ #8FA7B7) */
+  --cinnabar:       oklch(49.5% 0.128 35);    /* retraction, contradiction (≈ #B5443A) */
+  --moss:           oklch(43.5% 0.043 128);   /* replicated, verified (≈ #59634E) */
+  --brass:          oklch(45.5% 0.082 83);    /* contested, dissent (≈ #8A6A1F) */
+  --winter:         oklch(68.5% 0.040 236);   /* inferred, speculative, cross-frontier (≈ #8FA7B7) */
 
   /* State washes — engraved-chip backgrounds for the materials above. */
   --moss-soft:      color-mix(in oklch, var(--moss) 14%, transparent);
