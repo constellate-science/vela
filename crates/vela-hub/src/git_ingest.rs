@@ -73,6 +73,16 @@ pub fn spawn(db: HubDb, cfg: GitIngestConfig) {
 /// One sweep over every registered target. Errors on one target are recorded
 /// on its row and do not stop the sweep.
 pub async fn run_once(db: &HubDb, cfg: &GitIngestConfig) -> Result<usize, String> {
+    // One sweeper at a time: with more than one hub machine on the same
+    // database, concurrent sweeps duplicate fetch work and race the
+    // receipt insert. A session advisory lock elects a leader per sweep;
+    // the loser skips this tick (the state converges next tick).
+    let _guard = match db.try_ingest_lock().await? {
+        Some(g) => Some(g),
+        None => {
+            return Ok(0);
+        }
+    };
     let targets = db.git_ingest_targets().await?;
     let mut ingested = 0;
     for (vfr_id, remote, git_ref, subdir, last_commit, owner_pubkey) in targets {
@@ -186,9 +196,16 @@ async fn ingest_one(
     };
     // Insert the receipt row FIRST: the promotion links
     // frontiers.registry_entry_id to it, and every read path JOINs on that
-    // link (an unlinked frontiers row is invisible to /entries).
+    // link (an unlinked frontiers row is invisible to /entries). A
+    // duplicate is IDEMPOTENT here (synthetic ingest entries share the
+    // empty-signature key; a second machine or a re-run inserts the same
+    // row) — tolerate it and continue to the hash-guarded promotion.
     let raw = serde_json::to_value(&entry).map_err(|e| e.to_string())?;
-    db.insert_entry(&entry, &raw).await?;
+    if let Err(e) = db.insert_entry(&entry, &raw).await {
+        if !e.contains("duplicate") && !e.contains("UNIQUE constraint") {
+            return Err(e);
+        }
+    }
     db.promote_frontier_snapshot(&entry, &project, None, AUTHORITY_GIT_INGESTED)
         .await?;
     Ok(Some(commit))

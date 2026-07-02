@@ -1068,6 +1068,32 @@ impl HubDb {
         }
     }
 
+    /// Try to become THE ingest sweeper for this tick. Postgres: a
+    /// TRANSACTION-scoped advisory lock (`pg_try_advisory_xact_lock`) held
+    /// by the returned guard's open transaction — dropping the guard ends
+    /// the transaction and releases the lock, so a pooled connection can
+    /// never smuggle a stale session lock. None when another machine holds
+    /// it. SQLite is single-node: always the leader.
+    pub async fn try_ingest_lock(&self) -> Result<Option<IngestLockGuard>, String> {
+        const INGEST_LOCK_KEY: i64 = 0x76656c61_696e67; // "vela" "ing"
+        match self {
+            Self::Postgres(p) => {
+                let mut tx = p.begin().await.map_err(|e| e.to_string())?;
+                let got: bool = sqlx::query_scalar("SELECT pg_try_advisory_xact_lock($1)")
+                    .bind(INGEST_LOCK_KEY)
+                    .fetch_one(&mut *tx)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                if got {
+                    Ok(Some(IngestLockGuard { _tx: Some(tx) }))
+                } else {
+                    Ok(None)
+                }
+            }
+            Self::Sqlite(_) => Ok(Some(IngestLockGuard { _tx: None })),
+        }
+    }
+
     /// Every registered git-ingestion target with its cursor, for the
     /// ingestor's tick. Row shape: (vfr_id, git_remote, git_ref, git_subdir,
     /// last_ingested_commit, registered_by_pubkey).
@@ -4059,4 +4085,12 @@ mod tests {
             .expect("audit row");
         assert_eq!(audit.status, "failed");
     }
+}
+
+/// Holds the ingest advisory lock for the sweep's lifetime. The lock is
+/// transaction-scoped: dropping the guard rolls the transaction back,
+/// which releases the lock — pooled-connection session state can never
+/// leak it.
+pub struct IngestLockGuard {
+    _tx: Option<sqlx::Transaction<'static, sqlx::Postgres>>,
 }
