@@ -9,6 +9,14 @@ primary_region = "yyz"
 [build]
   dockerfile = "Dockerfile"
 
+# Blue-green, not rolling: an in-place rolling restart leaves NO machine
+# with a built MCP projection (the restarted machine rebuilds ~6 min and
+# with auto_stop only one machine runs at steady state). Blue-green
+# starts the new machines alongside, waits for /readyz to pass, then
+# cuts over — the old machine serves /mcp for the whole build.
+[deploy]
+  strategy = "bluegreen"
+
 [http_service]
   internal_port = 8080
   force_https = true
