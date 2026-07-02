@@ -3,4 +3,6 @@
 
 pub mod cli_commands;
 pub mod cli_engine;
+pub mod http;
 pub mod serve;
+pub mod tools;
