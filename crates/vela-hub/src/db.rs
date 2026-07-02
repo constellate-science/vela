@@ -1359,6 +1359,98 @@ impl HubDb {
         }
     }
 
+    /// Upsert the synthetic registry row for a GIT-INGESTED promote:
+    /// latest promote wins. Ingested rows share the empty-signature key
+    /// per vfr, so the plain insert's ON CONFLICT DO NOTHING froze
+    /// `signed_publish_at` (and the hashes readers see) at FIRST
+    /// ingestion — which also froze every HTML page's projection cache,
+    /// keyed on that timestamp. The repo is the authority; this row is
+    /// an index cursor, and a cursor must advance.
+    pub async fn upsert_ingested_entry(
+        &self,
+        entry: &RegistryEntry,
+        raw_json: &Value,
+    ) -> Result<(), String> {
+        match self {
+            Self::Postgres(p) => {
+                sqlx::query(
+                    r#"
+                    INSERT INTO registry_entries (
+                      vfr_id, schema, name, owner_actor_id, owner_pubkey,
+                      latest_snapshot_hash, latest_event_log_hash, network_locator,
+                      signed_publish_at, signature, raw_json
+                    )
+                    VALUES (
+                      $1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10, $11
+                    )
+                    ON CONFLICT (vfr_id, signature) DO UPDATE SET
+                      name = EXCLUDED.name,
+                      owner_actor_id = EXCLUDED.owner_actor_id,
+                      owner_pubkey = EXCLUDED.owner_pubkey,
+                      latest_snapshot_hash = EXCLUDED.latest_snapshot_hash,
+                      latest_event_log_hash = EXCLUDED.latest_event_log_hash,
+                      network_locator = EXCLUDED.network_locator,
+                      signed_publish_at = EXCLUDED.signed_publish_at,
+                      raw_json = EXCLUDED.raw_json
+                    "#,
+                )
+                .bind(&entry.vfr_id)
+                .bind(&entry.schema)
+                .bind(&entry.name)
+                .bind(&entry.owner_actor_id)
+                .bind(&entry.owner_pubkey)
+                .bind(&entry.latest_snapshot_hash)
+                .bind(&entry.latest_event_log_hash)
+                .bind(&entry.network_locator)
+                .bind(&entry.signed_publish_at)
+                .bind(&entry.signature)
+                .bind(raw_json)
+                .execute(p)
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok(())
+            }
+            Self::Sqlite(p) => {
+                let raw_json_str = serde_json::to_string(raw_json)
+                    .map_err(|e| format!("serialize raw_json: {e}"))?;
+                sqlx::query(
+                    r#"
+                    INSERT INTO registry_entries (
+                      vfr_id, schema, name, owner_actor_id, owner_pubkey,
+                      latest_snapshot_hash, latest_event_log_hash, network_locator,
+                      signed_publish_at, signature, raw_json
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT (vfr_id, signature) DO UPDATE SET
+                      name = excluded.name,
+                      owner_actor_id = excluded.owner_actor_id,
+                      owner_pubkey = excluded.owner_pubkey,
+                      latest_snapshot_hash = excluded.latest_snapshot_hash,
+                      latest_event_log_hash = excluded.latest_event_log_hash,
+                      network_locator = excluded.network_locator,
+                      signed_publish_at = excluded.signed_publish_at,
+                      raw_json = excluded.raw_json
+                    "#,
+                )
+                .bind(&entry.vfr_id)
+                .bind(&entry.schema)
+                .bind(&entry.name)
+                .bind(&entry.owner_actor_id)
+                .bind(&entry.owner_pubkey)
+                .bind(&entry.latest_snapshot_hash)
+                .bind(&entry.latest_event_log_hash)
+                .bind(&entry.network_locator)
+                .bind(&entry.signed_publish_at)
+                .bind(&entry.signature)
+                .bind(&raw_json_str)
+                .execute(p)
+                .await
+                .map_err(|e| e.to_string())?;
+                Ok(())
+            }
+        }
+    }
+
     async fn registry_entry_id(&self, entry: &RegistryEntry) -> Result<Option<i64>, String> {
         match self {
             Self::Postgres(p) => sqlx::query_scalar::<_, i64>(

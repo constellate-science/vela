@@ -194,19 +194,14 @@ async fn ingest_one(
         license: None,
         extras_manifest_hash: None,
     };
-    // Insert the receipt row FIRST: the promotion links
+    // Upsert the index row FIRST: the promotion links
     // frontiers.registry_entry_id to it, and every read path JOINs on that
-    // link (an unlinked frontiers row is invisible to /entries). A
-    // duplicate is IDEMPOTENT here (synthetic ingest entries share the
-    // empty-signature key; a second machine or a re-run inserts the same
-    // row) — tolerate it and continue to the hash-guarded promotion.
+    // link (an unlinked frontiers row is invisible to /entries). Latest
+    // promote WINS: ingested rows share the empty-signature key per vfr,
+    // and the old DO-NOTHING insert froze signed_publish_at (and every
+    // page cache keyed on it) at first ingestion.
     let raw = serde_json::to_value(&entry).map_err(|e| e.to_string())?;
-    if let Err(e) = db.insert_entry(&entry, &raw).await
-        && !e.contains("duplicate")
-        && !e.contains("UNIQUE constraint")
-    {
-        return Err(e);
-    }
+    db.upsert_ingested_entry(&entry, &raw).await?;
     db.promote_frontier_snapshot(&entry, &project, None, AUTHORITY_GIT_INGESTED)
         .await?;
     Ok(Some(commit))
