@@ -468,7 +468,7 @@ pub fn all_tools() -> Vec<ToolDefinition> {
         // around it. A lease is coordination, never authority.
         tool(
             "vela_claim_task",
-            "Lease an open obligation (vf_… finding) for this agent so other swarm agents route around it. Emits a signed attempt.claimed event under the agent's OWN key (VELA_AGENT_KEY_HEX). One live lease per obligation; returns already_claimed_by when contested. Decides nothing.",
+            "Lease an open obligation (vf_… finding, or a namespaced external id like erdos:443) so other swarm agents route around it. Emits a signed attempt.claimed event under the agent's OWN session key, minted automatically at ~/.vela/agents/<actor>/ on first use — no key step needed. One live lease per obligation; returns already_claimed_by when contested. Decides nothing.",
             json!({"type": "object", "properties": {
                 "frontier_path": {"type": "string", "description": "Path to the frontier repo."},
                 "obligation_id": {"type": "string", "description": "The vf_… finding to lease."},
@@ -477,7 +477,9 @@ pub fn all_tools() -> Vec<ToolDefinition> {
             }, "required": ["frontier_path", "obligation_id", "agent_actor"]}),
             PermissionLevel::Write,
             true,
-            vec!["Requires VELA_AGENT_KEY_HEX (the agent's own key; never a human's)."],
+            vec![
+                "Signs under the agent's own auto-minted session key (never a human's); VELA_AGENT_KEY_HEX overrides when an explicit key is wanted.",
+            ],
         ),
         // The agent's "does this frontier pass the gate right now?"
         // question, answered by the SAME strict bundle the hub's ingestor

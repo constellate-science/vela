@@ -119,9 +119,11 @@ transfers, Lean anchoring, and experiment receipts are
 The loop scales by composition, not new machinery:
 
 1. **Claim before long work**: `vela_claim_task` (MCP, draft profile)
-   leases an obligation under your OWN agent key; a live competing lease
-   returns `already_claimed_by` — route around it. A lease coordinates;
-   it never decides. Lifecycle: the `attempt.claimed` event carries a TTL
+   leases an obligation under your OWN agent key — minted automatically
+   at `~/.vela/agents/<actor>/` from your `VELA_ACTOR_ID` the first time
+   you claim, no key step needed (`VELA_AGENT_KEY_HEX` overrides). A
+   live competing lease returns `already_claimed_by` — route around it.
+   A lease coordinates; it never decides. Lifecycle: the `attempt.claimed` event carries a TTL
    (default 24h); an expired lease is simply ignored by the next claimer,
    and landing your pack is what closes the work — there is no unclaim
    ceremony. Obligation ids may be frontier-external and namespaced
