@@ -119,6 +119,7 @@ pub(crate) fn cmd_status(path: &Path, json: bool) {
                     "pending_total": pending_total,
                     "pending_by_kind": pending_by_kind,
                 },
+                "unpublished_store_files": unpublished_store_files(path),
                 "next": if pending_total > 0 {
                     json!(format!(
                         "{pending_total} pending proposal(s) await a human key: `vela inbox .` then `vela accept . --all-pending`"
@@ -211,6 +212,14 @@ pub(crate) fn cmd_status(path: &Path, json: bool) {
         }
         _ => {}
     }
+    let unpublished = unpublished_store_files(path);
+    if unpublished > 0 {
+        println!(
+            "  {}  {unpublished} store file(s) changed but not committed — signed state that exists only on this machine",
+            style::warn("unpublished")
+        );
+        println!("             publish: git add -A && git commit && git push");
+    }
     if pending_total > 0 {
         println!(
             "  {}  {pending_total} pending proposals",
@@ -229,6 +238,36 @@ pub(crate) fn cmd_status(path: &Path, json: bool) {
         println!("  {}  inbox clean", style::ok("ok"));
     }
     println!();
+}
+
+/// Signed-but-uncommitted store state: the worst state a decision can
+/// be in (it exists on one machine, invisible to CI, the hub, and every
+/// collaborator). Counts changed/untracked files under the frontier's
+/// store paths; 0 when not a git repo.
+pub(crate) fn unpublished_store_files(path: &Path) -> usize {
+    let Ok(out) = std::process::Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args([
+            "status",
+            "--porcelain",
+            "--",
+            ".vela",
+            "frontier.json",
+            "vela.lock",
+            "proof",
+        ])
+        .output()
+    else {
+        return 0;
+    };
+    if !out.status.success() {
+        return 0;
+    }
+    String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .count()
 }
 
 /// v0.42: Recent canonical events. The `git log` analogue.

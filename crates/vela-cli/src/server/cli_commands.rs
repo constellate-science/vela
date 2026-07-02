@@ -343,6 +343,12 @@ pub(crate) enum Commands {
     /// proposal under the configured reviewer id, emitting the
     /// signed canonical event.
     Accept {
+        /// Leave the signed decision uncommitted (publication stays manual).
+        #[arg(long)]
+        no_commit: bool,
+        /// Publish the commit locally but do not push.
+        #[arg(long)]
+        no_push: bool,
         frontier: PathBuf,
         /// The proposal to accept (`vpr_…`). Omit in batch mode
         /// (`--all-pending` / `--id`).
@@ -550,6 +556,12 @@ pub(crate) enum Commands {
     /// verdicts (single or batch) and role-scoped reviewer attestations.
     /// Everything here is a decision — agents are refused by the engine.
     Review {
+        /// Leave the signed decision uncommitted (publication stays manual).
+        #[arg(long)]
+        no_commit: bool,
+        /// Publish the commit locally but do not push.
+        #[arg(long)]
+        no_push: bool,
         /// Frontier path. Required.
         frontier: PathBuf,
         /// Role-scoped target id (`vev_*`, `vsd_*`, `vrp_*`, or `vpf_*`).
@@ -693,6 +705,12 @@ pub(crate) enum IdAction {
     /// Sign your unsigned events in a frontier with your registered actor
     /// key — the re-sign ceremony verb.
     Sign {
+        /// Leave the signed decision uncommitted (publication stays manual).
+        #[arg(long)]
+        no_commit: bool,
+        /// Publish the commit locally but do not push.
+        #[arg(long)]
+        no_push: bool,
         frontier: PathBuf,
         /// Path to the Ed25519 private key. Optional: defaults to your
         /// `vela id` identity key (or `$VELA_KEY_PATH`).
@@ -2072,6 +2090,12 @@ pub(crate) enum ProposalAction {
     },
     /// Reject one proposal
     Reject {
+        /// Leave the signed decision uncommitted (publication stays manual).
+        #[arg(long)]
+        no_commit: bool,
+        /// Publish the commit locally but do not push.
+        #[arg(long)]
+        no_push: bool,
         frontier: PathBuf,
         proposal_id: String,
         /// Reviewer actor id. Optional: defaults to your configured identity.

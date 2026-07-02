@@ -15,9 +15,19 @@ pub(crate) fn cmd_id(action: IdAction) {
         IdAction::Keygen { out, json } => crate::cli::cmd_id_keygen(out, json),
         IdAction::Sign {
             frontier,
+            no_commit,
+            no_push,
             key,
             json,
-        } => crate::cli::cmd_id_sign(frontier, key, json),
+        } => {
+            crate::cli::cmd_id_sign(frontier.clone(), key, json);
+            crate::config::git_publish::publish_decision(
+                &frontier,
+                "re-sign: unsigned events signed under the registered key",
+                &[],
+                &crate::config::git_publish::PublishOptions::new(no_commit, no_push),
+            );
+        }
         IdAction::Create {
             handle,
             agent,
@@ -49,6 +59,8 @@ pub(crate) fn cmd_id(action: IdAction) {
                 key_path: key_path.display().to_string(),
                 pubkey: pubkey.clone(),
                 hub_url: hub_url.clone(),
+                git_commit: "auto".to_string(),
+                git_push: "auto".to_string(),
             };
             save_identity(&identity).unwrap_or_else(|e| fail_return(&e));
             print_identity_created(&identity, json);
@@ -84,6 +96,8 @@ pub(crate) fn cmd_id(action: IdAction) {
                 key_path: key.display().to_string(),
                 pubkey: pubkey.clone(),
                 hub_url: hub.unwrap_or_else(|| DEFAULT_HUB.to_string()),
+                git_commit: "auto".to_string(),
+                git_push: "auto".to_string(),
             };
             save_identity(&identity).unwrap_or_else(|e| fail_return(&e));
             print_identity_created(&identity, json);

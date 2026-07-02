@@ -241,7 +241,24 @@ pub(crate) fn cmd_frontier(action: FrontierAction) {
 fn cmd_frontier_next(frontier: &std::path::Path, limit: usize, json: bool) {
     let project = vela_protocol::repo::load_from_path(frontier)
         .unwrap_or_else(|e| crate::cli::fail_return(&e));
-    let targets = vela_edge::frontier_next::frontier_next(&project, Some(frontier), limit);
+    let mut targets = vela_edge::frontier_next::frontier_next(&project, Some(frontier), limit);
+    // Unpublished signed state outranks everything: a decision that
+    // exists on one machine is blocked work for every other worker.
+    let unpublished = crate::cli_read::unpublished_store_files(frontier);
+    if unpublished > 0 {
+        targets.insert(
+            0,
+            vela_edge::frontier_next::NextTarget {
+                lane: "publish".to_string(),
+                id: format!("{unpublished} store file(s)"),
+                title: "signed state not yet committed".to_string(),
+                why: "it exists only on this machine — invisible to CI, the hub, and collaborators"
+                    .to_string(),
+                next_command: "git add -A && git commit && git push".to_string(),
+            },
+        );
+        targets.truncate(limit.max(1));
+    }
     if json {
         crate::cli::print_json(&serde_json::json!({
             "ok": true,
@@ -269,6 +286,7 @@ fn cmd_frontier_next(frontier: &std::path::Path, limit: usize, json: bool) {
         if t.lane != last_lane {
             println!();
             let head = match t.lane.as_str() {
+                "publish" => "publish — signed state stranded on this machine",
                 "review" => "review — one key-custody decision each",
                 "attack" => "attack — open campaign seeds",
                 "verify" => "verify — accepted but the gate refuses",

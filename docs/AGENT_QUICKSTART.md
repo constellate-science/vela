@@ -60,7 +60,8 @@ git push                  # publication: CI re-derives the frontier and the
 ```
 
 A human then runs `vela inbox .` and `vela accept . --all-pending` (their
-key). That boundary is the product, not a limitation.
+key) — and the decision publishes itself: materialize, commit, push, hub
+re-index, in the one act. That boundary is the product, not a limitation.
 
 ## MCP: the same loop for tool-calling agents
 

@@ -6,3 +6,5 @@ pub mod cli_agents;
 pub mod cli_experiment;
 pub mod cli_identity;
 pub mod cli_policy;
+
+pub(crate) mod git_publish;

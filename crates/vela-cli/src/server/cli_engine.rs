@@ -424,6 +424,17 @@ fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, apply: bool, json_outp
             ),
         }
     }
+    // Mechanical-lane CD: the signed policy IS the standing human
+    // authorization; requiring a human to come commit its output would
+    // contradict the point of the lane. Emitted = publish.
+    if let Some((id, true)) = &emitted {
+        crate::config::git_publish::publish_decision(
+            frontier,
+            &format!("policy auto-admit: {finding_id}"),
+            std::slice::from_ref(id),
+            &crate::config::git_publish::PublishOptions::new(false, false),
+        );
+    }
     if !would_admit {
         std::process::exit(1);
     }

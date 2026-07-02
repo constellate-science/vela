@@ -29,7 +29,7 @@ discovery plane nests under `foundry`. Every porcelain verb takes
 | `record` | Record activity into a portable claim packet (`vrc_`): a claim, hashed artifacts, and required caveats. `--propose` lands it as a pending proposal. |
 | `propose` | Draft the common `finding.review` proposal. |
 | `review` | Signed human judgments: statement-fidelity verdicts (`--fidelity`, `--batch`) and role-scoped reviewer attestations. |
-| `accept` | Apply proposals under your key: `--all-pending`, `--id vpr_…`, or `--pack vsd_…` for one atomic changeset decision. |
+| `accept` | Apply proposals under your key: `--all-pending`, `--id vpr_…`, or `--pack vsd_…` for one atomic changeset decision. The decision self-publishes (see below). |
 | `pack` | Bundle pending proposals into a changeset (`vsd_`) — the pull-request analogue. `vela pack . vsd_…` shows one. |
 | `proposals` | The full proposal store: list/show/preview/import/validate/export/accept/reject. |
 | `attach` | Bind mechanical verifier evidence (or `--proof lean_kernel`) to a finding. |
@@ -69,6 +69,27 @@ discovery plane nests under `foundry`. Every porcelain verb takes
 | `atlas` | Cross-frontier math-atlas projections. |
 | `policy` | Governance policy: show/seal/test/evaluate. |
 
+## Decisions self-publish
+
+Once your key has signed, everything that follows is mechanical
+consequence, and the verb finishes it: `accept`, `review`,
+`proposals reject`, `id sign`, and the policy auto-admit lane end by
+materializing derived views, committing the store with a canonical
+message that binds the signed event ids, and pushing. One intention,
+one act — the signed decision can never again rot uncommitted on one
+machine. `--no-commit` / `--no-push` hold publication per-call;
+`vela id` config (`git_commit` / `git_push`: `auto` | `off`) sets the
+default; `VELA_NO_PUBLISH=1` disables globally (the conformance gate
+sets it). Nothing is ever auto-signed: publication only carries events
+a key already signed. `vela status` warns about any store state that
+predates this (`unpublished: N store file(s)…`), and `frontier next`
+ranks stranded state above all other work.
+
+`vela init` scaffolds versioned git hooks (`.vela/hooks`, activated via
+`core.hooksPath`): pre-commit re-materializes views when events are
+staged (committed store can never lead its views), pre-push holds the
+push to the same strict bar CI enforces.
+
 ## Identity grammar
 
 `--as <actor>` is THE acting-identity flag on every write verb.
@@ -95,7 +116,8 @@ git push                        # publication; the hub re-indexes
 # the human's session (their key)
 vela inbox .                    # packs awaiting one decision
 vela diff vpr_<id>              # preview any member
-vela accept . --pack vsd_<id>   # one atomic verdict for the changeset
+vela accept . --pack vsd_<id>   # one act: signed, materialized,
+                                # committed, pushed, re-indexed
 ```
 
 ## Policy tiers (shadow / staged / live)

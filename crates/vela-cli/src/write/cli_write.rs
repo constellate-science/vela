@@ -232,6 +232,8 @@ pub(crate) fn cmd_proposals(action: ProposalAction) {
         }
         ProposalAction::Reject {
             frontier,
+            no_commit,
+            no_push,
             proposal_id,
             reviewer,
             reason,
@@ -271,6 +273,12 @@ pub(crate) fn cmd_proposals(action: ProposalAction) {
                     }
                 );
             }
+            crate::config::git_publish::publish_decision(
+                &frontier,
+                &format!("reject: {proposal_id}"),
+                &[],
+                &crate::config::git_publish::PublishOptions::new(no_commit, no_push),
+            );
         }
     }
 }

@@ -761,8 +761,11 @@ pub async fn run_command() {
             limit,
             dry_run,
             no_reconcile,
+            no_commit,
+            no_push,
             json,
         } => {
+            let publish_opts = crate::config::git_publish::PublishOptions::new(no_commit, no_push);
             // Pack mode: one decision for a whole changeset.
             if let Some(pack_id) = pack {
                 let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
@@ -817,6 +820,17 @@ pub async fn run_command() {
                 }
                 if !report.gated && !report.dry_run && !no_reconcile {
                     let _ = vela_protocol::frontier_repo::materialize(&frontier);
+                }
+                if !report.gated && !report.dry_run {
+                    crate::config::git_publish::publish_decision(
+                        &frontier,
+                        &format!(
+                            "accept: pack {pack_id} ({} member(s))",
+                            report.accepted_proposal_ids.len()
+                        ),
+                        &report.accepted_proposal_ids,
+                        &publish_opts,
+                    );
                 }
                 return;
             }
@@ -956,6 +970,17 @@ pub async fn run_command() {
                         println!("  reconciled derived views (frontier.json, vela.lock, proof)");
                     }
                 }
+                if !report.gated && !report.dry_run {
+                    crate::config::git_publish::publish_decision(
+                        &frontier,
+                        &format!(
+                            "accept: {} proposal(s) in one signed pass",
+                            report.accepted_proposal_ids.len()
+                        ),
+                        &report.event_ids,
+                        &publish_opts,
+                    );
+                }
                 return;
             }
             let proposal_id = proposal_id.unwrap_or_else(|| {
@@ -1014,10 +1039,18 @@ pub async fn run_command() {
                 println!("  event: {}", outcome.event_id);
                 print_engine_verdict(v);
             }
+            crate::config::git_publish::publish_decision(
+                &frontier,
+                &format!("accept: {proposal_id}"),
+                std::slice::from_ref(&outcome.event_id),
+                &publish_opts,
+            );
         }
 
         Commands::Review {
             frontier,
+            no_commit,
+            no_push,
             target_id,
             scopes,
             reviewer,
@@ -1041,8 +1074,15 @@ pub async fn run_command() {
         } => {
             // Fidelity batch mode: sign a whole verdict file under one key
             // read and one save. Checked before the single --fidelity path.
+            let publish_opts = crate::config::git_publish::PublishOptions::new(no_commit, no_push);
             if let Some(batch) = batch {
-                cmd_review_fidelity_batch(frontier, batch, reviewer, key, json);
+                cmd_review_fidelity_batch(frontier.clone(), batch, reviewer, key, json);
+                crate::config::git_publish::publish_decision(
+                    &frontier,
+                    "review: fidelity verdict batch",
+                    &[],
+                    &publish_opts,
+                );
                 return;
             }
             // Statement-fidelity mode: a signed `vsa_` human verdict on
@@ -1054,7 +1094,7 @@ pub async fn run_command() {
                     fail_return("review: positional <finding-id> is required with --fidelity")
                 });
                 cmd_review_fidelity(
-                    frontier,
+                    frontier.clone(),
                     target,
                     fidelity,
                     informal_ref.unwrap_or_else(|| {
@@ -1072,6 +1112,12 @@ pub async fn run_command() {
                     reviewer,
                     key,
                     json,
+                );
+                crate::config::git_publish::publish_decision(
+                    &frontier,
+                    "review: statement-fidelity verdict",
+                    &[],
+                    &publish_opts,
                 );
                 return;
             }
@@ -1116,6 +1162,12 @@ pub async fn run_command() {
                     }
                     println!("  path: {}", report.path);
                 }
+                crate::config::git_publish::publish_decision(
+                    &frontier,
+                    &format!("review: attestation on {}", report.attestation.target_id),
+                    report.attestation.canonical_event_id.clone().as_slice(),
+                    &publish_opts,
+                );
                 return;
             }
             // v0.80.1: per-event mode. When --event is supplied,
@@ -3025,6 +3077,7 @@ fn cmd_init(path: &Path, name: &str, template: &str, initialize_git: bool, json_
         },
     )
     .unwrap_or_else(|e| fail_return(&e));
+    let hooks = scaffold_git_hooks(path);
     if json_output {
         print_json(&payload);
     } else {
@@ -3033,7 +3086,71 @@ fn cmd_init(path: &Path, name: &str, template: &str, initialize_git: bool, json_
             style::ok("ok"),
             path.display()
         );
+        if hooks {
+            println!("  git hooks installed (.vela/hooks): pre-push runs the strict check");
+        }
     }
+}
+
+/// Versioned git hooks: local CI before the Action sees the push, and
+/// derived views that can never lag the committed store. Written under
+/// `.vela/hooks` (committed with the repo) and activated via
+/// `core.hooksPath`; a clone re-activates with one config line, which
+/// `vela doctor` suggests.
+fn scaffold_git_hooks(path: &Path) -> bool {
+    if !path.join(".git").exists() {
+        return false;
+    }
+    let hooks_dir = path.join(".vela/hooks");
+    if std::fs::create_dir_all(&hooks_dir).is_err() {
+        return false;
+    }
+    let pre_commit = r#"#!/bin/sh
+# vela pre-commit: the committed store must never lead its derived views
+# (CI holds them to hash parity). If events are staged, re-materialize
+# and stage the views alongside them.
+if git diff --cached --name-only | grep -q "\.vela/events/"; then
+  if command -v vela >/dev/null 2>&1; then
+    root="$(git rev-parse --show-toplevel)"
+    vela frontier materialize "$root" >/dev/null 2>&1 &&       git add "$root/frontier.json" "$root/vela.lock" "$root/proof" 2>/dev/null
+  fi
+fi
+exit 0
+"#;
+    let pre_push = r#"#!/bin/sh
+# vela pre-push: hold the push to the same strict bar CI will.
+command -v vela >/dev/null 2>&1 || exit 0
+root="$(git rev-parse --show-toplevel)"
+if ! vela check "$root" --strict >/dev/null 2>&1; then
+  echo "vela pre-push: strict check failed — push aborted."
+  echo "  inspect: vela check $root --strict"
+  echo "  bypass (CI will still refuse): git push --no-verify"
+  exit 1
+fi
+exit 0
+"#;
+    let ok = std::fs::write(hooks_dir.join("pre-commit"), pre_commit).is_ok()
+        && std::fs::write(hooks_dir.join("pre-push"), pre_push).is_ok();
+    if !ok {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for name in ["pre-commit", "pre-push"] {
+            let _ = std::fs::set_permissions(
+                hooks_dir.join(name),
+                std::fs::Permissions::from_mode(0o755),
+            );
+        }
+    }
+    std::process::Command::new("git")
+        .arg("-C")
+        .arg(path)
+        .args(["config", "core.hooksPath", ".vela/hooks"])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
 }
 
 fn cmd_mcp_setup(source: Option<&Path>, frontiers: Option<&Path>) {

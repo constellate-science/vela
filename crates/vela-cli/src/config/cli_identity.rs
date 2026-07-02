@@ -50,6 +50,17 @@ pub(crate) struct Identity {
     /// Default hub base URL.
     #[serde(default = "default_hub")]
     pub hub_url: String,
+    /// Decisions self-publish: commit the store after every signed
+    /// decision ("auto") or leave publication manual ("off").
+    #[serde(default = "default_git_mode")]
+    pub git_commit: String,
+    /// Push the publish commit ("auto") or stop at the local commit ("off").
+    #[serde(default = "default_git_mode")]
+    pub git_push: String,
+}
+
+fn default_git_mode() -> String {
+    "auto".to_string()
 }
 
 fn default_version() -> String {
