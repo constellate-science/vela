@@ -23,7 +23,7 @@ keywords = [
     "ai-attribution",
 ]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 7 - Inactive",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: Apache Software License",
     "License :: OSI Approved :: MIT License",

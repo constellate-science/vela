@@ -1,5 +1,11 @@
 # Vela Python client
 
+> **Not distributed on PyPI.** The historical `vela-state` package is
+> frozen at a pre-consolidation version and deprecated — do not install
+> it. This module lives HERE, in the repo, as the second conformance
+> implementation; the distribution channel for Vela is GitHub releases
+> (`install.sh`). See THREAT_MODEL.md A9/A10.
+
 Cross-implementation reducer + loader for the Vela protocol. The
 authoritative implementation is the Rust workspace under
 `crates/vela-protocol/`; this Python module mirrors the kernel
