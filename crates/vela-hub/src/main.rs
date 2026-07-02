@@ -659,6 +659,26 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             get(static_logo_wordmark_svg),
         )
         .route("/static/rete.svg", get(static_rete_svg))
+        .route(
+            "/static/fonts/inter-latin-400-normal.woff2",
+            get(|| async { woff2_response(FONT_INTER_400) }),
+        )
+        .route(
+            "/static/fonts/inter-latin-600-normal.woff2",
+            get(|| async { woff2_response(FONT_INTER_600) }),
+        )
+        .route(
+            "/static/fonts/source-serif-4-latin-400-normal.woff2",
+            get(|| async { woff2_response(FONT_SS4_400) }),
+        )
+        .route(
+            "/static/fonts/source-serif-4-latin-400-italic.woff2",
+            get(|| async { woff2_response(FONT_SS4_400_ITALIC) }),
+        )
+        .route(
+            "/static/fonts/jetbrains-mono-latin-400-normal.woff2",
+            get(|| async { woff2_response(FONT_JBM_400) }),
+        )
         // v0.727: the hosted MCP endpoint (streamable HTTP, stateless
         // JSON, read-only profile) and the GitHub webhook that kicks
         // ingest + MCP refresh ahead of the interval sweeps.
@@ -3319,9 +3339,16 @@ async fn get_entry_events_stream(
 // `/static/...` so the marketing site and the hub share one source of
 // truth. Hub-specific page styles are kept in a small inline block.
 
-const FONT_LINK: &str = r#"<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600&family=Source+Serif+4:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&display=swap">"#;
+// Self-hosted latin subsets (OFL; web/fonts/LICENSE.md) — no third-party
+// font CDN. The faces match the frontier kit and the production app.
+const FONT_LINK: &str = r#"<link rel="preload" href="/static/fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/static/fonts/source-serif-4-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>"#;
+
+const FONT_INTER_400: &[u8] = include_bytes!("../../../web/fonts/inter-latin-400-normal.woff2");
+const FONT_INTER_600: &[u8] = include_bytes!("../../../web/fonts/inter-latin-600-normal.woff2");
+const FONT_SS4_400: &[u8] = include_bytes!("../../../web/fonts/source-serif-4-latin-400-normal.woff2");
+const FONT_SS4_400_ITALIC: &[u8] = include_bytes!("../../../web/fonts/source-serif-4-latin-400-italic.woff2");
+const FONT_JBM_400: &[u8] = include_bytes!("../../../web/fonts/jetbrains-mono-latin-400-normal.woff2");
 
 // Embedded design-system files. Compiled into the binary so the runtime
 // has no external file dependency; touching any of these forces a rebuild.
@@ -4031,11 +4058,108 @@ code, .mono-inline {
   color: color-mix(in oklab, var(--gold) 36%, var(--ink-2));
 }
 
-/* Mobile fallback for the workbench rim */
+/* ============================================================
+   Chrome — the frontier-kit register. The old .wb grid died in the
+   Workbench.astro migration; this is its replacement: sticky header,
+   one 1180px container, hero head, quiet footer.
+   ============================================================ */
+
+@font-face { font-family: "Inter"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("/static/fonts/inter-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Inter"; font-style: normal; font-weight: 600; font-display: swap;
+  src: url("/static/fonts/inter-latin-600-normal.woff2") format("woff2"); }
+@font-face { font-family: "Source Serif 4"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("/static/fonts/source-serif-4-latin-400-normal.woff2") format("woff2"); }
+@font-face { font-family: "Source Serif 4"; font-style: italic; font-weight: 400; font-display: swap;
+  src: url("/static/fonts/source-serif-4-latin-400-italic.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: swap;
+  src: url("/static/fonts/jetbrains-mono-latin-400-normal.woff2") format("woff2"); }
+
+body {
+  margin: 0;
+  background: var(--paper-0);
+  color: var(--ink-1);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: var(--leading-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.hub-header {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--paper-0);
+  border-bottom: 1px solid var(--rule-1);
+}
+.hub-header__inner {
+  max-width: var(--measure-page); margin: 0 auto;
+  padding: 0 clamp(20px, 4vw, 48px);
+  height: 60px; display: flex; align-items: center; gap: 24px;
+}
+.hub-mark {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--font-display); font-size: 17px;
+  color: var(--ink-0); text-decoration: none; white-space: nowrap; border: 0;
+}
+.hub-mark span { color: var(--ink-3); }
+.hub-nav { display: flex; gap: 4px; align-items: center; font-size: var(--text-small); }
+.hub-nav a {
+  color: var(--ink-3); text-decoration: none; border: 0;
+  padding: 0.35rem 0.8rem; border-radius: 999px; line-height: 1;
+}
+.hub-nav a:hover { color: var(--ink-1); background: var(--paper-2); }
+.hub-nav a[aria-current="page"] {
+  color: var(--ink-0); background: var(--paper-2);
+  box-shadow: inset 0 -1.5px 0 var(--gold);
+}
+.hub-header__right { margin-left: auto; display: inline-flex; align-items: center; gap: 12px; }
+.hub-ver {
+  font-family: var(--font-mono); font-size: 10.5px;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-4);
+}
+
+.hub-page {
+  max-width: var(--measure-page); margin: 0 auto;
+  padding: 40px clamp(20px, 4vw, 48px) 120px;
+}
+
+.wb-head { max-width: 52rem; margin: 0 0 40px; }
+.wb-head__row { display: flex; gap: 40px; align-items: flex-start; justify-content: space-between; }
+.wb-head__eyebrow {
+  font-family: var(--font-mono); font-weight: 500; font-size: 10.5px;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--gold-ink); margin: 0 0 8px;
+}
+.wb-head__eyebrow a { color: inherit; border: 0; }
+.wb-head__title {
+  font-family: var(--font-display); font-weight: 400;
+  font-size: clamp(26px, 3.4vw, 34px); line-height: 1.08;
+  color: var(--ink-0); margin: 0 0 8px; text-wrap: balance;
+}
+.wb-head__sub {
+  font-size: var(--text-lede); line-height: 1.5; color: var(--ink-2);
+  max-width: 60ch; margin: 0; text-wrap: pretty;
+}
+.wb-head__aside { flex-shrink: 0; }
+
+.wb-main { min-width: 0; }
+
+.wb-foot {
+  margin-top: 72px; padding-top: 16px;
+  border-top: 1px solid var(--rule-2);
+  color: var(--ink-3); font-size: 13px; line-height: 1.7;
+  display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap;
+}
+.wb-foot__left { display: flex; gap: 16px; flex-wrap: wrap; }
+.wb-foot a { color: var(--ink-3); }
+
+/* Quiet the numbered section labels; the heading carries the meaning. */
+.wb-section__num { display: none; }
+
 @media (max-width: 720px) {
-  .wb { grid-template-columns: 0 1fr 0 !important; }
-  .wb-rim { display: none !important; }
-  .wb-head, .wb-main, .wb-foot { padding-left: 20px !important; padding-right: 20px !important; }
+  .hub-header__inner { height: auto; min-height: 52px; flex-wrap: wrap; padding-top: 8px; padding-bottom: 8px; row-gap: 4px; }
+  .hub-header__right { display: none; }
+  .hub-page { padding-top: 24px; padding-bottom: 72px; }
+  .wb-head__row { flex-direction: column; gap: 16px; }
   .vf-table td.vf-cls, .vf-table thead th:nth-child(2) { display: none; }
   .pp-table thead th, .pp-table td { padding: 6px 6px; }
   .pp-sha { width: 110px; }
@@ -4075,28 +4199,29 @@ fn shell(
     foot_left_html: &str,
 ) -> String {
     let nav_link = |id: &str, href: &str, label: &str| -> String {
-        let on = if id == active {
-            " wb-rim__link--on"
+        let current = if id == active {
+            r#" aria-current="page""#
         } else {
             ""
         };
-        format!(r#"<a class="wb-rim__link{on}" href="{href}">{label}</a>"#)
+        format!(r#"<a{current} href="{href}">{label}</a>"#)
     };
-    let rim = format!(
-        r#"<aside class="wb-rim">
-  <div class="wb-rim__mark">
-    <a href="/" aria-label="Vela">
-      <img src="/static/vela-logo-mark.svg" width="26" height="26" alt="Vela">
-    </a>
-  </div>
-  <nav class="wb-rim__nav" aria-label="Hub">
+    let header = format!(
+        r#"<header class="hub-header"><div class="hub-header__inner">
+  <a class="hub-mark" href="/" aria-label="Vela Hub">
+    <img src="/static/vela-logo-mark.svg" width="20" height="20" alt="">Vela<span> Hub</span>
+  </a>
+  <nav class="hub-nav" aria-label="Hub">
     {l1}
     {l2}
   </nav>
-  <div class="wb-rim__index">v{HUB_VERSION}</div>
-</aside>"#,
-        l1 = nav_link("hub", "/", "01 · Hub"),
-        l2 = nav_link("entries", "/entries", "02 · Entries"),
+  <span class="hub-header__right">
+    <span class="wb-chip wb-chip--live"><span class="wb-chip__dot"></span>live</span>
+    <span class="hub-ver">v{HUB_VERSION}</span>
+  </span>
+</div></header>"#,
+        l1 = nav_link("hub", "/", "Hub"),
+        l2 = nav_link("entries", "/entries", "Entries"),
     );
     format!(
         r#"<!doctype html>
@@ -4112,8 +4237,8 @@ fn shell(
 <style>{HUB_STYLES}</style>
 </head>
 <body>
-<div class="wb">
-{rim}
+{header}
+<div class="hub-page">
 <header class="wb-head">
   <div class="wb-head__row">
     <div>
@@ -4123,17 +4248,16 @@ fn shell(
     </div>
     <div class="wb-head__aside">{aside_html}</div>
   </div>
-  <div class="wb-head__ticks"></div>
 </header>
 <main class="wb-main">
 {main_html}
 </main>
 <footer class="wb-foot">
   <div class="wb-foot__left">
-    <span><span class="wb-foot__star"></span> live · {hub_host}</span>
+    <span>live · {hub_host}</span>
     <span>{foot_left_html}</span>
   </div>
-  <div>Vela · <a href="{repo_url}" style="color:var(--ink-3);">{repo_short}</a></div>
+  <div>Vela · <a href="{repo_url}">{repo_short}</a></div>
 </footer>
 </div>
 </body>
@@ -4165,6 +4289,21 @@ fn css_response(body: &'static str) -> Response {
         [
             (axum::http::header::CONTENT_TYPE, "text/css; charset=utf-8"),
             (axum::http::header::CACHE_CONTROL, "public, max-age=300"),
+        ],
+        body,
+    )
+        .into_response()
+}
+
+fn woff2_response(body: &'static [u8]) -> Response {
+    (
+        StatusCode::OK,
+        [
+            (axum::http::header::CONTENT_TYPE, "font/woff2"),
+            (
+                axum::http::header::CACHE_CONTROL,
+                "public, max-age=31536000, immutable",
+            ),
         ],
         body,
     )
