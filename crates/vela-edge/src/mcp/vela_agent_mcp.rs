@@ -568,8 +568,19 @@ pub fn claim_task(args: &Value) -> Result<String, String> {
     let pubkey = hex::encode(key.verifying_key().to_bytes());
     let mut project = vela_protocol::repo::load_from_path(&frontier_path)
         .map_err(|e| format!("load frontier: {e}"))?;
-    if !project.findings.iter().any(|f| f.id == obligation) {
-        return Err(format!("obligation finding {obligation} not found"));
+    // An obligation is usually a finding (vf_…) but may be an EXTERNAL
+    // work target (e.g. `erdos:443` — a problem with no finding yet).
+    // External ids must be namespaced so a typo'd vf_ id can't slip.
+    let is_finding = project.findings.iter().any(|f| f.id == obligation);
+    let is_external = obligation.contains(':')
+        && !obligation.starts_with("vf_")
+        && obligation
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, ':' | '.' | '_' | '-'));
+    if !is_finding && !is_external {
+        return Err(format!(
+            "obligation {obligation} is neither a finding on this frontier nor a              namespaced external target (e.g. erdos:443)"
+        ));
     }
     // Refuse a live competing lease (route-around, not fight).
     let now = chrono::Utc::now().to_rfc3339();
