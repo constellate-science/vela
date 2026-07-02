@@ -2,6 +2,17 @@
 
 - Status: Accepted 2026-06-24. Phase 0 landed (agent-doable); Phase 1+ pending
   Will key-custody. Target sharpened 2026-06-25 to **repo-native Vela** (below).
+- 2026-07-01: **Phase 2 executed** (v0.721). The bespoke transport is deleted
+  (~3,700 lines: `vela publish/clone/pull/workspace`, `registry.rs` remote
+  plumbing, `workspace.rs`, the hub's `POST /entries` write path); `merkle.rs`
+  and `storage.rs` KEPT per the corrections above. Publication is `git push`:
+  the hub runs a git-ingestion loop (validate + strict reducer replay +
+  signature signals) over owner-registered remotes (`registry register-git`,
+  with monorepo-subdir support), and a `no-legacy-transport` grep gate holds
+  the line. The restore drill proves credible exit through the real lane.
+  Phase 1 (the re-sign ceremony) remains Will's: erdos-problems and
+  benchmark-state still refuse strict ingest on `unsigned_registered_actor`
+  (pre-signing events from a now-registered actor).
 - 2026-06-25 progress (no re-sign needed): the lock self-describes + enforces its
   verifier contract (`verifiers:` pin), and the producing repo now hydrates its
   frontiers from GIT (`vela-frontiers`), not the hub — the hub is demoted to a
