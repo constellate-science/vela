@@ -1075,7 +1075,7 @@ impl HubDb {
     /// never smuggle a stale session lock. None when another machine holds
     /// it. SQLite is single-node: always the leader.
     pub async fn try_ingest_lock(&self) -> Result<Option<IngestLockGuard>, String> {
-        const INGEST_LOCK_KEY: i64 = 0x76656c61_696e67; // "vela" "ing"
+        const INGEST_LOCK_KEY: i64 = 0x0076_656c_6169_6e67; // "vela"+"ing"
         match self {
             Self::Postgres(p) => {
                 let mut tx = p.begin().await.map_err(|e| e.to_string())?;
@@ -3611,6 +3611,14 @@ fn collect_array_objects(
     }
 }
 
+/// Holds the ingest advisory lock for the sweep's lifetime. The lock is
+/// transaction-scoped: dropping the guard rolls the transaction back,
+/// which releases the lock — pooled-connection session state can never
+/// leak it.
+pub struct IngestLockGuard {
+    _tx: Option<sqlx::Transaction<'static, sqlx::Postgres>>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4085,12 +4093,4 @@ mod tests {
             .expect("audit row");
         assert_eq!(audit.status, "failed");
     }
-}
-
-/// Holds the ingest advisory lock for the sweep's lifetime. The lock is
-/// transaction-scoped: dropping the guard rolls the transaction back,
-/// which releases the lock — pooled-connection session state can never
-/// leak it.
-pub struct IngestLockGuard {
-    _tx: Option<sqlx::Transaction<'static, sqlx::Postgres>>,
 }

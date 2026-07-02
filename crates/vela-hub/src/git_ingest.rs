@@ -201,10 +201,11 @@ async fn ingest_one(
     // empty-signature key; a second machine or a re-run inserts the same
     // row) — tolerate it and continue to the hash-guarded promotion.
     let raw = serde_json::to_value(&entry).map_err(|e| e.to_string())?;
-    if let Err(e) = db.insert_entry(&entry, &raw).await {
-        if !e.contains("duplicate") && !e.contains("UNIQUE constraint") {
-            return Err(e);
-        }
+    if let Err(e) = db.insert_entry(&entry, &raw).await
+        && !e.contains("duplicate")
+        && !e.contains("UNIQUE constraint")
+    {
+        return Err(e);
     }
     db.promote_frontier_snapshot(&entry, &project, None, AUTHORITY_GIT_INGESTED)
         .await?;
