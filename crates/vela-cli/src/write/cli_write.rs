@@ -487,61 +487,6 @@ pub(crate) fn cmd_finding_retract(
     print_state_report(&report, json);
 }
 
-/// `vela claim` — lease an obligation finding for a bounded TTL (signed).
-/// Moved verbatim from the run_command dispatch (B7 inline-arm extraction).
-pub(crate) fn cmd_claim(
-    frontier: PathBuf,
-    obligation: String,
-    ttl: u64,
-    by: Option<String>,
-    key: Option<PathBuf>,
-    json: bool,
-) {
-    let by = crate::cli_identity::resolve_actor(by.as_deref());
-    let signing_key = crate::cli_identity::resolve_signing_key(key.as_deref());
-    let pubkey = hex::encode(signing_key.verifying_key().to_bytes());
-    let mut project = repo::load_from_path(&frontier).unwrap_or_else(|e| fail_return(&e));
-    if !project.findings.iter().any(|f| f.id == obligation) {
-        fail(&format!("obligation finding {obligation} not found"));
-    }
-    let mut event =
-        vela_protocol::events::new_finding_event(vela_protocol::events::FindingEventInput {
-            kind: "attempt.claimed",
-            finding_id: &obligation,
-            actor_id: &by,
-            actor_type: vela_protocol::events::actor_kind(&by),
-            reason: "obligation lease",
-            before_hash: "sha256:null",
-            after_hash: "sha256:null",
-            payload: serde_json::json!({
-                "obligation_id": obligation,
-                "lease_ttl_seconds": ttl,
-                "claimant_actor": by,
-                "claimant_pubkey": pubkey,
-            }),
-            caveats: Vec::new(),
-            timestamp: None,
-        });
-    vela_protocol::reducer::apply_event(&mut project, &event).unwrap_or_else(|e| fail_return(&e));
-    event.signature = Some(
-        vela_protocol::sign::sign_event(&event, &signing_key).unwrap_or_else(|e| fail_return(&e)),
-    );
-    project.events.push(event);
-    repo::save_to_path(&frontier, &project).unwrap_or_else(|e| fail_return(&e));
-    let payload = json!({
-        "ok": true, "command": "claim", "obligation": obligation,
-        "by": by, "ttl_seconds": ttl,
-    });
-    if json {
-        print_json(&payload);
-    } else {
-        println!(
-            "{} leased {obligation} to {by} for {ttl}s (signed)",
-            style::ok("ok")
-        );
-    }
-}
-
 /// `vela review <frontier> <finding_id> --fidelity ...`: write a signed
 /// statement-faithfulness attestation (`vsa_`) — the human judgment that a
 /// FORMAL statement faithfully encodes an INFORMAL problem. Reserved for

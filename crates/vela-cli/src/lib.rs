@@ -17,7 +17,7 @@ pub(crate) use frontier::{cli_frontier, cli_read, cli_registry};
 mod write;
 pub(crate) use write::{cli_claim, cli_finding, cli_write, review_work, solve_diff_triangle};
 mod discovery;
-pub(crate) use discovery::{campaign, cli_campaign, cli_source_fetch};
+pub(crate) use discovery::{campaign, cli_campaign};
 mod tools;
 pub(crate) use tools::{cli_check, cli_lean, cli_log_verify, cli_proof};
 mod config;

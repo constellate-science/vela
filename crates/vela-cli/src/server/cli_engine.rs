@@ -1,15 +1,12 @@
-use crate::cli::{collect_witness_files, fail, fail_return, hash_path, parse_witness, print_json};
+use crate::cli::{collect_witness_files, fail, fail_return, parse_witness, print_json};
 use crate::cli_commands::*;
 use serde_json::{Value, json};
 use std::path::Path;
-use vela_edge::normalize;
 use vela_protocol::bundle;
 use vela_protocol::cli_style as style;
 use vela_protocol::evidence_ci;
-use vela_protocol::project;
 use vela_protocol::proposals;
 use vela_protocol::repo;
-use vela_protocol::sources;
 
 pub(crate) fn cmd_gate(action: GateAction) {
     use vela_edge::deliverable_grade::{self, DeliverableGrade, GradeGate};
@@ -482,6 +479,11 @@ fn attachment_vouch_gate(floor_ok: bool, matched_len: usize) -> (bool, String) {
 /// the de-human-gate made to fire on a freshly produced candidate.
 pub(crate) fn cmd_foundry(action: FoundryAction) {
     match action {
+        FoundryAction::Campaign { action } => crate::cli_campaign::cmd_campaign(action),
+        FoundryAction::Lean { action } => crate::cli_lean::cmd_lean(action),
+        FoundryAction::Attempt { action } => crate::cli_lean::cmd_attempt(action),
+        FoundryAction::Transfer { action } => crate::cli_lean::cmd_transfer(action),
+        FoundryAction::Experiment { action } => crate::cli_experiment::cmd_experiment(action),
         FoundryAction::Run {
             frontier,
             kind,
@@ -1378,7 +1380,8 @@ fn pick_best_seed(
     for s in base_seed..base_seed.saturating_add(count) {
         let tmp = std::env::temp_dir().join(format!("vela_portfolio_{kind}_{n}_{s}.json"));
         let mut c = std::process::Command::new(exe);
-        c.arg("campaign")
+        c.arg("foundry")
+            .arg("campaign")
             .arg("run")
             .arg(kind)
             .arg("--n")
@@ -1535,6 +1538,7 @@ fn cmd_foundry_run(
     //    finding.add proposal). A failed search is a valid (null) turn.
     let mut produce = std::process::Command::new(&exe);
     produce
+        .arg("foundry")
         .arg("campaign")
         .arg("run")
         .arg(kind)
@@ -2680,187 +2684,6 @@ pub(crate) fn cmd_attach(
             }
         }
         Err(e) => fail(&format!("attach: {e}")),
-    }
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn cmd_normalize(
-    source: &Path,
-    out: Option<&Path>,
-    write: bool,
-    dry_run: bool,
-    rewrite_ids: bool,
-    id_map: Option<&Path>,
-    resync_provenance: bool,
-    json_output: bool,
-) {
-    if write && out.is_some() {
-        fail("Use either --write or --out, not both.");
-    }
-    if dry_run && (write || out.is_some()) {
-        fail("--dry-run cannot be combined with --write or --out.");
-    }
-    if id_map.is_some() && !rewrite_ids {
-        fail("--id-map requires --rewrite-ids.");
-    }
-
-    let detected = repo::detect(source).unwrap_or_else(|e| {
-        eprintln!("{e}");
-        std::process::exit(1);
-    });
-    if matches!(detected, repo::VelaSource::PacketDir(_)) {
-        fail(
-            "Cannot normalize a proof packet directory. Export a new packet from frontier state instead.",
-        );
-    }
-    let mut frontier = repo::load(&detected).unwrap_or_else(|e| fail_return(&e));
-    // Phase J: every v0.4 frontier carries a `frontier.created` genesis
-    // event in events[0]. That's identity metadata, not a substantive
-    // mutation, so it doesn't disqualify normalization. Any non-genesis
-    // canonical event still blocks normalize.
-    let has_substantive_events = frontier
-        .events
-        .iter()
-        .any(|event| event.kind != "frontier.created");
-    if has_substantive_events && (write || out.is_some()) {
-        fail(
-            "Refusing to normalize a frontier with canonical events. Normalize before proposal-backed writes, or create a new reviewed transition for the intended change.",
-        );
-    }
-    let source_hash = hash_path(source).unwrap_or_else(|_| "unavailable".to_string());
-    let before_stats = serde_json::to_value(&frontier.stats).unwrap_or(Value::Null);
-    let (entity_type_fixes, entity_name_fixes) =
-        normalize::normalize_findings(&mut frontier.findings);
-    // Phase N: optionally rewrite finding.provenance from the canonical
-    // SourceRecord. The source registry is the authority; provenance is
-    // the denormalized cache.
-    let provenance_resync_count = if resync_provenance {
-        sources::resync_provenance_from_sources(&mut frontier)
-    } else {
-        0
-    };
-    let before_source_count = frontier.sources.len();
-    let before_evidence_atom_count = frontier.evidence_atoms.len();
-    let before_condition_record_count = frontier.condition_records.len();
-
-    let mut id_rewrites = Vec::new();
-    if rewrite_ids {
-        let mut id_map_values = std::collections::BTreeMap::<String, String>::new();
-        for finding in &frontier.findings {
-            let expected =
-                bundle::FindingBundle::content_address(&finding.assertion, &finding.provenance);
-            if expected != finding.id {
-                id_map_values.insert(finding.id.clone(), expected);
-            }
-        }
-        let new_ids = id_map_values
-            .values()
-            .map(String::as_str)
-            .collect::<std::collections::HashSet<_>>();
-        if new_ids.len() != id_map_values.len() {
-            fail("Refusing to rewrite IDs because two findings map to the same content address.");
-        }
-        for finding in &mut frontier.findings {
-            if let Some(new_id) = id_map_values.get(&finding.id) {
-                id_rewrites.push(json!({"old": finding.id, "new": new_id}));
-                finding.previous_version = Some(finding.id.clone());
-                finding.id = new_id.clone();
-            }
-        }
-        for finding in &mut frontier.findings {
-            for link in &mut finding.links {
-                if let Some(new_target) = id_map_values.get(&link.target) {
-                    link.target = new_target.clone();
-                }
-            }
-        }
-        if let Some(path) = id_map {
-            std::fs::write(
-                path,
-                serde_json::to_string_pretty(&id_map_values)
-                    .expect("failed to serialize normalize id map"),
-            )
-            .unwrap_or_else(|e| fail(&format!("Failed to write {}: {e}", path.display())));
-        }
-    }
-
-    sources::materialize_project(&mut frontier);
-    let source_records_materialized = frontier.sources.len().saturating_sub(before_source_count);
-    let evidence_atoms_materialized = frontier
-        .evidence_atoms
-        .len()
-        .saturating_sub(before_evidence_atom_count);
-    let condition_records_materialized = frontier
-        .condition_records
-        .len()
-        .saturating_sub(before_condition_record_count);
-    let after_stats = serde_json::to_value(&frontier.stats).unwrap_or(Value::Null);
-    let id_rewrite_count = id_rewrites.len();
-    let wrote_to = if write {
-        repo::save(&detected, &frontier).unwrap_or_else(|e| fail(&e));
-        Some(source.display().to_string())
-    } else if let Some(out_path) = out {
-        repo::save_to_path(out_path, &frontier).unwrap_or_else(|e| fail(&e));
-        Some(out_path.display().to_string())
-    } else {
-        None
-    };
-    let wrote = wrote_to.is_some();
-    let planned_changes = entity_type_fixes
-        + entity_name_fixes
-        + id_rewrite_count
-        + source_records_materialized
-        + evidence_atoms_materialized
-        + condition_records_materialized
-        + provenance_resync_count;
-    let payload = json!({
-        "ok": true,
-        "command": "normalize",
-        "schema_version": project::VELA_SCHEMA_VERSION,
-        "source": {
-            "path": source.display().to_string(),
-            "hash": format!("sha256:{source_hash}"),
-        },
-        "dry_run": wrote_to.is_none(),
-        "wrote_to": wrote_to,
-        "summary": {
-            "planned": planned_changes,
-            "safe": planned_changes,
-            "unsafe": 0,
-            "applied": if wrote { planned_changes } else { 0 },
-        },
-        "changes": {
-            "entity_type_fixes": entity_type_fixes,
-            "entity_name_fixes": entity_name_fixes,
-            "id_rewrites": id_rewrite_count,
-            "source_records_materialized": source_records_materialized,
-            "evidence_atoms_materialized": evidence_atoms_materialized,
-            "condition_records_materialized": condition_records_materialized,
-            "provenance_resyncs": provenance_resync_count,
-            "stats_changed": before_stats != after_stats,
-        },
-        "id_rewrites": id_rewrites,
-        "repair_plan": if wrote { Vec::<Value>::new() } else {
-            vec![json!({
-                "action": "apply_normalization",
-                "command": "vela normalize <frontier> --out frontier.normalized.json"
-            })]
-        },
-    });
-    if json_output {
-        print_json(&payload);
-    } else if let Some(path) = payload.get("wrote_to").and_then(Value::as_str) {
-        println!("{} normalized frontier written to {path}", style::ok("ok"));
-        println!(
-            "  entity type fixes: {}, entity name fixes: {}, id rewrites: {}",
-            entity_type_fixes, entity_name_fixes, id_rewrite_count
-        );
-    } else {
-        println!("normalize dry run for {}", source.display());
-        println!(
-            "  would apply entity type fixes: {}, entity name fixes: {}, id rewrites: {}",
-            entity_type_fixes, entity_name_fixes, id_rewrite_count
-        );
     }
 }
 

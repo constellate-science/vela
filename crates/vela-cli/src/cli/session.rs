@@ -18,55 +18,41 @@ fn find_vela_repo() -> Option<PathBuf> {
 }
 
 pub(crate) fn print_session_help() {
-    println!();
     println!(
         "  Vela {} · Version control for scientific state.",
         env!("CARGO_PKG_VERSION")
     );
     println!();
+    println!("  Agents propose. Verifiers reproduce. Humans accept. Git publishes.");
+    println!();
     println!("  USAGE");
     println!("    vela              Open a session against the nearest .vela/ repo");
     println!("    vela <command>    Run a specific subcommand");
-    println!("    vela help advanced   Full subcommand list (30+ commands)");
+    println!("    vela help advanced   Everything reachable, grouped");
     println!();
     println!("  SETUP (once)");
-    println!(
-        "    id create         Generate your key + identity; then no --key/--actor/--hub flags"
-    );
-    println!("    init <dir>        Start a new frontier repo (vs clone, which joins one)");
+    println!("    id create         Your key + identity; then no --key/--as flags");
+    println!("    init <dir>        Start a new frontier repo (git clone joins one)");
     println!();
-    println!("  PRODUCER LOOP (the git-style path: clone, reproduce, propose, push)");
-    println!("    clone <vfr|url>   Clone a published frontier from the hub into a working tree");
-    println!(
-        "    reproduce <dir>   Re-verify the cloned witnesses from scratch (frozen verifiers)"
-    );
-    println!("    ingest <path>     Ingest a paper, dataset, or Carina packet");
-    println!("    propose           Create a finding.review proposal");
-    println!(
-        "    publish <dir>     Push your frontier to the hub (alias: push); owner/key/hub from id"
-    );
-    println!();
-    println!("  SYNC");
+    println!("  THE LOOP");
     println!("    status            One-screen frontier state");
-    println!("    log               Recent canonical state events");
-    println!();
-    println!("  REVIEW (maintainers)");
-    println!("    inbox             Pending review proposals");
-    println!("    propose <vf>      Create/apply a finding.review proposal (the review verb)");
-    println!("    diff <vpr_id>     Preview a pending proposal vs current frontier");
-    println!("    accept <vpr_id>   Apply a proposal under your reviewer key");
-    println!(
-        "    accept-batch      Accept all pending in one signed, reconciled pass (--all-pending)"
-    );
-    println!("    attest            Sign findings under your private key");
+    println!("    inbox             Pending proposals awaiting a human key");
+    println!("    log [vf_]         Recent signed events, or one finding's history");
+    println!("    diff <vpr_>       Preview a pending proposal");
+    println!("    record <dir>      Record activity: claim + hashed artifacts + caveats");
+    println!("    propose           Draft a finding.review proposal");
+    println!("    review            Sign fidelity verdicts (--fidelity, --batch)");
+    println!("    accept            Apply proposals under your key (--all-pending)");
+    println!("    attach            Bind mechanical verifier evidence to a finding");
     println!();
     println!("  VERIFY");
-    println!("    gate check <vf>                    Trust-gate status for one finding");
-    println!("    reproduce <dir>                    Re-verify stored witnesses from scratch");
-    println!(
-        "    registry verify-log <vfr>          Independently verify a hub's transparency log"
-    );
-    println!("    claim state <vf>                   Claim-State Cell (Belnap status, deps)");
+    println!("    check <dir>       The full trust gate, locally (--strict)");
+    println!("    reproduce <dir>   Re-verify witnesses with the frozen verifiers");
+    println!("    proof <dir>       Export a proof packet (proof verify re-checks one)");
+    println!();
+    println!("  PUBLISH");
+    println!("    git push          IS publication; the hub re-derives its index");
+    println!("    hub register-git  Bind this repo to its vfr_ on the hub, once");
     println!();
     println!("  In session, type a single letter for a quick verb, or any");
     println!("  question in plain text. `q` or `exit` quits.");

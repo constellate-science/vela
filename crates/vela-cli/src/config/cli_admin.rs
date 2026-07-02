@@ -12,6 +12,12 @@ pub(crate) fn cmd_id(action: IdAction) {
         DEFAULT_HUB, Identity, identity_path, load_identity, save_identity, vela_home,
     };
     match action {
+        IdAction::Keygen { out, json } => crate::cli::cmd_id_keygen(out, json),
+        IdAction::Sign {
+            frontier,
+            key,
+            json,
+        } => crate::cli::cmd_id_sign(frontier, key, json),
         IdAction::Create {
             handle,
             agent,

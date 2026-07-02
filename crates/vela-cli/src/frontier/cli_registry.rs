@@ -10,9 +10,9 @@ use vela_protocol::cli_style as style;
 /// The registry surface after the ADR 0001 Phase 2 transport cut: index
 /// reads, transparency-log verification, and the one owner-signed act —
 /// binding a frontier's git remote. Publication itself is `git push`.
-pub(crate) fn cmd_registry(action: RegistryAction) {
+pub(crate) fn cmd_hub(action: HubAction) {
     match action {
-        RegistryAction::VerifyLog {
+        HubAction::VerifyLog {
             vfr_id,
             hub,
             event,
@@ -25,12 +25,12 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
             pubkey.as_deref(),
             json,
         ),
-        RegistryAction::VerifyChain {
+        HubAction::VerifyChain {
             frontier,
             artifacts,
             json,
         } => cmd_verify_chain(frontier, artifacts, json),
-        RegistryAction::RegisterGit {
+        HubAction::RegisterGit {
             vfr_id,
             remote,
             r#ref,
@@ -96,7 +96,7 @@ pub(crate) fn cmd_registry(action: RegistryAction) {
                 fail(&format!("register-git failed ({status}): {payload}"));
             }
         }
-        RegistryAction::WitnessCheck { vfr_id, hubs, json } => {
+        HubAction::WitnessCheck { vfr_id, hubs, json } => {
             // v0.129: A11 mitigation. Pull `vfr_id` from every named
             // hub, canonicalize each entry, compare. Reports per-hub
             // canonical hash plus consensus signal:

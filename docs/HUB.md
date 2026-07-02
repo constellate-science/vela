@@ -9,7 +9,7 @@ APIs, and the editorial "live" filter. It does not own byte custody (git + LFS
 do), and it is not the write authority for acceptance (a reviewer's signed
 `review.accepted` event in a PR is). Its write endpoints are now limited to index
 population: the git-ingestion lane is LIVE — an owner binds a repo once
-(`vela registry register-git <vfr> --remote <url>`, or POST
+(`vela hub register-git <vfr> --remote <url>`, or POST
 `/entries/{vfr}/git-remote` with a signed `vela.frontier-git-remote.v0.1`
 record), and the hub re-derives the index by fetching the repo, strictly
 replaying the committed `.vela/events` log (validation + reducer replay +
@@ -91,7 +91,7 @@ repo; the hub's ingest loop re-derives the index from the committed
 event log. Bind the repo once:
 
 ```bash
-vela registry register-git <vfr_id> --remote <repo-url>
+vela hub register-git <vfr_id> --remote <repo-url>
 ```
 
 ## Reading
@@ -166,7 +166,7 @@ distinction between "human signs" and "bot signs."
 
 ```bash
 # 1. Generate a keypair locally.
-vela sign generate-keypair --out ~/.vela/keys/my-bot
+vela id keygen --out ~/.vela/keys/my-bot
 
 # 2. Register the pubkey in the frontier with a tier.
 vela actor add path/to/frontier.json reviewer:my-bot \
@@ -447,7 +447,7 @@ that need them).
 The federation primitive remains:
 
 ```bash
-vela registry mirror <vfr_id> \
+vela registry mirror <vfr_id> \   # historical (v0.20 mirror primitive; retired)
   --from https://hub.constellate.science \
   --to https://your-hub.example.com
 ```

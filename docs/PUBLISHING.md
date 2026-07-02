@@ -111,7 +111,7 @@ vela frontier materialize .
 vela check . --strict --json
 git push
 
-vela registry register-git <vfr_id> \
+vela hub register-git <vfr_id> \
   --remote https://github.com/you/your-frontier.git
 ```
 

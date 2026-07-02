@@ -1,4 +1,4 @@
-//! `vela registry verify-log` — independent verification of a hub's RFC 6962
+//! `vela hub verify-log` — independent verification of a hub's RFC 6962
 //! transparency log. Fetches the signed tree head (STH), checks its Ed25519
 //! signature against an externally pinned pubkey, recomputes the Merkle root
 //! from the event content-address preimages, and (optionally) checks one

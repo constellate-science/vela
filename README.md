@@ -110,12 +110,12 @@ curl -fsSL https://raw.githubusercontent.com/constellate-science/vela/main/insta
 ## The working loop
 
 ```sh
-vela status <frontier>          # one screen: replay verdict, proposals, leases, judgment
+vela status <frontier>          # one screen: replay verdict, proposals, judgment
 vela serve <frontier>           # MCP tools incl. task_packet (the agent entry contract)
-vela claim <frontier> <id> ...  # lease an obligation before long work
+vela record <frontier> --claim … --artifact …   # activity into a portable claim packet
 vela reproduce <frontier>       # frozen verifiers re-check every witness
-vela accept <frontier> <vpr> --key ...        # keyed authority lands state
-vela attest <frontier> --scope formalism-fidelity --key ...   # signed human faithfulness verdict (vsa_)
+vela accept <frontier> <vpr>    # keyed authority lands state (--all-pending for batch)
+vela review <frontier> <vf> --fidelity …        # signed human faithfulness verdict (vsa_)
 ```
 
 An agent may propose; only a key-holding human accepts. Failures are
@@ -130,10 +130,9 @@ Anyone with a keypair can deposit a signed transition into the public registry
 in one command:
 
 ```sh
-vela sign generate-keypair --out ~/.config/vela/keys
-vela registry propose <vfr_id> --to https://hub.constellate.science \
-  --key ~/.config/vela/keys/private.key --actor reviewer:your-handle \
-  --reason "..." --payload finding.json
+vela id create --handle your-handle    # key + identity, once
+vela finding add . --assertion "..." --as reviewer:your-handle
+git push                               # publication; the hub re-derives its index
 ```
 
 A proposal is admitted to the *log* on the strength of its signature over

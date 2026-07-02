@@ -120,9 +120,9 @@ For verifier-gated construction kinds, you do not need to hand-write a witness; 
 
 ```bash
 # search and report (writes nothing)
-vela campaign search rook_directions --n 16
+vela foundry campaign search rook_directions --n 16
 # search, write the verified witness, and propose it (pending; no key needed)
-vela campaign run gf2_sidon --n 12 --frontier <frontier> --propose --reviewer <agent-id>
+vela foundry campaign run gf2_sidon --n 12 --frontier <frontier> --propose --as <agent-id>
 ```
 
 Searchable kinds: `gf2_sidon`, `union_free`, `rook_directions`, `sidon`, `bh` (with `--h`), `golomb`, `costas`. The search is deterministic (the same `--seed` reproduces the same witness), and every find is re-checked by the frozen `vela-verify` before it is reported, so a reported find always passes `vela reproduce`. `--propose` lands a key-free `finding.add` that waits for a human verdict (step 4); it does not promote the claim. The engine certifies lower bounds: it extends the less-explored ranges and will under-perform the algebraic optima behind the largest records, which is exactly where a stronger search wins.
@@ -177,7 +177,7 @@ vela status <frontier>                      # one-screen truth
 
 1. **Read the frontier.** `vela status` shows replay health, pending proposals, live leases, and signed judgment counts. Problem pages render the same state at app.constellate.science/erdos/617 (append `/packet.json` for the machine twin).
 2. **Pull a task packet.** `vela serve examples/erdos-problems` exposes MCP tools; `task_packet` for a problem number returns the statement, allowed outputs mapped to verifiers, banked do-not-regrind routes, and open targets ranked by what rests on them.
-3. **Lease before long work.** `vela claim <frontier> <obligation-id> --ttl 86400 --by <actor> --key <key>` so other producers route around you.
+3. **Coordinate long work out-of-band** (an issue, a claim comment); the CLI lease verb is retired.
 4. **Produce a state transition.** A witness that passes `vela reproduce`, a finding proposed via `vela propose`, or a signed attempt (failures included: they are ledger entries, not noise).
 5. **Authority is custody.** An agent may propose; only a key-holding human accepts (`vela accept --key`). Statement fidelity is a separate signed verdict (`vela review --fidelity …`): the kernel proves the formal statement follows; only a human attests it is the problem anyone meant.
 
@@ -1150,7 +1150,7 @@ vela reject frontier.json vf_0123 --reason "..." --reviewer reviewer:demo --json
 vela retract frontier.json vf_0123 --reason "..." --reviewer reviewer:demo --json
 vela proposals list frontier.json --status pending_review --json
 vela proposals accept frontier.json vpr_0123456789abcdef --reviewer reviewer:demo --reason "Accepted after review" --json
-vela history frontier.json vf_0123 --json
+vela log frontier.json vf_0123 --json
 ```
 
 `finding add`, `propose`, `note`, `caveat`, `revise`, `reject`, and `retract` create `vela.proposal.v0.1` records by default. `--apply` accepts and applies the proposal locally in one step. Applied proposals append a canonical `vela.event.v0.1` event and then save the materialized frontier snapshot. They return this stable envelope:

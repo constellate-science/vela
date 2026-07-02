@@ -64,57 +64,94 @@ mod surface_tests {
         });
     }
 
-    /// The v0.700 released command set, minus the bespoke hub transport
-    /// retired at v0.721 (ADR 0001 Phase 2: `publish`, `clone`, `workspace`
-    /// — git push is publication; the hub re-derives its index from
-    /// registered git remotes) and minus `attest`, renamed to `review`
-    /// at v0.722 (one family for everything a human key decides). A regression guard: later consolidation
-    /// batches may NEST these (keeping a hidden top-level alias) but must
-    /// never make one unreachable. `is_science_subcommand` counts aliases,
-    /// so a nested-with-alias command still passes here.
-    const V0700_BASELINE: &[&str] = &[
+    /// The v0.723 porcelain: the EXACT visible surface, guarded in both
+    /// directions. A dropped command fails ("a collapse removed it"); a new
+    /// command fails too ("extend this list deliberately"). Growth is a
+    /// decision, not a drift.
+    const V0723_VISIBLE: &[&str] = &[
         "accept",
-        "accept-batch",
         "actor",
+        "agents",
         "attach",
-        "attempt",
         "check",
-        "claim",
-        "completions",
         "diff",
         "doctor",
         "finding",
+        "foundry",
         "frontier",
         "gate",
-        "history",
+        "hub",
         "id",
         "inbox",
-        "ingest",
         "init",
-        "lean",
         "log",
-        "normalize",
         "proof",
         "proposals",
         "propose",
-        "queue",
-        "registry",
+        "record",
         "reproduce",
+        "review",
         "serve",
-        "sign",
         "status",
-        "transfer",
-        "verify",
     ];
+    const V0723_HIDDEN: &[&str] = &["completions", "queue"];
 
     #[test]
-    fn v0700_baseline_commands_stay_reachable() {
+    fn v0723_surface_is_exact_both_directions() {
         on_big_stack(|| {
-            for name in V0700_BASELINE {
+            let cmd = Cli::command();
+            let mut visible: Vec<String> = Vec::new();
+            let mut hidden: Vec<String> = Vec::new();
+            for c in cmd.get_subcommands() {
+                if c.is_hide_set() {
+                    hidden.push(c.get_name().to_string());
+                } else {
+                    visible.push(c.get_name().to_string());
+                }
+            }
+            visible.sort();
+            hidden.sort();
+            let want_visible: Vec<String> = V0723_VISIBLE.iter().map(|s| s.to_string()).collect();
+            let want_hidden: Vec<String> = V0723_HIDDEN.iter().map(|s| s.to_string()).collect();
+            assert_eq!(
+                visible, want_visible,
+                "the VISIBLE surface drifted — a removal broke the porcelain, or an \
+                 addition must be a deliberate baseline change"
+            );
+            assert_eq!(
+                hidden, want_hidden,
+                "the HIDDEN surface drifted — hiding/unhiding is a deliberate act"
+            );
+        });
+    }
+
+    #[test]
+    fn retired_verbs_are_not_reachable() {
+        on_big_stack(|| {
+            for name in [
+                "land",
+                "verify",
+                "history",
+                "accept-batch",
+                "normalize",
+                "ingest",
+                "claim",
+                "sign",
+                "campaign",
+                "lean",
+                "attempt",
+                "transfer",
+                "experiment",
+                "registry",
+                "publish",
+                "clone",
+                "workspace",
+                "attest",
+                "receipt",
+            ] {
                 assert!(
-                    is_science_subcommand(name),
-                    "v0.700 command `{name}` is no longer reachable — a consolidation \
-                     dropped it instead of nesting-with-alias"
+                    !is_science_subcommand(name),
+                    "retired verb `{name}` is still reachable — the cut regressed"
                 );
             }
         });

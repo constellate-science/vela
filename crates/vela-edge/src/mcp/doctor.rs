@@ -122,7 +122,7 @@ pub fn run(frontier_arg: Option<&Path>, port: u16) -> DoctorReport {
             format!("vela frontier audit {frontier_display}"),
             format!("vela check {frontier_display} --evidence"),
             format!("vela proof {frontier_display} --out /tmp/vela-proof"),
-            "vela verify /tmp/vela-proof".to_string(),
+            "vela proof verify /tmp/vela-proof".to_string(),
         ]
     } else {
         vec![

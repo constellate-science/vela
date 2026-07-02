@@ -407,7 +407,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
                     "Active finding has no materialized evidence atom in the source-evidence map."
                         .to_string(),
                 recommended_action:
-                    "Run `vela normalize` to materialize evidence atoms, or attach explicit evidence spans."
+                    "Attach explicit evidence spans (`vela finding add --evidence-span …`), or regenerate derived views with `vela frontier materialize`."
                         .to_string(),
                 blocks: vec!["strict_check".to_string(), "proof_ready".to_string()],
                 caveats: vec![
@@ -602,7 +602,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
     // canonical; `FindingBundle.provenance` is a denormalized cache.
     // Drift between the two is a strict-mode failure — the source
     // record wins, and the finding must be rewritten via
-    // `vela normalize --resync-provenance`.
+    // a provenance resync (retired `normalize` verb; the check remains).
     let mut by_doi: BTreeMap<String, &vela_protocol::sources::SourceRecord> = BTreeMap::new();
     let mut by_pmid: BTreeMap<String, &vela_protocol::sources::SourceRecord> = BTreeMap::new();
     let mut duplicate_dois: BTreeSet<String> = BTreeSet::new();
@@ -667,7 +667,7 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
                     diffs.join("; ")
                 ),
                 recommended_action:
-                    "Run `vela normalize --resync-provenance --write` to regenerate finding.provenance from the canonical SourceRecord."
+                    "Regenerate finding.provenance from the canonical SourceRecord (re-add the source via `vela finding add`, or edit and re-materialize)."
                         .to_string(),
                 blocks: vec!["strict_check".to_string(), "proof_ready".to_string()],
                 caveats: vec![

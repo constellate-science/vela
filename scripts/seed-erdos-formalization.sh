@@ -47,5 +47,5 @@ VF=$("$VELA" finding add "$FRONTIER" \
       --author "$REVIEWER" --apply --json | grep -oE 'vf_[0-9a-f]+' | head -1)
 "$VELA" attest "$FRONTIER" "$VF" --verdict "$VERDICT" \
   --informal-ref "erdosproblems.com/$N" --formal-ref "$FORMAL_REF" \
-  --formal-statement-hash "$HASH" --note "$NOTE" --reviewer "$REVIEWER"
-echo "signed. next: vela frontier materialize $FRONTIER && git push  # git push is publication; bind once with vela registry register-git"
+  --formal-statement-hash "$HASH" --note "$NOTE" --as "$REVIEWER"
+echo "signed. next: vela frontier materialize $FRONTIER && git push  # git push is publication; bind once with vela hub register-git"

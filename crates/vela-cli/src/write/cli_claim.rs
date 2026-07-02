@@ -1,5 +1,5 @@
-//! Read-side claim projections: `vela claim {state,trust,pack,diff}`, plus the
-//! math-atlas anchor verbs `vela claim {anchor,anchors,unanchor}` (`run_anchor`).
+//! Read-side state projections: `vela state [trust|pack|diff]`, plus the
+//! math-atlas anchor verbs `vela state {anchor,anchors,unanchor}` (`run_anchor`).
 //! The projections never write; `anchor`/`unanchor` are the one write pair here
 //! (signed `anchor.attached`/`anchor.retracted` events), kept in their own
 //! entrypoint so the projection contract stays pure.
@@ -26,7 +26,8 @@
 //! Dispatched by an intercept in `cli.rs::run_from_args` (mirroring the
 //! `proof verify` / atlas-r2 read-only intercepts) so the projections
 //! sit ahead of the clap dispatcher and never collide with the existing
-//! `vela claim <frontier> <obligation>` lease command.
+//! (The obligation-lease verb is retired; the argv still arrives in the
+//! historical `claim <mode>` shape, rewritten by the `state` intercept.)
 
 use std::path::Path;
 
@@ -63,11 +64,11 @@ pub(crate) fn run(args: &[String]) {
         let frontier = positionals
             .first()
             .copied()
-            .unwrap_or_else(|| fail("usage: vela claim diff <frontier> <proposal_id> [--json]"));
+            .unwrap_or_else(|| fail("usage: vela state diff <frontier> <proposal_id> [--json]"));
         let proposal_id = positionals
             .get(1)
             .copied()
-            .unwrap_or_else(|| fail("usage: vela claim diff <frontier> <proposal_id> [--json]"));
+            .unwrap_or_else(|| fail("usage: vela state diff <frontier> <proposal_id> [--json]"));
         let delta = derive_evidence_diff(Path::new(frontier), proposal_id);
         if json {
             print_json(&delta);
@@ -77,16 +78,14 @@ pub(crate) fn run(args: &[String]) {
         return;
     }
 
-    let frontier = positionals.first().copied().unwrap_or_else(|| {
-        fail(&format!(
-            "usage: vela claim {verb} <frontier> <vf_id> [--json]"
-        ))
-    });
-    let vf_id = positionals.get(1).copied().unwrap_or_else(|| {
-        fail(&format!(
-            "usage: vela claim {verb} <frontier> <vf_id> [--json]"
-        ))
-    });
+    let frontier = positionals
+        .first()
+        .copied()
+        .unwrap_or_else(|| fail("usage: vela state [trust|pack] <frontier> <vf_id> [--json]"));
+    let vf_id = positionals
+        .get(1)
+        .copied()
+        .unwrap_or_else(|| fail("usage: vela state [trust|pack] <frontier> <vf_id> [--json]"));
 
     let project = repo::load_from_path(Path::new(frontier)).unwrap_or_else(|e| fail(&e));
     let finding = project
@@ -132,7 +131,7 @@ pub(crate) fn run(args: &[String]) {
     }
 }
 
-/// `vela claim anchor|anchors|unanchor` — the math-atlas anchor-link verbs.
+/// `vela state anchor|anchors|unanchor` — the math-atlas anchor-link verbs.
 ///
 /// `anchor` attaches a signed `val_` (an external-catalogue anchor: OEIS,
 /// Erdős, mathlib, arXiv, MSC) to a claim; `unanchor` retracts one by id;
@@ -158,7 +157,7 @@ pub(crate) fn run_anchor(args: &[String]) {
     };
 
     let frontier = positionals.first().copied().unwrap_or_else(|| {
-        fail("usage: vela claim anchor <frontier> <vf_id> --ns <ns> --id <id> --role <role>")
+        fail("usage: vela state anchor <frontier> <vf_id> --ns <ns> --id <id> --role <role>")
     });
 
     // ── anchors: read-only list ──
@@ -198,7 +197,7 @@ pub(crate) fn run_anchor(args: &[String]) {
         let val_id = positionals
             .get(1)
             .copied()
-            .unwrap_or_else(|| fail("usage: vela claim unanchor <frontier> <val_id>"));
+            .unwrap_or_else(|| fail("usage: vela state unanchor <frontier> <val_id>"));
         let by = crate::cli_identity::resolve_actor(flag("--reviewer").as_deref());
         let mut project = repo::load_from_path(Path::new(frontier)).unwrap_or_else(|e| fail(&e));
         let target = project
@@ -233,7 +232,7 @@ pub(crate) fn run_anchor(args: &[String]) {
 
     // ── anchor: attach a signed external-catalogue anchor ──
     let vf_id = positionals.get(1).copied().unwrap_or_else(|| {
-        fail("usage: vela claim anchor <frontier> <vf_id> --ns <ns> --id <id> --role <role>")
+        fail("usage: vela state anchor <frontier> <vf_id> --ns <ns> --id <id> --role <role>")
     });
     let ns = flag("--ns")
         .or_else(|| flag("--namespace"))

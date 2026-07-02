@@ -3822,8 +3822,8 @@ fn render_root_html(urls: &PublicUrls) -> String {
     <span class="wb-section__aside">the signature is the bind</span>
   </div>
   <div class="tm-paper">
-    <div class="tm-paper__bar"><span>vela registry publish</span></div>
-    <div class="tm-paper__body"><span class="tm-ps">$</span> <span class="tm-cmd">vela registry publish</span> frontier.json \
+    <div class="tm-paper__bar"><span>git push · vela hub register-git</span></div>
+    <div class="tm-paper__body"><span class="tm-ps">$</span> <span class="tm-cmd">vela hub register-git</span> vfr_&hellip; \
   <span class="tm-flag">--owner</span> reviewer:my-id \
   <span class="tm-flag">--key</span> ~/.vela/keys/private.key \
   <span class="tm-flag">--locator</span> https://example.com/frontier.json \
@@ -3838,9 +3838,9 @@ fn render_root_html(urls: &PublicUrls) -> String {
     <span class="wb-section__aside">byte-identical reconstruction</span>
   </div>
   <div class="tm-paper">
-    <div class="tm-paper__bar"><span>vela registry list / pull</span></div>
-    <div class="tm-paper__body"><span class="tm-ps">$</span> <span class="tm-cmd">vela registry list</span> <span class="tm-flag">--from</span> {hub_url}/entries
-<span class="tm-ps">$</span> <span class="tm-cmd">vela registry pull</span> &lt;vfr_id&gt; <span class="tm-flag">--from</span> {hub_url}/entries <span class="tm-flag">--out</span> ./pulled.json</div>
+    <div class="tm-paper__bar"><span>git clone · vela check</span></div>
+    <div class="tm-paper__body"><span class="tm-ps">$</span> <span class="tm-cmd">git clone</span> &lt;frontier-repo-url&gt;
+<span class="tm-ps">$</span> <span class="tm-cmd">vela check</span> &lt;dir&gt; <span class="tm-flag">--strict</span></div>
   </div>
 </section>"#,
     );
@@ -3982,8 +3982,8 @@ fn render_entry_html(
         <span class="wb-section__aside">byte-identical reconstruction</span>
       </div>
       <div class="tm-paper">
-        <div class="tm-paper__bar"><span>vela registry pull · {vfr_safe}</span></div>
-        <div class="tm-paper__body"><span class="tm-ps">$</span> <span class="tm-cmd">vela registry pull</span> {vfr_safe} \
+        <div class="tm-paper__bar"><span>git clone · {vfr_safe}</span></div>
+        <div class="tm-paper__body"><span class="tm-ps">$</span> <span class="tm-cmd">git clone</span> &lt;this frontier's registered repo&gt; \
   <span class="tm-flag">--from</span> {hub_url}/entries \
   <span class="tm-flag">--out</span> ./pulled.json</div>
       </div>

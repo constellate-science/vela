@@ -100,40 +100,6 @@ fn check_missing_frontier_reports_error_without_panic() {
 }
 
 #[test]
-fn normalize_refuses_to_write_eventful_frontier() {
-    let tmp = TempDir::new().unwrap();
-    let Some(frontier) = copy_bbb_frontier(&tmp) else {
-        eprintln!("skip: bbb-alzheimer.json fixture absent (internal-only)");
-        return;
-    };
-    let finding_id = first_finding_id(&frontier);
-    let out = tmp.path().join("normalized.json");
-
-    run_json(&[
-        "review",
-        frontier.to_str().unwrap(),
-        &finding_id,
-        "--status",
-        "contested",
-        "--reason",
-        "Scope requires review before reuse.",
-        "--reviewer",
-        "reviewer:test",
-        "--apply",
-        "--json",
-    ]);
-
-    let error = run_expect_failure(&[
-        "normalize",
-        frontier.to_str().unwrap(),
-        "--out",
-        out.to_str().unwrap(),
-    ]);
-    assert!(error.contains("Refusing to normalize a frontier with canonical events"));
-    assert!(!out.exists());
-}
-
-#[test]
 fn proof_without_record_proof_state_leaves_input_byte_identical() {
     let tmp = TempDir::new().unwrap();
     let Some(frontier) = copy_bbb_frontier(&tmp) else {
@@ -299,9 +265,11 @@ fn tool_check_json_has_concise_tool_lists() {
 fn advanced_help_quickstart_uses_release_commands() {
     let help = run_text(&["help", "advanced"]);
 
-    assert!(help.contains("vela check frontier.json --json"));
-    assert!(help.contains("reproduce     Re-verify stored witnesses from scratch"));
-    assert!(!help.contains("vela check frontier.json --strict --json"));
+    assert!(help.contains("check         The full trust gate"));
+    assert!(
+        help.contains("reproduce     Re-verify stored witnesses from scratch (frozen verifiers)")
+    );
+
     assert!(!help.contains("bridges derive"));
     assert!(!help.contains("vela workbench"));
     // The v0.700 cut: the help must advertise nothing the binary

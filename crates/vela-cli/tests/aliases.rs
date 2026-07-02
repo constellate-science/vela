@@ -27,25 +27,25 @@ fn combined(out: &Output) -> String {
     )
 }
 
-/// The acting-identity flag is `--reviewer` and ONLY `--reviewer` — the
-/// retired `--actor`/`--by` aliases must now be rejected (one canonical name).
+/// The acting-identity flag is `--as` and ONLY `--as` — the retired
+/// `--reviewer`/`--actor`/`--by` spellings must be rejected (one name).
 #[test]
-fn identity_flag_is_canonical_reviewer_only() {
+fn identity_flag_is_canonical_as_only() {
     let ok = vela(&[
         "accept",
         "/tmp/vela_nonexistent.json",
         "vpr_x",
-        "--reviewer",
+        "--as",
         "reviewer:w",
         "--reason",
         "r",
     ]);
     assert!(
         !stderr(&ok).contains("unexpected argument"),
-        "`accept --reviewer` should parse, got: {}",
+        "`accept --as` should parse, got: {}",
         stderr(&ok)
     );
-    for retired in ["--actor", "--by"] {
+    for retired in ["--reviewer", "--actor", "--by"] {
         let out = vela(&[
             "accept",
             "/tmp/x.json",
@@ -63,27 +63,92 @@ fn identity_flag_is_canonical_reviewer_only() {
     }
 }
 
-/// `sign apply` takes `--key` and only `--key` (retired `--private-key`).
+/// `id sign` takes `--key` and only `--key`; the retired `sign` top-level
+/// 404s outright.
 #[test]
 fn key_flag_is_canonical_key_only() {
     let ok = vela(&[
+        "id",
         "sign",
-        "apply",
         "/tmp/vela_nonexistent.json",
         "--key",
         "/tmp/nope",
     ]);
     assert!(
         !stderr(&ok).contains("unexpected argument"),
-        "`sign apply --key` should parse, got: {}",
+        "`id sign --key` should parse, got: {}",
         stderr(&ok)
     );
-    let retired = vela(&["sign", "apply", "/tmp/x.json", "--private-key", "/tmp/nope"]);
+    let retired = vela(&["sign", "apply", "/tmp/x.json", "--key", "/tmp/nope"]);
     assert!(
-        stderr(&retired).contains("unexpected argument")
-            || stderr(&retired).contains("private-key"),
-        "retired `--private-key` should be rejected, got: {}",
-        stderr(&retired)
+        combined(&retired).contains("unknown or non-release command"),
+        "retired `sign` top-level should 404, got: {}",
+        combined(&retired)
+    );
+}
+
+/// Every retired top-level spelling 404s with the release-surface error —
+/// no aliases, no shims, the porcelain is the porcelain.
+#[test]
+fn retired_top_level_verbs_404() {
+    for verb in [
+        "land",
+        "verify",
+        "history",
+        "accept-batch",
+        "normalize",
+        "ingest",
+        "claim",
+        "sign",
+        "campaign",
+        "lean",
+        "attempt",
+        "transfer",
+        "experiment",
+        "registry",
+        "attest",
+        "receipt",
+        "publish",
+        "clone",
+        "workspace",
+    ] {
+        let out = vela(&[verb, "--help"]);
+        assert!(
+            combined(&out).contains("unknown or non-release command"),
+            "retired verb `{verb}` should 404, got: {}",
+            combined(&out)
+        );
+    }
+}
+
+/// The folded spellings dispatch: hub, foundry planes, id keygen, state.
+#[test]
+fn folded_spellings_dispatch() {
+    for args in [
+        vec!["hub", "--help"],
+        vec!["foundry", "campaign", "--help"],
+        vec!["foundry", "lean", "--help"],
+        vec!["foundry", "attempt", "--help"],
+        vec!["foundry", "transfer", "--help"],
+        vec!["foundry", "experiment", "--help"],
+        vec!["id", "keygen", "--help"],
+        vec!["accept", "--help"],
+    ] {
+        let out = vela(&args);
+        assert!(
+            !combined(&out).contains("unknown or non-release command"),
+            "`{}` should dispatch, got: {}",
+            args.join(" "),
+            combined(&out)
+        );
+    }
+    // the state intercept: reaches the projection parser (usage error is
+    // fine; a 404 is not)
+    let out = vela(&["state"]);
+    assert!(
+        !combined(&out).contains("unknown or non-release command"),
+        "`state` should reach the intercept, got: {}",
+        combined(&out)
     );
 }
 

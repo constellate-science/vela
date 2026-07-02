@@ -3,4 +3,3 @@
 
 pub mod campaign;
 pub mod cli_campaign;
-pub mod cli_source_fetch;
