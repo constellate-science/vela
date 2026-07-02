@@ -9,6 +9,7 @@ use vela_protocol::repo;
 
 /// v0.42: One-screen status. The `git status` analogue.
 pub(crate) fn cmd_status(path: &Path, json: bool) {
+    crate::ui::set_mode("status", json);
     let project = repo::load_from_path(path).unwrap_or_else(|e| fail_return(&e));
 
     // Replay integrity: the one-line truth a stranger checks first.
@@ -272,6 +273,7 @@ pub(crate) fn unpublished_store_files(path: &Path) -> usize {
 
 /// v0.42: Recent canonical events. The `git log` analogue.
 pub(crate) fn cmd_log(path: &Path, limit: usize, kind_filter: Option<&str>, json: bool) {
+    crate::ui::set_mode("log", json);
     let project = repo::load_from_path(path).unwrap_or_else(|e| fail_return(&e));
     let mut events: Vec<&vela_protocol::events::StateEvent> = project
         .events
@@ -365,6 +367,7 @@ pub(crate) fn cmd_log(path: &Path, limit: usize, kind_filter: Option<&str>, json
 
 /// v0.42: Pending-proposals triage. The thing you sit down to review.
 pub(crate) fn cmd_inbox(path: &Path, kind_filter: Option<&str>, limit: usize, json: bool) {
+    crate::ui::set_mode("inbox", json);
     let project = repo::load_from_path(path).unwrap_or_else(|e| fail_return(&e));
 
     // Collect reviewer-agent score map (composite shown alongside each

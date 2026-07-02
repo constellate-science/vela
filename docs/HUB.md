@@ -55,8 +55,8 @@ The public hub is **<https://hub.constellate.science>**.
 | `GET /healthz` | Liveness; reports DB reachability. |
 | `GET /entries` | Live frontiers, returned as `vela.registry-entry.v0.1` index rows. |
 | `GET /entries/{vfr_id}` | One live frontier entry. HTML reads the hub projection and renders findings inline. |
-| `GET /entries/{vfr_id}/events?since=<event_id>&limit=<n>&kind=&target=` | Cursor-paginated canonical event log ordered by `seq`. Unknown cursors return 400. |
-| `GET /entries/{vfr_id}/events/stream?since=<event_id>` | Server-sent event stream. Emits backlog, then heartbeat while idle. |
+| `GET /entries/{vfr_id}/events?cursor=<event_id>&limit=<n>&kind=&target=` | Cursor-paginated canonical event log ordered by `seq`; `next_cursor` in the body resumes the walk. Unknown cursors return 400. |
+| `GET /entries/{vfr_id}/events/stream?cursor=<event_id>` | Server-sent event stream. Emits backlog, then heartbeat while idle. |
 | `GET /frontier/{vfr_id}/inbox` | Agent-facing alias for the event stream. |
 | `GET /entries/{vfr_id}/snapshot` | Derived materialized snapshot JSON. `?redirect=cdn` redirects to the immutable blob when available. |
 | `GET /entries/{vfr_id}/findings/{vf_id}` | Single-finding view: claim, conditions, evidence, links. Cross-frontier links navigate when dependencies are published. |
@@ -117,12 +117,12 @@ a webhook push.
 
 Add it to any MCP client as `https://hub.constellate.science/mcp`
 (transport: streamable HTTP, no auth). The tool surface is the read-only
-profile minus the filesystem-path `vela_*` runtime family (useless
-remotely, and `vela_reproduce_run` would be a CPU sink on a public
-endpoint). Orientation, search, findings, contradictions, blast-radius,
-task packets, and event reads are all served; every write verb and every
-decision verb is absent by construction — the hosted endpoint cannot
-mutate state under any configuration.
+profile minus the filesystem-path tools `verify`, `work`, and `objects`
+(useless remotely, and `verify` mode=witness would be a CPU sink on a
+public endpoint) — five tools: `orient`, `finding`, `search`, `graph`,
+`external`. Every write verb and every decision verb is absent by
+construction — the hosted endpoint cannot mutate state under any
+configuration.
 
 `vela serve <frontier> --http <port>` exposes the identical `/mcp` route
 locally, so the remote and local contracts are the same surface.

@@ -186,7 +186,7 @@ def fetch_all_events(hub: str, vfr: str) -> list[dict]:
     while True:
         url = f"{hub}/entries/{vfr}/events?limit=500"
         if cursor:
-            url += f"&since={urllib.parse.quote(cursor)}"
+            url += f"&cursor={urllib.parse.quote(cursor)}"
         page = get_json(url)
         batch = page.get("events", [])
         events.extend(batch)

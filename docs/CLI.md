@@ -57,7 +57,7 @@ discovery plane nests under `foundry`. Every porcelain verb takes
 | `frontier` | Repo-level: new/materialize/add-dep/list-deps/diff/release/audit. |
 | `actor` | Frontier-registered identities: add/list/rotate. |
 | `agents` | `VELA.md` charter adapters: sync/doctor/diff (AGENTS.md, CLAUDE.md, .mcp.json are generated, never hand-edited). |
-| `serve` | MCP (stdio, and streamable HTTP at `--http`'s `/mcp`) + HTTP read surface. Profiles nest: `read-only` ⊂ `draft` ⊂ `maintainer`. The public hub serves the same read-only surface at `hub.constellate.science/mcp`. |
+| `serve` | The frontier as an MCP server (stdio, or `/mcp` over `--http`) with ten agent-first tools; profiles nest `read-only` (7) ⊂ `draft` (9) ⊂ `maintainer` (10). The hub hosts the clone-free subset (5) at `hub.constellate.science/mcp`. |
 | `doctor` | First-user diagnosis of checkout/frontier/proof/serve. |
 | `foundry` | The discovery plane: `campaign`, `lean-*`, `attempt`, `transfer`, `experiment`. Search proposes; the frozen verifier is the gate. |
 
@@ -89,6 +89,27 @@ ranks stranded state above all other work.
 `core.hooksPath`): pre-commit re-materializes views when events are
 staged (committed store can never lead its views), pre-push holds the
 push to the same strict bar CI enforces.
+
+## The output contract
+
+One grammar, enforced by one module (`crates/vela-cli/src/ui.rs`):
+
+- **Frontier discovery**: the `[frontier]` positional is optional on the
+  daily verbs — omitted, it is discovered by walking upward from the
+  current directory, exactly like git finds `.git`. An object id in the
+  frontier slot shifts automatically (`vela accept vpr_x` works).
+- **Exit codes**: 0 ok · 1 domain failure (gate red, verify fail) ·
+  2 usage · 3 not found · 4 custody refused · 5 already exists. An agent
+  that knows WHY a call failed can self-correct without parsing prose.
+- **JSON guarantee**: under `--json`, every outcome — including every
+  failure — is one JSON object `{ok, command, error?{kind,message,hint}}`.
+  No prose ever leaks into a `--json` stream.
+- **Hints**: errors carry a `hint:` line naming the exact next command;
+  `--quiet` or `VELA_ADVICE=0` silences hints without touching messages.
+- **Flags mean one thing**: `--as` = acting identity (all writes);
+  `--key` = path to an Ed25519 private key, hex seed (defaults to your
+  `vela id`); `--as-of` = RFC3339 instant. The same help text renders on
+  every verb that carries the flag.
 
 ## Identity grammar
 

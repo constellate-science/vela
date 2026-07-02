@@ -2526,6 +2526,10 @@ pub(crate) fn register_canonical_witnesses(
 }
 
 pub(crate) fn cmd_reproduce(path: &Path, json_output: bool) {
+    crate::ui::set_mode("reproduce", json_output);
+    if !json_output {
+        crate::ui::header("REPRODUCE", &path.display().to_string(), None);
+    }
     let files = collect_witness_files(path);
     if files.is_empty() {
         fail(&format!(

@@ -20,9 +20,18 @@
 use clap::Subcommand;
 use std::path::PathBuf;
 
+/// One meaning per flag, everywhere (the audit's top finding was
+/// semantic drift). These are the canonical help strings, referenced by
+/// every variant that carries the flag.
+pub(crate) const HELP_KEY: &str = "Path to an Ed25519 private key (hex seed file). Optional: defaults to your `vela id` identity key";
+pub(crate) const HELP_AS: &str = "Acting identity for this write (reviewer:<you> or agent:<name>). Optional: defaults to your `vela id`";
+pub(crate) const HELP_AS_OF: &str = "Answer as of this RFC3339 instant, e.g. 2026-07-02T16:00:00Z";
+
 #[derive(Subcommand)]
 pub(crate) enum Commands {
-    /// Check frontier quality and proof readiness
+    /// Is the LOG intact: replay, signatures, hash parity (--strict is
+    /// the bar CI and the hub hold a repo to). Checks the record, not
+    /// the science — `vela reproduce` re-runs the verifiers themselves.
     Check {
         /// Frontier JSON file, Vela repo, or proof packet
         source: Option<PathBuf>,
@@ -87,7 +96,11 @@ pub(crate) enum Commands {
         #[arg(long)]
         json: bool,
     },
-    /// Serve a read-only frontier over MCP stdio or HTTP
+    /// Make this frontier queryable by AI agents: an MCP server any
+    /// client (Claude Code, Cursor, …) can attach to, over stdio or
+    /// HTTP. Profiles gate what tools exist: read-only (default) ⊂
+    /// draft ⊂ maintainer. The public hub serves the same read surface
+    /// at hub.constellate.science/mcp with no clone at all.
     Serve {
         /// Frontier JSON file or Vela repo
         #[arg(required_unless_present_any = ["frontiers", "setup"])]
@@ -124,7 +137,7 @@ pub(crate) enum Commands {
     /// equivalent of `git status`. One screen: counts, the inbox,
     /// the audit. Read in two seconds.
     Status {
-        frontier: PathBuf,
+        frontier: Option<PathBuf>,
         /// Output stable JSON for programmatic callers.
         #[arg(long)]
         json: bool,
@@ -132,7 +145,7 @@ pub(crate) enum Commands {
     /// v0.42: Recent canonical events in human-readable form. The
     /// `git log` analogue. Default newest-first; cap on count.
     Log {
-        frontier: PathBuf,
+        frontier: Option<PathBuf>,
         /// A finding id (`vf_…`): show that finding's state-transition
         /// history instead of the frontier-wide event log.
         finding_id: Option<String>,
@@ -143,7 +156,7 @@ pub(crate) enum Commands {
         #[arg(long)]
         kind: Option<String>,
         /// Finding mode: state as of this RFC3339 instant.
-        #[arg(long = "as-of")]
+        #[arg(long = "as-of", help = HELP_AS_OF)]
         as_of: Option<String>,
         /// Output stable JSON.
         #[arg(long)]
@@ -153,7 +166,7 @@ pub(crate) enum Commands {
     /// review. Reviewer-agent scores surface where present; flagged
     /// items rise to the top.
     Inbox {
-        frontier: PathBuf,
+        frontier: Option<PathBuf>,
         /// Show only proposals matching this kind (substring match).
         #[arg(long)]
         kind: Option<String>,
@@ -183,12 +196,10 @@ pub(crate) enum Commands {
         #[command(subcommand)]
         action: AgentsAction,
     },
-    /// Re-verify stored witnesses from scratch with the frozen exact
-    /// verifiers (`vela-verify`). Trust is never self-reported: a stranger
-    /// runs `vela reproduce <example>` and confirms every claimed
-    /// construction re-checks (Sidon, Golomb, cap, B_h, covering,
-    /// constant-weight, Costas, linear codes). Exits non-zero if any
-    /// witness fails to re-verify.
+    /// Is the SCIENCE intact: re-run every stored witness through the
+    /// frozen exact verifiers, from scratch — same input, same answer,
+    /// any machine. Complements `vela check`, which verifies the log
+    /// rather than the results.
     Reproduce {
         /// A witness JSON file, or a directory (reproduces every
         /// `*.witness.json` under it, or a `witnesses/` subdir).
@@ -308,7 +319,7 @@ pub(crate) enum Commands {
         #[arg(long)]
         reason: Option<String>,
         /// Reviewer actor id. Optional: defaults to your configured identity.
-        #[arg(long = "as")]
+        #[arg(long = "as", help = HELP_AS)]
         reviewer: Option<String>,
         /// Apply the proposal locally WITHOUT signing it (a draft applied under
         /// reviewer authority, no signature). Prefer `--sign` for the one-step
@@ -324,7 +335,7 @@ pub(crate) enum Commands {
         sign: bool,
         /// Path to your Ed25519 key (hex seed) for `--sign`. Optional: defaults
         /// to your configured identity's key.
-        #[arg(long)]
+        #[arg(long, help = HELP_KEY)]
         key: Option<PathBuf>,
         /// Record a non-human co-author (an AI that drafted), e.g.
         /// `agent:claude`. Defaults to `$VELA_CO_AUTHOR`. Signed-over
@@ -349,13 +360,13 @@ pub(crate) enum Commands {
         /// Publish the commit locally but do not push.
         #[arg(long)]
         no_push: bool,
-        frontier: PathBuf,
+        frontier: Option<PathBuf>,
         /// The proposal to accept (`vpr_…`). Omit in batch mode
         /// (`--all-pending` / `--id`).
         proposal_id: Option<String>,
         /// Reviewer actor id. Optional: defaults to your configured
         /// identity (`vela id create`).
-        #[arg(long = "as")]
+        #[arg(long = "as", help = HELP_AS)]
         reviewer: Option<String>,
         /// Decision note recorded in the signed event. Optional: defaults to
         /// "accepted via review". Key custody, not the note, is the authority.
@@ -364,7 +375,7 @@ pub(crate) enum Commands {
         /// Path to the reviewer's Ed25519 private key (hex seed). Optional:
         /// defaults to your configured identity's key. Key custody, not the
         /// typed name, is the accept authority; the event is signed with it.
-        #[arg(long)]
+        #[arg(long, help = HELP_KEY)]
         key: Option<PathBuf>,
         /// Engine strict mode: also block when the acceptance introduces
         /// new review warnings, not only release-blocking regressions.
@@ -456,7 +467,7 @@ pub(crate) enum Commands {
         note: Option<String>,
         /// Reviewer authority applying the attachment (e.g. `reviewer:opus`).
         /// Optional: defaults to your `vela id`.
-        #[arg(long = "as")]
+        #[arg(long = "as", help = HELP_AS)]
         reviewer: Option<String>,
         #[arg(long, default_value = "bind verifier attachment")]
         reason: String,
@@ -488,7 +499,7 @@ pub(crate) enum Commands {
     /// shows one. Packing is grouping, never deciding.
     Pack {
         /// The frontier repo.
-        frontier: PathBuf,
+        frontier: Option<PathBuf>,
         /// A pack id (`vsd_…`) to show. Omit to CREATE a pack.
         pack_id: Option<String>,
         /// What this changeset claims, in one reviewer-first sentence.
@@ -504,7 +515,7 @@ pub(crate) enum Commands {
         #[arg(long, default_value = "mixed")]
         aggregate_kind: String,
         /// Who packs (defaults to $VELA_ACTOR_ID / your identity).
-        #[arg(long = "as")]
+        #[arg(long = "as", help = HELP_AS)]
         actor: Option<String>,
         #[arg(long)]
         json: bool,
@@ -537,10 +548,10 @@ pub(crate) enum Commands {
         #[arg(long = "verifier-run")]
         verifier_runs: Vec<String>,
         /// Who records (defaults to $VELA_ACTOR_ID / your identity).
-        #[arg(long = "as")]
+        #[arg(long = "as", help = HELP_AS)]
         actor: Option<String>,
         /// Signing key (optional — agents without keys record unsigned).
-        #[arg(long)]
+        #[arg(long, help = HELP_KEY)]
         key: Option<PathBuf>,
         /// Where to write the record (default: records/<vrc_id>.json).
         #[arg(long)]
@@ -563,7 +574,7 @@ pub(crate) enum Commands {
         #[arg(long)]
         no_push: bool,
         /// Frontier path. Required.
-        frontier: PathBuf,
+        frontier: Option<PathBuf>,
         /// Role-scoped target id (`vev_*`, `vsd_*`, `vrp_*`, or `vpf_*`).
         /// When present, writes a local scientific attestation record.
         target_id: Option<String>,
@@ -571,7 +582,7 @@ pub(crate) enum Commands {
         #[arg(long = "scope")]
         scopes: Vec<String>,
         /// Local reviewer id, for example `reviewer:will-blair`.
-        #[arg(long = "as")]
+        #[arg(long = "as", help = HELP_AS)]
         reviewer: Option<String>,
         /// Reviewer role for this attestation, such as `domain_reviewer`.
         #[arg(long)]
@@ -610,7 +621,7 @@ pub(crate) enum Commands {
         signature: Option<String>,
         /// v0.74 frontier-wide path: private key for `sign apply`.
         /// Ignored in per-event mode.
-        #[arg(long)]
+        #[arg(long, help = HELP_KEY)]
         key: Option<PathBuf>,
         /// Statement-faithfulness mode: the attester's verdict on whether
         /// the FORMAL statement encodes the INFORMAL problem
@@ -714,7 +725,7 @@ pub(crate) enum IdAction {
         frontier: PathBuf,
         /// Path to the Ed25519 private key. Optional: defaults to your
         /// `vela id` identity key (or `$VELA_KEY_PATH`).
-        #[arg(long = "key")]
+        #[arg(long = "key", help = HELP_KEY)]
         key: Option<PathBuf>,
         #[arg(long)]
         json: bool,
@@ -942,7 +953,7 @@ pub(crate) enum FoundryAction {
         actor: String,
         /// Signing key for the `vlv_` (the verifier's machine key). Resolved
         /// from managed identity when omitted.
-        #[arg(long)]
+        #[arg(long, help = HELP_KEY)]
         key: Option<PathBuf>,
         /// Where to write the `vla_`/`vlv_` artifacts (default: alongside the
         /// frontier under `lean/`, else the current dir).
@@ -1172,7 +1183,7 @@ pub(crate) enum GateAction {
         /// Reviewer authority landing the attachments (e.g.
         /// `reviewer:will-blair`). Optional: defaults to your configured
         /// identity (`vela id`). A signing key is required to apply.
-        #[arg(long = "as")]
+        #[arg(long = "as", help = HELP_AS)]
         reviewer: Option<String>,
         /// Report the plan without writing.
         #[arg(long)]
@@ -1342,7 +1353,7 @@ pub(crate) enum LeanAction {
         build_log: PathBuf,
         /// Path to the Ed25519 private key. Optional: defaults to your
         /// configured identity's key (`vela id`).
-        #[arg(long)]
+        #[arg(long, help = HELP_KEY)]
         key: Option<PathBuf>,
         /// Free-form verifier identity (e.g. github-action URL).
         #[arg(long = "verifier-actor")]
@@ -1484,7 +1495,7 @@ pub(crate) enum TransferAction {
         draft: PathBuf,
         /// Path to the Ed25519 signing key. Optional: defaults to your
         /// configured identity's key (`vela id`).
-        #[arg(long)]
+        #[arg(long, help = HELP_KEY)]
         key: Option<PathBuf>,
         /// Where to write the signed `vtr_` record.
         #[arg(long)]
@@ -1635,8 +1646,8 @@ pub(crate) enum FrontierAction {
     /// (`campaign.yaml`, batch order kept), and accepted findings the
     /// verification gate still refuses. Advice, never authority.
     Next {
-        /// Frontier repo directory.
-        frontier: PathBuf,
+        /// Frontier repo directory. Optional: discovered upward from cwd.
+        frontier: Option<PathBuf>,
         /// Maximum targets to list.
         #[arg(long, default_value_t = 12)]
         limit: usize,
@@ -1659,11 +1670,11 @@ pub(crate) enum QueueAction {
     Sign {
         /// Stable actor id matching a registered entry in the frontier.
         /// Optional: defaults to your configured identity (`vela id`).
-        #[arg(long = "as")]
+        #[arg(long = "as", help = HELP_AS)]
         actor: Option<String>,
         /// Path to the actor's Ed25519 private key. Optional: defaults to
         /// your configured identity's key.
-        #[arg(long)]
+        #[arg(long, help = HELP_KEY)]
         key: Option<PathBuf>,
         /// Override the queue file location
         #[arg(long)]
@@ -1710,7 +1721,7 @@ pub(crate) enum HubAction {
         to: Option<String>,
         /// Path to the owner's Ed25519 private key. Optional: defaults to
         /// your configured identity's key (`vela id`).
-        #[arg(long)]
+        #[arg(long, help = HELP_KEY)]
         key: Option<PathBuf>,
         #[arg(long)]
         json: bool,
@@ -2077,13 +2088,13 @@ pub(crate) enum ProposalAction {
         frontier: PathBuf,
         proposal_id: String,
         /// Reviewer actor id. Optional: defaults to your configured identity.
-        #[arg(long = "as")]
+        #[arg(long = "as", help = HELP_AS)]
         reviewer: Option<String>,
         #[arg(long)]
         reason: String,
         /// Path to the reviewer's Ed25519 private key. Optional: defaults to
         /// your configured identity's key.
-        #[arg(long)]
+        #[arg(long, help = HELP_KEY)]
         key: Option<PathBuf>,
         #[arg(long)]
         json: bool,
@@ -2099,14 +2110,14 @@ pub(crate) enum ProposalAction {
         frontier: PathBuf,
         proposal_id: String,
         /// Reviewer actor id. Optional: defaults to your configured identity.
-        #[arg(long = "as")]
+        #[arg(long = "as", help = HELP_AS)]
         reviewer: Option<String>,
         #[arg(long)]
         reason: String,
         /// Path to the reviewer's Ed25519 private key. Optional: defaults to
         /// your configured identity's key. A reject is a signed, append-only
         /// event, so key custody is its authority just as for accept.
-        #[arg(long)]
+        #[arg(long, help = HELP_KEY)]
         key: Option<PathBuf>,
         #[arg(long)]
         json: bool,

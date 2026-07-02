@@ -382,17 +382,23 @@ async fn rpc_dispatch(request: &Value, st: &AppState, excluded: &HashSet<String>
             let name = request["params"]["name"].as_str().unwrap_or_default();
             let args = request["params"]["arguments"].clone();
             if excluded.contains(name) {
+                let available: Vec<String> = tool_registry::tools_for_profile(st.profile)
+                    .into_iter()
+                    .map(|t| t.name)
+                    .filter(|n| !excluded.contains(n))
+                    .collect();
                 json_rpc_error(
                     &id,
                     -32602,
                     &format!(
-                        "{name} is not served on this hosted endpoint (it operates on \
+                        "`{name}` is not served on this hosted endpoint (it operates on \
                          local filesystem paths); clone the frontier repo and run it \
-                         there instead"
+                         there. Tools available here: {}",
+                        available.join(", ")
                     ),
                 )
-            } else if let Some(err) = profile_gate(&id, name, st.profile) {
-                err
+            } else if let Some(err) = profile_gate(name, st.profile) {
+                ToolResult::failure(name, err, 0).to_rpc(&id)
             } else {
                 handle_tool_call(
                     &id,
@@ -513,15 +519,16 @@ impl McpService {
         ))
     }
 
-    /// The hosted exclusion set: every read-only tool that operates on a
-    /// caller-supplied filesystem path (the `vela_*` runtime family). On a
-    /// public endpoint those are useless at best (the caller has no paths
-    /// on the server) and a CPU sink at worst (`vela_reproduce_run`).
+    /// The hosted exclusion set: every tool that operates on a
+    /// caller-supplied filesystem path. On a public endpoint those are
+    /// useless at best (the caller has no paths on the server) and a CPU
+    /// sink at worst (`verify` with mode=witness). The hosted endpoint runs
+    /// the read-only profile, so its `tools/list` is the read-only surface
+    /// minus these three: orient, finding, search, graph, external.
     pub fn hosted_exclusions() -> Vec<String> {
-        tool_registry::tools_for_profile(tool_registry::McpProfile::ReadOnly)
+        ["verify", "work", "objects"]
             .into_iter()
-            .map(|t| t.name)
-            .filter(|n| n.starts_with("vela_"))
+            .map(str::to_string)
             .collect()
     }
 
@@ -562,35 +569,18 @@ pub async fn run_http(
         source_path,
     };
 
+    // One HTTP shape: the read surface mirrors the hub's `/entries/{vfr}/…`
+    // paths for the concepts serve supports, and `/mcp` at the root is the
+    // tool surface. The literal segment `self` names the served frontier;
+    // its real vfr_ id (or a prefix) is accepted too.
     let app = Router::new()
         .route("/health", get(http_health))
         .route("/healthz", get(http_health))
-        .route("/api/frontier", get(http_frontier))
-        .route("/api/findings", get(http_findings))
-        .route("/api/findings/{id}", get(http_finding_by_id))
-        .route("/api/contradictions", get(http_contradictions))
-        .route("/api/tensions", get(http_tensions))
-        .route("/api/gaps", get(http_gaps))
-        .route("/api/artifacts", get(http_artifacts))
-        .route("/api/artifact-audit", get(http_artifact_audit))
-        .route("/api/proof", get(http_proof))
-        .route("/api/propagate/{id}", get(http_propagate))
-        .route("/api/stats", get(http_stats))
-        .route("/api/frontiers", get(http_frontiers))
-        .route("/api/pubmed", get(http_pubmed))
-        // Phase Q-r (v0.5): cursor-paginated event-log read for agent
-        // loops and public consumers. The canonical event log is
-        // already ordered and content-addressed, so the cursor is just
-        // the last seen `vev_…`.
-        .route("/api/events", get(http_events))
-        // Phase R (v0.5): Workbench draft queue. Browser POSTs unsigned
-        // intents here; `vela queue sign` is the only path that turns
-        // them into signed canonical state. The Ed25519 key never
-        // enters the browser.
-        .route("/api/queue", post(http_queue_append))
-        .route("/api/tools", get(http_tools_list))
-        .route("/mcp/tools", get(http_tools_list))
-        .route("/api/tool", post(http_tool_call))
+        .route("/entries", get(http_entries))
+        .route("/entries/{vfr}", get(http_entry))
+        .route("/entries/{vfr}/findings", get(http_entry_findings))
+        .route("/entries/{vfr}/findings/{id}", get(http_entry_finding))
+        .route("/entries/{vfr}/events", get(http_entry_events))
         // Streamable-HTTP MCP (stateless JSON): the same dispatcher as
         // stdio, so any remote MCP client can connect without a clone.
         .route("/mcp", post(http_mcp).get(http_mcp_get));
@@ -616,25 +606,17 @@ pub async fn run_http(
     );
     eprintln!("  {}", vela_protocol::cli_style::tick_row(60));
     eprintln!("  listening on http://{addr}");
-    // v0.91: full endpoint enumeration so a fresh user opening
-    // `vela serve --http` knows what they can hit. Grouped by
-    // function rather than alphabetically.
+    // Full endpoint enumeration so a fresh user opening `vela serve --http`
+    // knows what they can hit. `self` names the served frontier; its real
+    // vfr_ id works too.
     eprintln!("  endpoints:");
-    eprintln!("    health:     GET  /health");
-    eprintln!("    state:      GET  /api/frontier      /api/frontiers     /api/stats");
-    eprintln!("    findings:   GET  /api/findings      /api/findings/{{id}}");
-    eprintln!("                     (no params -> structured list; query=... -> search)");
-    eprintln!("    events:     GET  /api/events");
-    eprintln!("    artifacts:  GET  /api/artifacts     /api/artifact-audit");
-    eprintln!("    proof:      GET  /api/proof");
-    eprintln!("    tensions:   GET  /api/contradictions /api/tensions     /api/gaps");
-    eprintln!(
-        "    projections:GET  /api/decision-brief /api/trials       /api/source-verification"
-    );
-    eprintln!("                     /api/source-ingest-plan");
-    eprintln!("                     /api/propagate/{{id}}     /api/pubmed");
-    eprintln!("    queue:      POST /api/queue");
-    eprintln!("    tools:      POST /api/tool/{{name}} (MCP-style tool dispatch)");
+    eprintln!("    health:    GET  /health  /healthz");
+    eprintln!("    entries:   GET  /entries                          (single-element list)");
+    eprintln!("               GET  /entries/self                     (frontier summary)");
+    eprintln!("               GET  /entries/self/findings            (?query= to search)");
+    eprintln!("               GET  /entries/self/findings/{{id}}");
+    eprintln!("               GET  /entries/self/events?cursor=&limit=");
+    eprintln!("    tools:     POST /mcp   (streamable-HTTP MCP; the tool surface)");
     let listener = tokio::net::TcpListener::bind(&addr)
         .await
         .unwrap_or_else(|e| {
@@ -653,93 +635,61 @@ pub fn check_tools(source: ProjectSource, adoption: bool) -> Result<Value, Strin
         ProjectSource::Single(path) => path.display().to_string(),
         ProjectSource::Directory(path) => path.display().to_string(),
     };
+    let source_path = match &source {
+        ProjectSource::Single(p) => Some(p.as_path()),
+        ProjectSource::Directory(p) => Some(p.as_path()),
+    };
     let (frontier, _project_infos) = load_projects(&source);
     let first_id = frontier.findings.first().map(|finding| finding.id.clone());
     let mut checks = vec![
-        check_tool_result("frontier_stats", tool_frontier_stats(&frontier), started),
         check_tool_result(
-            "search_findings",
-            tool_search_findings(&json!({"query": "Sidon", "limit": 3}), &frontier),
-            started,
-        ),
-        check_tool_result("list_gaps", tool_list_gaps(&frontier), started),
-        check_tool_result(
-            "list_contradictions",
-            tool_list_contradictions(&frontier),
+            "orient",
+            tool_orient(&json!({}), &frontier, source_path),
             started,
         ),
         check_tool_result(
-            "frontier_graph",
-            tool_frontier_graph(&json!({"kind": "contradicts"}), &frontier),
+            "search",
+            tool_search(&json!({"query": "Sidon", "limit": 3}), &frontier),
             started,
         ),
+        check_tool_result("graph", tool_graph(&json!({}), &frontier), started),
         check_tool_result(
-            "contradictions",
-            tool_contradictions(&json!({}), &frontier),
-            started,
-        ),
-        check_tool_result(
-            "frontier_compare",
-            tool_frontier_compare(&json!({"limit": 10}), &frontier),
-            started,
-        ),
-        check_tool_result(
-            "propagate_retraction",
-            tool_propagate_retraction(&json!({"finding_id": "vf_missing"}), &frontier),
+            "graph",
+            tool_graph(&json!({"mode": "contradictions"}), &frontier),
             started,
         ),
     ];
     if let Some(id) = first_id {
         checks.push(check_tool_result(
-            "get_finding",
-            tool_get_finding(&json!({"id": id}), &frontier),
-            started,
-        ));
-        checks.push(check_tool_result(
-            "get_finding_history",
-            tool_get_finding_history(&json!({"id": id}), &frontier),
-            started,
-        ));
-        checks.push(check_tool_result(
-            "trace_evidence_chain",
-            tool_trace_evidence_chain(&json!({"finding_id": id}), &frontier),
-            started,
-        ));
-        checks.push(check_tool_result(
-            "list_dependents",
-            tool_list_dependents(&json!({"finding_id": id, "transitive": true}), &frontier),
-            started,
-        ));
-        checks.push(check_tool_result(
-            "context",
-            tool_frontier_context(&json!({"finding_id": id}), &frontier),
-            started,
-        ));
-        checks.push(check_tool_result(
-            "frontier_explore",
-            tool_frontier_explore(&json!({"problem": id}), &frontier),
-            started,
-        ));
-        checks.push(check_tool_result(
-            "task_packet",
-            tool_task_packet(
-                &json!({"problem": id}),
+            "finding",
+            tool_finding(
+                &json!({"id": id, "include": ["history", "dependents", "neighborhood"]}),
                 &frontier,
-                match &source {
-                    ProjectSource::Single(p) => Some(p.as_path()),
-                    ProjectSource::Directory(p) => Some(p.as_path()),
-                },
             ),
             started,
         ));
         checks.push(check_tool_result(
-            "deep_trace",
-            tool_deep_trace(&json!({"finding_id": id, "max_hops": 3}), &frontier),
+            "orient",
+            tool_orient(&json!({"problem": id}), &frontier, source_path),
             started,
         ));
         checks.push(check_tool_result(
-            "nanopublication",
-            tool_nanopublication(&json!({"finding_id": id}), &frontier),
+            "graph",
+            tool_graph(
+                &json!({"root": id, "mode": "traverse", "max_hops": 3}),
+                &frontier,
+            ),
+            started,
+        ));
+        checks.push(check_tool_result(
+            "graph",
+            tool_graph(&json!({"root": id, "mode": "impact"}), &frontier),
+            started,
+        ));
+        checks.push(check_tool_result(
+            "external",
+            parse_payload(tool_nanopublication(&json!({"finding_id": id}), &frontier))
+                .map(|v| (v, Vec::new())),
             started,
         ));
     }
@@ -789,14 +739,7 @@ pub fn check_tools(source: ProjectSource, adoption: bool) -> Result<Value, Strin
 }
 
 fn adoption_tool_report(checks: &[Value], source_label: &str) -> Value {
-    let required_tools = vec![
-        "frontier_stats",
-        "search_findings",
-        "get_finding",
-        "list_gaps",
-        "list_contradictions",
-        "trace_evidence_chain",
-    ];
+    let required_tools = vec!["orient", "search", "finding", "graph"];
     let missing_or_failed = required_tools
         .iter()
         .filter(|tool| {
@@ -819,7 +762,7 @@ fn adoption_tool_report(checks: &[Value], source_label: &str) -> Value {
                 }
             }
         },
-        "prompt": "Call frontier_stats first. Then use search_findings for the review question. Inspect important results with get_finding. Cite vf_* ids. Review list_contradictions and list_gaps as candidate signals. Use trace_evidence_chain before summarizing provenance. Preserve caveats and do not present Vela output as field consensus.",
+        "prompt": "Call orient first. Then use search for the review question. Inspect important results with finding (include history/dependents/neighborhood as needed). Cite vf_* ids. Review graph mode=contradictions and orient's gaps as candidate signals. Use graph mode=traverse on a root before summarizing provenance. Preserve caveats and do not present Vela output as field consensus.",
         "commands": [
             format!("vela serve {source_label} --check-tools --adoption --json"),
             format!("vela serve {source_label}")
@@ -832,8 +775,8 @@ struct AppState {
     project: Arc<Mutex<Project>>,
     project_infos: Vec<ProjectInfo>,
     client: Client,
-    /// MCP exposure profile (memo §9.1). Scopes which tools `/api/tools`
-    /// lists and `/api/tool` will execute. Defaults to read-only.
+    /// MCP exposure profile (memo §9.1). Scopes which tools `tools/list`
+    /// exposes and `tools/call` will execute. Defaults to read-only.
     profile: tool_registry::McpProfile,
     /// Phase Q-w (v0.5): when serving a single frontier file, this is
     /// the path to write back to after a successful signed write. None
@@ -842,35 +785,137 @@ struct AppState {
     source_path: Option<PathBuf>,
 }
 
+/// Structured tool-error kinds. One closed set for every transport: the MCP
+/// envelope and both HTTP servers speak `{kind, message, hint?}`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+enum ToolErrorKind {
+    #[serde(rename = "NOT_FOUND")]
+    NotFound,
+    #[serde(rename = "INVALID_ARG")]
+    InvalidArg,
+    #[serde(rename = "PERMISSION_DENIED")]
+    PermissionDenied,
+    #[serde(rename = "CUSTODY_REFUSED")]
+    CustodyRefused,
+    #[serde(rename = "INTERNAL")]
+    Internal,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ToolError {
+    kind: ToolErrorKind,
+    message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hint: Option<String>,
+}
+
+impl ToolError {
+    fn new(kind: ToolErrorKind, message: impl Into<String>) -> Self {
+        Self {
+            kind,
+            message: message.into(),
+            hint: None,
+        }
+    }
+
+    fn not_found(message: impl Into<String>) -> Self {
+        Self::new(ToolErrorKind::NotFound, message)
+    }
+
+    fn invalid(message: impl Into<String>) -> Self {
+        Self::new(ToolErrorKind::InvalidArg, message)
+    }
+
+    fn internal(message: impl Into<String>) -> Self {
+        Self::new(ToolErrorKind::Internal, message)
+    }
+
+    fn with_hint(mut self, hint: impl Into<String>) -> Self {
+        self.hint = Some(hint.into());
+        self
+    }
+
+    /// Classify a prose error from an underlying impl. The impls predate the
+    /// kind vocabulary, so this is a boundary heuristic: id/file lookups read
+    /// as NOT_FOUND, argument shapes as INVALID_ARG, everything else INTERNAL.
+    fn classify(message: String) -> Self {
+        let lc = message.to_lowercase();
+        let kind = if lc.contains("not found")
+            || lc.contains("no finding resolves")
+            || lc.contains("is not registered")
+            || lc.contains("no such file")
+            || lc.contains("is neither a finding")
+        {
+            ToolErrorKind::NotFound
+        } else if lc.contains("required")
+            || lc.contains("missing")
+            || lc.contains("must be")
+            || lc.contains("must start")
+            || lc.contains("must include")
+            || lc.contains("must contain")
+            || lc.contains("invalid")
+            || lc.contains("unknown edge kind")
+            || lc.contains("out of [0.0, 1.0]")
+            || lc.contains("is for agent:/ci: actors")
+        {
+            ToolErrorKind::InvalidArg
+        } else {
+            ToolErrorKind::Internal
+        };
+        Self::new(kind, message)
+    }
+}
+
+/// The one result envelope every tool call returns, as a single JSON text
+/// block: `{tool, ok, data, notes?, error?, signals, caveats, duration_ms}`.
+/// No markdown duplication — `data` is the payload, `notes` carries
+/// truncation and degradation notices, `error` carries `{kind, message,
+/// hint?}` on failure.
 #[derive(Debug, Clone, Serialize)]
 struct ToolResult {
     tool: String,
     ok: bool,
     data: Value,
-    markdown: String,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    notes: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<ToolError>,
     signals: Vec<signals::SignalItem>,
     caveats: Vec<String>,
     duration_ms: u128,
 }
 
 impl ToolResult {
-    fn from_text(
+    fn success(
         tool: &str,
-        text: String,
+        data: Value,
+        notes: Vec<String>,
         duration_ms: u128,
-        is_error: bool,
         frontier: Option<&Project>,
     ) -> Self {
-        let data = serde_json::from_str(&text).unwrap_or_else(|_| json!({"text": text}));
         let signal_items = frontier
             .map(|project| signals::analyze(project, &[]).signals)
             .unwrap_or_default();
         Self {
             tool: tool.to_string(),
-            ok: !is_error,
+            ok: true,
             data,
-            markdown: text,
+            notes,
+            error: None,
             signals: signal_items,
+            caveats: tool_registry::tool_caveats(tool),
+            duration_ms,
+        }
+    }
+
+    fn failure(tool: &str, error: ToolError, duration_ms: u128) -> Self {
+        Self {
+            tool: tool.to_string(),
+            ok: false,
+            data: Value::Null,
+            notes: Vec::new(),
+            error: Some(error),
+            signals: Vec::new(),
             caveats: tool_registry::tool_caveats(tool),
             duration_ms,
         }
@@ -881,45 +926,62 @@ impl ToolResult {
             "tool": self.tool,
             "ok": self.ok,
             "duration_ms": self.duration_ms,
-            "signals": self.signals,
             "caveats": self.caveats,
-            "definition": tool_registry::get_tool(&self.tool),
         })
     }
 
     fn to_json_text(&self) -> String {
         serde_json::to_string_pretty(self).unwrap_or_else(|_| "{}".to_string())
     }
+
+    fn to_rpc(&self, id: &Option<Value>) -> Value {
+        json_rpc_result(
+            id,
+            json!({
+                "content": [{"type": "text", "text": self.to_json_text()}],
+                "isError": !self.ok,
+                "_meta": self.metadata()
+            }),
+        )
+    }
 }
 
 /// MCP profile gate (memo §9.4): refuse to execute a tool the active profile
-/// does not admit, returning a structured next-action error. `None` means the
-/// call may proceed (allowed, or unknown — `handle_tool_call` then returns its
-/// own not-found). This is the execution boundary; `tools/list` already hides
-/// the tool, but a client could still call it by name.
-fn profile_gate(
-    id: &Option<Value>,
-    name: &str,
-    profile: tool_registry::McpProfile,
-) -> Option<Value> {
+/// does not admit, returning a structured error envelope. `None` means the
+/// call may proceed (allowed, or unknown — the dispatch then returns its own
+/// NOT_FOUND). This is the execution boundary; `tools/list` already hides the
+/// tool, but a client could still call it by name.
+fn profile_gate(name: &str, profile: tool_registry::McpProfile) -> Option<ToolError> {
     let tool = tool_registry::get_tool(name)?;
     if profile.allows(&tool) {
         return None;
     }
+    // A non-maintainer session reaching for `decide` is the custody boundary
+    // itself — an agent lane asking to finalize. Everything else is a plain
+    // profile mismatch.
+    let kind = if name == "decide" {
+        ToolErrorKind::CustodyRefused
+    } else {
+        ToolErrorKind::PermissionDenied
+    };
     let needed = if tool_registry::McpProfile::Draft.allows(&tool) {
         "draft"
     } else {
         "maintainer"
     };
-    Some(json_rpc_error(
-        id,
-        -32001,
-        &format!(
-            "tool `{name}` ({}) is not available in the `{}` MCP profile; restart `vela serve` with `--profile {needed}` for a scoped session. MCP exposes tools; accepted public state still requires a key-custody human accept.",
-            tool.permission_level,
-            profile.as_str()
-        ),
-    ))
+    Some(
+        ToolError::new(
+            kind,
+            format!(
+                "tool `{name}` ({}) is not available in the `{}` MCP profile",
+                tool.permission_level,
+                profile.as_str()
+            ),
+        )
+        .with_hint(format!(
+            "restart `vela serve` with `--profile {needed}` for a scoped session; MCP exposes tools, accepted public state still requires a key-custody human accept"
+        )),
+    )
 }
 
 async fn handle_tool_call(
@@ -934,41 +996,43 @@ async fn handle_tool_call(
     let started = std::time::Instant::now();
     let (result, snapshot) =
         execute_tool(name, args, frontier, client, project_infos, source_path).await;
+    let elapsed = started.elapsed().as_millis();
     match result {
-        Ok(text) => {
-            let output = ToolResult::from_text(
-                name,
-                text,
-                started.elapsed().as_millis(),
-                false,
-                snapshot.as_ref(),
-            );
-            json_rpc_result(
-                id,
-                json!({
-                    "content": [{"type": "text", "text": output.to_json_text()}],
-                    "isError": false,
-                    "_meta": output.metadata()
-                }),
-            )
+        Ok((data, notes)) => {
+            ToolResult::success(name, data, notes, elapsed, snapshot.as_ref()).to_rpc(id)
         }
-        Err(error) => {
-            let output = ToolResult::from_text(
-                name,
-                error,
-                started.elapsed().as_millis(),
-                true,
-                snapshot.as_ref(),
-            );
-            json_rpc_result(
-                id,
-                json!({
-                    "content": [{"type": "text", "text": output.to_json_text()}],
-                    "isError": true,
-                    "_meta": output.metadata()
-                }),
-            )
-        }
+        Err(error) => ToolResult::failure(name, error, elapsed).to_rpc(id),
+    }
+}
+
+/// Every tool call resolves to `(data, notes)` or a typed error. `notes`
+/// carries truncation and degradation notices for the envelope.
+type ToolOutput = Result<(Value, Vec<String>), ToolError>;
+
+/// Parse an underlying impl's JSON-string result into the envelope's `data`,
+/// classifying prose errors into the kind vocabulary at the boundary.
+fn parse_payload(result: Result<String, String>) -> Result<Value, ToolError> {
+    let text = result.map_err(ToolError::classify)?;
+    serde_json::from_str(&text)
+        .map_err(|e| ToolError::internal(format!("tool payload did not parse as JSON: {e}")))
+}
+
+fn clamp_limit(args: &Value, default: u64, max: u64) -> usize {
+    args.get("limit")
+        .and_then(Value::as_u64)
+        .unwrap_or(default)
+        .clamp(1, max) as usize
+}
+
+/// Decode an opaque list cursor (an offset into the stable result order,
+/// issued by a previous response's `next_cursor`).
+fn decode_cursor(args: &Value) -> Result<usize, ToolError> {
+    match args.get("cursor").and_then(Value::as_str) {
+        None => Ok(0),
+        Some(c) => c.parse::<usize>().map_err(|_| {
+            ToolError::invalid(format!("cursor '{c}' is not a cursor this server issued"))
+                .with_hint("pass a previous response's next_cursor back unchanged")
+        }),
     }
 }
 
@@ -979,156 +1043,582 @@ async fn execute_tool(
     client: &Client,
     _project_infos: &[ProjectInfo],
     source_path: Option<&Path>,
-) -> (Result<String, String>, Option<Project>) {
+) -> (ToolOutput, Option<Project>) {
     match name {
-        "search_findings" => {
+        "orient" => {
             let project = frontier.lock().await;
             (
-                tool_search_findings(args, &project),
+                tool_orient(args, &project, source_path),
                 Some(clone_project(&project)),
             )
         }
-        "get_finding" => {
+        "finding" => {
+            let project = frontier.lock().await;
+            (tool_finding(args, &project), Some(clone_project(&project)))
+        }
+        "search" => {
+            let project = frontier.lock().await;
+            (tool_search(args, &project), Some(clone_project(&project)))
+        }
+        "graph" => {
+            let project = frontier.lock().await;
+            (tool_graph(args, &project), Some(clone_project(&project)))
+        }
+        "verify" => (tool_verify(args), None),
+        "propose" => {
+            let result = tool_propose(args, frontier, source_path).await;
+            let snapshot = Some(clone_project(&*frontier.lock().await));
+            (result, snapshot)
+        }
+        "decide" => {
+            let result = tool_decide(args, frontier, source_path).await;
+            let snapshot = Some(clone_project(&*frontier.lock().await));
+            (result, snapshot)
+        }
+        "work" => (tool_work(args), None),
+        "objects" => (tool_objects(args), None),
+        "external" => {
             let project = frontier.lock().await;
             (
-                tool_get_finding(args, &project),
+                tool_external(args, &project, client).await,
                 Some(clone_project(&project)),
             )
         }
-        "get_finding_history" => {
-            let project = frontier.lock().await;
+        _ => {
+            let known: Vec<String> = tool_registry::all_tools()
+                .into_iter()
+                .map(|t| t.name)
+                .collect();
             (
-                tool_get_finding_history(args, &project),
-                Some(clone_project(&project)),
+                Err(ToolError::not_found(format!("unknown tool `{name}`"))
+                    .with_hint(format!("this server exposes: {}", known.join(", ")))),
+                None,
             )
         }
-        "list_gaps" => {
-            let project = frontier.lock().await;
-            (tool_list_gaps(&project), Some(clone_project(&project)))
+    }
+}
+
+/// `orient` — one-call situational awareness: stats, verification posture,
+/// ranked open targets, gap-flagged findings, the recent event tail, the
+/// agent-object summary (when a frontier directory is known), and — when
+/// `problem` is given — the full task briefing (task packet merged with the
+/// problem exploration).
+fn tool_orient(args: &Value, project: &Project, source_path: Option<&Path>) -> ToolOutput {
+    let limit = clamp_limit(args, 12, 100);
+    let mut notes = Vec::new();
+
+    let stats = parse_payload(tool_frontier_stats(project))?;
+
+    let targets = vela_edge::frontier_next::frontier_next(project, source_path, limit);
+    if source_path.is_none() {
+        notes.push(
+            "campaign-seed lane skipped: this transport serves no frontier directory \
+             (hosted or merged mode), so open targets list only review and verify lanes"
+                .to_string(),
+        );
+    }
+
+    // Gap-flagged findings — the review leads that used to be `list_gaps`.
+    let gap_findings: Vec<&vela_protocol::bundle::FindingBundle> = project
+        .findings
+        .iter()
+        .filter(|finding| finding.flags.gap)
+        .collect();
+    let gap_total = gap_findings.len();
+    let gaps: Vec<Value> = gap_findings
+        .into_iter()
+        .take(limit)
+        .map(|finding| {
+            json!({
+                "id": finding.id,
+                "assertion": trunc(&finding.assertion.text, 160),
+                "confidence": finding.confidence.score,
+                "conditions": trunc(&finding.conditions.text, 120),
+            })
+        })
+        .collect();
+    if gap_total > gaps.len() {
+        notes.push(format!(
+            "gaps truncated to {} of {gap_total}; raise `limit` or use `search` to page",
+            gaps.len()
+        ));
+    }
+
+    // Recent event tail, chronological.
+    let recent_events: Vec<Value> = project
+        .events
+        .iter()
+        .rev()
+        .take(limit)
+        .map(|event| {
+            json!({
+                "id": event.id,
+                "kind": event.kind,
+                "target": event.target,
+                "actor": event.actor,
+                "timestamp": event.timestamp,
+            })
+        })
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
+
+    // Agent-object counts (packs, attestations, evaluations, conflicts) when
+    // the server knows its frontier directory.
+    let objects_summary = match source_path {
+        Some(path) => {
+            let summary_args = json!({"frontier_path": path.display().to_string()});
+            match parse_payload(vela_edge::vela_agent_mcp::frontier_summary(&summary_args)) {
+                Ok(v) => v.get("summary").cloned().unwrap_or(v),
+                Err(e) => {
+                    notes.push(format!("agent-object summary unavailable: {}", e.message));
+                    Value::Null
+                }
+            }
         }
-        "list_contradictions" => {
-            let project = frontier.lock().await;
-            (
-                tool_list_contradictions(&project),
-                Some(clone_project(&project)),
+        None => {
+            notes.push(
+                "agent-object summary skipped: no frontier directory on this transport".to_string(),
+            );
+            Value::Null
+        }
+    };
+
+    // The one-problem briefing: the task packet's entry contract merged with
+    // the exploration payload (obligations, rests-on, dependents, staleness).
+    let briefing = match args.get("problem").and_then(Value::as_str) {
+        None => Value::Null,
+        Some(problem) => {
+            let mut packet = build_task_packet(
+                problem,
+                project,
+                source_path,
+                default_decl_graph_path().as_deref(),
             )
+            .map_err(ToolError::classify)?;
+            let explore =
+                parse_payload(tool_frontier_explore(&json!({"problem": problem}), project))?;
+            if let Value::Object(map) = &mut packet {
+                map.remove("tool");
+                for key in ["obligations", "rests_on", "dependents", "staleness"] {
+                    if let Some(v) = explore.get(key) {
+                        map.insert(key.to_string(), v.clone());
+                    }
+                }
+            }
+            packet
         }
-        "frontier_stats" => {
-            let project = frontier.lock().await;
-            (tool_frontier_stats(&project), Some(clone_project(&project)))
+    };
+
+    let data = json!({
+        "frontier": stats.get("frontier"),
+        "stats": stats.get("stats"),
+        "verification": {
+            "proof_state": stats.get("proof_state"),
+            "events": stats.get("events"),
+            "proposals": stats.get("proposals"),
+        },
+        "signals": stats.get("signals"),
+        "open_targets": targets,
+        "gaps": {"total": gap_total, "items": gaps},
+        "recent_events": recent_events,
+        "agent_objects": objects_summary,
+        "briefing": briefing,
+    });
+    Ok((data, notes))
+}
+
+/// `finding` — one finding's full context, with opt-in merges of its event
+/// history, direct dependents, and graph neighborhood.
+fn tool_finding(args: &Value, project: &Project) -> ToolOutput {
+    let id = args
+        .get("id")
+        .and_then(Value::as_str)
+        .filter(|s| s.len() >= 3)
+        .ok_or_else(|| ToolError::invalid("finding requires `id` (a vf_… id, minLength 3)"))?;
+    let mut base = parse_payload(tool_get_finding(&json!({"id": id}), project))?;
+
+    let includes: Vec<&str> = args
+        .get("include")
+        .and_then(Value::as_array)
+        .map(|a| a.iter().filter_map(Value::as_str).collect())
+        .unwrap_or_default();
+    let mut notes = Vec::new();
+    for inc in includes {
+        let merged = match inc {
+            "history" => parse_payload(tool_get_finding_history(&json!({"id": id}), project))?,
+            "dependents" => parse_payload(tool_list_dependents(
+                &json!({"finding_id": id, "transitive": false}),
+                project,
+            ))?,
+            "neighborhood" => {
+                parse_payload(tool_frontier_context(&json!({"finding_id": id}), project))?
+            }
+            other => {
+                return Err(
+                    ToolError::invalid(format!("unknown include entry '{other}'"))
+                        .with_hint("valid entries: history, dependents, neighborhood"),
+                );
+            }
+        };
+        if let Value::Object(map) = &mut base {
+            map.insert(inc.to_string(), merged);
         }
-        "frontier_next" => {
-            let project = frontier.lock().await;
-            let limit = args
-                .get("limit")
-                .and_then(Value::as_u64)
-                .unwrap_or(12)
-                .min(100) as usize;
-            let targets = vela_edge::frontier_next::frontier_next(&project, source_path, limit);
-            (
-                serde_json::to_string_pretty(&json!({"targets": targets}))
-                    .map_err(|e| e.to_string()),
-                Some(clone_project(&project)),
-            )
+        notes.push(format!("merged `{inc}` payload"));
+    }
+    Ok((base, notes))
+}
+
+/// `search` — structured text search over findings, sources, and evidence
+/// atoms, with stable offset cursoring (the cursor is an opaque offset into
+/// the result order: findings, then sources, then evidence, in frontier
+/// order).
+fn tool_search(args: &Value, project: &Project) -> ToolOutput {
+    let query = args
+        .get("query")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|q| !q.is_empty())
+        .ok_or_else(|| ToolError::invalid("search requires `query` (non-empty string)"))?;
+    let q = query.to_lowercase();
+    let ty = args.get("type").and_then(Value::as_str).unwrap_or("any");
+    if !matches!(ty, "finding" | "source" | "evidence" | "any") {
+        return Err(ToolError::invalid(format!("unknown search type '{ty}'"))
+            .with_hint("valid types: finding, source, evidence, any"));
+    }
+    let entity = args
+        .get("entity")
+        .and_then(Value::as_str)
+        .map(str::to_lowercase);
+    let limit = clamp_limit(args, 24, 200);
+    let offset = decode_cursor(args)?;
+    let mut notes = Vec::new();
+
+    let mut matches: Vec<Value> = Vec::new();
+    if matches!(ty, "finding" | "any") {
+        for finding in &project.findings {
+            let text_hit = finding.assertion.text.to_lowercase().contains(&q)
+                || finding.conditions.text.to_lowercase().contains(&q)
+                || finding
+                    .assertion
+                    .entities
+                    .iter()
+                    .any(|e| e.name.to_lowercase().contains(&q));
+            let entity_hit = entity.as_ref().is_none_or(|needle| {
+                finding
+                    .assertion
+                    .entities
+                    .iter()
+                    .any(|e| e.name.to_lowercase().contains(needle))
+            });
+            if text_hit && entity_hit {
+                matches.push(json!({
+                    "kind": "finding",
+                    "id": finding.id,
+                    "assertion": trunc(&finding.assertion.text, 160),
+                    "assertion_type": finding.assertion.assertion_type,
+                    "confidence": finding.confidence.score,
+                    "gap": finding.flags.gap,
+                    "contested": finding.flags.contested,
+                    "source": finding.provenance.title,
+                }));
+            }
         }
-        "propagate_retraction" => {
-            let project = frontier.lock().await;
-            (
-                tool_propagate_retraction(args, &project),
-                Some(clone_project(&project)),
-            )
+    }
+    if entity.is_some() && ty != "finding" {
+        notes.push("`entity` filters findings only; source/evidence lanes skipped".to_string());
+    }
+    if matches!(ty, "source" | "any") && entity.is_none() {
+        for source in &project.sources {
+            let hit = source.title.to_lowercase().contains(&q)
+                || source.id.to_lowercase().contains(&q)
+                || source.locator.to_lowercase().contains(&q)
+                || source
+                    .doi
+                    .as_deref()
+                    .is_some_and(|d| d.to_lowercase().contains(&q));
+            if hit {
+                matches.push(json!({
+                    "kind": "source",
+                    "id": source.id,
+                    "title": source.title,
+                    "doi": source.doi,
+                    "source_type": source.source_type,
+                    "finding_ids": source.finding_ids,
+                }));
+            }
         }
-        "trace_evidence_chain" => {
-            let project = frontier.lock().await;
-            (
-                tool_trace_evidence_chain(args, &project),
-                Some(clone_project(&project)),
-            )
+    }
+    if matches!(ty, "evidence" | "any") && entity.is_none() {
+        for atom in &project.evidence_atoms {
+            let hit = atom.measurement_or_claim.to_lowercase().contains(&q)
+                || atom.id.to_lowercase().contains(&q);
+            if hit {
+                matches.push(json!({
+                    "kind": "evidence",
+                    "id": atom.id,
+                    "excerpt": trunc(&atom.measurement_or_claim, 160),
+                    "finding_id": atom.finding_id,
+                    "source_id": atom.source_id,
+                    "supports_or_challenges": atom.supports_or_challenges,
+                }));
+            }
         }
-        "list_dependents" => {
-            let project = frontier.lock().await;
-            (
-                tool_list_dependents(args, &project),
-                Some(clone_project(&project)),
-            )
+    }
+
+    let total = matches.len();
+    let page: Vec<Value> = matches.into_iter().skip(offset).take(limit).collect();
+    let next_cursor = if offset + page.len() < total {
+        Some((offset + page.len()).to_string())
+    } else {
+        None
+    };
+    if next_cursor.is_some() {
+        notes.push(format!(
+            "{} more matches remain; pass next_cursor to continue",
+            total - offset - page.len()
+        ));
+    }
+    let data = json!({
+        "query": query,
+        "type": ty,
+        "total": total,
+        "returned": page.len(),
+        "matches": page,
+        "next_cursor": next_cursor,
+    });
+    Ok((data, notes))
+}
+
+/// `graph` — traverse / impact / contradictions over the typed claim graph.
+fn tool_graph(args: &Value, project: &Project) -> ToolOutput {
+    let mode = args
+        .get("mode")
+        .and_then(Value::as_str)
+        .unwrap_or("traverse");
+    let root = args.get("root").and_then(Value::as_str);
+    let limit = clamp_limit(args, 100, 500);
+    let edge_kinds: Vec<String> = args
+        .get("edge_kinds")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    for kind in &edge_kinds {
+        if vela_protocol::frontier_graph::EdgeKind::parse(kind).is_none() {
+            return Err(ToolError::invalid(format!("unknown edge kind '{kind}'")).with_hint(
+                "valid kinds: supports, contradicts, depends_on, derived_from, replicates, specializes",
+            ));
         }
-        "context" => {
-            let project = frontier.lock().await;
-            (
-                tool_frontier_context(args, &project),
-                Some(clone_project(&project)),
-            )
-        }
-        "frontier_explore" => {
-            let project = frontier.lock().await;
-            (
-                tool_frontier_explore(args, &project),
-                Some(clone_project(&project)),
-            )
-        }
-        "task_packet" => {
-            let project = frontier.lock().await;
-            (
-                tool_task_packet(args, &project, source_path),
-                Some(clone_project(&project)),
-            )
-        }
-        "frontier_graph" => {
-            let project = frontier.lock().await;
-            (
-                tool_frontier_graph(args, &project),
-                Some(clone_project(&project)),
-            )
-        }
+    }
+    let mut notes = Vec::new();
+
+    match mode {
         "contradictions" => {
-            let project = frontier.lock().await;
-            (
-                tool_contradictions(args, &project),
-                Some(clone_project(&project)),
-            )
+            // Raw contradiction/dispute links, then the first-class vcx_
+            // objects, in one list; `first_class` distinguishes them.
+            let lookup: HashMap<&str, &vela_protocol::bundle::FindingBundle> = project
+                .findings
+                .iter()
+                .map(|finding| (finding.id.as_str(), finding))
+                .collect();
+            let mut rows: Vec<Value> = Vec::new();
+            for finding in &project.findings {
+                for link in &finding.links {
+                    if matches!(link.link_type.as_str(), "contradicts" | "disputes") {
+                        let target_assertion = lookup
+                            .get(link.target.as_str())
+                            .map(|f| trunc(&f.assertion.text, 120));
+                        rows.push(json!({
+                            "first_class": false,
+                            "source": finding.id,
+                            "source_assertion": trunc(&finding.assertion.text, 120),
+                            "target": link.target,
+                            "target_assertion": target_assertion,
+                            "link_type": link.link_type,
+                            "note": link.note,
+                        }));
+                    }
+                }
+            }
+            let raw_total = rows.len();
+            let first_class =
+                parse_payload(tool_contradictions(&json!({"limit": limit}), project))?;
+            let fc_rows = first_class
+                .get("contradictions")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default();
+            for mut c in fc_rows {
+                if let Value::Object(map) = &mut c {
+                    map.insert("first_class".to_string(), json!(true));
+                }
+                rows.push(c);
+            }
+            let total = rows.len();
+            rows.truncate(limit);
+            if total > rows.len() {
+                notes.push(format!(
+                    "rows truncated to {} of {total}; raise `limit`",
+                    rows.len()
+                ));
+            }
+            let data = json!({
+                "mode": "contradictions",
+                "total": total,
+                "raw_link_total": raw_total,
+                "candidate_total": first_class.get("candidate_contradictions"),
+                "reviewed_total": first_class.get("reviewed_contradictions"),
+                "returned": rows.len(),
+                "rows": rows,
+            });
+            Ok((data, notes))
         }
-        "deep_trace" => {
-            let project = frontier.lock().await;
-            (
-                tool_deep_trace(args, &project),
-                Some(clone_project(&project)),
-            )
+        "impact" => {
+            let root = root.ok_or_else(|| {
+                ToolError::invalid("mode=impact requires `root` (a vf_… finding id)")
+            })?;
+            let direction = match args.get("direction").and_then(Value::as_str) {
+                None | Some("both") => "both",
+                Some("up") => "up",
+                Some("down") => "down",
+                Some(other) => {
+                    return Err(ToolError::invalid(format!("unknown direction '{other}'"))
+                        .with_hint("valid directions: up, down, both"));
+                }
+            };
+            let mut impact_args = json!({"finding": root, "impact": direction});
+            if !edge_kinds.is_empty() {
+                impact_args["kinds"] = json!(edge_kinds.join(","));
+            }
+            let blast = parse_payload(tool_blast_radius(&impact_args, project))?;
+            let cascade = parse_payload(tool_propagate_retraction(
+                &json!({"finding_id": root}),
+                project,
+            ))?;
+            let data = json!({
+                "mode": "impact",
+                "root": root,
+                "direction": direction,
+                "blast_radius": blast,
+                "retraction_cascade": cascade,
+            });
+            Ok((data, notes))
         }
-        "blast_radius" => {
-            let project = frontier.lock().await;
-            (
-                tool_blast_radius(args, &project),
-                Some(clone_project(&project)),
-            )
+        "traverse" => match root {
+            None => {
+                let mut summary = parse_payload(tool_frontier_graph(&json!({}), project))?;
+                if !edge_kinds.is_empty() {
+                    let mut by_kind = Vec::new();
+                    for kind in &edge_kinds {
+                        let detail = parse_payload(tool_frontier_graph(
+                            &json!({"kind": kind, "limit": limit}),
+                            project,
+                        ))?;
+                        by_kind.push(json!({
+                            "kind": kind,
+                            "edges": detail.get("matched_edges"),
+                        }));
+                    }
+                    if let Value::Object(map) = &mut summary {
+                        map.insert("edges_by_kind".to_string(), json!(by_kind));
+                    }
+                }
+                if let Value::Object(map) = &mut summary {
+                    map.insert("mode".to_string(), json!("traverse"));
+                }
+                Ok((summary, notes))
+            }
+            Some(root) => {
+                let max_hops = args
+                    .get("max_hops")
+                    .and_then(Value::as_u64)
+                    .unwrap_or(2)
+                    .clamp(1, 6);
+                let deep = parse_payload(tool_deep_trace(
+                    &json!({
+                        "finding_id": root,
+                        "max_hops": max_hops,
+                        "limit_per_hop": limit,
+                    }),
+                    project,
+                ))?;
+                let chain = parse_payload(tool_trace_evidence_chain(
+                    &json!({"finding_id": root, "depth": max_hops}),
+                    project,
+                ))?;
+                if !edge_kinds.is_empty() {
+                    notes.push(
+                        "edge_kinds is not applied in traverse mode; the traversal follows \
+                         all declared kinds"
+                            .to_string(),
+                    );
+                }
+                let data = json!({
+                    "mode": "traverse",
+                    "root": root,
+                    "max_hops": max_hops,
+                    "traversal": deep,
+                    "evidence_chain": chain,
+                });
+                Ok((data, notes))
+            }
+        },
+        other => Err(ToolError::invalid(format!("unknown graph mode '{other}'"))
+            .with_hint("valid modes: traverse, impact, contradictions")),
+    }
+}
+
+/// `verify` — the frozen verifiers over a local frontier checkout.
+fn tool_verify(args: &Value) -> ToolOutput {
+    if args
+        .get("frontier_path")
+        .and_then(Value::as_str)
+        .is_none_or(str::is_empty)
+    {
+        return Err(ToolError::invalid("verify requires `frontier_path`"));
+    }
+    let payload = match args.get("mode").and_then(Value::as_str) {
+        Some("strict") => parse_payload(vela_edge::vela_agent_mcp::check_run(args))?,
+        Some("witness") => parse_payload(vela_edge::vela_agent_mcp::reproduce_run(args))?,
+        _ => {
+            return Err(ToolError::invalid("verify requires `mode`")
+                .with_hint("strict = validation + reducer replay + signature signals; witness = re-verify stored witnesses"));
         }
-        "frontier_compare" => {
-            let project = frontier.lock().await;
-            (
-                tool_frontier_compare(args, &project),
-                Some(clone_project(&project)),
-            )
-        }
-        "nanopublication" => {
-            let project = frontier.lock().await;
-            (
-                tool_nanopublication(args, &project),
-                Some(clone_project(&project)),
-            )
-        }
-        "check_pubmed" => (tool_check_pubmed(args, client).await, None),
-        "list_events_since" => {
-            let project = frontier.lock().await;
-            (
-                tool_list_events_since(args, &project),
-                Some(clone_project(&project)),
-            )
-        }
-        // Phase Q-w (v0.5): write surface — propose-* and decision tools.
-        // Each requires a registered actor and a verifying signature
-        // over a canonical preimage. Idempotent under Phase P.
-        "propose_review" => {
-            let result = write_tool_propose(
-                args,
+    };
+    Ok((payload, Vec::new()))
+}
+
+/// `propose` — the draft write surface: one tool, five kinds, all landing as
+/// pending proposals through the same signed path the narrow propose_* tools
+/// used.
+async fn tool_propose(
+    args: &Value,
+    frontier: &Arc<Mutex<Project>>,
+    source_path: Option<&Path>,
+) -> ToolOutput {
+    let kind = args
+        .get("kind")
+        .and_then(Value::as_str)
+        .ok_or_else(|| ToolError::invalid("propose requires `kind`"))?;
+    let target = args
+        .get("target")
+        .and_then(Value::as_str)
+        .filter(|t| t.starts_with("vf_"))
+        .ok_or_else(|| ToolError::invalid("propose requires `target` (a vf_… finding id)"))?;
+    // The underlying write path reads `target_finding_id`.
+    let mut legacy = args.clone();
+    legacy["target_finding_id"] = json!(target);
+
+    let result = match kind {
+        "review" => {
+            write_tool_propose(
+                &legacy,
                 frontier,
                 source_path,
                 "finding.review",
@@ -1136,7 +1626,7 @@ async fn execute_tool(
                     let status = args
                         .get("status")
                         .and_then(Value::as_str)
-                        .ok_or("propose_review requires `status`")?;
+                        .ok_or("propose kind=review requires `status`")?;
                     if !matches!(
                         status,
                         "accepted" | "approved" | "contested" | "needs_revision" | "rejected"
@@ -1147,44 +1637,36 @@ async fn execute_tool(
                 },
                 false,
             )
-            .await;
-            let snapshot = Some(clone_project(&*frontier.lock().await));
-            (result, snapshot)
+            .await
         }
-        "propose_note" => {
-            let result = write_tool_propose(
-                args,
+        "note" => {
+            write_tool_propose(
+                &legacy,
                 frontier,
                 source_path,
                 "finding.note",
-                |args| build_note_payload(args, "propose_note"),
+                |args| build_note_payload(args, "propose kind=note"),
                 false,
             )
-            .await;
-            let snapshot = Some(clone_project(&*frontier.lock().await));
-            (result, snapshot)
+            .await
         }
-        // Phase α (v0.6): one-call propose-and-apply for `finding.note`.
-        // Requires the actor to have `tier="auto-notes"` registered; the
-        // `write_tool_propose` helper rejects with a clear error otherwise.
-        // Doctrine: tiers permit review-context kinds only; never state-
-        // changing kinds (no `propose_and_apply_review`/`_retract`/`_revise`).
-        "propose_and_apply_note" => {
-            let result = write_tool_propose(
-                args,
+        // apply_note: propose-and-apply in one signed call, gated on the
+        // actor's `tier="auto-notes"` registration. Tiers permit
+        // review-context kinds only; never state-changing kinds.
+        "apply_note" => {
+            write_tool_propose(
+                &legacy,
                 frontier,
                 source_path,
                 "finding.note",
-                |args| build_note_payload(args, "propose_and_apply_note"),
+                |args| build_note_payload(args, "propose kind=apply_note"),
                 true,
             )
-            .await;
-            let snapshot = Some(clone_project(&*frontier.lock().await));
-            (result, snapshot)
+            .await
         }
-        "propose_revise_confidence" => {
-            let result = write_tool_propose(
-                args,
+        "revise_confidence" => {
+            write_tool_propose(
+                &legacy,
                 frontier,
                 source_path,
                 "finding.confidence_revise",
@@ -1192,7 +1674,7 @@ async fn execute_tool(
                     let new_score = args
                         .get("new_score")
                         .and_then(Value::as_f64)
-                        .ok_or("propose_revise_confidence requires `new_score`")?;
+                        .ok_or("propose kind=revise_confidence requires `new_score`")?;
                     if !(0.0..=1.0).contains(&new_score) {
                         return Err(format!("new_score {new_score} out of [0.0, 1.0]"));
                     }
@@ -1200,56 +1682,278 @@ async fn execute_tool(
                 },
                 false,
             )
-            .await;
-            let snapshot = Some(clone_project(&*frontier.lock().await));
-            (result, snapshot)
+            .await
         }
-        "propose_retract" => {
-            let result = write_tool_propose(
-                args,
+        "retract" => {
+            write_tool_propose(
+                &legacy,
                 frontier,
                 source_path,
                 "finding.retract",
                 |_args| Ok(json!({})),
                 false,
             )
-            .await;
-            let snapshot = Some(clone_project(&*frontier.lock().await));
-            (result, snapshot)
+            .await
         }
-        "accept_proposal" => {
-            let result = write_tool_decision(args, frontier, source_path, "accept").await;
-            let snapshot = Some(clone_project(&*frontier.lock().await));
-            (result, snapshot)
+        other => {
+            return Err(
+                ToolError::invalid(format!("unknown propose kind '{other}'"))
+                    .with_hint("valid kinds: review, note, revise_confidence, retract, apply_note"),
+            );
         }
-        "reject_proposal" => {
-            let result = write_tool_decision(args, frontier, source_path, "reject").await;
-            let snapshot = Some(clone_project(&*frontier.lock().await));
-            (result, snapshot)
+    };
+    Ok((parse_payload(result)?, Vec::new()))
+}
+
+/// `decide` — accept/reject a pending proposal as the named (registered,
+/// key-holding) reviewer. Maintainer-profile only; the profile gate refuses
+/// everyone else before this runs.
+async fn tool_decide(
+    args: &Value,
+    frontier: &Arc<Mutex<Project>>,
+    source_path: Option<&Path>,
+) -> ToolOutput {
+    let action = match args.get("action").and_then(Value::as_str) {
+        Some("accept") => "accept",
+        Some("reject") => "reject",
+        _ => {
+            return Err(ToolError::invalid(
+                "decide requires `action` (accept or reject)",
+            ));
         }
-        // v0.206: write-side tools for the vela_agent SDK. Both
-        // require VELA_AGENT_KEY_HEX (or skip-as-error). Stateless
-        // one-shot calls — the agent does its own session bookkeeping
-        // and only invokes Vela when ready to submit.
-        "vela_agent_submit_diff_pack" => (vela_edge::vela_agent_mcp::submit_diff_pack(args), None),
-        "vela_claim_task" => (vela_edge::vela_agent_mcp::claim_task(args), None),
-        "vela_check_run" => (vela_edge::vela_agent_mcp::check_run(args), None),
-        "vela_reproduce_run" => (vela_edge::vela_agent_mcp::reproduce_run(args), None),
-        "vela_record_propose" => (vela_edge::vela_agent_mcp::record_propose(args), None),
-        // v0.214: read-side tools. None require VELA_AGENT_KEY_HEX.
-        "vela_agent_get_pack" => (vela_edge::vela_agent_mcp::get_pack(args), None),
-        "vela_agent_list_packs" => (vela_edge::vela_agent_mcp::list_packs(args), None),
-        "vela_agent_get_attestation" => (vela_edge::vela_agent_mcp::get_attestation(args), None),
-        "vela_agent_frontier_summary" => (vela_edge::vela_agent_mcp::frontier_summary(args), None),
-        // v0.220: parity read tools.
-        "vela_agent_get_tool_descriptor" => {
-            (vela_edge::vela_agent_mcp::get_tool_descriptor(args), None)
+    };
+    if args
+        .get("proposal_id")
+        .and_then(Value::as_str)
+        .is_none_or(|p| !p.starts_with("vpr_"))
+    {
+        return Err(ToolError::invalid(
+            "decide requires `proposal_id` (a vpr_… id)",
+        ));
+    }
+    if args
+        .get("reason")
+        .and_then(Value::as_str)
+        .is_none_or(|r| r.trim().is_empty())
+    {
+        return Err(ToolError::invalid("decide requires a non-empty `reason`"));
+    }
+    let result = write_tool_decision(args, frontier, source_path, action).await;
+    Ok((parse_payload(result)?, Vec::new()))
+}
+
+/// `work` — the agent work loop: claim a lease, land a record as a pending
+/// proposal, or sign an attestation + diff pack. All three sign under the
+/// agent's own auto-minted session key; none finalizes state.
+fn tool_work(args: &Value) -> ToolOutput {
+    if args
+        .get("frontier_path")
+        .and_then(Value::as_str)
+        .is_none_or(str::is_empty)
+    {
+        return Err(ToolError::invalid("work requires `frontier_path`"));
+    }
+    let result = match args.get("action").and_then(Value::as_str) {
+        Some("claim") => {
+            let actor = args
+                .get("agent_actor")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            if !actor.starts_with("agent:") && !actor.starts_with("ci:") {
+                return Err(ToolError::invalid(
+                    "work action=claim requires `agent_actor` matching ^(agent:|ci:)",
+                ));
+            }
+            vela_edge::vela_agent_mcp::claim_task(args)
         }
-        "vela_agent_get_evaluation" => (vela_edge::vela_agent_mcp::get_evaluation(args), None),
-        "vela_agent_list_evaluations" => (vela_edge::vela_agent_mcp::list_evaluations(args), None),
-        "vela_agent_get_conflict" => (vela_edge::vela_agent_mcp::get_conflict(args), None),
-        "vela_agent_list_conflicts" => (vela_edge::vela_agent_mcp::list_conflicts(args), None),
-        _ => (Err(format!("Unknown tool: {name}")), None),
+        Some("record") => {
+            if args
+                .get("record_path")
+                .and_then(Value::as_str)
+                .is_none_or(str::is_empty)
+            {
+                return Err(ToolError::invalid(
+                    "work action=record requires `record_path` (a vrc_… record JSON)",
+                ));
+            }
+            vela_edge::vela_agent_mcp::record_propose(args)
+        }
+        Some("pack") => {
+            if args
+                .get("summary")
+                .and_then(Value::as_str)
+                .is_none_or(|s| s.trim().is_empty())
+            {
+                return Err(ToolError::invalid(
+                    "work action=pack requires a non-empty `summary`",
+                ));
+            }
+            vela_edge::vela_agent_mcp::submit_diff_pack(args)
+        }
+        _ => {
+            return Err(ToolError::invalid("work requires `action`")
+                .with_hint("valid actions: claim, record, pack"));
+        }
+    };
+    Ok((parse_payload(result)?, Vec::new()))
+}
+
+/// `objects` — read the content-addressed agent objects on a frontier
+/// checkout's `.vela/` tree: one by id, or a cursor-paginated listing.
+fn tool_objects(args: &Value) -> ToolOutput {
+    let frontier_path = args
+        .get("frontier_path")
+        .and_then(Value::as_str)
+        .filter(|p| !p.is_empty())
+        .ok_or_else(|| ToolError::invalid("objects requires `frontier_path`"))?;
+    let ty = args.get("type").and_then(Value::as_str).ok_or_else(|| {
+        ToolError::invalid("objects requires `type`")
+            .with_hint("valid types: pack, attestation, evaluation, conflict, tool_descriptor")
+    })?;
+    let target = args.get("target").and_then(Value::as_str);
+
+    if let Some(id) = args.get("id").and_then(Value::as_str) {
+        let fetch = match ty {
+            "pack" => vela_edge::vela_agent_mcp::get_pack(
+                &json!({"frontier_path": frontier_path, "pack_id": id}),
+            ),
+            "attestation" => vela_edge::vela_agent_mcp::get_attestation(
+                &json!({"frontier_path": frontier_path, "attestation_id": id}),
+            ),
+            "evaluation" => vela_edge::vela_agent_mcp::get_evaluation(
+                &json!({"frontier_path": frontier_path, "evaluation_id": id}),
+            ),
+            "conflict" => vela_edge::vela_agent_mcp::get_conflict(
+                &json!({"frontier_path": frontier_path, "conflict_id": id}),
+            ),
+            "tool_descriptor" => vela_edge::vela_agent_mcp::get_tool_descriptor(
+                &json!({"frontier_path": frontier_path, "descriptor_id": id}),
+            ),
+            other => {
+                return Err(ToolError::invalid(format!("unknown object type '{other}'"))
+                    .with_hint(
+                        "valid types: pack, attestation, evaluation, conflict, tool_descriptor",
+                    ));
+            }
+        };
+        let object = parse_payload(fetch)?;
+        return Ok((json!({"type": ty, "id": id, "object": object}), Vec::new()));
+    }
+
+    let (listed, key) = match ty {
+        "pack" => {
+            let mut list_args = json!({"frontier_path": frontier_path});
+            if let Some(pending) = args.get("only_pending").and_then(Value::as_bool) {
+                list_args["only_pending"] = json!(pending);
+            }
+            (vela_edge::vela_agent_mcp::list_packs(&list_args), "packs")
+        }
+        "attestation" => (
+            vela_edge::vela_agent_mcp::list_attestations(&json!({"frontier_path": frontier_path})),
+            "attestations",
+        ),
+        "evaluation" => {
+            let mut list_args = json!({"frontier_path": frontier_path});
+            if let Some(t) = target {
+                list_args["target_descriptor_id"] = json!(t);
+            }
+            (
+                vela_edge::vela_agent_mcp::list_evaluations(&list_args),
+                "evaluations",
+            )
+        }
+        "conflict" => {
+            let mut list_args = json!({"frontier_path": frontier_path});
+            if let Some(t) = target {
+                list_args["resolution_mode"] = json!(t);
+            }
+            (
+                vela_edge::vela_agent_mcp::list_conflicts(&list_args),
+                "conflicts",
+            )
+        }
+        "tool_descriptor" => (
+            vela_edge::vela_agent_mcp::list_tool_descriptors(
+                &json!({"frontier_path": frontier_path}),
+            ),
+            "descriptors",
+        ),
+        other => {
+            return Err(
+                ToolError::invalid(format!("unknown object type '{other}'")).with_hint(
+                    "valid types: pack, attestation, evaluation, conflict, tool_descriptor",
+                ),
+            );
+        }
+    };
+    let listing = parse_payload(listed)?;
+    let items = listing
+        .get(key)
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let total = items.len();
+    let limit = clamp_limit(args, 50, 200);
+    let offset = decode_cursor(args)?;
+    let page: Vec<Value> = items.into_iter().skip(offset).take(limit).collect();
+    let next_cursor = if offset + page.len() < total {
+        Some((offset + page.len()).to_string())
+    } else {
+        None
+    };
+    let mut notes = Vec::new();
+    if next_cursor.is_some() {
+        notes.push(format!(
+            "{} more objects remain; pass next_cursor to continue",
+            total - offset - page.len()
+        ));
+    }
+    let data = json!({
+        "type": ty,
+        "total": total,
+        "returned": page.len(),
+        "items": page,
+        "next_cursor": next_cursor,
+    });
+    Ok((data, notes))
+}
+
+/// `external` — external services: PubMed prior-art counts, nanopublication
+/// export.
+async fn tool_external(args: &Value, project: &Project, client: &Client) -> ToolOutput {
+    match args.get("service").and_then(Value::as_str) {
+        Some("pubmed") => {
+            if args
+                .get("query")
+                .and_then(Value::as_str)
+                .is_none_or(|q| q.trim().is_empty())
+            {
+                return Err(ToolError::invalid(
+                    "external service=pubmed requires a non-empty `query`",
+                ));
+            }
+            Ok((
+                parse_payload(tool_check_pubmed(args, client).await)?,
+                Vec::new(),
+            ))
+        }
+        Some("nanopub") => {
+            if args
+                .get("finding_id")
+                .and_then(Value::as_str)
+                .is_none_or(str::is_empty)
+            {
+                return Err(ToolError::invalid(
+                    "external service=nanopub requires `finding_id`",
+                ));
+            }
+            Ok((
+                parse_payload(tool_nanopublication(args, project))?,
+                Vec::new(),
+            ))
+        }
+        _ => Err(ToolError::invalid("external requires `service`")
+            .with_hint("valid services: pubmed, nanopub")),
     }
 }
 
@@ -1257,7 +1961,7 @@ async fn execute_tool(
 /// caller args. Accepts the required `text` plus an optional structured
 /// `provenance` object whose at-least-one-identifier rule is enforced
 /// here at the API boundary, so the same validation runs whether the
-/// caller is `propose_note` or `propose_and_apply_note`.
+/// caller is `propose` kind=note or kind=apply_note.
 fn build_note_payload(args: &Value, tool_name: &str) -> Result<Value, String> {
     let text = args
         .get("text")
@@ -1401,7 +2105,7 @@ where
     .map_err(|e| format!("serialize write result: {e}"))
 }
 
-/// Phase Q-w (v0.5): shared body for `accept_proposal` and `reject_proposal`.
+/// Phase Q-w (v0.5): shared body for the `decide` accept/reject actions.
 /// The signing preimage is `{action, proposal_id, reviewer_id, reason, timestamp}`
 /// canonicalized; the reviewer must be a registered actor.
 async fn write_tool_decision(
@@ -1496,117 +2200,109 @@ async fn write_tool_decision(
     serde_json::to_string(&outcome).map_err(|e| format!("serialize decision: {e}"))
 }
 
-/// Phase Q-r (v0.5): MCP-tool form of the cursor-paginated event read.
-/// Mirrors `GET /api/events`. Same cursor semantics: events strictly
-/// after `cursor` (a `vev_…` id), or from genesis if cursor is omitted.
-fn tool_list_events_since(args: &Value, project: &Project) -> Result<String, String> {
-    let cursor = args.get("cursor").and_then(Value::as_str);
-    let limit = args
-        .get("limit")
-        .and_then(Value::as_u64)
-        .map_or(100usize, |n| (n as usize).min(500));
-    let start_idx: usize = match cursor {
-        None => 0,
-        Some(c) => match project.events.iter().position(|event| event.id == c) {
-            Some(idx) => idx + 1,
-            None => {
-                return Err(format!(
-                    "cursor '{c}' not found in event log; client is out of sync"
-                ));
-            }
-        },
-    };
-    let end_idx = (start_idx + limit).min(project.events.len());
-    let slice = &project.events[start_idx..end_idx];
-    let next_cursor = if end_idx < project.events.len() {
-        slice.last().map(|event| event.id.clone())
+fn check_tool_result(name: &str, result: ToolOutput, started: std::time::Instant) -> Value {
+    let duration_ms = started.elapsed().as_millis();
+    match result {
+        Ok((data, notes)) => {
+            let has_data = !data.is_null();
+            json!({
+                "tool": name,
+                "ok": has_data,
+                "data": data,
+                "notes": notes,
+                "has_data": has_data,
+                "caveats": tool_registry::tool_caveats(name),
+                "duration_ms": duration_ms,
+            })
+        }
+        Err(error) => json!({
+            "tool": name,
+            "ok": false,
+            "data": Value::Null,
+            "error": error,
+            "caveats": tool_registry::tool_caveats(name),
+            "duration_ms": duration_ms,
+        }),
+    }
+}
+
+/// JSON error body shared by every serve HTTP error response:
+/// `{"error": {"kind": "...", "message": "..."}}`, matching the hub's shape
+/// and the MCP envelope's kind vocabulary.
+fn http_error(status: StatusCode, kind: &str, message: String) -> (StatusCode, Json<Value>) {
+    (
+        status,
+        Json(json!({"error": {"kind": kind, "message": message}})),
+    )
+}
+
+/// Resolve the `{vfr}` path segment: the literal `self`, the served
+/// frontier's real vfr_ id, or a vfr_ prefix of it.
+fn resolve_vfr(project: &Project, segment: &str) -> Option<String> {
+    let fid = project.frontier_id();
+    if segment == "self" || (segment.starts_with("vfr_") && fid.starts_with(segment)) {
+        Some(fid)
     } else {
         None
-    };
-    let payload = json!({
-        "events": slice,
-        "count": slice.len(),
-        "next_cursor": next_cursor,
-        "log_total": project.events.len(),
-    });
-    serde_json::to_string(&payload).map_err(|e| format!("serialize list_events_since: {e}"))
+    }
 }
 
-fn check_tool_result(
-    name: &str,
-    result: Result<String, String>,
-    started: std::time::Instant,
-) -> Value {
-    let output = ToolResult::from_text(
-        name,
-        result.unwrap_or_else(|e| e),
-        started.elapsed().as_millis(),
-        false,
-        None,
-    );
-    let has_data = !output.data.is_null();
-    let has_markdown = !output.markdown.trim().is_empty();
-    let has_signals = true;
-    let has_caveats = true;
-    json!({
-        "tool": name,
-        "ok": has_data && has_markdown && has_signals && has_caveats,
-        "data": output.data,
-        "markdown": output.markdown,
-        "has_data": has_data,
-        "has_markdown": has_markdown,
-        "has_signals": has_signals,
-        "has_caveats": has_caveats,
-        "signals": output.signals,
-        "caveats": output.caveats,
-        "duration_ms": output.duration_ms,
-    })
+fn vfr_not_found(project: &Project, segment: &str) -> (StatusCode, Json<Value>) {
+    http_error(
+        StatusCode::NOT_FOUND,
+        "NOT_FOUND",
+        format!(
+            "{segment} is not served here; this server serves {} (use `self`)",
+            project.frontier_id()
+        ),
+    )
 }
 
-/// Phase Q-r (v0.5): cursor-paginated read over the canonical event log.
+/// GET /entries/{vfr}/events — cursor-paginated read over the canonical
+/// event log, mirroring the hub's shape.
 ///
 /// Query params:
-///   - `since` (optional): a `vev_…` event id; events strictly after this id
-///     are returned. Omit to start from the genesis event.
+///   - `cursor` (optional): a `vev_…` event id; events strictly after this
+///     id are returned. Omit to start from the genesis event.
 ///   - `limit` (optional, default 100, max 500): cap the response size.
+///   - `kind`, `target` (optional): server-side filters, applied before
+///     pagination so the cursor walks the filtered view.
 ///
 /// Returns `{events: [...], next_cursor: "vev_..." | null, count: usize}`.
 /// `next_cursor` is null when the response includes the tail of the log.
-///
-/// 400 if `since` is provided but does not exist in the log (the client is
-/// out of sync with the log it's reading; better to fail loudly than to
-/// silently skip).
-async fn http_events(
+/// 400 if `cursor` does not exist in the log (the client is out of sync;
+/// better to fail loudly than to silently skip).
+async fn http_entry_events(
     State(state): State<AppState>,
+    axum::extract::Path(vfr): axum::extract::Path<String>,
     axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
 ) -> (StatusCode, Json<Value>) {
     let project = state.project.lock().await;
+    let Some(vfr_id) = resolve_vfr(&project, &vfr) else {
+        return vfr_not_found(&project, &vfr);
+    };
     let limit = params
         .get("limit")
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(100)
         .min(500);
-    let start_idx: usize = match params.get("since") {
+    let start_idx: usize = match params.get("cursor") {
         None => 0,
         Some(cursor) => match project.events.iter().position(|event| &event.id == cursor) {
             Some(idx) => idx + 1,
             None => {
-                return (
+                return http_error(
                     StatusCode::BAD_REQUEST,
-                    Json(json!({
-                        "error": format!(
-                            "cursor '{cursor}' not found in event log; client is out of sync"
-                        ),
-                    })),
+                    "INVALID_ARG",
+                    format!("cursor '{cursor}' not found in event log; client is out of sync"),
                 );
             }
         },
     };
-    // v0.17: server-side `?kind=` and `?target=` filters. Agents watching
-    // for specific event kinds (e.g. polling for new finding.superseded
-    // events) shouldn't need to fetch the whole log to locate one match.
-    // Filters apply BEFORE the limit/cursor so pagination works on the
-    // filtered view.
+    // Server-side `?kind=` and `?target=` filters. Agents watching for
+    // specific event kinds (e.g. polling for new finding.superseded events)
+    // shouldn't need to fetch the whole log to locate one match. Filters
+    // apply BEFORE the limit/cursor so pagination works on the filtered view.
     let kind_filter = params.get("kind").map(String::as_str);
     let target_filter = params.get("target").map(String::as_str);
     let filtered: Vec<&vela_protocol::events::StateEvent> = project
@@ -1628,85 +2324,12 @@ async fn http_events(
     (
         StatusCode::OK,
         Json(json!({
+            "vfr_id": vfr_id,
             "events": slice,
             "count": slice.len(),
             "next_cursor": next_cursor,
             "log_total": project.events.len(),
             "filtered_total": total_filtered,
-        })),
-    )
-}
-
-/// Phase R (v0.5): append a draft Workbench action to the local queue.
-/// The browser POSTs `{kind, args}` (no signature, no actor key — the
-/// browser is identity-blind under the v0.5 doctrine). The Workbench
-/// host process appends to the configured queue file; `vela queue sign`
-/// is the only path that produces a signed write.
-///
-/// Body:
-///   `{"kind": "<tool_name>", "args": { ... }}`
-///
-/// Returns `{ok: true, queued_at: "<rfc3339>"}` on success.
-async fn http_queue_append(
-    State(state): State<AppState>,
-    Json(body): Json<Value>,
-) -> (StatusCode, Json<Value>) {
-    let path = match &state.source_path {
-        Some(p) => p.clone(),
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(
-                    json!({"error": "The draft queue requires a single-file frontier (--frontier <PATH>)"}),
-                ),
-            );
-        }
-    };
-    let kind = match body.get("kind").and_then(Value::as_str) {
-        Some(k) => k.to_string(),
-        None => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"error": "POST /api/queue requires `kind`"})),
-            );
-        }
-    };
-    let valid_kinds = [
-        "propose_review",
-        "propose_note",
-        "propose_revise_confidence",
-        "propose_retract",
-        "accept_proposal",
-        "reject_proposal",
-    ];
-    if !valid_kinds.contains(&kind.as_str()) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error": format!("unsupported queue kind '{kind}'")})),
-        );
-    }
-    let args = body.get("args").cloned().unwrap_or(Value::Null);
-    let queued_at = chrono::Utc::now().to_rfc3339();
-    let action = vela_edge::queue::QueuedAction {
-        kind,
-        frontier: path,
-        args,
-        queued_at: queued_at.clone(),
-    };
-    let queue_path = vela_edge::queue::default_queue_path();
-    if let Err(error) = vela_edge::queue::append(&queue_path, action) {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("append to queue: {error}")})),
-        );
-    }
-    (
-        StatusCode::OK,
-        Json(json!({
-            "ok": true,
-            "queue_file": queue_path.display().to_string(),
-            "queued_at": queued_at,
-            "next_step": "run `vela queue sign` to apply queued drafts",
         })),
     )
 }
@@ -1738,19 +2361,70 @@ fn requesting_clearance(
     actor.access_clearance
 }
 
-async fn http_frontier(State(state): State<AppState>, headers: HeaderMap) -> Json<Value> {
+/// GET /entries — the single-element registry list. `vela serve` serves one
+/// (possibly merged) frontier; this mirrors the hub's `/entries` shape so a
+/// client can speak one protocol to either server.
+async fn http_entries(State(state): State<AppState>) -> Json<Value> {
     let project = state.project.lock().await;
-    let clearance = requesting_clearance(&headers, &project);
-    let view = vela_protocol::access_tier::redact_for_actor(&project, clearance);
-    Json(serde_json::to_value(&view).unwrap_or_else(|_| json!({"error": "serialization failed"})))
+    Json(json!({
+        "schema": "vela.entries.v0",
+        "count": 1,
+        "entries": [{
+            "vfr_id": project.frontier_id(),
+            "name": project.project.name,
+            "findings": project.stats.findings,
+            "links": project.stats.links,
+            "events": project.events.len(),
+            "sources": state.project_infos.iter().map(|info| json!({
+                "name": info.name,
+                "file": info.file,
+                "findings": info.findings_count,
+                "links": info.links_count,
+                "papers": info.papers,
+            })).collect::<Vec<_>>(),
+        }],
+    }))
 }
 
-async fn http_findings(
+/// GET /entries/{vfr} — the frontier summary: stats, proof state, signals.
+async fn http_entry(
     State(state): State<AppState>,
+    axum::extract::Path(vfr): axum::extract::Path<String>,
+) -> (StatusCode, Json<Value>) {
+    let project = state.project.lock().await;
+    let Some(vfr_id) = resolve_vfr(&project, &vfr) else {
+        return vfr_not_found(&project, &vfr);
+    };
+    (
+        StatusCode::OK,
+        Json(json!({
+            "vfr_id": vfr_id,
+            "frontier": {
+                "name": project.project.name,
+                "description": project.project.description,
+                "compiled_at": project.project.compiled_at,
+                "compiler": project.project.compiler,
+            },
+            "stats": project.stats,
+            "events": project.events.len(),
+            "proof_state": project.proof_state,
+            "signals": signals::analyze(&project, &[]).signals,
+        })),
+    )
+}
+
+/// GET /entries/{vfr}/findings — structured list, or text-shaped search when
+/// a `query`/`entity`/`entity_type`/`type` filter is supplied.
+async fn http_entry_findings(
+    State(state): State<AppState>,
+    axum::extract::Path(vfr): axum::extract::Path<String>,
     headers: HeaderMap,
     axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
-) -> Json<Value> {
+) -> (StatusCode, Json<Value>) {
     let project = state.project.lock().await;
+    if resolve_vfr(&project, &vfr).is_none() {
+        return vfr_not_found(&project, &vfr);
+    }
     let clearance = requesting_clearance(&headers, &project);
     let view = vela_protocol::access_tier::redact_for_actor(&project, clearance);
 
@@ -1776,11 +2450,14 @@ async fn http_findings(
             .take(limit)
             .map(|f| serde_json::to_value(f).unwrap_or_default())
             .collect();
-        return Json(json!({
-            "count": view.findings.len(),
-            "returned": findings.len(),
-            "findings": findings,
-        }));
+        return (
+            StatusCode::OK,
+            Json(json!({
+                "count": view.findings.len(),
+                "returned": findings.len(),
+                "findings": findings,
+            })),
+        );
     }
 
     let args = json!({
@@ -1791,17 +2468,22 @@ async fn http_findings(
         "limit": params.get("limit").and_then(|v| v.parse::<u64>().ok()).unwrap_or(50),
     });
     match tool_search_findings(&args, &view) {
-        Ok(text) => Json(json!({"result": text})),
-        Err(error) => Json(json!({"error": error})),
+        Ok(text) => (StatusCode::OK, Json(json!({"result": text}))),
+        Err(error) => http_error(StatusCode::INTERNAL_SERVER_ERROR, "INTERNAL", error),
     }
 }
 
-async fn http_finding_by_id(
+/// GET /entries/{vfr}/findings/{id} — one finding with its derived Belnap
+/// status and provenance overlays.
+async fn http_entry_finding(
     State(state): State<AppState>,
+    axum::extract::Path((vfr, id)): axum::extract::Path<(String, String)>,
     headers: HeaderMap,
-    axum::extract::Path(id): axum::extract::Path<String>,
 ) -> (StatusCode, Json<Value>) {
     let project = state.project.lock().await;
+    if resolve_vfr(&project, &vfr).is_none() {
+        return vfr_not_found(&project, &vfr);
+    }
     let clearance = requesting_clearance(&headers, &project);
     match project
         .findings
@@ -1812,9 +2494,10 @@ async fn http_finding_by_id(
             if !vela_protocol::access_tier::actor_may_read(finding.access_tier, clearance) {
                 // v0.51: above-clearance findings 404 — the existence
                 // of the object is itself part of the tiered content.
-                return (
+                return http_error(
                     StatusCode::NOT_FOUND,
-                    Json(json!({"error": format!("Finding not found: {id}")})),
+                    "NOT_FOUND",
+                    format!("Finding not found: {id}"),
                 );
             }
             // v0.85: surface the substrate-derived Belnap status
@@ -1868,21 +2551,12 @@ async fn http_finding_by_id(
             }
             (StatusCode::OK, Json(value))
         }
-        None => (
+        None => http_error(
             StatusCode::NOT_FOUND,
-            Json(json!({"error": format!("Finding not found: {id}")})),
+            "NOT_FOUND",
+            format!("Finding not found: {id}"),
         ),
     }
-}
-
-async fn http_contradictions(State(state): State<AppState>) -> Json<Value> {
-    let project = state.project.lock().await;
-    Json(
-        serde_json::from_str(&tool_list_contradictions(&project).unwrap_or_default())
-            .unwrap_or_else(
-                |_| json!({"result": tool_list_contradictions(&project).unwrap_or_default()}),
-            ),
-    )
 }
 
 async fn http_health(State(state): State<AppState>) -> Json<Value> {
@@ -1895,171 +2569,6 @@ async fn http_health(State(state): State<AppState>) -> Json<Value> {
             "events": project.events.len(),
         }
     }))
-}
-
-async fn http_artifacts(State(state): State<AppState>) -> Json<Value> {
-    let project = state.project.lock().await;
-    Json(json!({
-        "ok": true,
-        "count": project.artifacts.len(),
-        "artifacts": project.artifacts,
-    }))
-}
-
-async fn http_artifact_audit(State(state): State<AppState>) -> Json<Value> {
-    let source_path = state.source_path.clone();
-    let project = state.project.lock().await;
-    let Some(path) = source_path else {
-        return Json(json!({
-            "ok": false,
-            "available": false,
-            "issues": [],
-            "error": "artifact audit requires a single frontier source",
-        }));
-    };
-    Json(
-        serde_json::to_value(vela_edge::artifact_audit::audit_artifacts(&path, &project))
-            .unwrap_or_else(|_| json!({"ok": false, "error": "serialization failed"})),
-    )
-}
-
-async fn http_proof(State(state): State<AppState>) -> Json<Value> {
-    let project = state.project.lock().await;
-    let integrity = vela_edge::state_integrity::analyze(&project);
-    let signal_report = signals::analyze(&project, &[]);
-    let latest = &project.proof_state.latest_packet;
-    Json(json!({
-        "ok": true,
-        "schema": "vela.http_proof_status.v0.1",
-        "frontier_id": project.frontier_id(),
-        "proof_state": project.proof_state,
-        "latest_packet": latest,
-        "freshness": integrity.proof_freshness,
-        "current_snapshot_hash": events::snapshot_hash(&project),
-        "current_event_log_hash": events::event_log_hash(&project.events),
-        "readiness": {
-            "status": signal_report.proof_readiness.status,
-            "blockers": signal_report.proof_readiness.blockers,
-            "warnings": signal_report.proof_readiness.warnings,
-        },
-        "boundary": "Proof verifies replay and hashes. It does not prove clinical actionability.",
-    }))
-}
-
-async fn http_gaps(State(state): State<AppState>) -> Json<Value> {
-    let project = state.project.lock().await;
-    let gaps = project
-        .findings
-        .iter()
-        .filter(|finding| finding.flags.gap || finding.flags.negative_space)
-        .map(|finding| {
-            json!({
-                "id": finding.id,
-                "assertion": finding.assertion.text,
-                "confidence": finding.confidence.score,
-                "conditions": finding.conditions.text,
-                "source": finding.provenance.title,
-            })
-        })
-        .collect::<Vec<_>>();
-    Json(json!({
-        "ok": true,
-        "count": gaps.len(),
-        "gaps": gaps,
-        "caveats": ["Candidate gap rankings are review leads, not confirmed experiment targets."],
-    }))
-}
-
-async fn http_tensions(State(state): State<AppState>) -> Json<Value> {
-    let project = state.project.lock().await;
-    let lookup = project
-        .findings
-        .iter()
-        .map(|finding| (finding.id.as_str(), finding))
-        .collect::<HashMap<_, _>>();
-    let mut tensions = Vec::new();
-    for finding in &project.findings {
-        for link in &finding.links {
-            if link.link_type != "contradicts" {
-                continue;
-            }
-            // Cross-frontier resolution, consistent with the graph
-            // tools: resolve `vf_X@vfr_Y` to the bare `vf_X` node when
-            // present (as under `serve --frontiers`).
-            let bare = vela_protocol::bundle::bare_finding_id(&link.target);
-            let target = lookup
-                .get(link.target.as_str())
-                .or_else(|| lookup.get(bare));
-            tensions.push(json!({
-                "source": {
-                    "id": finding.id,
-                    "assertion": finding.assertion.text,
-                    "confidence": finding.confidence.score,
-                },
-                "target": target.map(|target| json!({
-                    "id": target.id,
-                    "assertion": target.assertion.text,
-                    "confidence": target.confidence.score,
-                })),
-                "type": link.link_type,
-                "note": link.note,
-                "resolved": finding.flags.retracted || target.is_some_and(|target| target.flags.retracted),
-            }));
-        }
-    }
-    Json(json!({
-        "ok": true,
-        "count": tensions.len(),
-        "tensions": tensions,
-        "caveats": ["Candidate tensions are review surfaces, not definitive contradictions."],
-    }))
-}
-
-async fn http_propagate(
-    State(state): State<AppState>,
-    axum::extract::Path(id): axum::extract::Path<String>,
-) -> Json<Value> {
-    let project = state.project.lock().await;
-    let args = json!({"finding_id": id});
-    match tool_propagate_retraction(&args, &project) {
-        Ok(text) => Json(serde_json::from_str(&text).unwrap_or_else(|_| json!({"result": text}))),
-        Err(error) => Json(json!({"error": error})),
-    }
-}
-
-async fn http_stats(State(state): State<AppState>) -> Json<Value> {
-    let project = state.project.lock().await;
-    Json(json!({
-        "frontier": {
-            "name": project.project.name,
-            "compiled_at": project.project.compiled_at,
-            "compiler": project.project.compiler,
-        },
-        "stats": project.stats,
-        "signals": signals::analyze(&project, &[]).signals,
-    }))
-}
-
-async fn http_frontiers(State(state): State<AppState>) -> Json<Value> {
-    Json(
-        serde_json::from_str(&frontier_index_json(&state.project_infos).unwrap_or_default())
-            .unwrap_or_else(|_| json!({"frontier_count": 0, "frontiers": []})),
-    )
-}
-
-async fn http_pubmed(
-    State(state): State<AppState>,
-    axum::extract::Query(params): axum::extract::Query<HashMap<String, String>>,
-) -> Json<Value> {
-    let args = json!({"query": params.get("query").cloned().unwrap_or_default()});
-    match tool_check_pubmed(&args, &state.client).await {
-        Ok(text) => Json(serde_json::from_str(&text).unwrap_or_else(|_| json!({"result": text}))),
-        Err(error) => Json(json!({"error": error})),
-    }
-}
-
-async fn http_tools_list(State(state): State<AppState>) -> Json<Value> {
-    Json(tool_registry::mcp_tools_json_for_profile(state.profile))
 }
 
 /// POST /mcp — streamable-HTTP MCP with stateless JSON responses.
@@ -2081,91 +2590,6 @@ async fn http_mcp_get() -> (StatusCode, Json<Value>) {
             "error": "stateless MCP endpoint: POST a JSON-RPC message; no server-initiated stream is offered"
         })),
     )
-}
-
-async fn http_tool_call(
-    State(state): State<AppState>,
-    Json(body): Json<Value>,
-) -> (StatusCode, Json<Value>) {
-    let name = body["name"].as_str().unwrap_or_default();
-    let args = &body["arguments"];
-    // MCP profile gate (memo §9.4): refuse tools outside the active profile.
-    if let Some(tool) = tool_registry::get_tool(name)
-        && !state.profile.allows(&tool)
-    {
-        let needed = if tool_registry::McpProfile::Draft.allows(&tool) {
-            "draft"
-        } else {
-            "maintainer"
-        };
-        return (
-            StatusCode::FORBIDDEN,
-            Json(json!({
-                "error": format!(
-                    "tool `{name}` ({}) is not available in the `{}` MCP profile; serve with `--profile {needed}`. MCP exposes tools; accepted public state still requires a key-custody human accept.",
-                    tool.permission_level, state.profile.as_str()
-                ),
-            })),
-        );
-    }
-    let started = std::time::Instant::now();
-    let (result, snapshot) = execute_tool(
-        name,
-        args,
-        &state.project,
-        &state.client,
-        &state.project_infos,
-        state.source_path.as_deref(),
-    )
-    .await;
-    match result {
-        Ok(text) => {
-            let output = ToolResult::from_text(
-                name,
-                text,
-                started.elapsed().as_millis(),
-                false,
-                snapshot.as_ref(),
-            );
-            (
-                StatusCode::OK,
-                Json(json!({
-                    "result": output.markdown,
-                    "tool": output.tool,
-                    "ok": output.ok,
-                    "data": output.data,
-                    "markdown": output.markdown,
-                    "signals": output.signals,
-                    "caveats": output.caveats,
-                    "duration_ms": output.duration_ms,
-                    "metadata": output.metadata(),
-                })),
-            )
-        }
-        Err(error) => {
-            let output = ToolResult::from_text(
-                name,
-                error,
-                started.elapsed().as_millis(),
-                true,
-                snapshot.as_ref(),
-            );
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({
-                    "error": output.markdown,
-                    "tool": output.tool,
-                    "ok": output.ok,
-                    "data": output.data,
-                    "markdown": output.markdown,
-                    "signals": output.signals,
-                    "caveats": output.caveats,
-                    "duration_ms": output.duration_ms,
-                    "metadata": output.metadata(),
-                })),
-            )
-        }
-    }
 }
 
 fn tool_search_findings(args: &Value, frontier: &Project) -> Result<String, String> {
@@ -2277,65 +2701,6 @@ fn tool_get_finding_history(args: &Value, frontier: &Project) -> Result<String, 
         ],
     });
     serde_json::to_string_pretty(&payload).map_err(|e| format!("Serialization error: {e}"))
-}
-
-fn tool_list_gaps(frontier: &Project) -> Result<String, String> {
-    let gaps = frontier
-        .findings
-        .iter()
-        .filter(|finding| finding.flags.gap)
-        .collect::<Vec<_>>();
-    if gaps.is_empty() {
-        return Ok("No gap-flagged findings in this frontier.".to_string());
-    }
-    let mut out = format!(
-        "{} candidate gap review leads:\nTreat these as navigation signals, not confirmed experiment targets.\n\n",
-        gaps.len()
-    );
-    for finding in gaps {
-        out.push_str(&format!(
-            "**{}** [conf: {}]\n{}\nConditions: {}\n\n",
-            finding.id, finding.confidence.score, finding.assertion.text, finding.conditions.text
-        ));
-    }
-    Ok(out)
-}
-
-fn tool_list_contradictions(frontier: &Project) -> Result<String, String> {
-    let lookup = frontier
-        .findings
-        .iter()
-        .map(|finding| (finding.id.as_str(), finding))
-        .collect::<HashMap<_, _>>();
-    let mut contradictions = Vec::new();
-    for finding in &frontier.findings {
-        for link in &finding.links {
-            if matches!(link.link_type.as_str(), "contradicts" | "disputes") {
-                let target = lookup
-                    .get(link.target.as_str())
-                    .map(|f| f.assertion.text.as_str())
-                    .unwrap_or("(unknown target)");
-                contradictions.push(format!(
-                    "**{}** {} **{}**\n  {} --[{}]--> {}\n  Note: {}\n",
-                    finding.id,
-                    link.link_type,
-                    link.target,
-                    trunc(&finding.assertion.text, 80),
-                    link.link_type,
-                    trunc(target, 80),
-                    link.note,
-                ));
-            }
-        }
-    }
-    if contradictions.is_empty() {
-        return Ok("No candidate contradiction links in this frontier.".to_string());
-    }
-    Ok(format!(
-        "{} candidate contradiction links:\n\n{}",
-        contradictions.len(),
-        contradictions.join("\n")
-    ))
 }
 
 fn tool_frontier_stats(frontier: &Project) -> Result<String, String> {
@@ -2700,35 +3065,6 @@ fn resolve_problem<'a>(
         .find(|f| f.assertion.text.to_lowercase().contains(&lc))
 }
 
-/// One-call problem briefing: statement, gate status, open obligations
-/// (gap-flagged findings linked to it), rests-on, dependents, and
-/// staleness — the CodeGraph one-shot context call for frontier state.
-/// The agent entry contract: everything needed to start work on a
-/// problem cold, in one call. Statement + state hashes + gate status +
-/// ALLOWED OUTPUTS (each mapped to the frozen verifier kind that would
-/// check it) + failed-route memory (the BANKED clauses of the linked
-/// obligations — what is provably exhausted, do not re-grind) + open
-/// targets + the attempt ledger for this problem. An agent's output is
-/// acceptable only if it is one of the allowed output types with its
-/// verifier passing; prose strategy is not a state transition.
-fn tool_task_packet(
-    args: &Value,
-    frontier: &Project,
-    source_path: Option<&std::path::Path>,
-) -> Result<String, String> {
-    let arg = args["problem"]
-        .as_str()
-        .or_else(|| args["id"].as_str())
-        .ok_or("Missing 'problem' argument")?;
-    let v = build_task_packet(
-        arg,
-        frontier,
-        source_path,
-        default_decl_graph_path().as_deref(),
-    )?;
-    serde_json::to_string_pretty(&v).map_err(|e| e.to_string())
-}
-
 /// Default location of the Mathlib decl-dependency graph (regenerable working
 /// data; `data/` is gitignored, so this is present only on a worktree that has
 /// run the decl-build / Lean pass — absent is fine, the premise slice is then
@@ -2831,7 +3167,7 @@ pub(crate) fn decl_premise_slice(
 }
 
 /// Compose one root-pinned, replayable Frontier Packet for a single target. The
-/// MCP `task_packet` tool and the `vela task packet` CLI verb share this. It
+/// MCP `orient` tool's problem briefing is built from this. It
 /// binds: the resolved obligation, the accepted state at (snapshot_hash,
 /// event_log_hash), the gate status, the minimal kernel-premise slice
 /// ([`decl_premise_slice`], the CodeGraph bridge), the failed-route memory and
@@ -3265,81 +3601,6 @@ fn tool_nanopublication(args: &Value, frontier: &Project) -> Result<String, Stri
     .map_err(|e| format!("Serialization error: {e}"))
 }
 
-/// ORKG-style comparison: line up findings addressing the same scoped
-/// problem against a fixed set of generic comparison properties, so a
-/// reviewer can read the state of a question as a table rather than
-/// prose. Scope is set by `query` (substring on the assertion),
-/// `assertion_type`, and/or an explicit `ids` list; with none, compares
-/// the whole frontier (capped by `limit`).
-fn tool_frontier_compare(args: &Value, frontier: &Project) -> Result<String, String> {
-    let query = args["query"].as_str().map(str::to_lowercase);
-    let assertion_type = args["assertion_type"].as_str();
-    let ids: Vec<&str> = args["ids"]
-        .as_array()
-        .map(|a| a.iter().filter_map(Value::as_str).collect())
-        .unwrap_or_default();
-    let limit = args["limit"].as_u64().unwrap_or(50) as usize;
-
-    let selected: Vec<&vela_protocol::bundle::FindingBundle> = frontier
-        .findings
-        .iter()
-        .filter(|f| {
-            query
-                .as_deref()
-                .is_none_or(|q| f.assertion.text.to_lowercase().contains(q))
-                && assertion_type.is_none_or(|t| f.assertion.assertion_type == t)
-                && (ids.is_empty() || ids.iter().any(|id| f.id == *id || f.id.starts_with(id)))
-        })
-        .take(limit)
-        .collect();
-
-    // The generic comparison properties (ORKG's "comparison
-    // properties"): applicable across any contribution on the problem.
-    let properties = json!([
-        "assertion_type",
-        "confidence",
-        "evidence_type",
-        "method",
-        "model_system",
-        "replicated",
-        "replication_count",
-        "human_data",
-        "clinical_trial",
-        "contested",
-        "gap",
-        "year"
-    ]);
-
-    let rows: Vec<Value> = selected
-        .iter()
-        .map(|f| {
-            json!({
-                "id": f.id,
-                "assertion": trunc(&f.assertion.text, 100),
-                "assertion_type": f.assertion.assertion_type,
-                "confidence": f.confidence.score,
-                "evidence_type": f.evidence.evidence_type,
-                "method": trunc(&f.evidence.method, 60),
-                "model_system": f.evidence.model_system,
-                "replicated": f.evidence.replicated,
-                "replication_count": f.evidence.replication_count,
-                "contested": f.flags.contested,
-                "gap": f.flags.gap,
-                "year": f.provenance.year,
-            })
-        })
-        .collect();
-
-    serde_json::to_string_pretty(&json!({
-        "scope": {"query": args["query"], "assertion_type": assertion_type, "ids": ids},
-        "compared": rows.len(),
-        "properties": properties,
-        "rows": rows,
-        "caveat": "A structured side-by-side of declared finding properties; not a ranking or adjudication.",
-    }))
-    .map_err(|e| format!("Serialization error: {e}"))
-}
-
 /// The "deep" tier (DeepWiki pattern): multi-hop traversal from a
 /// finding across the typed graph, layered by hop distance, versus the
 /// single-hop `context`/`frontier_graph` "fast" tier. Returns the
@@ -3457,26 +3718,6 @@ async fn pubmed_result_count(client: &Client, query: &str) -> Result<u64, String
         .as_str()
         .and_then(|s| s.parse().ok())
         .unwrap_or(0))
-}
-
-fn frontier_index_json(project_infos: &[ProjectInfo]) -> Result<String, String> {
-    let frontiers = project_infos
-        .iter()
-        .map(|info| {
-            json!({
-                "name": info.name,
-                "file": info.file,
-                "findings": info.findings_count,
-                "links": info.links_count,
-                "papers": info.papers,
-            })
-        })
-        .collect::<Vec<_>>();
-    serde_json::to_string_pretty(&json!({
-        "frontier_count": frontiers.len(),
-        "frontiers": frontiers,
-    }))
-    .map_err(|e| format!("Serialization error: {e}"))
 }
 
 fn tool_trace_evidence_chain(args: &Value, frontier: &Project) -> Result<String, String> {
@@ -3893,38 +4134,44 @@ mod list_dependents_tests {
         l
     }
 
+    /// The `search` tool pages with a stable opaque cursor: page one plus
+    /// next_cursor, page two resumes where page one stopped, and the tail
+    /// page carries no cursor.
     #[test]
-    fn frontier_compare_tabulates_properties_and_scopes_by_type() {
-        let mut a = synth_finding(0, vec![]);
-        a.assertion.assertion_type = "mechanism".into();
-        a.evidence.replicated = true;
-        let mut b = synth_finding(1, vec![]);
-        b.assertion.assertion_type = "association".into();
-        let (a_id, _b_id) = (a.id.clone(), b.id.clone());
+    fn search_pages_with_stable_cursor() {
+        let findings: Vec<_> = (0..5).map(|i| synth_finding(i, vec![])).collect();
+        let ids: Vec<String> = findings.iter().map(|f| f.id.clone()).collect();
+        let mut project = assemble("srch", vec![], 0, 0, "test");
+        project.findings = findings;
 
-        let mut project = assemble("cmp", vec![], 0, 0, "test");
-        project.findings = vec![a, b];
+        let (page1, _) = tool_search(&json!({"query": "Synthetic", "limit": 2}), &project).unwrap();
+        assert_eq!(page1["total"], 5);
+        assert_eq!(page1["returned"], 2);
+        assert_eq!(page1["matches"][0]["id"], ids[0]);
+        let cursor = page1["next_cursor"].as_str().unwrap().to_string();
 
-        // No scope: both findings compared, with the property columns.
-        let all: Value =
-            serde_json::from_str(&tool_frontier_compare(&json!({}), &project).unwrap()).unwrap();
-        assert_eq!(all["compared"], 2);
-        assert!(
-            all["properties"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .any(|p| p == "confidence")
-        );
-
-        // Scoped by assertion_type: only the mechanism finding.
-        let scoped: Value = serde_json::from_str(
-            &tool_frontier_compare(&json!({"assertion_type": "mechanism"}), &project).unwrap(),
+        let (page2, _) = tool_search(
+            &json!({"query": "Synthetic", "limit": 2, "cursor": cursor}),
+            &project,
         )
         .unwrap();
-        assert_eq!(scoped["compared"], 1);
-        assert_eq!(scoped["rows"][0]["id"], a_id);
-        assert_eq!(scoped["rows"][0]["replicated"], true);
+        assert_eq!(page2["matches"][0]["id"], ids[2]);
+
+        let (tail, _) = tool_search(
+            &json!({"query": "Synthetic", "limit": 2, "cursor": page2["next_cursor"]}),
+            &project,
+        )
+        .unwrap();
+        assert_eq!(tail["returned"], 1);
+        assert!(tail["next_cursor"].is_null());
+
+        // A cursor this server never issued is an INVALID_ARG, not a 500.
+        let err = tool_search(
+            &json!({"query": "Synthetic", "cursor": "vev_bogus"}),
+            &project,
+        )
+        .unwrap_err();
+        assert_eq!(err.kind, ToolErrorKind::InvalidArg);
     }
 
     #[test]
@@ -4059,36 +4306,92 @@ mod mcp_service_tests {
             .iter()
             .map(|t| t["name"].as_str().unwrap().to_string())
             .collect();
-        assert!(
-            names.iter().any(|n| n == "frontier_stats"),
-            "orientation tools present"
-        );
-        assert!(
-            !names.iter().any(|n| n.starts_with("vela_")),
-            "hosted exclusions filter the filesystem-path family from tools/list: {names:?}"
+        // Hosted = the read-only profile minus the path-bound exclusions:
+        // exactly these five.
+        assert_eq!(
+            names,
+            vec!["orient", "finding", "search", "graph", "external"],
+            "hosted tools/list is the read-only surface minus verify/work/objects"
         );
     }
 
     #[tokio::test]
-    async fn tool_call_works_and_excluded_tool_is_refused() {
+    async fn tool_call_returns_envelope_and_excluded_tool_is_refused_by_name() {
         let svc = service();
         let (status, body) = svc
             .handle_http(
-                r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"frontier_stats","arguments":{}}}"#,
+                r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"orient","arguments":{}}}"#,
             )
             .await;
         assert_eq!(status, 200);
         let body = body.unwrap();
-        assert_eq!(body["result"]["isError"], false, "stats call succeeds");
+        assert_eq!(body["result"]["isError"], false, "orient call succeeds");
+        // The one JSON text block: {tool, ok, data, notes?, signals,
+        // caveats, duration_ms} — and no markdown duplication.
+        let text = body["result"]["content"][0]["text"].as_str().unwrap();
+        let envelope: Value = serde_json::from_str(text).unwrap();
+        assert_eq!(envelope["tool"], "orient");
+        assert_eq!(envelope["ok"], true);
+        assert!(envelope["data"].is_object(), "data payload present");
+        assert!(envelope.get("markdown").is_none(), "no markdown field");
+        assert!(envelope["duration_ms"].is_number());
 
         let (status, body) = svc
             .handle_http(
-                r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"vela_check_run","arguments":{}}}"#,
+                r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"verify","arguments":{}}}"#,
             )
             .await;
         assert_eq!(status, 200);
         let body = body.unwrap();
         assert_eq!(body["error"]["code"], -32602, "excluded tool refused");
+        let message = body["error"]["message"].as_str().unwrap();
+        assert!(
+            message.contains("orient, finding, search, graph, external"),
+            "refusal names the available tool set: {message}"
+        );
+    }
+
+    #[tokio::test]
+    async fn errors_carry_kind_and_profile_gate_refuses_writes() {
+        let svc = service();
+        // Unknown finding id → NOT_FOUND in the envelope, isError true.
+        let (_, body) = svc
+            .handle_http(
+                r#"{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"finding","arguments":{"id":"vf_does_not_exist"}}}"#,
+            )
+            .await;
+        let body = body.unwrap();
+        assert_eq!(body["result"]["isError"], true);
+        let text = body["result"]["content"][0]["text"].as_str().unwrap();
+        let envelope: Value = serde_json::from_str(text).unwrap();
+        assert_eq!(envelope["ok"], false);
+        assert_eq!(envelope["error"]["kind"], "NOT_FOUND");
+
+        // A write tool on a read-only profile → PERMISSION_DENIED; the
+        // finalizing tool → CUSTODY_REFUSED (the human lane).
+        let (_, body) = svc
+            .handle_http(
+                r#"{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"propose","arguments":{}}}"#,
+            )
+            .await;
+        let text = body.unwrap()["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let envelope: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(envelope["error"]["kind"], "PERMISSION_DENIED");
+
+        let (_, body) = svc
+            .handle_http(
+                r#"{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"decide","arguments":{}}}"#,
+            )
+            .await;
+        let text = body.unwrap()["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .to_string();
+        let envelope: Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(envelope["error"]["kind"], "CUSTODY_REFUSED");
     }
 
     #[tokio::test]

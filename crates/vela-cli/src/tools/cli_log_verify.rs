@@ -52,12 +52,12 @@ fn fetch_all_events(hub: &str, vfr: &str) -> Result<Vec<Value>, String> {
     let mut out = Vec::new();
     let mut cursor: Option<String> = None;
     loop {
-        // The hub's events endpoint pages by `since=<last event id>` (oldest
+        // The hub's events endpoint pages by `cursor=<last event id>` (oldest
         // first); `next_cursor` carries the id to resume from. This must match
-        // clients/python/vela_verify_log.py — using `cursor=` instead silently
+        // clients/python/vela_verify_log.py — a mismatched param name silently
         // re-fetches page 1 forever on any log past the page limit.
         let url = match &cursor {
-            Some(c) => format!("{hub}/entries/{vfr}/events?limit=1000&since={c}"),
+            Some(c) => format!("{hub}/entries/{vfr}/events?limit=1000&cursor={c}"),
             None => format!("{hub}/entries/{vfr}/events?limit=1000"),
         };
         let page = get_json(&url)?;

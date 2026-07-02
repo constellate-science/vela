@@ -114,7 +114,7 @@ record → propose → pack → accept example, is [docs/CLI.md](docs/CLI.md).
 
 ```sh
 vela status <frontier>          # one screen: replay verdict, proposals, judgment
-vela serve <frontier>           # MCP tools incl. task_packet (the agent entry contract)
+vela serve <frontier>           # ten MCP tools incl. orient (the agent entry contract)
 vela record <frontier> --claim … --artifact …   # activity into a portable claim packet
 vela reproduce <frontier>       # frozen verifiers re-check every witness
 vela accept <frontier> <vpr>    # keyed authority lands state (--all-pending for batch)

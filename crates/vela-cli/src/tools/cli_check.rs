@@ -69,7 +69,11 @@ pub(crate) fn cmd_check(
     let run_all = all || (!schema && !stats && !conformance_flag && !schema_only);
     if run_all || schema || schema_only {
         let Some(src) = source else {
-            fail("check requires a frontier source");
+            crate::ui::fail_with(
+                crate::ui::ErrorKind::Usage,
+                "check requires a frontier source",
+                Some("point it at a frontier: `vela check .` (or any repo/frontier.json path)"),
+            )
         };
         validate::run(src);
     }

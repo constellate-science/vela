@@ -31,6 +31,9 @@ use vela_protocol::cli_style as style;
 #[command(name = "vela", version)]
 #[command(about = "Portable frontier state for science")]
 struct Cli {
+    /// Suppress hint/advice lines (VELA_ADVICE=0 does the same).
+    #[arg(long, global = true)]
+    quiet: bool,
     #[command(subcommand)]
     command: Commands,
 }
@@ -58,7 +61,9 @@ pub(crate) use session::*;
 pub async fn run_command() {
     dotenvy::dotenv().ok();
 
-    match Cli::parse().command {
+    let cli = Cli::parse();
+    crate::ui::set_quiet(cli.quiet);
+    match cli.command {
         Commands::Check {
             source,
             schema,
@@ -144,7 +149,9 @@ pub async fn run_command() {
                 }
             }
         }
-        Commands::Status { frontier, json } => cmd_status(&frontier, json),
+        Commands::Status { frontier, json } => {
+            cmd_status(&crate::ui::resolve_frontier(frontier), json)
+        }
         Commands::Log {
             frontier,
             finding_id,
@@ -153,6 +160,8 @@ pub async fn run_command() {
             as_of,
             json,
         } => {
+            let (frontier, finding_id) =
+                crate::ui::resolve_frontier_with_id(frontier, finding_id, &["vf_"]);
             if let Some(vf) = finding_id {
                 let payload = state::history_as_of(&frontier, &vf, as_of.as_deref())
                     .unwrap_or_else(|e| fail_return(&e));
@@ -170,7 +179,12 @@ pub async fn run_command() {
             kind,
             limit,
             json,
-        } => cmd_inbox(&frontier, kind.as_deref(), limit, json),
+        } => cmd_inbox(
+            &crate::ui::resolve_frontier(frontier),
+            kind.as_deref(),
+            limit,
+            json,
+        ),
         Commands::Gate { action } => cmd_gate(action),
         Commands::Agents { action } => crate::cli_agents::cmd_agents(action),
         Commands::Foundry { action } => crate::cli_engine::cmd_foundry(action),
@@ -469,16 +483,21 @@ pub async fn run_command() {
             aggregate_kind,
             actor,
             json,
-        } => cmd_pack(
-            &frontier,
-            pack_id,
-            summary,
-            from_pending,
-            ids,
-            aggregate_kind,
-            actor,
-            json,
-        ),
+        } => {
+            let (frontier, pack_id) =
+                crate::ui::resolve_frontier_with_id(frontier, pack_id, &["vsd_"]);
+            crate::ui::set_mode("pack", json);
+            cmd_pack(
+                &frontier,
+                pack_id,
+                summary,
+                from_pending,
+                ids,
+                aggregate_kind,
+                actor,
+                json,
+            )
+        }
         Commands::Proposals { action } => cmd_proposals(action),
         Commands::Finding { command } => match command {
             FindingCommands::Add {
@@ -765,6 +784,9 @@ pub async fn run_command() {
             no_push,
             json,
         } => {
+            let (frontier, proposal_id) =
+                crate::ui::resolve_frontier_with_id(frontier, proposal_id, &["vpr_"]);
+            crate::ui::set_mode("accept", json);
             let publish_opts = crate::config::git_publish::PublishOptions::new(no_commit, no_push);
             // Pack mode: one decision for a whole changeset.
             if let Some(pack_id) = pack {
@@ -984,7 +1006,10 @@ pub async fn run_command() {
                 return;
             }
             let proposal_id = proposal_id.unwrap_or_else(|| {
-                fail_return("accept: pass a vpr_… id, or --all-pending / --id for batch")
+                fail_usage(
+                    "accept: pass a vpr_… id, or --all-pending / --id for batch, or --pack vsd_… for a changeset",
+                    "run `vela inbox .` first — it lists the pending vpr_/vsd_ ids and the exact accept command",
+                )
             });
             let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
             let reason = reason.unwrap_or_else(|| "accepted via review".to_string());
@@ -1074,6 +1099,12 @@ pub async fn run_command() {
         } => {
             // Fidelity batch mode: sign a whole verdict file under one key
             // read and one save. Checked before the single --fidelity path.
+            let (frontier, target_id) = crate::ui::resolve_frontier_with_id(
+                frontier,
+                target_id,
+                &["vev_", "vsd_", "vrp_", "vpf_", "vf_"],
+            );
+            crate::ui::set_mode("review", json);
             let publish_opts = crate::config::git_publish::PublishOptions::new(no_commit, no_push);
             if let Some(batch) = batch {
                 cmd_review_fidelity_batch(frontier.clone(), batch, reviewer, key, json);
@@ -1733,118 +1764,6 @@ pub(crate) fn save_recorded_proof_state(
 }
 
 // ── v0.42 daily-driver triad ────────────────────────────────────────
-
-pub(crate) fn answer(project: &vela_protocol::project::Project, q: &str, json: bool) {
-    let lower = q.to_lowercase();
-
-    // Pattern: pending / inbox.
-    if lower.contains("pending")
-        || lower.contains("inbox")
-        || lower.contains("queue")
-        || lower.contains("to review")
-    {
-        let pending: Vec<&vela_protocol::proposals::StateProposal> = project
-            .proposals
-            .iter()
-            .filter(|p| p.status == "pending_review")
-            .collect();
-        let mut by_kind: std::collections::BTreeMap<String, usize> = Default::default();
-        for p in &pending {
-            *by_kind.entry(p.kind.clone()).or_insert(0) += 1;
-        }
-        if json {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({
-                    "answer": "pending",
-                    "total": pending.len(),
-                    "by_kind": by_kind,
-                }))
-                .unwrap()
-            );
-        } else {
-            println!("  {} pending proposals.", pending.len());
-            for (k, n) in &by_kind {
-                println!("    · {n:>3}  {k}");
-            }
-            if pending.is_empty() {
-                println!("  Inbox is clean.");
-            } else {
-                println!("  Run `vela inbox <frontier>` to triage.");
-            }
-        }
-        return;
-    }
-
-    // Pattern: recent / changed / log.
-    if lower.contains("recent")
-        || lower.contains("changed")
-        || lower.contains("latest")
-        || lower.contains("happen")
-    {
-        let mut events: Vec<&vela_protocol::events::StateEvent> = project.events.iter().collect();
-        events.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
-        events.truncate(8);
-        if json {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({
-                    "answer": "recent_events",
-                    "events": events.iter().map(|e| json!({
-                        "id": e.id, "kind": e.kind, "timestamp": e.timestamp,
-                        "actor": e.actor.id, "target": e.target.id,
-                    })).collect::<Vec<_>>(),
-                }))
-                .unwrap()
-            );
-        } else {
-            println!("  Most recent {} events:", events.len());
-            for e in &events {
-                let when = fmt_timestamp(&e.timestamp);
-                println!("    · {when}  {:<28}  {}", e.kind, e.target.id);
-            }
-        }
-        return;
-    }
-
-    // Pattern: how many / count.
-    if lower.starts_with("how many") || lower.contains("count") || lower.contains("total") {
-        let n = project.findings.len();
-        let evs = project.events.len();
-        let actors = project.actors.len();
-        if json {
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({
-                    "answer": "counts",
-                    "findings": n,
-                    "events": evs,
-                    "actors": actors,
-                }))
-                .unwrap()
-            );
-        } else {
-            println!("  {n} findings · {evs} events · {actors} actors.");
-        }
-        return;
-    }
-
-    // Fallback.
-    if json {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&json!({
-                "answer": "unknown_question",
-                "question": q,
-                "hint": "Try: pending, audit, recent, how many."
-            }))
-            .unwrap()
-        );
-    } else {
-        println!("  Don't know how to route that question yet.");
-        println!("  Try: pending · audit · recent · how many");
-    }
-}
 
 pub(crate) fn frontier_label(p: &vela_protocol::project::Project) -> String {
     if p.project.name.trim().is_empty() {
@@ -3900,8 +3819,20 @@ pub fn run_from_args() {
 }
 
 pub(crate) fn fail(message: &str) -> ! {
-    eprintln!("{} {message}", style::err_prefix());
-    std::process::exit(1);
+    // Route through the one output contract: under --json (set_mode by
+    // the running command) even this generic failure is a JSON envelope
+    // with the right exit code, never stray prose.
+    crate::ui::fail_with(crate::ui::ErrorKind::Domain, message, None)
+}
+
+/// A lookup that found nothing. Exit 3; the hint names the discovery verb.
+pub(crate) fn fail_not_found<T>(message: &str, hint: &str) -> T {
+    crate::ui::fail_with(crate::ui::ErrorKind::NotFound, message, Some(hint))
+}
+
+/// A wrong invocation. Exit 2; the hint shows the corrected command.
+pub(crate) fn fail_usage<T>(message: &str, hint: &str) -> T {
+    crate::ui::fail_with(crate::ui::ErrorKind::Usage, message, Some(hint))
 }
 
 /// Validate that a CLI string argument is one of the allowed enum values.

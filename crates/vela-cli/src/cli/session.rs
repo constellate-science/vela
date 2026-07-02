@@ -36,9 +36,17 @@ pub(crate) fn print_session_help() {
     println!();
     println!("  Agents propose. Verifiers reproduce. Humans accept. Git publishes.");
     println!();
+    println!("  HOW IT FITS");
+    println!("    A frontier is a git repo whose .vela/ event log is the state.");
+    println!("    record   = your ACTIVITY, as a portable claim packet (optional)");
+    println!("    propose  = one reviewable CHANGE; pack = several as one changeset");
+    println!("    accept   = a human key decides — and the decision publishes itself");
+    println!("    check    = is the LOG intact (replay, signatures, parity)");
+    println!("    reproduce= is the SCIENCE intact (re-run every frozen verifier)");
+    println!();
     println!("  USAGE");
-    println!("    vela              Open a session against the nearest .vela/ repo");
-    println!("    vela <command>    Run a specific subcommand");
+    println!("    vela              Dashboard for the nearest frontier (found upward)");
+    println!("    vela <command>    Most commands find the frontier the same way");
     println!("    vela help advanced   Everything reachable, grouped");
     println!();
     println!("  SETUP (once)");
@@ -53,7 +61,8 @@ pub(crate) fn print_session_help() {
     println!("    record <dir>      Record activity: claim + hashed artifacts + caveats");
     println!("    propose           Draft a finding.review proposal");
     println!("    review            Sign fidelity verdicts (--fidelity, --batch)");
-    println!("    accept            Apply proposals under your key (--all-pending)");
+    println!("    accept            Decide under your key: <vpr_>, --all-pending,");
+    println!("                      or --pack <vsd_> for one atomic changeset verdict");
     println!("    attach            Bind mechanical verifier evidence to a finding");
     println!();
     println!("  VERIFY");
@@ -65,8 +74,12 @@ pub(crate) fn print_session_help() {
     println!("    git push          IS publication; the hub re-derives its index");
     println!("    hub register-git  Bind this repo to its vfr_ on the hub, once");
     println!();
-    println!("  In session, type a single letter for a quick verb, or any");
-    println!("  question in plain text. `q` or `exit` quits.");
+    println!("  AGENTS");
+    println!("    serve             This frontier as an MCP server for AI agents");
+    println!("                      (Claude Code, Cursor, any MCP client; also hosted");
+    println!("                      at hub.constellate.science/mcp — no clone needed)");
+    println!("    policy            The governance policy: what auto-admits, what");
+    println!("                      always needs a human key (show/seal/test)");
     println!();
 }
 
@@ -118,38 +131,6 @@ pub(crate) fn print_session_dashboard(project: &vela_protocol::project::Project,
     println!();
 }
 
-/// Run a single verb shortcut. Returns true if the verb was recognized.
-fn run_session_verb(verb: &str, repo_path: &Path) -> bool {
-    match verb {
-        "i" | "inbox" => {
-            let action = ProposalAction::List {
-                frontier: repo_path.to_path_buf(),
-                status: Some("pending_review".into()),
-                json: false,
-            };
-            cmd_proposals(action);
-            true
-        }
-        "l" | "log" => {
-            cmd_log(repo_path, 10, None, false);
-            true
-        }
-        "s" | "status" | "refresh" => {
-            // Reload + re-render dashboard.
-            match repo::load_from_path(repo_path) {
-                Ok(p) => print_session_dashboard(&p, repo_path),
-                Err(e) => eprintln!("{} {e}", style::err_prefix()),
-            }
-            true
-        }
-        "h" | "help" | "?" => {
-            print_session_help();
-            true
-        }
-        _ => false,
-    }
-}
-
 pub(crate) fn run_session() {
     let repo_path = match find_vela_repo() {
         Some(p) => p,
@@ -177,45 +158,34 @@ pub(crate) fn run_session() {
 
     print_session_dashboard(&project, &repo_path);
 
-    // Piped or scripted invocation: the dashboard IS the answer. A
-    // prompt loop over a closed stdin never sees EOF as "stop" from
-    // read_line's Ok(0), so it would spin forever printing prompts.
-    use std::io::IsTerminal;
-    if !std::io::stdin().is_terminal() {
-        return;
+    // The dashboard IS the session: one screen of state plus the ranked
+    // next actions, then your shell prompt back. (The old REPL loop is
+    // retired — a prompt that shadows the shell helps neither humans
+    // nor agents; every quick verb is one `vela <verb>` away.)
+    let unpublished = crate::cli_read::unpublished_store_files(&repo_path);
+    if unpublished > 0 {
+        println!(
+            "  {}  {unpublished} store file(s) not committed — signed state only on this machine",
+            style::warn("unpublished")
+        );
     }
-
-    use std::io::{BufRead, Write};
-    let stdin = std::io::stdin();
-    let mut stdout = std::io::stdout();
-    loop {
-        print!("  > ");
-        stdout.flush().ok();
-        let mut line = String::new();
-        match stdin.lock().read_line(&mut line) {
-            Ok(0) | Err(_) => break, // EOF ends the session
-            Ok(_) => {}
+    let targets = vela_edge::frontier_next::frontier_next(&project, Some(&repo_path), 3);
+    if !targets.is_empty() {
+        println!();
+        println!(
+            "  {}",
+            "next, ranked (vela frontier next for more):".dimmed()
+        );
+        for t in &targets {
+            println!(
+                "    {}  {}",
+                t.id,
+                t.title.chars().take(56).collect::<String>()
+            );
+            println!("      {}", t.next_command.dimmed());
         }
-        let input = line.trim();
-        if input.is_empty() {
-            continue;
-        }
-        if matches!(input, "q" | "quit" | "exit") {
-            break;
-        }
-        if run_session_verb(input, &repo_path) {
-            continue;
-        }
-        // Fall through: treat as natural-language question.
-        let project = match repo::load_from_path(&repo_path) {
-            Ok(p) => p,
-            Err(e) => {
-                eprintln!("{} {e}", style::err_prefix());
-                continue;
-            }
-        };
-        answer(&project, input, false);
     }
+    println!();
 }
 
 #[cfg(test)]

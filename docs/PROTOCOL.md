@@ -1058,13 +1058,12 @@ before serializing.
 
 - Anonymous reads (header absent) get `None`, equivalent to
   public-only.
-- `GET /api/finding/<id>` returns `404` when the finding's tier
-  exceeds the actor's clearance; the existence of the object is
+- `GET /entries/self/findings/<id>` returns `404` when the finding's
+  tier exceeds the actor's clearance; the existence of the object is
   itself part of the tiered content.
-- `GET /api/frontier` and `GET /api/findings` return a redacted
-  `Project` view: above-clearance findings, negative_results,
-  trajectories, and any events targeting them are dropped from the
-  response.
+- `GET /entries/self/findings` returns a redacted view:
+  above-clearance findings, negative_results, trajectories, and any
+  events targeting them are dropped from the response.
 
 This is a deliberately thin authentication surface for v0.51: a
 real deployment terminates TLS and validates actor signatures at a

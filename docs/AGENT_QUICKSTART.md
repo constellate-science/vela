@@ -80,20 +80,22 @@ opening the repo gets the read-only profile:
 ```
 
 Profiles nest: `read-only` ⊂ `draft` ⊂ `maintainer`. Read-only exposes no
-mutating tool (a unit test enforces this); `draft` adds the propose family;
-accept/reject live only in `maintainer`, behind a human session.
+mutating tool (a unit test enforces this); `draft` adds `propose` and
+`work`; `decide` lives only in `maintainer`, behind a human session.
 
-The tools that answer the agent questions:
+The surface is ten tools; each one answers an agent question:
 
 | Question | Tool |
 |---|---|
-| What frontier am I on / what is accepted? | `frontier_stats`, `context`, `frontier_explore`, `search_findings`, `get_finding` |
-| What should I work on? | `task_packet` (the agent entry contract), `list_gaps` |
-| What is contested / what breaks if X falls? | `contradictions`, `blast_radius`, `deep_trace`, `trace_evidence_chain` |
-| Does the frontier pass the gate right now? | `vela_check_run` — the same strict bundle the hub's ingestor enforces |
-| Do the witnesses actually reproduce? | `vela_reproduce_run` — frozen-verifier re-check, per witness |
-| How do I submit work? | `vela_record_propose` (draft profile) — lands a vrc_ record as a pending proposal |
-| What happened since I last looked? | `list_events_since`, `get_finding_history` |
+| Where am I / what should I work on? | `orient` — stats, open targets, gaps, recent events; pass `problem` for the full task briefing (the agent entry contract) |
+| What exactly does this finding say? | `finding` — one vf_ with optional `include`: history, dependents, neighborhood |
+| Where is X discussed? | `search` — findings, sources, evidence atoms; cursor-paginated |
+| What is contested / what breaks if X falls? | `graph` — mode=contradictions, mode=impact (blast radius + retraction cascade), mode=traverse |
+| Does the frontier pass the gate / do witnesses reproduce? | `verify` — mode=strict (the same bundle the hub's ingestor enforces), mode=witness (frozen-verifier re-check) |
+| How do I submit work? | `propose` (draft profile) — kind=review/note/apply_note/revise_confidence/retract, always pending; `work` — action=claim/record/pack |
+| Who decides? | `decide` (maintainer only) — accept/reject, a key-custody human act |
+| What agent objects exist here? | `objects` — packs, attestations, evaluations, conflicts, tool descriptors |
+| Is this novel / shareable? | `external` — service=pubmed prior-art count, service=nanopub export |
 
 ## JSON contracts
 
@@ -118,7 +120,7 @@ transfers, Lean anchoring, and experiment receipts are
 
 The loop scales by composition, not new machinery:
 
-1. **Claim before long work**: `vela_claim_task` (MCP, draft profile)
+1. **Claim before long work**: `work` action=claim (MCP, draft profile)
    leases an obligation under your OWN agent key — minted automatically
    at `~/.vela/agents/<actor>/` from your `VELA_ACTOR_ID` the first time
    you claim, no key step needed (`VELA_AGENT_KEY_HEX` overrides). A
@@ -129,7 +131,7 @@ The loop scales by composition, not new machinery:
    ceremony. Obligation ids may be frontier-external and namespaced
    (`erdos:443`); strict replay treats such leases as coordination, not
    orphaned targets.
-2. **Watch, don't poll blind**: `GET /entries/{vfr}/events/stream?since=<cursor>`
+2. **Watch, don't poll blind**: `GET /entries/{vfr}/events/stream?cursor=<event_id>`
    (SSE, cursor-resumable) streams what changed.
 3. **One pack per session**: bundle your session's proposals into a
    changeset — `vela pack . --summary "…" --from-pending` — so the

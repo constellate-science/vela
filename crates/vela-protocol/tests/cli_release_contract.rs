@@ -242,22 +242,20 @@ fn tool_check_json_has_concise_tool_lists() {
     ]);
 
     assert_eq!(payload["ok"], true);
-    assert!(payload["tool_count"].as_u64().unwrap() >= 8);
+    assert!(payload["tool_count"].as_u64().unwrap() >= 5);
     assert!(
         payload["tools"]
             .as_array()
             .unwrap()
-            .contains(&Value::String("frontier_stats".to_string()))
+            .contains(&Value::String("orient".to_string()))
     );
-    assert!(
-        payload["registered_tool_count"].as_u64().unwrap()
-            >= payload["tool_count"].as_u64().unwrap()
-    );
+    // The registered surface is the ten-tool contract.
+    assert_eq!(payload["registered_tool_count"].as_u64().unwrap(), 10);
     assert!(
         payload["registered_tools"]
             .as_array()
             .unwrap()
-            .contains(&Value::String("check_pubmed".to_string()))
+            .contains(&Value::String("external".to_string()))
     );
 }
 

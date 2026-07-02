@@ -1,9 +1,10 @@
 """Vela v0.5 Python SDK.
 
 A small, single-file client for `vela serve --http`. Wraps the read
-endpoints (`/api/findings`, `/api/events`) and the signed write tools
-(`propose_review`, `propose_note`, `propose_revise_confidence`,
-`propose_retract`, `accept_proposal`, `reject_proposal`).
+endpoints (`/entries/self/findings`, `/entries/self/events`) and the
+signed write tools (`propose` with kind=review/note/apply_note/
+revise_confidence/retract, and `decide` with action=accept/reject),
+spoken over the `/mcp` streamable-HTTP endpoint.
 
 Idempotency is a substrate property: `propose_review` etc. compute the
 content-addressed proposal_id locally, then send it to the server. A
@@ -256,63 +257,79 @@ class Frontier:
     @classmethod
     def connect(cls, base_url: str) -> "Frontier":
         f = cls(base_url)
-        # Eager-fetch /api/stats to validate the connection.
+        # Eager-fetch /entries/self to validate the connection.
         f.stats()
         return f
 
     def _post_tool(self, name: str, args: dict) -> dict:
+        """Call one MCP tool over the `/mcp` streamable-HTTP endpoint.
+
+        Tool-level failures (bad signature, tier rejection, profile
+        refusal) come back inside the envelope as `ok=false` with a typed
+        `error: {kind, message, hint?}` — surfaced as VelaError, not
+        HTTPError. HTTPError is reserved for true transport failures.
+        """
         r = self._session.post(
-            f"{self.base_url}/api/tool",
-            json={"name": name, "arguments": args},
+            f"{self.base_url}/mcp",
+            json={
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {"name": name, "arguments": args},
+            },
             timeout=30,
         )
-        # The server returns HTTP 500 for *tool-level* errors (bad signature,
-        # tier rejection, etc.) with a structured `ok=false` body. Surface
-        # those as VelaError, not HTTPError; only raise HTTPError for true
-        # transport failures (404, 5xx without a tool body).
         try:
             body = r.json()
         except ValueError:
             r.raise_for_status()
             raise VelaError(f"tool {name}: non-JSON response (HTTP {r.status_code})")
-        if not body.get("ok", False):
-            err = body.get("error") or body.get("data") or {}
-            text = err.get("text") if isinstance(err, dict) else err
-            raise VelaError(f"tool {name} failed: {text}")
-        return body["data"]
+        if "error" in body:  # JSON-RPC transport-level error
+            raise VelaError(f"tool {name} failed: {body['error'].get('message')}")
+        content = body.get("result", {}).get("content", [])
+        if not content:
+            raise VelaError(f"tool {name}: empty result content")
+        envelope = json.loads(content[0]["text"])
+        if not envelope.get("ok", False):
+            err = envelope.get("error") or {}
+            raise VelaError(
+                f"tool {name} failed ({err.get('kind', 'INTERNAL')}): {err.get('message')}"
+            )
+        return envelope["data"]
 
     # ── Reads ──────────────────────────────────────────────────────────
 
     def stats(self) -> dict:
-        r = self._session.get(f"{self.base_url}/api/stats", timeout=30)
+        r = self._session.get(f"{self.base_url}/entries/self", timeout=30)
         r.raise_for_status()
         return r.json()
 
     def findings(self, *, query: str | None = None, limit: int = 50) -> dict:
-        """Markdown search result (matches `/api/findings` shape).
-
-        For a structured list of finding objects, prefer `list_findings()`
-        which pulls the full project view from `/api/frontier`.
-        """
+        """Search result from `/entries/self/findings?query=…`, or the
+        structured list shape when no query is given."""
         params: dict[str, str] = {"limit": str(limit)}
         if query:
             params["query"] = query
-        r = self._session.get(f"{self.base_url}/api/findings", params=params, timeout=30)
+        r = self._session.get(
+            f"{self.base_url}/entries/self/findings", params=params, timeout=30
+        )
         r.raise_for_status()
         return r.json()
 
     def list_findings(self, *, limit: int | None = None) -> list[dict]:
-        """Return the structured findings array from `/api/frontier`,
-        optionally limited to the first `limit`. Suitable for picking
-        target finding ids for write tools."""
-        r = self._session.get(f"{self.base_url}/api/frontier", timeout=30)
+        """Return the structured findings array from
+        `/entries/self/findings`, optionally limited to the first `limit`.
+        Suitable for picking target finding ids for write tools."""
+        r = self._session.get(f"{self.base_url}/entries/self/findings", timeout=30)
         r.raise_for_status()
         body = r.json()
         items = body.get("findings", [])
         return items[:limit] if limit else items
 
     def find(self, finding_id: str) -> dict:
-        r = self._session.get(f"{self.base_url}/api/findings/{finding_id}", timeout=30)
+        r = self._session.get(
+            f"{self.base_url}/entries/self/findings/{finding_id}", timeout=30
+        )
         r.raise_for_status()
         return r.json()
 
@@ -322,8 +339,10 @@ class Frontier:
         while True:
             params: dict[str, str] = {"limit": str(limit)}
             if cursor:
-                params["since"] = cursor
-            r = self._session.get(f"{self.base_url}/api/events", params=params, timeout=30)
+                params["cursor"] = cursor
+            r = self._session.get(
+                f"{self.base_url}/entries/self/events", params=params, timeout=30
+            )
             r.raise_for_status()
             body = r.json()
             for raw in body.get("events", []):
@@ -394,10 +413,11 @@ class Frontier:
             ts,
         )
         data = self._post_tool(
-            "propose_review",
+            "propose",
             {
+                "kind": "review",
+                "target": finding_id,
                 "actor_id": actor.id,
-                "target_finding_id": finding_id,
                 "status": status,
                 "reason": reason,
                 "created_at": ts,
@@ -443,8 +463,9 @@ class Frontier:
             ts,
         )
         args: dict[str, Any] = {
+            "kind": "note",
+            "target": finding_id,
             "actor_id": actor.id,
-            "target_finding_id": finding_id,
             "text": text,
             "reason": reason,
             "created_at": ts,
@@ -452,7 +473,7 @@ class Frontier:
         }
         if provenance is not None:
             args["provenance"] = provenance
-        data = self._post_tool("propose_note", args)
+        data = self._post_tool("propose", args)
         return Proposal(
             id=data["proposal_id"],
             finding_id=data["finding_id"],
@@ -501,8 +522,9 @@ class Frontier:
             ts,
         )
         args: dict[str, Any] = {
+            "kind": "apply_note",
+            "target": finding_id,
             "actor_id": actor.id,
-            "target_finding_id": finding_id,
             "text": text,
             "reason": reason,
             "created_at": ts,
@@ -510,7 +532,7 @@ class Frontier:
         }
         if provenance is not None:
             args["provenance"] = provenance
-        data = self._post_tool("propose_and_apply_note", args)
+        data = self._post_tool("propose", args)
         return Proposal(
             id=data["proposal_id"],
             finding_id=data["finding_id"],
@@ -537,10 +559,11 @@ class Frontier:
             ts,
         )
         data = self._post_tool(
-            "propose_revise_confidence",
+            "propose",
             {
+                "kind": "revise_confidence",
+                "target": finding_id,
                 "actor_id": actor.id,
-                "target_finding_id": finding_id,
                 "new_score": new_score,
                 "reason": reason,
                 "created_at": ts,
@@ -572,10 +595,11 @@ class Frontier:
             ts,
         )
         data = self._post_tool(
-            "propose_retract",
+            "propose",
             {
+                "kind": "retract",
+                "target": finding_id,
                 "actor_id": actor.id,
-                "target_finding_id": finding_id,
                 "reason": reason,
                 "created_at": ts,
                 "signature": signature,
@@ -604,8 +628,9 @@ class Frontier:
             )
         )
         data = self._post_tool(
-            "accept_proposal",
+            "decide",
             {
+                "action": "accept",
                 "proposal_id": proposal_id,
                 "reviewer_id": reviewer.id,
                 "reason": reason,
@@ -630,8 +655,9 @@ class Frontier:
             )
         )
         self._post_tool(
-            "reject_proposal",
+            "decide",
             {
+                "action": "reject",
                 "proposal_id": proposal_id,
                 "reviewer_id": reviewer.id,
                 "reason": reason,

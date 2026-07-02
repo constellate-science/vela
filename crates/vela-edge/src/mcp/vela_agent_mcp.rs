@@ -1,9 +1,9 @@
-//! v0.206: MCP adapter for the vela_agent SDK surface.
+//! MCP adapter for the vela_agent SDK surface.
 //!
-//! Exposes two write-side tools over JSON-RPC stdio: a one-shot
-//! `vela_agent_submit_diff_pack` that signs a vaa_* attestation +
-//! a vsd_* pack in one call, and `vela_agent_open_trajectory` that
-//! writes a vtr_* with N steps.
+//! The underlying impls behind the `work`, `verify`, and `objects` MCP
+//! tools: signed one-shot submissions (attestation + diff pack), obligation
+//! leases, record proposals, the strict/witness verification runs, and the
+//! `.vela/` object reads.
 //!
 //! Stateless: each call is one-shot. The agent does its own
 //! bookkeeping client-side (mirroring the Python SDK's run lifecycle)
@@ -89,7 +89,7 @@ fn frontier_path_arg(args: &Value) -> Result<PathBuf, String> {
         .ok_or_else(|| "frontier_path required".to_string())
 }
 
-/// `vela_agent_get_pack` — fetch a single Diff Pack by id.
+/// `objects` type=pack with id — fetch a single Diff Pack by id.
 pub fn get_pack(args: &Value) -> Result<String, String> {
     let frontier = frontier_path_arg(args)?;
     let pack_id = args
@@ -103,7 +103,7 @@ pub fn get_pack(args: &Value) -> Result<String, String> {
     Ok(body)
 }
 
-/// `vela_agent_list_packs` — list every Diff Pack on a frontier.
+/// `objects` type=pack listing — every Diff Pack on a frontier.
 pub fn list_packs(args: &Value) -> Result<String, String> {
     let frontier = frontier_path_arg(args)?;
     let packs = list_artifacts(&frontier, "diff_packs", "vsd_");
@@ -127,7 +127,33 @@ pub fn list_packs(args: &Value) -> Result<String, String> {
     .unwrap_or_default())
 }
 
-/// `vela_agent_get_attestation` — fetch a single Agent Attestation.
+/// List every Agent Attestation on a frontier (the `objects` tool's
+/// attestation listing; there was no narrow-tool equivalent).
+pub fn list_attestations(args: &Value) -> Result<String, String> {
+    let frontier = frontier_path_arg(args)?;
+    let attestations = list_artifacts(&frontier, "agent_attestations", "vaa_");
+    Ok(serde_json::to_string_pretty(&json!({
+        "ok": true,
+        "count": attestations.len(),
+        "attestations": attestations,
+    }))
+    .unwrap_or_default())
+}
+
+/// List every Tool Descriptor on a frontier (the `objects` tool's
+/// descriptor listing; there was no narrow-tool equivalent).
+pub fn list_tool_descriptors(args: &Value) -> Result<String, String> {
+    let frontier = frontier_path_arg(args)?;
+    let descriptors = list_artifacts(&frontier, "tool_descriptors", "vtd_");
+    Ok(serde_json::to_string_pretty(&json!({
+        "ok": true,
+        "count": descriptors.len(),
+        "descriptors": descriptors,
+    }))
+    .unwrap_or_default())
+}
+
+/// `objects` type=attestation with id — fetch a single Agent Attestation.
 pub fn get_attestation(args: &Value) -> Result<String, String> {
     let frontier = frontier_path_arg(args)?;
     let vaa_id = args
@@ -143,9 +169,8 @@ pub fn get_attestation(args: &Value) -> Result<String, String> {
     Ok(body)
 }
 
-/// `vela_agent_frontier_summary` — quick counts: which primitives
-/// exist on this frontier. Useful as the first call in a multi-turn
-/// agent session.
+/// Quick counts of which agent-object primitives exist on a frontier;
+/// folded into `orient` as the agent_objects lane.
 pub fn frontier_summary(args: &Value) -> Result<String, String> {
     let frontier = frontier_path_arg(args)?;
     let diff_packs = list_artifacts(&frontier, "diff_packs", "vsd_");
@@ -175,7 +200,7 @@ pub fn frontier_summary(args: &Value) -> Result<String, String> {
 // v0.220: read-tool parity for tool descriptors, evaluations, conflicts.
 // ----------------------------------------------------------------------------
 
-/// `vela_agent_get_tool_descriptor` — fetch a single Tool Descriptor.
+/// `objects` type=tool_descriptor with id — fetch a single Tool Descriptor.
 pub fn get_tool_descriptor(args: &Value) -> Result<String, String> {
     let frontier = frontier_path_arg(args)?;
     let vtd_id = args
@@ -191,7 +216,7 @@ pub fn get_tool_descriptor(args: &Value) -> Result<String, String> {
     Ok(body)
 }
 
-/// `vela_agent_get_evaluation` — fetch a single Evaluation Record.
+/// `objects` type=evaluation with id — fetch a single Evaluation Record.
 pub fn get_evaluation(args: &Value) -> Result<String, String> {
     let frontier = frontier_path_arg(args)?;
     let ver_id = args
@@ -207,7 +232,7 @@ pub fn get_evaluation(args: &Value) -> Result<String, String> {
     Ok(body)
 }
 
-/// `vela_agent_list_evaluations` — list every Evaluation Record on a
+/// `objects` type=evaluation listing — every Evaluation Record on a
 /// frontier, optionally filtered by target descriptor.
 pub fn list_evaluations(args: &Value) -> Result<String, String> {
     let frontier = frontier_path_arg(args)?;
@@ -234,7 +259,7 @@ pub fn list_evaluations(args: &Value) -> Result<String, String> {
     .unwrap_or_default())
 }
 
-/// `vela_agent_get_conflict` — fetch a single resolved Verdict Conflict.
+/// `objects` type=conflict with id — fetch a single resolved Verdict Conflict.
 pub fn get_conflict(args: &Value) -> Result<String, String> {
     let frontier = frontier_path_arg(args)?;
     let vdc_id = args
@@ -250,7 +275,7 @@ pub fn get_conflict(args: &Value) -> Result<String, String> {
     Ok(body)
 }
 
-/// `vela_agent_list_conflicts` — list every resolved Verdict Conflict
+/// `objects` type=conflict listing — every resolved Verdict Conflict
 /// on a frontier, optionally filtered by resolution_mode.
 pub fn list_conflicts(args: &Value) -> Result<String, String> {
     let frontier = frontier_path_arg(args)?;
@@ -396,7 +421,7 @@ fn derive_proposal_id(kind: &str, payload: &Value, at: &str, actor: &str) -> Str
     format!("vpr_{}", &sha256_hex(preimage.as_bytes())[..16])
 }
 
-/// `vela_agent_submit_diff_pack` MCP tool. One-shot: builds a
+/// `work` action=pack. One-shot: builds a
 /// signed AgentAttestation envelope and a signed ScientificDiffPack
 /// bundling N proposals, writes both to the frontier's `.vela/`
 /// tree, and returns the resulting ids.
@@ -610,7 +635,7 @@ pub fn submit_diff_pack(args: &Value) -> Result<String, String> {
     .unwrap_or_default())
 }
 
-/// `vela_claim_task` — lease an open obligation so other swarm agents route
+/// `work` action=claim — lease an open obligation so other swarm agents route
 /// around it. Emits a signed `attempt.claimed` event (the agent's OWN key
 /// via VELA_AGENT_KEY_HEX; never a human's). One live lease per obligation;
 /// expiry = claimed_at + ttl, computed at read time. Coordination, not
@@ -704,7 +729,7 @@ pub fn claim_task(args: &Value) -> Result<String, String> {
     .to_string())
 }
 
-/// `vela_check_run` — hold the LOCAL frontier to the one strict bar
+/// `verify` mode=strict — hold the LOCAL frontier to the one strict bar
 /// (validation + strict reducer replay + signature signals), over MCP. The
 /// agent's "does this frontier pass the gate right now?" question, answered
 /// by the same bundle the hub's ingestor enforces.
@@ -731,7 +756,7 @@ pub fn check_run(args: &Value) -> Result<String, String> {
     }
 }
 
-/// `vela_reproduce_run` — re-verify a frontier's stored witnesses from
+/// `verify` mode=witness — re-verify a frontier's stored witnesses from
 /// scratch with the frozen exact verifiers, over MCP. Walks
 /// `witnesses/*.witness.json` (or any `*.witness.json` under the path).
 pub fn reproduce_run(args: &Value) -> Result<String, String> {
@@ -802,7 +827,7 @@ pub fn reproduce_run(args: &Value) -> Result<String, String> {
     .to_string())
 }
 
-/// `vela_record_propose` — land an activity record (vrc_) on the LOCAL
+/// `work` action=record — land an activity record (vrc_) on the LOCAL
 /// frontier as a pending proposal. The git-native agent write path: the
 /// agent works in the repo, the record becomes a reviewable proposal,
 /// `git push` publishes, the hub re-indexes. Never decides — the proposal

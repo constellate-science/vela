@@ -231,7 +231,7 @@ pub(crate) fn cmd_frontier(action: FrontierAction) {
             frontier,
             limit,
             json,
-        } => cmd_frontier_next(&frontier, limit, json),
+        } => cmd_frontier_next(&crate::ui::resolve_frontier(frontier), limit, json),
     }
 }
 

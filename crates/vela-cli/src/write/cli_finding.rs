@@ -11,8 +11,14 @@ use colored::Colorize;
 use serde_json::Value;
 
 pub(crate) fn cmd_finding_show(frontier: &Path, finding_id: &str, json_out: bool) {
+    crate::ui::set_mode("finding.show", json_out);
     let project = repo::load_from_path(frontier).unwrap_or_else(|e| fail_return(&e));
-    let ctx = state::finding_context(&project, finding_id).unwrap_or_else(|e| fail_return(&e));
+    let ctx = state::finding_context(&project, finding_id).unwrap_or_else(|_| {
+        crate::cli::fail_not_found(
+            &format!("no finding '{finding_id}' in this frontier"),
+            "list recent findings: `vela log .` — or search: `vela status .`",
+        )
+    });
     if json_out {
         print_json(&ctx);
         return;

@@ -2501,12 +2501,12 @@ impl HubDb {
     pub async fn event_page(
         &self,
         vfr_id: &str,
-        since: Option<&str>,
+        cursor: Option<&str>,
         limit: usize,
         kind: Option<&str>,
         target: Option<&str>,
     ) -> Result<EventPage, String> {
-        let cursor_seq = match since {
+        let cursor_seq = match cursor {
             Some(cursor) => Some(self.event_seq(vfr_id, cursor).await?.ok_or_else(|| {
                 format!("cursor_not_found: cursor '{cursor}' not found in event log")
             })?),

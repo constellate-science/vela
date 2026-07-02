@@ -816,12 +816,17 @@ fn validate_project_metadata(
     }
 }
 
-/// CLI entry point for `vela validate`.
+/// CLI entry point for `vela check`'s structural pass.
 pub fn run(source: &Path) {
     let report = validate(source);
 
     println!();
-    println!("  {}", "VELA · VALIDATE".dimmed());
+    println!(
+        "  {}",
+        format!("VELA · CHECK · {}", source.display())
+            .to_uppercase()
+            .dimmed()
+    );
     println!("  {}", style::tick_row(60));
     println!("  total findings: {}", report.total_files);
     println!(
