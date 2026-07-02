@@ -64,6 +64,8 @@ The public hub is **<https://hub.constellate.science>**.
 | `GET /entries/{vfr_id}/reproduce` | Verify-this-yourself page: the clone → `vela check --strict` → `vela reproduce` block plus last-ingest commit and time. |
 | `GET /entries/{vfr_id}/git-remote` | The frontier's registered git remote (url, ref, subdir, last ingest). |
 | `POST /entries/{vfr_id}/git-remote` | The one write: an owner-signed `vela.frontier-git-remote.v0.1` registration binding the frontier to its repo. |
+| `POST /mcp` | Hosted MCP endpoint (streamable HTTP, stateless JSON): the read-only tool surface over every live frontier, for remote agents with no clone. |
+| `POST /webhook/github` | Push events kick ingest + the MCP refresher ahead of the interval sweeps. HMAC-authenticated (`X-Hub-Signature-256`). |
 
 Historical note: `POST /entries` (the signed-manifest publish) was the
 pre-git-native write path and is removed. Index rows are synthesized by
@@ -102,6 +104,40 @@ vela hub register-git <vfr_id> --remote <repo-url>
 git clone <repo-url> && vela check <dir> --strict   # the authority path
 curl https://hub.constellate.science/entries        # the index view
 ```
+
+## Hosted MCP (`/mcp`)
+
+Remote agents connect to the hub as an MCP server — no clone, no local
+binary. The endpoint is streamable HTTP with stateless JSON responses
+(POST a JSON-RPC message; no server-initiated SSE stream), backed by the
+same dispatcher, profile gate, and tool registry as `vela serve`, loaded
+from local checkouts of every registered frontier remote and refreshed on
+an interval (`VELA_HUB_MCP_REFRESH_SECS`, default 300 s) or immediately on
+a webhook push.
+
+Add it to any MCP client as `https://hub.constellate.science/mcp`
+(transport: streamable HTTP, no auth). The tool surface is the read-only
+profile minus the filesystem-path `vela_*` runtime family (useless
+remotely, and `vela_reproduce_run` would be a CPU sink on a public
+endpoint). Orientation, search, findings, contradictions, blast-radius,
+task packets, and event reads are all served; every write verb and every
+decision verb is absent by construction — the hosted endpoint cannot
+mutate state under any configuration.
+
+`vela serve <frontier> --http <port>` exposes the identical `/mcp` route
+locally, so the remote and local contracts are the same surface.
+
+## Webhook (`POST /webhook/github`)
+
+The ingest and MCP refresh loops sweep on an interval; the webhook is the
+latency lane that makes `git push` reflect in seconds. Configure a
+GitHub webhook on the frontier repo (push events, content type JSON,
+secret = the hub's `VELA_HUB_WEBHOOK_SECRET`); the hub verifies
+`X-Hub-Signature-256` over the raw body and then kicks a targeted sweep.
+Authenticity of state never rests on this header: whatever arrives is
+still held to the strict replay bundle like every sweep. No secret
+configured ⇒ the route answers 503 and the interval sweeps remain the
+only refresh path.
 
 ## Git as remote (the frontier repo is the store)
 

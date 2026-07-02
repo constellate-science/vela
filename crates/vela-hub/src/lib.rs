@@ -10,4 +10,5 @@
 
 pub mod db;
 pub mod git_ingest;
+pub mod mcp_host;
 pub mod storage;

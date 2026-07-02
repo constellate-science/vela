@@ -57,7 +57,7 @@ discovery plane nests under `foundry`. Every porcelain verb takes
 | `frontier` | Repo-level: new/materialize/add-dep/list-deps/diff/release/audit. |
 | `actor` | Frontier-registered identities: add/list/rotate. |
 | `agents` | `VELA.md` charter adapters: sync/doctor/diff (AGENTS.md, CLAUDE.md, .mcp.json are generated, never hand-edited). |
-| `serve` | MCP + HTTP read surface. Profiles nest: `read-only` ⊂ `draft` ⊂ `maintainer`. |
+| `serve` | MCP (stdio, and streamable HTTP at `--http`'s `/mcp`) + HTTP read surface. Profiles nest: `read-only` ⊂ `draft` ⊂ `maintainer`. The public hub serves the same read-only surface at `hub.constellate.science/mcp`. |
 | `doctor` | First-user diagnosis of checkout/frontier/proof/serve. |
 | `foundry` | The discovery plane: `campaign`, `lean-*`, `attempt`, `transfer`, `experiment`. Search proposes; the frozen verifier is the gate. |
 

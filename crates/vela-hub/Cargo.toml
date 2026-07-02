@@ -25,6 +25,9 @@ dotenvy.workspace = true
 reqwest.workspace = true
 vela-protocol.workspace = true
 vela-edge = { path = "../vela-edge" }
+# The hosted MCP lane: the hub embeds the serve dispatcher in-process to
+# run /mcp over its git-ingest checkouts (no sidecar, one dispatcher).
+vela-cli = { path = "../vela-cli" }
 async-stream.workspace = true
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -39,6 +42,7 @@ ed25519-dalek.workspace = true
 chrono.workspace = true
 hex = "0.4"
 sha2.workspace = true
+hmac.workspace = true
 # v0.55.1: substrate distribution via S3-compatible object storage.
 # Production runs against Tigris (Fly's S3-flavoured offering) but the
 # same client speaks to CloudFlare R2 / AWS S3 / Backblaze B2 by

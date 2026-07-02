@@ -2,7 +2,7 @@
 
 #![allow(clippy::too_many_lines)]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -310,8 +310,14 @@ pub async fn run(
         ProjectSource::Single(path) => Some(path.clone()),
         ProjectSource::Directory(_) => None,
     };
-    let frontier = Arc::new(Mutex::new(frontier));
-    let client = Client::new();
+    let state = AppState {
+        project: Arc::new(Mutex::new(frontier)),
+        project_infos,
+        client: Client::new(),
+        profile,
+        source_path,
+    };
+    let no_exclusions = HashSet::new();
     let stdin = io::stdin();
     let stdout = io::stdout();
 
@@ -325,47 +331,213 @@ pub async fn run(
         let Ok(request) = serde_json::from_str::<Value>(&line) else {
             continue;
         };
-        let id = request.get("id").cloned();
-        let method = request["method"].as_str().unwrap_or_default();
-        let response = match method {
-            "initialize" => json_rpc_result(
-                &id,
-                json!({
-                    "protocolVersion": "2024-11-05",
-                    "capabilities": {"tools": {}},
-                    "serverInfo": {"name": "vela", "version": project::VELA_SCHEMA_VERSION}
-                }),
-            ),
-            "notifications/initialized" => continue,
-            "tools/list" => json_rpc_result(
-                &id,
-                json!({"tools": tool_registry::mcp_tools_json_for_profile(profile)}),
-            ),
-            "tools/call" => {
-                let name = request["params"]["name"].as_str().unwrap_or_default();
-                let args = request["params"]["arguments"].clone();
-                if let Some(err) = profile_gate(&id, name, profile) {
-                    err
-                } else {
-                    handle_tool_call(
-                        &id,
-                        name,
-                        &args,
-                        &frontier,
-                        &client,
-                        &project_infos,
-                        source_path.as_deref(),
-                    )
-                    .await
-                }
-            }
-            "ping" => json_rpc_result(&id, json!({})),
-            _ => json_rpc_error(&id, -32601, "Method not found"),
+        let Some(response) = rpc_dispatch(&request, &state, &no_exclusions).await else {
+            continue;
         };
         let mut out = stdout.lock();
         let _ = serde_json::to_writer(&mut out, &response);
         let _ = out.write_all(b"\n");
         let _ = out.flush();
+    }
+}
+
+/// The one JSON-RPC dispatcher behind every MCP transport: the stdio line
+/// loop, the `/mcp` streamable-HTTP route, and the hub's hosted endpoint
+/// (via `McpService`). `None` means the message was a notification and no
+/// response is owed. `excluded` names tools withheld from this transport
+/// (the hosted endpoint drops the filesystem-path `vela_*` family); the
+/// exclusion applies to both `tools/list` and `tools/call`.
+async fn rpc_dispatch(request: &Value, st: &AppState, excluded: &HashSet<String>) -> Option<Value> {
+    let id = request.get("id").cloned();
+    let method = request["method"].as_str().unwrap_or_default();
+    if method.starts_with("notifications/") {
+        return None;
+    }
+    Some(match method {
+        "initialize" => {
+            // Stateless JSON either way, so echo the client's requested
+            // protocol version; default to the widely-supported baseline.
+            let requested = request["params"]["protocolVersion"]
+                .as_str()
+                .unwrap_or("2024-11-05");
+            json_rpc_result(
+                &id,
+                json!({
+                    "protocolVersion": requested,
+                    "capabilities": {"tools": {}},
+                    "serverInfo": {"name": "vela", "version": project::VELA_SCHEMA_VERSION}
+                }),
+            )
+        }
+        "tools/list" => {
+            let mut tools = tool_registry::mcp_tools_json_for_profile(st.profile);
+            if !excluded.is_empty()
+                && let Some(arr) = tools.as_array_mut()
+            {
+                arr.retain(|t| t["name"].as_str().is_none_or(|n| !excluded.contains(n)));
+            }
+            json_rpc_result(&id, json!({"tools": tools}))
+        }
+        "tools/call" => {
+            let name = request["params"]["name"].as_str().unwrap_or_default();
+            let args = request["params"]["arguments"].clone();
+            if excluded.contains(name) {
+                json_rpc_error(
+                    &id,
+                    -32602,
+                    &format!(
+                        "{name} is not served on this hosted endpoint (it operates on \
+                         local filesystem paths); clone the frontier repo and run it \
+                         there instead"
+                    ),
+                )
+            } else if let Some(err) = profile_gate(&id, name, st.profile) {
+                err
+            } else {
+                handle_tool_call(
+                    &id,
+                    name,
+                    &args,
+                    &st.project,
+                    &st.client,
+                    &st.project_infos,
+                    st.source_path.as_deref(),
+                )
+                .await
+            }
+        }
+        "ping" => json_rpc_result(&id, json!({})),
+        _ => json_rpc_error(&id, -32601, "Method not found"),
+    })
+}
+
+/// One streamable-HTTP MCP exchange (stateless JSON responses; no
+/// server-initiated SSE). Accepts a single JSON-RPC message or a batch
+/// array. Returns `(http_status, body)`; `None` body means an empty 202
+/// (the message was all notifications).
+async fn mcp_http_exchange(
+    body: &str,
+    st: &AppState,
+    excluded: &HashSet<String>,
+) -> (u16, Option<Value>) {
+    let Ok(message) = serde_json::from_str::<Value>(body) else {
+        return (
+            400,
+            Some(json!({
+                "jsonrpc": "2.0", "id": null,
+                "error": {"code": -32700, "message": "Parse error"}
+            })),
+        );
+    };
+    if let Some(batch) = message.as_array() {
+        let mut responses = Vec::new();
+        for request in batch {
+            if let Some(response) = rpc_dispatch(request, st, excluded).await {
+                responses.push(response);
+            }
+        }
+        if responses.is_empty() {
+            (202, None)
+        } else {
+            (200, Some(Value::Array(responses)))
+        }
+    } else {
+        match rpc_dispatch(&message, st, excluded).await {
+            Some(response) => (200, Some(response)),
+            None => (202, None),
+        }
+    }
+}
+
+/// A hosted, in-process MCP service over named frontier checkouts. The hub
+/// embeds this to serve `hub.constellate.science/mcp` without a sidecar:
+/// the same dispatcher, profile gate, and tool registry as `vela serve`,
+/// loaded from the git checkouts its ingest lane already maintains.
+pub struct McpService {
+    state: AppState,
+    excluded: HashSet<String>,
+}
+
+impl McpService {
+    /// Load named frontier directories into one merged read-only service.
+    /// A broken entry is skipped and reported in the returned warnings,
+    /// never fatal: one frontier failing to replay must not take the
+    /// hosted endpoint down for the rest.
+    pub fn from_named_paths(
+        entries: &[(String, PathBuf)],
+        profile_str: &str,
+        exclude: &[String],
+    ) -> Result<(Self, Vec<String>), String> {
+        let profile = tool_registry::McpProfile::parse(profile_str)?;
+        let mut named = Vec::new();
+        let mut warnings = Vec::new();
+        for (name, path) in entries {
+            match repo::load_from_path(path) {
+                Ok(mut frontier) => {
+                    sources::materialize_project(&mut frontier);
+                    named.push((name.clone(), frontier));
+                }
+                Err(e) => warnings.push(format!("{name}: {e}")),
+            }
+        }
+        if named.is_empty() {
+            return Err(format!(
+                "no loadable frontier among {} entries: {}",
+                entries.len(),
+                warnings.join(" | ")
+            ));
+        }
+        let project_infos = named
+            .iter()
+            .map(|(name, frontier)| ProjectInfo {
+                name: frontier.project.name.clone(),
+                file: name.clone(),
+                findings_count: frontier.findings.len(),
+                links_count: frontier.stats.links,
+                papers: frontier.project.papers_processed,
+            })
+            .collect();
+        let project = merge_projects(named);
+        Ok((
+            Self {
+                state: AppState {
+                    project: Arc::new(Mutex::new(project)),
+                    project_infos,
+                    client: Client::new(),
+                    profile,
+                    source_path: None,
+                },
+                excluded: exclude.iter().cloned().collect(),
+            },
+            warnings,
+        ))
+    }
+
+    /// The hosted exclusion set: every read-only tool that operates on a
+    /// caller-supplied filesystem path (the `vela_*` runtime family). On a
+    /// public endpoint those are useless at best (the caller has no paths
+    /// on the server) and a CPU sink at worst (`vela_reproduce_run`).
+    pub fn hosted_exclusions() -> Vec<String> {
+        tool_registry::tools_for_profile(tool_registry::McpProfile::ReadOnly)
+            .into_iter()
+            .map(|t| t.name)
+            .filter(|n| n.starts_with("vela_"))
+            .collect()
+    }
+
+    /// Handle one streamable-HTTP MCP exchange (single message or batch).
+    /// Returns `(http_status, body)`; `None` body = empty 202.
+    pub async fn handle_http(&self, body: &str) -> (u16, Option<Value>) {
+        mcp_http_exchange(body, &self.state, &self.excluded).await
+    }
+
+    /// The loaded frontier labels, for the hub's status surfaces.
+    pub fn frontier_labels(&self) -> Vec<String> {
+        self.state
+            .project_infos
+            .iter()
+            .map(|i| format!("{} ({})", i.name, i.file))
+            .collect()
     }
 }
 
@@ -418,7 +590,10 @@ pub async fn run_http(
         .route("/api/queue", post(http_queue_append))
         .route("/api/tools", get(http_tools_list))
         .route("/mcp/tools", get(http_tools_list))
-        .route("/api/tool", post(http_tool_call));
+        .route("/api/tool", post(http_tool_call))
+        // Streamable-HTTP MCP (stateless JSON): the same dispatcher as
+        // stdio, so any remote MCP client can connect without a clone.
+        .route("/mcp", post(http_mcp).get(http_mcp_get));
 
     // v0.107.5: explicit request-body cap. Closes the integrity
     // half of THREAT_MODEL.md A13 (resource exhaustion via large
@@ -1871,6 +2046,27 @@ async fn http_pubmed(
 
 async fn http_tools_list(State(state): State<AppState>) -> Json<Value> {
     Json(tool_registry::mcp_tools_json_for_profile(state.profile))
+}
+
+/// POST /mcp — streamable-HTTP MCP with stateless JSON responses.
+async fn http_mcp(State(state): State<AppState>, body: String) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let (status, response) = mcp_http_exchange(&body, &state, &HashSet::new()).await;
+    let status = StatusCode::from_u16(status).unwrap_or(StatusCode::OK);
+    match response {
+        Some(value) => (status, Json(value)).into_response(),
+        None => status.into_response(),
+    }
+}
+
+/// GET /mcp — this endpoint offers no server-initiated SSE stream.
+async fn http_mcp_get() -> (StatusCode, Json<Value>) {
+    (
+        StatusCode::METHOD_NOT_ALLOWED,
+        Json(json!({
+            "error": "stateless MCP endpoint: POST a JSON-RPC message; no server-initiated stream is offered"
+        })),
+    )
 }
 
 async fn http_tool_call(
@@ -3806,5 +4002,100 @@ mod list_dependents_tests {
         assert_eq!(e["decls"].as_array().unwrap().len(), 0);
 
         std::fs::remove_dir_all(&dir).ok();
+    }
+}
+
+#[cfg(test)]
+mod mcp_service_tests {
+    use super::*;
+
+    fn fixture() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/erdos-formalization")
+    }
+
+    fn service() -> McpService {
+        let entries = vec![("erdos-formalization".to_string(), fixture())];
+        let (service, warnings) =
+            McpService::from_named_paths(&entries, "read-only", &McpService::hosted_exclusions())
+                .expect("fixture frontier loads");
+        assert!(warnings.is_empty(), "unexpected warnings: {warnings:?}");
+        service
+    }
+
+    #[tokio::test]
+    async fn initialize_echoes_protocol_version_and_lists_filtered_tools() {
+        let svc = service();
+        let (status, body) = svc
+            .handle_http(
+                r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}"#,
+            )
+            .await;
+        assert_eq!(status, 200);
+        let body = body.unwrap();
+        assert_eq!(body["result"]["protocolVersion"], "2025-06-18");
+
+        let (status, body) = svc
+            .handle_http(r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#)
+            .await;
+        assert_eq!(status, 200);
+        let tools = body.unwrap()["result"]["tools"].clone();
+        let names: Vec<String> = tools
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|t| t["name"].as_str().unwrap().to_string())
+            .collect();
+        assert!(
+            names.iter().any(|n| n == "frontier_stats"),
+            "orientation tools present"
+        );
+        assert!(
+            !names.iter().any(|n| n.starts_with("vela_")),
+            "hosted exclusions filter the filesystem-path family from tools/list: {names:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn tool_call_works_and_excluded_tool_is_refused() {
+        let svc = service();
+        let (status, body) = svc
+            .handle_http(
+                r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"frontier_stats","arguments":{}}}"#,
+            )
+            .await;
+        assert_eq!(status, 200);
+        let body = body.unwrap();
+        assert_eq!(body["result"]["isError"], false, "stats call succeeds");
+
+        let (status, body) = svc
+            .handle_http(
+                r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"vela_check_run","arguments":{}}}"#,
+            )
+            .await;
+        assert_eq!(status, 200);
+        let body = body.unwrap();
+        assert_eq!(body["error"]["code"], -32602, "excluded tool refused");
+    }
+
+    #[tokio::test]
+    async fn notifications_get_202_and_batches_collect() {
+        let svc = service();
+        let (status, body) = svc
+            .handle_http(r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#)
+            .await;
+        assert_eq!(status, 202);
+        assert!(body.is_none());
+
+        let (status, body) = svc
+            .handle_http(
+                r#"[{"jsonrpc":"2.0","method":"notifications/initialized"},{"jsonrpc":"2.0","id":5,"method":"ping"}]"#,
+            )
+            .await;
+        assert_eq!(status, 200);
+        assert_eq!(body.unwrap().as_array().unwrap().len(), 1);
+
+        let (status, body) = svc.handle_http("not json").await;
+        assert_eq!(status, 400);
+        assert_eq!(body.unwrap()["error"]["code"], -32700);
     }
 }

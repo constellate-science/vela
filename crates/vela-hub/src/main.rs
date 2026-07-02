@@ -36,7 +36,7 @@ use axum::{
         Html, IntoResponse, Response,
         sse::{Event, KeepAlive, Sse},
     },
-    routing::get,
+    routing::{get, post},
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
@@ -134,6 +134,16 @@ struct AppState {
     /// redirects to a CDN URL as an export path. Live reads come from
     /// event/projection tables.
     storage: Option<Storage>,
+    /// v0.727: the hosted MCP service, hot-swapped by the per-machine
+    /// refresher (`mcp_host`). `None` until the first refresh lands.
+    mcp: vela_hub::mcp_host::SharedMcp,
+    /// Kicks the MCP refresher ahead of its interval (webhook lane).
+    mcp_kick: Arc<tokio::sync::Notify>,
+    /// v0.727: shared secret for `POST /webhook/github` (HMAC-SHA256 over
+    /// the raw body, GitHub's `X-Hub-Signature-256`). Absent ⇒ the
+    /// webhook lane answers 503 and the interval sweeps remain the only
+    /// refresh path.
+    webhook_secret: Option<Arc<String>>,
 }
 
 /// v0.49: tiny stale-on-read cache for DB query results. Keyed by a
@@ -464,7 +474,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         signing_key,
         urls,
         storage,
+        mcp: Arc::new(tokio::sync::RwLock::new(None)),
+        mcp_kick: Arc::new(tokio::sync::Notify::new()),
+        webhook_secret: env::var("VELA_HUB_WEBHOOK_SECRET")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .map(Arc::new),
     };
+    if state.webhook_secret.is_none() {
+        tracing::info!(
+            "no VELA_HUB_WEBHOOK_SECRET set; /webhook/github disabled (interval sweeps only)"
+        );
+    }
 
     // Producer-index backfill: re-extract signer_pubkey for finding
     // objects from stored snapshots (covers publishes that predate the
@@ -531,6 +552,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     vela_hub::git_ingest::spawn(
         state.db.clone(),
         vela_hub::git_ingest::GitIngestConfig::from_env(),
+    );
+
+    // The hosted MCP lane (v0.727): per-machine checkout refresher +
+    // in-process serve dispatcher behind /mcp. Read-only by construction.
+    vela_hub::mcp_host::spawn(
+        state.db.clone(),
+        vela_hub::git_ingest::GitIngestConfig::from_env(),
+        state.mcp.clone(),
+        state.mcp_kick.clone(),
     );
 
     let port: u16 = env::var("VELA_HUB_PORT")
@@ -629,6 +659,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             get(static_logo_wordmark_svg),
         )
         .route("/static/rete.svg", get(static_rete_svg))
+        // v0.727: the hosted MCP endpoint (streamable HTTP, stateless
+        // JSON, read-only profile) and the GitHub webhook that kicks
+        // ingest + MCP refresh ahead of the interval sweeps.
+        .route("/mcp", post(post_mcp).get(get_mcp))
+        .route("/webhook/github", post(post_webhook_github))
         .layer(DefaultBodyLimit::max(MAX_PUBLISH_BODY_BYTES))
         .layer(CorsLayer::permissive())
         .with_state(state);
@@ -637,6 +672,114 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+/// POST /mcp — the hosted MCP endpoint: streamable HTTP with stateless
+/// JSON responses, read-only profile, over this machine's frontier
+/// checkouts. 503 until the first refresh lands.
+async fn post_mcp(State(state): State<AppState>, body: String) -> Response {
+    let guard = state.mcp.read().await;
+    let Some(service) = guard.as_ref() else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "jsonrpc": "2.0", "id": null,
+                "error": {"code": -32000, "message": "MCP projection not built yet; retry shortly (or no frontier is registered)"}
+            })),
+        )
+            .into_response();
+    };
+    let (status, response) = service.handle_http(&body).await;
+    let status = StatusCode::from_u16(status).unwrap_or(StatusCode::OK);
+    match response {
+        Some(value) => (status, Json(value)).into_response(),
+        None => status.into_response(),
+    }
+}
+
+/// GET /mcp — no server-initiated SSE stream is offered.
+async fn get_mcp() -> (StatusCode, Json<serde_json::Value>) {
+    (
+        StatusCode::METHOD_NOT_ALLOWED,
+        Json(serde_json::json!({
+            "error": "stateless MCP endpoint: POST a JSON-RPC message; no server-initiated stream is offered"
+        })),
+    )
+}
+
+/// Verify GitHub's `X-Hub-Signature-256` header (`sha256=<hex>`) over the
+/// raw request body. Constant-time comparison via the Mac verifier.
+fn github_signature_ok(secret: &str, body: &[u8], header: &str) -> bool {
+    use hmac::{Hmac, Mac};
+    let Some(hex_sig) = header.strip_prefix("sha256=") else {
+        return false;
+    };
+    let Ok(sig) = hex::decode(hex_sig) else {
+        return false;
+    };
+    let Ok(mut mac) = Hmac::<sha2::Sha256>::new_from_slice(secret.as_bytes()) else {
+        return false;
+    };
+    mac.update(body);
+    mac.verify_slice(&sig).is_ok()
+}
+
+/// POST /webhook/github — push events kick the MCP refresher and a DB
+/// ingest sweep ahead of the interval, so `git push` reflects in seconds.
+/// The webhook is a LATENCY lane only: authenticity of state still comes
+/// from strict replay of the signed event log, never from this header.
+async fn post_webhook_github(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    body: axum::body::Bytes,
+) -> (StatusCode, Json<serde_json::Value>) {
+    let Some(secret) = state.webhook_secret.clone() else {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(serde_json::json!({
+                "error": "webhook lane not configured (set VELA_HUB_WEBHOOK_SECRET)"
+            })),
+        );
+    };
+    let signature = headers
+        .get("x-hub-signature-256")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or_default();
+    if !github_signature_ok(&secret, &body, signature) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(serde_json::json!({"error": "invalid or missing X-Hub-Signature-256"})),
+        );
+    }
+    let event = headers
+        .get("x-github-event")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("push")
+        .to_string();
+    if event == "ping" {
+        return (
+            StatusCode::OK,
+            Json(serde_json::json!({"ok": true, "pong": true})),
+        );
+    }
+    state.mcp_kick.notify_one();
+    let db = state.db.clone();
+    tokio::spawn(async move {
+        match vela_hub::git_ingest::run_once(
+            &db,
+            &vela_hub::git_ingest::GitIngestConfig::from_env(),
+        )
+        .await
+        {
+            Ok(n) if n > 0 => tracing::info!(promoted = n, "webhook-triggered ingest complete"),
+            Ok(_) => {}
+            Err(e) => tracing::warn!(error = %e, "webhook-triggered ingest failed"),
+        }
+    });
+    (
+        StatusCode::ACCEPTED,
+        Json(serde_json::json!({"accepted": true, "event": event})),
+    )
 }
 
 /// usually omit the header or send `*/*`. We render HTML only when the
@@ -3980,7 +4123,9 @@ fn render_root_html(urls: &PublicUrls) -> String {
     <li><span class="verb"><span class="v">GET</span>/healthz</span><span class="desc"><a href="/healthz">liveness</a></span></li>
     <li><span class="verb"><span class="v">GET</span>/entries</span><span class="desc"><a href="/entries">full registry, latest-publish-wins per <code>vfr_id</code></a></span></li>
     <li><span class="verb"><span class="v">GET</span>/entries/&#123;vfr_id&#125;</span><span class="desc">single entry</span></li>
-    <li><span class="verb"><span class="v">POST</span>/entries</span><span class="desc">publish a signed manifest</span></li>
+    <li><span class="verb"><span class="v">POST</span>/entries/&#123;vfr_id&#125;/git-remote</span><span class="desc">the one write: owner-signed git-remote registration</span></li>
+    <li><span class="verb"><span class="v">POST</span>/mcp</span><span class="desc">hosted MCP (streamable HTTP, read-only tools over every live frontier)</span></li>
+    <li><span class="verb"><span class="v">POST</span>/webhook/github</span><span class="desc">push events refresh the index ahead of the sweep</span></li>
   </ul>
 </section>
 
@@ -3993,10 +4138,9 @@ fn render_root_html(urls: &PublicUrls) -> String {
   <div class="tm-paper">
     <div class="tm-paper__bar"><span>git push · vela hub register-git</span></div>
     <div class="tm-paper__body"><span class="tm-ps">$</span> <span class="tm-cmd">vela hub register-git</span> vfr_&hellip; \
-  <span class="tm-flag">--owner</span> reviewer:my-id \
-  <span class="tm-flag">--key</span> ~/.vela/keys/private.key \
-  <span class="tm-flag">--locator</span> https://example.com/frontier.json \
-  <span class="tm-flag">--to</span> {hub_url}</div>
+  <span class="tm-flag">--remote</span> https://github.com/you/your-frontier.git \
+  <span class="tm-flag">--to</span> {hub_url}
+<span class="tm-ps">$</span> <span class="tm-cmd">git push</span>   <span class="tm-flag"># publication; the hub re-derives on ingest</span></div>
   </div>
 </section>
 
@@ -6064,5 +6208,32 @@ mod gate_status_tests {
             finding_gate_status_body(&findings, &[], "vfr_test", "vf_does_not_exist").is_none(),
             "absent finding must return None (404), not a body"
         );
+    }
+}
+
+#[cfg(test)]
+mod webhook_signature_tests {
+    use super::github_signature_ok;
+
+    #[test]
+    fn valid_signature_verifies_and_wrong_ones_do_not() {
+        // hmac-sha256("secret", "payload") — precomputable with any HMAC
+        // implementation; pinned here so the header format is exercised
+        // end-to-end (sha256= prefix + lowercase hex).
+        use hmac::{Hmac, Mac};
+        let mut mac = Hmac::<sha2::Sha256>::new_from_slice(b"secret").unwrap();
+        mac.update(b"payload");
+        let good = format!("sha256={}", hex::encode(mac.finalize().into_bytes()));
+
+        assert!(github_signature_ok("secret", b"payload", &good));
+        assert!(!github_signature_ok("secret", b"tampered", &good));
+        assert!(!github_signature_ok("wrong-secret", b"payload", &good));
+        assert!(!github_signature_ok(
+            "secret",
+            b"payload",
+            "sha256=deadbeef"
+        ));
+        assert!(!github_signature_ok("secret", b"payload", "no-prefix"));
+        assert!(!github_signature_ok("secret", b"payload", ""));
     }
 }

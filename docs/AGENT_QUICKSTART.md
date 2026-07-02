@@ -64,6 +64,12 @@ key). That boundary is the product, not a limitation.
 
 ## MCP: the same loop for tool-calling agents
 
+No clone at all? The public hub IS an MCP server: add
+`https://hub.constellate.science/mcp` (streamable HTTP, no auth) to any
+MCP client and you get the read-only tool surface over every live
+frontier. Writes and verifier runs still happen in a clone — the hosted
+endpoint cannot mutate state under any configuration.
+
 Any frontier scaffolded by `vela init` ships `.mcp.json`; any client
 opening the repo gets the read-only profile:
 

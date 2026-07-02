@@ -236,7 +236,7 @@ async fn git(args: &[&str], cwd: Option<&Path>) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
 }
 
-async fn fetch_repo(remote: &str, git_ref: &str, dir: &Path) -> Result<(), String> {
+pub(crate) async fn fetch_repo(remote: &str, git_ref: &str, dir: &Path) -> Result<(), String> {
     if dir.join(".git").exists() {
         // A re-registration may have re-pointed the remote: the scratch
         // clone must always fetch the CURRENTLY registered URL, never a
@@ -266,7 +266,7 @@ async fn fetch_repo(remote: &str, git_ref: &str, dir: &Path) -> Result<(), Strin
     Ok(())
 }
 
-async fn rev_parse_head(dir: &Path) -> Result<String, String> {
+pub(crate) async fn rev_parse_head(dir: &Path) -> Result<String, String> {
     git(&["rev-parse", "HEAD"], Some(dir)).await
 }
 
