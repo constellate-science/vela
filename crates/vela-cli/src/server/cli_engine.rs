@@ -271,7 +271,53 @@ fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, apply: bool, json_outp
     // actually load-bearing — see `attachment_vouch_gate`.
     let (vouched_ok, vouch_reason) = attachment_vouch_gate(floor_ok, matched.len());
 
-    let would_admit = floor_ok && wrapper_ok && vouched_ok;
+    let mut would_admit = floor_ok && wrapper_ok && vouched_ok;
+
+    // The sealed, SIGNED acceptance policy (when present) is the governing
+    // authority over this lane: it can only TIGHTEN the frozen floor above
+    // (a Defer/Deny verdict refuses an admit the floor would allow; a
+    // Permit never overrides a failed floor). Signer must be a registered
+    // human reviewer on the frontier. Absent policy = today's behavior.
+    let mut policy_ref = "exact-lane.v1".to_string();
+    let mut policy_verdict: Option<String> = None;
+    match vela_protocol::acceptance_policy::load_active_policy(frontier) {
+        Ok(Some(vp)) => {
+            let signer_registered = proj.actors.iter().any(|a| {
+                a.public_key.eq_ignore_ascii_case(&vp.signer_pubkey_hex)
+                    && a.id.starts_with("reviewer:")
+            });
+            if !signer_registered {
+                fail_return::<()>(
+                    "active policy signer is not a registered reviewer on this frontier",
+                );
+            }
+            let ctx = vela_protocol::acceptance_policy::PolicyContext {
+                claim_class: "exact".to_string(),
+                assurance_level: if floor_ok { 3 } else { 0 },
+                impact_tier: 1,
+                changed_findings: 1,
+                downstream_dependents: 0,
+                assertion_text_mutated: false,
+                target_contested: !open_contradictions.is_empty(),
+                governance_mutation: false,
+                independence_satisfied: matched.len() >= 2,
+                method_integrity_sound: vouched_ok,
+                credential_valid: true,
+                has_unknown_fields: false,
+            };
+            let decision = vela_protocol::acceptance_policy::evaluate(
+                &vp.policy,
+                &ctx,
+                &chrono::Utc::now().to_rfc3339(),
+            );
+            policy_verdict = Some(format!("{:?}", decision.outcome));
+            let permitted = format!("{:?}", decision.outcome) == "Permit";
+            would_admit = would_admit && permitted;
+            policy_ref = vp.policy.id.clone();
+        }
+        Ok(None) => {}
+        Err(e) => fail_return(&format!("active policy: {e}")),
+    }
 
     // Apply (opt-in): record the unsigned, idempotent policy.auto_admitted audit
     // event when, AND ONLY WHEN, the finding would auto-admit. Never signs,
@@ -286,7 +332,7 @@ fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, apply: bool, json_outp
             &proposal.id,
             &digest,
             &attachment_ids,
-            "exact-lane.v1",
+            &policy_ref,
             vela_verify::ENV_ID,
         ) {
             Ok(res) => emitted = Some(res),
@@ -298,6 +344,7 @@ fn cmd_gate_auto_admit(frontier: &Path, finding_id: &str, apply: bool, json_outp
         let out = json!({
             "finding": finding.id,
             "would_auto_admit": would_admit,
+            "policy": {"ref": policy_ref, "verdict": policy_verdict},
             "floor": {
                 "witness_reproduces": witness_ok,
                 "witness_detail": witness_msg,

@@ -599,6 +599,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/frontier/{vfr_id}/inbox", get(get_entry_events_stream))
         .route("/entries/{vfr_id}/depends-on", get(get_depends_on))
         .route("/diff-packs/{pack_id}", get(get_diff_pack))
+        .route("/entries/{vfr_id}/packs/{pack_id}", get(get_pack_review))
+        .route("/entries/{vfr_id}/reproduce", get(get_reproduce))
         .route("/entries/{vfr_id}/findings/{vf_id}", get(get_finding))
         .route(
             "/entries/{vfr_id}/findings/{vf_id}/context",
@@ -2074,7 +2076,31 @@ async fn get_finding(
     };
 
     if wants_html(&headers) {
-        Html(render_finding_html(&state.urls, &vfr_id, &project, bundle)).into_response()
+        // Citation anchors: the snapshot hash from the registry row and
+        // the ingest cursor from the git-remote registration, when one
+        // exists. Both are content addresses — the citation pins to
+        // them, not to this page.
+        let snapshot_hash = entry
+            .get("latest_snapshot_hash")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let ingest_commit = match state.db.get_git_remote(&vfr_id).await {
+            Ok(Some(rec)) => rec
+                .get("last_ingested_commit")
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            _ => None,
+        };
+        Html(render_finding_html(
+            &state.urls,
+            &vfr_id,
+            &project,
+            bundle,
+            &snapshot_hash,
+            ingest_commit.as_deref(),
+        ))
+        .into_response()
     } else {
         match serde_json::to_value(bundle) {
             Ok(v) => (StatusCode::OK, Json(v)).into_response(),
@@ -2085,6 +2111,149 @@ async fn get_finding(
                 .into_response(),
         }
     }
+}
+
+/// Pack review page: one released Scientific Diff Pack (`vsd_*`) on one
+/// frontier, read end-to-end — release metadata, the human verdict when
+/// present, and the member proposals with their Evidence Diff links.
+/// HTML for browsers; `Accept: application/json` returns the replayed
+/// `ReleasedDiffPackRecord` as-is (same dual-mode contract as the
+/// finding page). The record is pure replay state from the canonical
+/// event log — this page renders it, it never adjudicates it.
+async fn get_pack_review(
+    State(state): State<AppState>,
+    Path((vfr_id, pack_id)): Path<(String, String)>,
+    headers: HeaderMap,
+) -> Response {
+    let entry = match state.db.get_live_entry(&vfr_id).await {
+        Ok(Some(v)) => v,
+        Ok(None) => {
+            if wants_html(&headers) {
+                return (
+                    StatusCode::NOT_FOUND,
+                    Html(render_not_found_html(&state.urls, &vfr_id)),
+                )
+                    .into_response();
+            }
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({"error": format!("{vfr_id} not found")})),
+            )
+                .into_response();
+        }
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("query: {e}")})),
+            )
+                .into_response();
+        }
+    };
+
+    let signed_at = entry
+        .get("signed_publish_at")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    let Some(project) = load_substrate(&state, &vfr_id, signed_at).await else {
+        if wants_html(&headers) {
+            return Html(render_pack_unavailable_html(&state.urls, &vfr_id, &pack_id))
+                .into_response();
+        }
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"error": "frontier projection unavailable; pull via the CLI to inspect"})),
+        )
+            .into_response();
+    };
+
+    let Some(rec) = project
+        .released_diff_packs
+        .iter()
+        .find(|r| r.pack_id == pack_id)
+    else {
+        if wants_html(&headers) {
+            return (
+                StatusCode::NOT_FOUND,
+                Html(render_pack_not_found_html(&state.urls, &vfr_id, &pack_id)),
+            )
+                .into_response();
+        }
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({"error": format!("{pack_id} not released on {vfr_id}")})),
+        )
+            .into_response();
+    };
+
+    if wants_html(&headers) {
+        Html(render_pack_html(&state.urls, &vfr_id, &project, rec)).into_response()
+    } else {
+        match serde_json::to_value(rec) {
+            Ok(v) => (StatusCode::OK, Json(v)).into_response(),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("serialize: {e}")})),
+            )
+                .into_response(),
+        }
+    }
+}
+
+/// The "verify this yourself" page: the exact copy-paste sequence that
+/// re-derives this frontier's state locally — clone the registered
+/// repo, replay the event log under `vela check --strict`, re-check
+/// every witness with the frozen verifiers under `vela reproduce`.
+/// The hub is an index; nothing on this page requires trusting it.
+async fn get_reproduce(State(state): State<AppState>, Path(vfr_id): Path<String>) -> Response {
+    let remote = match state.db.get_git_remote(&vfr_id).await {
+        Ok(r) => r,
+        Err(e) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("query: {e}")})),
+            )
+                .into_response();
+        }
+    };
+
+    let Some(rec) = remote else {
+        // No registered remote. Say so honestly — but only 404 when the
+        // frontier itself is unknown to this hub.
+        return match state.db.get_live_entry(&vfr_id).await {
+            Ok(Some(_)) => {
+                Html(render_reproduce_no_remote_html(&state.urls, &vfr_id)).into_response()
+            }
+            Ok(None) => (
+                StatusCode::NOT_FOUND,
+                Html(render_not_found_html(&state.urls, &vfr_id)),
+            )
+                .into_response(),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({"error": format!("query: {e}")})),
+            )
+                .into_response(),
+        };
+    };
+
+    // `get_git_remote` does not carry the subdir; the ingest-targets
+    // table does. One extra tiny-table read, main.rs-local.
+    let git_subdir = match state.db.git_ingest_targets().await {
+        Ok(rows) => rows
+            .into_iter()
+            .find(|r| r.0 == vfr_id)
+            .map(|r| r.3)
+            .unwrap_or_default(),
+        Err(_) => String::new(),
+    };
+
+    Html(render_reproduce_html(
+        &state.urls,
+        &vfr_id,
+        &rec,
+        &git_subdir,
+    ))
+    .into_response()
 }
 
 /// `GET /entries/{vfr_id}/findings/{vf_id}/context`
@@ -4568,6 +4737,8 @@ fn render_finding_html(
     vfr_id: &str,
     project: &Project,
     bundle: &vela_protocol::bundle::FindingBundle,
+    snapshot_hash: &str,
+    ingest_commit: Option<&str>,
 ) -> String {
     use vela_protocol::bundle::FindingBundle;
 
@@ -4785,6 +4956,55 @@ fn render_finding_html(
     };
     let conf_pct = (bundle.confidence.score.clamp(0.0, 1.0) * 100.0).round() as u32;
 
+    // ── Cite this state ─────────────────────────────────────────────
+    // A citation points at content addresses (snapshot hash, ingest
+    // commit), not at this page. Both blocks are plain text inside a
+    // pre so they copy-paste whole.
+    let finding_url = format!(
+        "{hub}/entries/{vfr_id}/findings/{vf}",
+        hub = urls.hub,
+        vf = bundle.id
+    );
+    let frontier_name = project.project.name.as_str();
+    let snapshot_txt = if snapshot_hash.is_empty() {
+        "unavailable".to_string()
+    } else {
+        format!("sha256:{snapshot_hash}")
+    };
+    let ingest_txt = ingest_commit
+        .map(|c| format!(", ingest commit {c}"))
+        .unwrap_or_default();
+    let cite_year = bundle.created.get(..4).unwrap_or("");
+    let cite_plain = format!(
+        "{frontier_name}. Finding {vf} (frontier {vfr_id}). Vela frontier state, snapshot {snapshot_txt}{ingest_txt}. {finding_url}",
+        vf = bundle.id,
+    );
+    let cite_bibtex = format!(
+        "@misc{{{vf},\n  title        = {{{claim}}},\n  howpublished = {{Vela frontier state: {frontier_name} ({vfr_id}), finding {vf} v{version}}},\n  year         = {{{cite_year}}},\n  url          = {{{finding_url}}},\n  note         = {{snapshot {snapshot_txt}{ingest_txt}}}\n}}",
+        vf = bundle.id,
+        claim = bundle.assertion.text,
+        version = bundle.version,
+    );
+    let cite_html = format!(
+        r#"<section class="wb-section">
+      <div class="wb-section__head">
+        <span class="wb-section__num">§5</span>
+        <span class="wb-section__t">Cite this state</span>
+        <span class="wb-section__aside">hash-pinned · content addresses, not a moving page</span>
+      </div>
+      <div class="tm-paper">
+        <div class="tm-paper__bar"><span>plain text</span></div>
+        <div class="tm-paper__body">{plain}</div>
+      </div>
+      <div class="tm-paper">
+        <div class="tm-paper__bar"><span>bibtex</span></div>
+        <div class="tm-paper__body">{bibtex}</div>
+      </div>
+    </section>"#,
+        plain = escape_html(&cite_plain),
+        bibtex = escape_html(&cite_bibtex),
+    );
+
     let main = format!(
         r#"<div class="fd">
   <article>
@@ -4811,6 +5031,7 @@ fn render_finding_html(
 
     {annotations_html}
     {links_html}
+    {cite_html}
   </article>
 
   <aside class="fd-margin">
@@ -4895,6 +5116,432 @@ fn render_finding_not_found_html(urls: &PublicUrls, vfr_id: &str, vf_id: &str) -
         "Not found",
         "Findings are content-addressed; their ids change with content.",
         "",
+        &main,
+        &vfr_safe,
+    )
+}
+
+/// Pack review page body. Renders one `ReleasedDiffPackRecord` — the
+/// release metadata, the verdict state (pending until a
+/// `diff_pack.reviewed` event lands), and the member proposals with
+/// their Evidence Diff links. The verdict reason lives on the review
+/// event itself, so it is resolved from the canonical event log.
+fn render_pack_html(
+    urls: &PublicUrls,
+    vfr_id: &str,
+    project: &Project,
+    rec: &vela_protocol::released_diff_pack::ReleasedDiffPackRecord,
+) -> String {
+    use vela_protocol::released_diff_pack::ReleasedVerdict;
+
+    let vfr_safe = escape_html(vfr_id);
+    let pack_safe = escape_html(&rec.pack_id);
+    let summary = escape_html(&rec.summary);
+    let aggregate_kind = escape_html(&rec.aggregate_kind);
+    let released_at = escape_html(&rec.released_at);
+    let released_event = escape_html(&rec.released_event_id);
+    let frontier_name = escape_html(&project.project.name);
+
+    // ── Verdict state ───────────────────────────────────────────────
+    let (verdict_label, verdict_class) = match rec.verdict {
+        None => ("pending", "stale"),
+        Some(ReleasedVerdict::Accept) => ("accepted", "ok"),
+        Some(ReleasedVerdict::Reject) => ("rejected", "lost"),
+        Some(ReleasedVerdict::Revise) => ("revise", "warn"),
+    };
+    let verdict_chip = format!(
+        r#"<span class="wb-chip" style="--chip:var(--state-{verdict_class});"><span class="wb-chip__dot"></span>{verdict_label}</span>"#
+    );
+    // The reason is recorded on the `diff_pack.reviewed` event, not on
+    // the replayed record — resolve it from the log when present.
+    let verdict_reason = rec
+        .verdict_event_id
+        .as_deref()
+        .and_then(|id| project.events.iter().find(|e| e.id == id))
+        .map(|e| e.reason.as_str())
+        .filter(|r| !r.is_empty());
+
+    let mut verdict_rows: Vec<String> = vec![format!(
+        r#"<div class="fd-cond"><dt>state</dt><dd>{verdict_chip}</dd></div>"#
+    )];
+    if let Some(reviewer) = &rec.reviewer_actor {
+        verdict_rows.push(format!(
+            r#"<div class="fd-cond"><dt>reviewer</dt><dd>{}</dd></div>"#,
+            escape_html(reviewer),
+        ));
+    }
+    if let Some(vev) = &rec.verdict_event_id {
+        verdict_rows.push(format!(
+            r#"<div class="fd-cond"><dt>verdict_event_id</dt><dd>{}</dd></div>"#,
+            escape_html(vev),
+        ));
+    }
+    if let Some(reason) = verdict_reason {
+        verdict_rows.push(format!(
+            r#"<div class="fd-cond"><dt>reason</dt><dd class="serif">{}</dd></div>"#,
+            escape_html(reason),
+        ));
+    }
+    let verdict_html = if rec.verdict.is_none() {
+        format!(
+            r#"<dl class="fd-conditions">{rows}</dl>
+      <p class="fd-prov-meta">No <code>diff_pack.reviewed</code> event has landed. Acceptance is a key-custody human decision; the hub only mirrors it.</p>"#,
+            rows = verdict_rows.join(""),
+        )
+    } else {
+        format!(
+            r#"<dl class="fd-conditions">{rows}</dl>"#,
+            rows = verdict_rows.join(""),
+        )
+    };
+
+    // ── Members ─────────────────────────────────────────────────────
+    // Each member id links to the read-only Evidence Diff projection;
+    // kind/target are resolved from the frontier's proposal store when
+    // the proposal is present in this projection.
+    let member_li = |member_id: &str, lane: &str| -> String {
+        let member_safe = escape_html(member_id);
+        let meta = project
+            .proposals
+            .iter()
+            .find(|p| p.id == member_id)
+            .map(|p| {
+                format!(
+                    r#"<span class="cross-vfr"> {kind} → {ttype} {tid}</span>"#,
+                    kind = escape_html(&p.kind),
+                    ttype = escape_html(&p.target.r#type),
+                    tid = escape_html(&p.target.id),
+                )
+            })
+            .unwrap_or_else(|| {
+                r#"<span class="cross-vfr"> (proposal not in this projection)</span>"#.to_string()
+            });
+        format!(
+            r#"<li><span class="link-rel">{lane}</span> <span><code>{member_safe}</code>{meta} · <a href="/entries/{vfr_safe}/proposals/{member_safe}/evidence-diff">evidence diff (JSON)</a></span></li>"#
+        )
+    };
+    let n_members = rec.applied_members.len() + rec.sdk_only_members.len();
+    let members_html = if n_members == 0 {
+        if rec.verdict.is_none() {
+            format!(
+                r#"<p class="empty">Member attribution lands with the verdict (<code>diff_pack.reviewed</code>). Until then, the signed pack body at <a href="/diff-packs/{pack_safe}">/diff-packs/{pack_safe}</a> lists the member proposal ids.</p>"#
+            )
+        } else {
+            r#"<p class="empty">The verdict applied no members.</p>"#.to_string()
+        }
+    } else {
+        let items: String = rec
+            .applied_members
+            .iter()
+            .map(|m| member_li(m, "applied"))
+            .chain(
+                rec.sdk_only_members
+                    .iter()
+                    .map(|m| member_li(m, "sdk-only")),
+            )
+            .collect();
+        format!(r#"<ul class="link-list">{items}</ul>"#)
+    };
+
+    let main = format!(
+        r#"<div class="fd">
+  <article>
+    <p class="fd-claim">{summary}</p>
+    <p class="fd-note">A released Scientific Diff Pack on <a href="/entries/{vfr_safe}">{frontier_name}</a>. Pure replay state from the canonical event log — the hub renders it, never adjudicates it.</p>
+
+    <section class="wb-section">
+      <div class="wb-section__head">
+        <span class="wb-section__num">§1</span>
+        <span class="wb-section__t">Release</span>
+        <span class="wb-section__aside">diff_pack.released · replayed</span>
+      </div>
+      <dl class="fd-conditions">
+        <div class="fd-cond"><dt>pack_id</dt><dd>{pack_safe}</dd></div>
+        <div class="fd-cond"><dt>frontier</dt><dd><a href="/entries/{vfr_safe}">{vfr_safe}</a></dd></div>
+        <div class="fd-cond"><dt>aggregate_kind</dt><dd>{aggregate_kind}</dd></div>
+        <div class="fd-cond"><dt>released_at</dt><dd>{released_at}</dd></div>
+        <div class="fd-cond"><dt>released_event_id</dt><dd>{released_event}</dd></div>
+      </dl>
+    </section>
+
+    <section class="wb-section">
+      <div class="wb-section__head">
+        <span class="wb-section__num">§2</span>
+        <span class="wb-section__t">Verdict</span>
+        <span class="wb-section__aside">diff_pack.reviewed · key-custody</span>
+      </div>
+      {verdict_html}
+    </section>
+
+    <section class="wb-section">
+      <div class="wb-section__head">
+        <span class="wb-section__num">§3</span>
+        <span class="wb-section__t">Members · {n_members}</span>
+        <span class="wb-section__aside">applied · sdk-only</span>
+      </div>
+      {members_html}
+    </section>
+  </article>
+
+  <aside class="fd-margin">
+    <div class="fd-dial">
+      <div class="fd-dial__k">verdict</div>
+      <div class="fd-dial__v">{verdict_chip}</div>
+      <div class="fd-dial__k" style="margin-top:16px;">released</div>
+      <div class="fd-dial__v mono">{released_at}</div>
+      <div class="fd-dial__k" style="margin-top:16px;">members</div>
+      <div class="fd-dial__v mono">{n_members}</div>
+    </div>
+
+    <div class="fd-dial">
+      <div class="fd-dial__k">pack_id</div>
+      <div class="fd-dial__v mono">{pack_safe}</div>
+      <div class="fd-dial__k" style="margin-top:14px;">released_event_id</div>
+      <div class="fd-dial__v mono">{released_event}</div>
+    </div>
+
+    <div class="fd-dial">
+      <div class="fd-dial__k">JSON</div>
+      <div style="font-family:var(--font-mono);font-size:12px;line-height:1.6;color:var(--ink-1);margin-top:6px;">
+        <a href="/entries/{vfr_safe}/packs/{pack_safe}" style="border-bottom:1px solid var(--rule-3);">/entries/{vfr_safe}/packs/{pack_safe}</a>
+        <div style="color:var(--ink-3);margin-top:4px;">with <code>Accept: application/json</code></div>
+        <a href="/diff-packs/{pack_safe}" style="border-bottom:1px solid var(--rule-3);margin-top:8px;display:inline-block;">/diff-packs/{pack_safe}</a>
+        <div style="color:var(--ink-3);margin-top:4px;">signed pack body</div>
+      </div>
+    </div>
+  </aside>
+</div>"#,
+    );
+
+    shell(
+        urls,
+        &format!("Vela Hub · {}", rec.pack_id),
+        "entries",
+        &format!("03 · Pack · <span style=\"color:var(--ink-2);\">{pack_safe}</span>"),
+        "Diff pack review",
+        &summary,
+        &format!(
+            r#"<a href="/entries/{vfr_safe}">← {vfr_safe}</a><span>·</span><a href="/entries/{vfr_safe}/packs/{pack_safe}">JSON</a><span>·</span><a href="/diff-packs/{pack_safe}">Pack body</a>"#
+        ),
+        &main,
+        &format!("{pack_safe} @ {vfr_safe}"),
+    )
+}
+
+fn render_pack_unavailable_html(urls: &PublicUrls, vfr_id: &str, pack_id: &str) -> String {
+    let vfr_safe = escape_html(vfr_id);
+    let pack_safe = escape_html(pack_id);
+    let main = format!(
+        r#"<p class="t-lead">The frontier state for <code>{vfr_safe}</code> is not currently available in the hub projections, so we cannot show pack <code>{pack_safe}</code>. The manifest is still verifiable; pull the frontier with the CLI to inspect.</p>
+<p class="t-lead"><a href="/entries/{vfr_safe}" style="border-bottom:1px solid var(--rule-3);">← back to entry</a></p>"#
+    );
+    shell(
+        urls,
+        "Vela Hub · pack unavailable",
+        "entries",
+        "503 · Frontier unavailable",
+        "Frontier unavailable",
+        "The manifest is verifiable from the hub; live reads require promoted frontier state.",
+        "",
+        &main,
+        &vfr_safe,
+    )
+}
+
+fn render_pack_not_found_html(urls: &PublicUrls, vfr_id: &str, pack_id: &str) -> String {
+    let vfr_safe = escape_html(vfr_id);
+    let pack_safe = escape_html(pack_id);
+    let main = format!(
+        r#"<p class="t-lead">No released pack <code>{pack_safe}</code> on <code>{vfr_safe}</code>. A pack appears here once a <code>diff_pack.released</code> event has been applied on this frontier's canonical log.</p>
+<p class="t-lead"><a href="/entries/{vfr_safe}" style="border-bottom:1px solid var(--rule-3);">← back to entry</a></p>"#
+    );
+    shell(
+        urls,
+        "Vela Hub · pack not found",
+        "entries",
+        "404 · Pack not found",
+        "Not found",
+        "Packs are content-addressed; their ids change with content.",
+        "",
+        &main,
+        &vfr_safe,
+    )
+}
+
+/// Directory name a `git clone` of `remote` produces: the last path
+/// segment with any `.git` suffix removed. Handles both HTTPS and
+/// scp-style SSH remotes.
+fn repo_dir_from_remote(remote: &str) -> String {
+    let dir = remote
+        .trim_end_matches('/')
+        .trim_end_matches(".git")
+        .rsplit(['/', ':'])
+        .next()
+        .unwrap_or("");
+    if dir.is_empty() {
+        "<repo>".to_string()
+    } else {
+        dir.to_string()
+    }
+}
+
+/// The "verify this yourself" page body: clone, replay, reproduce.
+fn render_reproduce_html(urls: &PublicUrls, vfr_id: &str, rec: &Value, git_subdir: &str) -> String {
+    let vfr_safe = escape_html(vfr_id);
+    let s = |key: &str| -> String {
+        rec.get(key)
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
+    };
+    let git_remote = s("git_remote");
+    let git_ref = s("git_ref");
+    let last_commit = s("last_ingested_commit");
+    let last_at = s("last_ingested_at");
+    let ingest_error = s("ingest_error");
+
+    let repo_dir = repo_dir_from_remote(&git_remote);
+    let cd_path = if git_subdir.is_empty() || git_subdir == "." {
+        repo_dir
+    } else {
+        format!("{repo_dir}/{git_subdir}")
+    };
+
+    let remote_safe = escape_html(&git_remote);
+    let cd_safe = escape_html(&cd_path);
+    let remote_dd = if git_remote.starts_with("http") {
+        format!(r#"<a href="{remote_safe}" rel="noopener">{remote_safe}</a>"#)
+    } else {
+        remote_safe.clone()
+    };
+
+    let mut cursor_rows: Vec<String> = vec![
+        format!(r#"<div class="fd-cond"><dt>git_remote</dt><dd>{remote_dd}</dd></div>"#),
+        format!(
+            r#"<div class="fd-cond"><dt>git_ref</dt><dd>{}</dd></div>"#,
+            escape_html(&git_ref),
+        ),
+    ];
+    if !git_subdir.is_empty() && git_subdir != "." {
+        cursor_rows.push(format!(
+            r#"<div class="fd-cond"><dt>git_subdir</dt><dd>{}</dd></div>"#,
+            escape_html(git_subdir),
+        ));
+    }
+    cursor_rows.push(format!(
+        r#"<div class="fd-cond"><dt>last_ingested_commit</dt><dd>{}</dd></div>"#,
+        if last_commit.is_empty() {
+            "— (not yet ingested)".to_string()
+        } else {
+            escape_html(&last_commit)
+        },
+    ));
+    cursor_rows.push(format!(
+        r#"<div class="fd-cond"><dt>last_ingested_at</dt><dd>{}</dd></div>"#,
+        if last_at.is_empty() {
+            "—".to_string()
+        } else {
+            escape_html(&last_at)
+        },
+    ));
+    if !ingest_error.is_empty() {
+        cursor_rows.push(format!(
+            r#"<div class="fd-cond"><dt>ingest_error</dt><dd>{}</dd></div>"#,
+            escape_html(&ingest_error),
+        ));
+    }
+    let cursor_dl = format!(r#"<dl class="fd-conditions">{}</dl>"#, cursor_rows.join(""));
+
+    let short_commit = if last_commit.is_empty() {
+        "—".to_string()
+    } else {
+        escape_html(&last_commit[..last_commit.len().min(12)])
+    };
+
+    let main = format!(
+        r#"<div class="fd">
+  <article>
+    <p class="fd-claim">Verify this yourself</p>
+    <p class="fd-note">The hub is an index, not an authority. This sequence clones the frontier's registered repository, replays the signed event log, and re-runs the frozen verifiers over every witness — re-deriving everything the hub shows, locally, with no hub dependency.</p>
+
+    <section class="wb-section">
+      <div class="wb-section__head">
+        <span class="wb-section__num">§1</span>
+        <span class="wb-section__t">Run it</span>
+        <span class="wb-section__aside">clone · replay · reproduce</span>
+      </div>
+      <div class="tm-paper">
+        <div class="tm-paper__bar"><span>git clone · vela check · vela reproduce</span></div>
+        <div class="tm-paper__body"><span class="tm-ps">$</span> <span class="tm-cmd">git clone</span> {remote_safe} &amp;&amp; <span class="tm-cmd">cd</span> {cd_safe}
+<span class="tm-ps">$</span> <span class="tm-cmd">vela check</span> . <span class="tm-flag">--strict</span>     <span class="tm-flag"># replay + signatures + parity</span>
+<span class="tm-ps">$</span> <span class="tm-cmd">vela reproduce</span> .          <span class="tm-flag"># frozen verifiers re-check every witness</span></div>
+      </div>
+    </section>
+
+    <section class="wb-section">
+      <div class="wb-section__head">
+        <span class="wb-section__num">§2</span>
+        <span class="wb-section__t">Ingest cursor</span>
+        <span class="wb-section__aside">what this hub's index was derived from</span>
+      </div>
+      {cursor_dl}
+    </section>
+  </article>
+
+  <aside class="fd-margin">
+    <div class="fd-dial">
+      <div class="fd-dial__k">last ingested commit</div>
+      <div class="fd-dial__v mono">{short_commit}</div>
+      <div class="fd-dial__k" style="margin-top:16px;">ingested at</div>
+      <div class="fd-dial__v mono">{last_at_dial}</div>
+    </div>
+
+    <div class="fd-dial">
+      <div class="fd-dial__k">JSON</div>
+      <div style="font-family:var(--font-mono);font-size:12px;line-height:1.6;color:var(--ink-1);margin-top:6px;">
+        <a href="/entries/{vfr_safe}/git-remote" style="border-bottom:1px solid var(--rule-3);">/entries/{vfr_safe}/git-remote</a>
+        <div style="color:var(--ink-3);margin-top:4px;">registration + cursor</div>
+      </div>
+    </div>
+  </aside>
+</div>"#,
+        last_at_dial = if last_at.is_empty() {
+            "—".to_string()
+        } else {
+            escape_html(&last_at)
+        },
+    );
+
+    shell(
+        urls,
+        &format!("Vela Hub · reproduce · {vfr_id}"),
+        "entries",
+        &format!("05 · Reproduce · <span style=\"color:var(--ink-2);\">{vfr_safe}</span>"),
+        "Reproduce",
+        "Two commands re-derive this frontier's state from its source repository. Nothing here requires trusting the hub.",
+        &format!(
+            r#"<a href="/entries/{vfr_safe}">← Entry</a><span>·</span><a href="/entries/{vfr_safe}/proof">Proof packet →</a>"#
+        ),
+        &main,
+        &format!("{vfr_safe} · reproduce"),
+    )
+}
+
+fn render_reproduce_no_remote_html(urls: &PublicUrls, vfr_id: &str) -> String {
+    let vfr_safe = escape_html(vfr_id);
+    let main = format!(
+        r#"<p class="t-lead">No git remote is registered for <code>{vfr_safe}</code>, so there is no clone-and-replay recipe to hand you. That is the honest answer: the hub only knows a source repository when the frontier's owner registers one with <code>vela hub register-git</code>.</p>
+<p class="t-lead">The signed manifest and its hashes remain verifiable on the entry page.</p>
+<p class="t-lead"><a href="/entries/{vfr_safe}" style="border-bottom:1px solid var(--rule-3);">← back to entry</a></p>"#
+    );
+    shell(
+        urls,
+        "Vela Hub · reproduce",
+        "entries",
+        &format!("05 · Reproduce · <span style=\"color:var(--ink-2);\">{vfr_safe}</span>"),
+        "No registered repository",
+        "Reproduction needs a source repository; this frontier has not registered one.",
+        &format!(r#"<a href="/entries/{vfr_safe}">← Entry</a>"#),
         &main,
         &vfr_safe,
     )
@@ -5296,6 +5943,40 @@ fn render_entry_unavailable_html(urls: &PublicUrls, vfr_id: &str, reason: &str) 
         &main,
         &vfr_safe,
     )
+}
+
+#[cfg(test)]
+mod reproduce_page_tests {
+    use super::repo_dir_from_remote;
+
+    #[test]
+    fn https_remote_with_git_suffix() {
+        assert_eq!(
+            repo_dir_from_remote("https://github.com/constellate-science/erdos-frontier.git"),
+            "erdos-frontier"
+        );
+    }
+
+    #[test]
+    fn https_remote_without_suffix_and_trailing_slash() {
+        assert_eq!(
+            repo_dir_from_remote("https://github.com/constellate-science/vela/"),
+            "vela"
+        );
+    }
+
+    #[test]
+    fn scp_style_ssh_remote() {
+        assert_eq!(
+            repo_dir_from_remote("git@github.com:constellate-science/vela.git"),
+            "vela"
+        );
+    }
+
+    #[test]
+    fn empty_remote_falls_back_to_placeholder() {
+        assert_eq!(repo_dir_from_remote(""), "<repo>");
+    }
 }
 
 #[cfg(test)]

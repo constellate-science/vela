@@ -405,6 +405,25 @@ pub async fn run_command() {
             propose,
             json,
         ),
+        Commands::Pack {
+            frontier,
+            pack_id,
+            summary,
+            from_pending,
+            ids,
+            aggregate_kind,
+            actor,
+            json,
+        } => cmd_pack(
+            &frontier,
+            pack_id,
+            summary,
+            from_pending,
+            ids,
+            aggregate_kind,
+            actor,
+            json,
+        ),
         Commands::Proposals { action } => cmd_proposals(action),
         Commands::Finding { command } => match command {
             FindingCommands::Add {
@@ -680,6 +699,7 @@ pub async fn run_command() {
             force,
             co_author,
             generated_by,
+            pack,
             all_pending,
             ids,
             kinds,
@@ -688,6 +708,63 @@ pub async fn run_command() {
             no_reconcile,
             json,
         } => {
+            // Pack mode: one decision for a whole changeset.
+            if let Some(pack_id) = pack {
+                let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
+                let signing_key = crate::cli_identity::resolve_signing_key_opt(key.as_deref());
+                let reason = reason
+                    .clone()
+                    .unwrap_or_else(|| format!("accepted pack {pack_id}"));
+                let (report, verdict_event) =
+                    vela_protocol::released_diff_pack::accept_pack_at_path(
+                        &frontier,
+                        &pack_id,
+                        &reviewer,
+                        &reason,
+                        proposals::AcceptOptions {
+                            strict,
+                            force,
+                            signing_key,
+                            custody_verified: false,
+                            provenance: crate::cli_identity::resolve_co_author_provenance(
+                                co_author.as_deref(),
+                                generated_by.as_deref(),
+                            ),
+                        },
+                        dry_run,
+                    )
+                    .unwrap_or_else(|e| fail_return(&e));
+                if json {
+                    print_json(&json!({
+                        "ok": report.failed.is_empty(),
+                        "command": "accept",
+                        "pack": pack_id,
+                        "accepted": report.accepted_proposal_ids,
+                        "failed": report.failed.len(),
+                        "dry_run": report.dry_run,
+                        "verdict_event": verdict_event,
+                    }));
+                } else {
+                    println!(
+                        "{} pack {pack_id}: {} member(s) accepted{}{}",
+                        style::ok("ok"),
+                        report.accepted_proposal_ids.len(),
+                        if report.failed.is_empty() {
+                            String::new()
+                        } else {
+                            format!(", {} FAILED", report.failed.len())
+                        },
+                        if report.dry_run { " (dry-run)" } else { "" }
+                    );
+                    if let Some(ev) = verdict_event {
+                        println!("  verdict event: {ev}");
+                    }
+                }
+                if !report.gated && !report.dry_run && !no_reconcile {
+                    let _ = vela_protocol::frontier_repo::materialize(&frontier);
+                }
+                return;
+            }
             // Batch mode: every selected proposal in one signed pass
             if all_pending || !ids.is_empty() {
                 let reason = reason
@@ -2482,6 +2559,120 @@ fn collect_witness_files_into(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
+/// `vela pack` — create or show a changeset. Creating bundles PENDING
+/// proposals into one reviewable `vsd_` unit; showing renders members and
+/// verdict state. Packing groups; a human key decides.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn cmd_pack(
+    frontier: &Path,
+    pack_id: Option<String>,
+    summary: Option<String>,
+    from_pending: bool,
+    ids: Vec<String>,
+    aggregate_kind: String,
+    actor: Option<String>,
+    json: bool,
+) {
+    // ── show mode ─────────────────────────────────────────────────────────
+    if let Some(pid) = pack_id {
+        let project = repo::load_from_path(frontier)
+            .unwrap_or_else(|e| fail_return(&format!("load frontier: {e}")));
+        let Some(rec) = project
+            .released_diff_packs
+            .iter()
+            .find(|r| r.pack_id == pid)
+        else {
+            fail(&format!("pack {pid} not found"));
+        };
+        if json {
+            print_json(&json!({
+                "ok": true,
+                "command": "pack.show",
+                "pack": rec,
+            }));
+        } else {
+            println!();
+            println!("  {}", format!("VELA · PACK · {pid}").to_uppercase());
+            println!("  summary:  {}", rec.summary);
+            println!(
+                "  verdict:  {}",
+                rec.verdict
+                    .as_ref()
+                    .map(|v| format!("{v:?}"))
+                    .unwrap_or_else(|| "pending".to_string())
+            );
+            println!("  released: {}", rec.released_at);
+            println!("  members ({}):", rec.member_proposals.len());
+            for m in &rec.member_proposals {
+                let kind = project
+                    .proposals
+                    .iter()
+                    .find(|p| &p.id == m)
+                    .map(|p| p.kind.clone())
+                    .unwrap_or_default();
+                println!("    · {m}  {kind}");
+            }
+        }
+        return;
+    }
+
+    // ── create mode ───────────────────────────────────────────────────────
+    let summary =
+        summary.unwrap_or_else(|| fail_return("pack: --summary is required to create a pack"));
+    let members: Vec<String> = if from_pending {
+        let project = repo::load_from_path(frontier)
+            .unwrap_or_else(|e| fail_return(&format!("load frontier: {e}")));
+        let in_undecided: std::collections::BTreeSet<String> = project
+            .released_diff_packs
+            .iter()
+            .filter(|r| r.verdict.is_none())
+            .flat_map(|r| r.member_proposals.iter().cloned())
+            .collect();
+        project
+            .proposals
+            .iter()
+            .filter(|p| {
+                p.status == "pending_review"
+                    && p.applied_event_id.is_none()
+                    && !in_undecided.contains(&p.id)
+            })
+            .map(|p| p.id.clone())
+            .collect()
+    } else {
+        ids
+    };
+    let actor_id = crate::cli_identity::resolve_actor(actor.as_deref());
+    let report = vela_protocol::released_diff_pack::release_pack_at_path(
+        frontier,
+        &summary,
+        &aggregate_kind,
+        &members,
+        &actor_id,
+    )
+    .unwrap_or_else(|e| fail_return(&e));
+    if json {
+        print_json(&json!({
+            "ok": true,
+            "command": "pack",
+            "pack_id": report.pack_id,
+            "event_id": report.event_id,
+            "members": report.members,
+        }));
+    } else {
+        println!(
+            "{} {} released ({} member(s)) — review with `vela pack {} {}` \
+             and decide with `vela accept {} --pack {}`",
+            style::ok("pack"),
+            report.pack_id,
+            report.members.len(),
+            frontier.display(),
+            report.pack_id,
+            frontier.display(),
+            report.pack_id,
+        );
+    }
+}
+
 /// `vela record` — the one-verb activity-record surface. A frontier dir
 /// records; a vrc_ JSON file validates; `--propose <dir>` lands the
 /// validated record as a PENDING proposal. Deciding stays with a human key.
@@ -3346,7 +3537,10 @@ The loop:
   propose       Draft the common finding.review proposal
   review        Signed human judgments: statement-fidelity verdicts (--fidelity,
                 --batch) and role-scoped reviewer attestations
-  accept        Apply proposals under your key; --all-pending/--id for the batch
+  accept        Apply proposals under your key; --all-pending/--id for the batch,
+                --pack vsd_… for one atomic changeset decision
+  pack          Bundle pending proposals into a changeset (vsd_) — the
+                pull-request analogue; `vela pack . vsd_…` shows one
   proposals     The full proposal store: list/show/preview/import/validate/export/
                 accept/reject
   attach        Bind mechanical verifier evidence (or --proof lean_kernel) to a finding

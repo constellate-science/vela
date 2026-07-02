@@ -100,6 +100,25 @@ the gate, `--propose` lands the result as a pending proposal. Attempts,
 transfers, Lean anchoring, and experiment receipts are
 `foundry attempt|transfer|lean|experiment …`.
 
+## Swarms (many agents, one frontier)
+
+The loop scales by composition, not new machinery:
+
+1. **Claim before long work**: `vela_claim_task` (MCP, draft profile)
+   leases an obligation under your OWN agent key; a live competing lease
+   returns `already_claimed_by` — route around it. A lease coordinates;
+   it never decides.
+2. **Watch, don't poll blind**: `GET /entries/{vfr}/events/stream?since=<cursor>`
+   (SSE, cursor-resumable) streams what changed.
+3. **One pack per session**: bundle your session's proposals into a
+   changeset — `vela pack . --summary "…" --from-pending` — so the
+   reviewer judges your work as one unit (`vela accept . --pack vsd_…`).
+4. **Policy-bound lanes**: when the frontier carries a signed acceptance
+   policy (`vela status . --json → .policy.mode == "live"`), mechanical
+   kinds (repairs, artifact provenance) auto-admit under the sealed
+   `vap_` policy id — the policy can only tighten the frozen verifier
+   floor, and truth-bearing claims stay human-keyed no matter what.
+
 ## Python SDK
 
 `clients/python/vela_agent` wraps the read surface and proposal drafting

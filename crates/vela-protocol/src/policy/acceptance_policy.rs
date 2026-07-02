@@ -661,3 +661,79 @@ mod tests {
         assert!(!bad.id_is_valid());
     }
 }
+
+/// The signature envelope over a SEALED policy: the one governance act.
+/// `signature` is Ed25519 over the sealed policy's canonical bytes.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PolicySignatureRecord {
+    pub policy_id: String,
+    pub signer_pubkey_hex: String,
+    pub signature: String,
+    pub signed_at: String,
+}
+
+/// A policy that passed loading checks: sealed id re-derives and the
+/// signature verifies over the sealed bytes. AUTHORITY still requires the
+/// caller to check the signer is a registered human reviewer on the
+/// frontier — the file system is not an actor table.
+pub struct VerifiedPolicy {
+    pub policy: AcceptancePolicy,
+    pub signer_pubkey_hex: String,
+}
+
+/// Load `.vela/policies/active.json` + `active.sig.json` from a frontier
+/// dir. Returns None when absent (shadow mode); Err on a present-but-broken
+/// pair (a corrupt governance file must never fail open into shadow).
+pub fn load_active_policy(
+    frontier_dir: &std::path::Path,
+) -> Result<Option<VerifiedPolicy>, String> {
+    use ed25519_dalek::Verifier;
+    let dir = frontier_dir.join(".vela").join("policies");
+    let policy_path = dir.join("active.json");
+    let sig_path = dir.join("active.sig.json");
+    if !policy_path.exists() {
+        return Ok(None);
+    }
+    if !sig_path.exists() {
+        // Sealed but not yet signed: STAGED. No authority — the gate treats
+        // this exactly like no policy; the status surface shows it staged.
+        return Ok(None);
+    }
+    let raw = std::fs::read_to_string(&policy_path).map_err(|e| e.to_string())?;
+    let policy: AcceptancePolicy =
+        serde_json::from_str(&raw).map_err(|e| format!("active policy parse: {e}"))?;
+    if !policy.id_is_valid() {
+        return Err(format!(
+            "active policy id does not re-derive: stored {}, sealed {}",
+            policy.id,
+            policy.content_address()
+        ));
+    }
+    let sig_raw = std::fs::read_to_string(&sig_path).map_err(|e| e.to_string())?;
+    let sig: PolicySignatureRecord =
+        serde_json::from_str(&sig_raw).map_err(|e| format!("policy sig parse: {e}"))?;
+    if sig.policy_id != policy.id {
+        return Err("policy signature is for a different policy id".to_string());
+    }
+    // The signed bytes: the sealed policy's canonical body with id set —
+    // exactly the file a human read and signed.
+    let mut sealed = policy.clone();
+    sealed.id = policy.id.clone();
+    let body =
+        crate::canonical::to_canonical_bytes(&sealed).map_err(|e| format!("canonical: {e}"))?;
+    let pk_bytes: [u8; 32] = hex::decode(&sig.signer_pubkey_hex)
+        .map_err(|e| format!("pubkey hex: {e}"))?
+        .try_into()
+        .map_err(|_| "pubkey must be 32 bytes".to_string())?;
+    let vk = ed25519_dalek::VerifyingKey::from_bytes(&pk_bytes).map_err(|e| e.to_string())?;
+    let sig_bytes: [u8; 64] = hex::decode(&sig.signature)
+        .map_err(|e| format!("signature hex: {e}"))?
+        .try_into()
+        .map_err(|_| "signature must be 64 bytes".to_string())?;
+    vk.verify(&body, &ed25519_dalek::Signature::from_bytes(&sig_bytes))
+        .map_err(|_| "active policy signature does not verify".to_string())?;
+    Ok(Some(VerifiedPolicy {
+        policy,
+        signer_pubkey_hex: sig.signer_pubkey_hex,
+    }))
+}

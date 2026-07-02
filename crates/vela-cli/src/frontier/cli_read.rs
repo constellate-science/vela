@@ -101,6 +101,18 @@ pub(crate) fn cmd_status(path: &Path, json: bool) {
                 "proof": {
                     "status": project.proof_state.latest_packet.status,
                 },
+                "policy": match vela_protocol::acceptance_policy::load_active_policy(path) {
+                    Ok(Some(vp)) => json!({"id": vp.policy.id, "mode": "live"}),
+                    Ok(None) => {
+                        let staged = path.join(".vela/policies/active.json").exists();
+                        if staged {
+                            json!({"mode": "staged", "next": "scripts/sign-policy.sh (one signature activates it)"})
+                        } else {
+                            json!({"mode": "shadow"})
+                        }
+                    }
+                    Err(e) => json!({"mode": "BROKEN", "error": e}),
+                },
                 "events": project.events.len(),
                 "actors": project.actors.len(),
                 "inbox": {
@@ -315,6 +327,19 @@ pub(crate) fn cmd_inbox(path: &Path, kind_filter: Option<&str>, limit: usize, js
     });
     pending.truncate(limit);
 
+    // Changeset grouping: a pending proposal that belongs to an undecided
+    // pack is reviewed as part of that pack (`vela accept . --pack …`).
+    let pack_of: std::collections::BTreeMap<String, String> = project
+        .released_diff_packs
+        .iter()
+        .filter(|r| r.verdict.is_none())
+        .flat_map(|r| {
+            r.member_proposals
+                .iter()
+                .map(move |m| (m.clone(), r.pack_id.clone()))
+        })
+        .collect();
+
     if json {
         let payload: Vec<_> = pending
             .iter()
@@ -342,6 +367,7 @@ pub(crate) fn cmd_inbox(path: &Path, kind_filter: Option<&str>, limit: usize, js
                     "assertion_text": assertion_text,
                     "assertion_type": assertion_type,
                     "reviewer_composite": composite,
+                    "pack": pack_of.get(&p.id),
                 })
             })
             .collect();
@@ -405,10 +431,33 @@ pub(crate) fn cmd_inbox(path: &Path, kind_filter: Option<&str>, limit: usize, js
         } else {
             p.reason.chars().take(80).collect()
         };
+        let pack_tag = pack_of
+            .get(&p.id)
+            .map(|v| format!("  ⟨{v}⟩"))
+            .unwrap_or_default();
         println!(
-            "  {}  {}  {:<13}  {:<18}  {}",
-            score_str, p.id, kind_short, assertion_type, summary
+            "  {}  {}  {:<13}  {:<18}  {}{}",
+            score_str, p.id, kind_short, assertion_type, summary, pack_tag
         );
+    }
+    // Undecided packs, so the reviewer sees the changeset units first.
+    let undecided: Vec<_> = project
+        .released_diff_packs
+        .iter()
+        .filter(|r| r.verdict.is_none() && !r.member_proposals.is_empty())
+        .collect();
+    if !undecided.is_empty() {
+        println!();
+        println!("  packs awaiting one decision:");
+        for r in undecided {
+            println!(
+                "    {}  {} member(s)  — {}",
+                r.pack_id,
+                r.member_proposals.len(),
+                r.summary.chars().take(60).collect::<String>()
+            );
+            println!("      accept: vela accept . --pack {}", r.pack_id);
+        }
     }
     println!();
 }

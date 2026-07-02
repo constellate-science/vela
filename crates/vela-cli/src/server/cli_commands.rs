@@ -379,6 +379,10 @@ pub(crate) enum Commands {
         /// Unverified attribution, never resolved to a key.
         #[arg(long = "generated-by")]
         generated_by: Option<String>,
+        /// Pack mode: accept a whole changeset (`vsd_…`) — every member
+        /// proposal engine-accepted, then one atomic verdict event.
+        #[arg(long = "pack")]
+        pack: Option<String>,
         /// Batch mode: accept every pending proposal in one signed pass.
         #[arg(long = "all-pending")]
         all_pending: bool,
@@ -471,6 +475,33 @@ pub(crate) enum Commands {
     /// (e.g. a second reviewer countersigning a finding.reviewed
     /// event, or a Lean run attesting a Stupp-protocol claim by
     /// pointing at its accept event).
+    /// Bundle pending proposals into a changeset (`vsd_` pack) — the
+    /// pull-request analogue: one reviewable unit, one atomic verdict.
+    /// `vela pack . --summary … --from-pending` bundles; `vela pack . vsd_…`
+    /// shows one. Packing is grouping, never deciding.
+    Pack {
+        /// The frontier repo.
+        frontier: PathBuf,
+        /// A pack id (`vsd_…`) to show. Omit to CREATE a pack.
+        pack_id: Option<String>,
+        /// What this changeset claims, in one reviewer-first sentence.
+        #[arg(long)]
+        summary: Option<String>,
+        /// Bundle every pending proposal not already in an undecided pack.
+        #[arg(long = "from-pending")]
+        from_pending: bool,
+        /// Bundle these specific proposal ids. Repeatable.
+        #[arg(long = "id")]
+        ids: Vec<String>,
+        /// Aggregate kind label (defaults to `mixed`).
+        #[arg(long, default_value = "mixed")]
+        aggregate_kind: String,
+        /// Who packs (defaults to $VELA_ACTOR_ID / your identity).
+        #[arg(long = "as")]
+        actor: Option<String>,
+        #[arg(long)]
+        json: bool,
+    },
     /// Record activity into a portable claim packet (vrc_): the claim, the
     /// artifact files (hashed at record time), the caveats, pinned against
     /// the frontier's current head. One verb, git-plain:

@@ -454,6 +454,21 @@ pub fn all_tools() -> Vec<ToolDefinition> {
                 "Resulting pack is reviewer-pending until a reviewer issues a verdict via the local review queue + diff-pack promoter.",
             ],
         ),
+        // Swarm coordination: lease an obligation so other agents route
+        // around it. A lease is coordination, never authority.
+        tool(
+            "vela_claim_task",
+            "Lease an open obligation (vf_… finding) for this agent so other swarm agents route around it. Emits a signed attempt.claimed event under the agent's OWN key (VELA_AGENT_KEY_HEX). One live lease per obligation; returns already_claimed_by when contested. Decides nothing.",
+            json!({"type": "object", "properties": {
+                "frontier_path": {"type": "string", "description": "Path to the frontier repo."},
+                "obligation_id": {"type": "string", "description": "The vf_… finding to lease."},
+                "agent_actor": {"type": "string", "description": "agent:<name> doing the work."},
+                "ttl_seconds": {"type": "number", "description": "Lease TTL (default 86400)."}
+            }, "required": ["frontier_path", "obligation_id", "agent_actor"]}),
+            PermissionLevel::Write,
+            true,
+            vec!["Requires VELA_AGENT_KEY_HEX (the agent's own key; never a human's)."],
+        ),
         // The agent's "does this frontier pass the gate right now?"
         // question, answered by the SAME strict bundle the hub's ingestor
         // enforces (validation + reducer replay + signature signals).

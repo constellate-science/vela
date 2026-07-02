@@ -85,6 +85,7 @@ mod surface_tests {
         "inbox",
         "init",
         "log",
+        "pack",
         "proof",
         "proposals",
         "propose",

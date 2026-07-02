@@ -87,6 +87,39 @@ pub(crate) fn run(args: &[String]) {
         .copied()
         .unwrap_or_else(|| fail("usage: vela state [trust|pack] <frontier> <vf_id> [--json]"));
 
+    // Bi-temporal read: `--as-of <RFC3339>` renders the finding's state at
+    // that instant (flags, confidence, review events filtered to the
+    // cutoff) via the same replay filter `vela log <dir> <vf_> --as-of`
+    // uses. A projection over history, never a write.
+    let as_of = args
+        .iter()
+        .position(|a| a == "--as-of")
+        .and_then(|i| args.get(i + 1))
+        .map(String::as_str);
+    if let Some(cutoff) = as_of {
+        if verb != "state" && !verb.is_empty() {
+            fail("--as-of is supported on the plain state projection only");
+        }
+        let payload = vela_protocol::state::history_as_of(Path::new(frontier), vf_id, Some(cutoff))
+            .unwrap_or_else(|e| fail(&e));
+        if json {
+            print_json(&serde_json::json!({
+                "ok": true,
+                "command": "state.as_of",
+                "as_of": cutoff,
+                "state": payload,
+            }));
+        } else {
+            println!();
+            println!("  VELA · STATE · {vf_id} · as of {cutoff}");
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&payload).unwrap_or_default()
+            );
+        }
+        return;
+    }
+
     let project = repo::load_from_path(Path::new(frontier)).unwrap_or_else(|e| fail(&e));
     let finding = project
         .findings

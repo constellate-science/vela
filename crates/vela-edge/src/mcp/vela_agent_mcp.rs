@@ -538,6 +538,89 @@ pub fn submit_diff_pack(args: &Value) -> Result<String, String> {
     .unwrap_or_default())
 }
 
+/// `vela_claim_task` — lease an open obligation so other swarm agents route
+/// around it. Emits a signed `attempt.claimed` event (the agent's OWN key
+/// via VELA_AGENT_KEY_HEX; never a human's). One live lease per obligation;
+/// expiry = claimed_at + ttl, computed at read time. Coordination, not
+/// authority: a lease decides nothing.
+pub fn claim_task(args: &Value) -> Result<String, String> {
+    let key = signing_key_from_env()?;
+    let frontier_path: PathBuf = args
+        .get("frontier_path")
+        .and_then(Value::as_str)
+        .ok_or("frontier_path required")?
+        .into();
+    let obligation = args
+        .get("obligation_id")
+        .and_then(Value::as_str)
+        .ok_or("obligation_id required (a vf_… finding id)")?;
+    let agent_actor = args
+        .get("agent_actor")
+        .and_then(Value::as_str)
+        .ok_or("agent_actor required")?;
+    if !agent_actor.starts_with("agent:") && !agent_actor.starts_with("ci:") {
+        return Err("claim_task is for agent:/ci: actors".to_string());
+    }
+    let ttl = args
+        .get("ttl_seconds")
+        .and_then(Value::as_u64)
+        .unwrap_or(86_400);
+    let pubkey = hex::encode(key.verifying_key().to_bytes());
+    let mut project = vela_protocol::repo::load_from_path(&frontier_path)
+        .map_err(|e| format!("load frontier: {e}"))?;
+    if !project.findings.iter().any(|f| f.id == obligation) {
+        return Err(format!("obligation finding {obligation} not found"));
+    }
+    // Refuse a live competing lease (route-around, not fight).
+    let now = chrono::Utc::now().to_rfc3339();
+    if let Some(live) = project.attempt_claims.iter().find(|c| {
+        c.obligation_id == obligation
+            && chrono::DateTime::parse_from_rfc3339(&c.claimed_at)
+                .map(|t| {
+                    (t + chrono::Duration::seconds(c.lease_ttl_seconds as i64)).to_rfc3339() > now
+                })
+                .unwrap_or(false)
+    }) {
+        return Ok(serde_json::json!({
+            "ok": false,
+            "already_claimed_by": live.claimant_actor,
+            "claimed_at": live.claimed_at,
+            "ttl_seconds": live.lease_ttl_seconds,
+        })
+        .to_string());
+    }
+    let mut event =
+        vela_protocol::events::new_finding_event(vela_protocol::events::FindingEventInput {
+            kind: "attempt.claimed",
+            finding_id: obligation,
+            actor_id: agent_actor,
+            actor_type: vela_protocol::events::actor_kind(agent_actor),
+            reason: "obligation lease (swarm coordination)",
+            before_hash: "sha256:null",
+            after_hash: "sha256:null",
+            payload: serde_json::json!({
+                "obligation_id": obligation,
+                "lease_ttl_seconds": ttl,
+                "claimant_actor": agent_actor,
+                "claimant_pubkey": pubkey,
+            }),
+            caveats: Vec::new(),
+            timestamp: None,
+        });
+    vela_protocol::reducer::apply_event(&mut project, &event)?;
+    event.signature = Some(vela_protocol::sign::sign_event(&event, &key)?);
+    project.events.push(event);
+    vela_protocol::repo::save_to_path(&frontier_path, &project)
+        .map_err(|e| format!("save: {e}"))?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "obligation": obligation,
+        "claimed_by": agent_actor,
+        "ttl_seconds": ttl,
+    })
+    .to_string())
+}
+
 /// `vela_check_run` — hold the LOCAL frontier to the one strict bar
 /// (validation + strict reducer replay + signature signals), over MCP. The
 /// agent's "does this frontier pass the gate right now?" question, answered

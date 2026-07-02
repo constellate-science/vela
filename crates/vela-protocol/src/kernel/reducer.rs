@@ -1116,6 +1116,17 @@ fn apply_diff_pack_released(state: &mut Project, event: &StateEvent) -> Result<(
         .and_then(Value::as_str)
         .unwrap_or("")
         .to_string();
+    let member_proposals: Vec<String> = event
+        .payload
+        .get("members")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .filter_map(Value::as_str)
+                .map(String::from)
+                .collect()
+        })
+        .unwrap_or_default();
     state
         .released_diff_packs
         .push(ReleasedDiffPackRecord::from_released_event(
@@ -1125,6 +1136,7 @@ fn apply_diff_pack_released(state: &mut Project, event: &StateEvent) -> Result<(
             aggregate_kind,
             event.timestamp.clone(),
             event.id.clone(),
+            member_proposals,
         ));
     Ok(())
 }
@@ -1221,6 +1233,7 @@ fn apply_diff_pack_reviewed(state: &mut Project, event: &StateEvent) -> Result<(
             String::new(),
             event.timestamp.clone(),
             String::new(),
+            Vec::new(),
         );
         rec.verdict = Some(verdict);
         rec.verdict_event_id = Some(event.id.clone());
