@@ -502,7 +502,7 @@ pub(crate) fn cmd_inbox(path: &Path, kind_filter: Option<&str>, limit: usize, js
     let mut undecided: Vec<_> = project
         .released_diff_packs
         .iter()
-        .filter(|r| r.verdict.is_none() && !r.member_proposals.is_empty())
+        .filter(|r| vela_edge::frontier_next::pack_awaits_decision(r, &project))
         .collect();
     undecided.sort_by(|a, b| a.summary.cmp(&b.summary).then(a.pack_id.cmp(&b.pack_id)));
     if !undecided.is_empty() {

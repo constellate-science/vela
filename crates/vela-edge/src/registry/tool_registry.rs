@@ -27,6 +27,16 @@ pub fn all_tools() -> Vec<ToolDefinition> {
             vec![],
         ),
         tool(
+            "frontier_next",
+            "What should I work on? Ranked open targets, read-only: undecided packs and pending proposals (the human's decisions first), open campaign seeds with no live lease and no landed statement, and accepted findings the verification gate still refuses. Advice, never authority — claiming a target still goes through vela_claim_task.",
+            json!({"type": "object", "properties": {"limit": {"type": "integer"}}}),
+            PermissionLevel::ReadOnly,
+            false,
+            vec![
+                "Campaign seeds require the server to know the frontier directory; a merged multi-frontier service lists only review and verify lanes.",
+            ],
+        ),
+        tool(
             "search_findings",
             "Search findings by text content, entity name, entity type, or assertion type. Returns matching findings.",
             json!({"type": "object", "properties": {

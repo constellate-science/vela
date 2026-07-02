@@ -283,9 +283,10 @@ yanked (a maintainer-account decision).
 
 **Mitigations available, not yet adopted:**
 
-- Sigstore / SLSA provenance attestations on release assets
-  would let consumers verify the publisher (release-provenance.yml
-  is the start of this).
+- **Adopted (v0.730):** SLSA build provenance is attested on every
+  release asset inside release.yml (Sigstore transparency log, OIDC
+  keyless). Verify before trusting:
+  `gh attestation verify <file> --repo constellate-science/vela`.
 - Pinning an exact tag (`VELA_VERSION=v0.726.0 ./install.sh`)
   prevents silent rolls.
 - Reviewing the diff between released versions would catch

@@ -227,5 +227,58 @@ pub(crate) fn cmd_frontier(action: FrontierAction) {
         } => cmd_frontier_release(frontier, name, notes, previous, json),
         FrontierAction::Releases { frontier, json } => cmd_frontier_releases(frontier, json),
         FrontierAction::Audit { frontier, json } => cmd_frontier_audit(frontier, json),
+        FrontierAction::Next {
+            frontier,
+            limit,
+            json,
+        } => cmd_frontier_next(&frontier, limit, json),
     }
+}
+
+/// `vela frontier next` — ranked open targets. The render is grouped by
+/// lane so the reader sees decisions first, then open seeds, then the
+/// verification debt; `--json` emits the same list for agents.
+fn cmd_frontier_next(frontier: &std::path::Path, limit: usize, json: bool) {
+    let project = vela_protocol::repo::load_from_path(frontier)
+        .unwrap_or_else(|e| crate::cli::fail_return(&e));
+    let targets = vela_edge::frontier_next::frontier_next(&project, Some(frontier), limit);
+    if json {
+        crate::cli::print_json(&serde_json::json!({
+            "ok": true,
+            "command": "frontier.next",
+            "targets": targets,
+        }));
+        return;
+    }
+    use colored::Colorize;
+    println!();
+    println!(
+        "  {}",
+        format!("VELA · NEXT · {}", frontier.display())
+            .to_uppercase()
+            .dimmed()
+    );
+    println!("  {}", vela_protocol::cli_style::tick_row(60));
+    if targets.is_empty() {
+        println!("  nothing open: no pending decisions, no unleased seeds, no gate debt.");
+        println!();
+        return;
+    }
+    let mut last_lane = String::new();
+    for t in &targets {
+        if t.lane != last_lane {
+            println!();
+            let head = match t.lane.as_str() {
+                "review" => "review — one key-custody decision each",
+                "attack" => "attack — open campaign seeds",
+                "verify" => "verify — accepted but the gate refuses",
+                other => other,
+            };
+            println!("  {}", head.dimmed());
+            last_lane = t.lane.clone();
+        }
+        println!("    {}  {}", t.id, t.title);
+        println!("      {}  ·  {}", t.why.dimmed(), t.next_command);
+    }
+    println!();
 }

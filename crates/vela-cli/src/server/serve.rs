@@ -1017,6 +1017,20 @@ async fn execute_tool(
             let project = frontier.lock().await;
             (tool_frontier_stats(&project), Some(clone_project(&project)))
         }
+        "frontier_next" => {
+            let project = frontier.lock().await;
+            let limit = args
+                .get("limit")
+                .and_then(Value::as_u64)
+                .unwrap_or(12)
+                .min(100) as usize;
+            let targets = vela_edge::frontier_next::frontier_next(&project, source_path, limit);
+            (
+                serde_json::to_string_pretty(&json!({"targets": targets}))
+                    .map_err(|e| e.to_string()),
+                Some(clone_project(&project)),
+            )
+        }
         "propagate_retraction" => {
             let project = frontier.lock().await;
             (

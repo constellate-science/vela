@@ -1611,6 +1611,20 @@ pub(crate) enum FrontierAction {
         #[arg(long)]
         json: bool,
     },
+    /// What should I work on? Ranked open targets, read-only: undecided
+    /// packs and pending proposals (the human's decisions first), open
+    /// campaign seeds with no live lease and no landed statement
+    /// (`campaign.yaml`, batch order kept), and accepted findings the
+    /// verification gate still refuses. Advice, never authority.
+    Next {
+        /// Frontier repo directory.
+        frontier: PathBuf,
+        /// Maximum targets to list.
+        #[arg(long, default_value_t = 12)]
+        limit: usize,
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Subcommand)]

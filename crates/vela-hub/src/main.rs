@@ -1625,7 +1625,11 @@ async fn get_blob(State(state): State<AppState>, Path(hash): Path<String>) -> Re
 
 /// The producer view: cross-frontier objects signed by one key — the
 /// fundable CV, queryable in one call.
-async fn get_producer(State(state): State<AppState>, Path(pubkey): Path<String>) -> Response {
+async fn get_producer(
+    State(state): State<AppState>,
+    Path(pubkey): Path<String>,
+    headers: HeaderMap,
+) -> Response {
     match state.db.producer_objects(&pubkey, 500).await {
         Ok(rows) => {
             let mut by_frontier: std::collections::BTreeMap<String, Vec<Value>> =
@@ -1636,6 +1640,10 @@ async fn get_producer(State(state): State<AppState>, Path(pubkey): Path<String>)
                     "id": oid,
                     "summary": raw.get("claim").or_else(|| raw.get("assertion").and_then(|a| a.get("text"))).cloned().unwrap_or(Value::Null),
                 }));
+            }
+            if wants_html(&headers) {
+                return Html(render_producer_html(&state.urls, &pubkey, &by_frontier))
+                    .into_response();
             }
             Json(json!({
                 "pubkey": pubkey,
@@ -1706,6 +1714,7 @@ async fn get_entry_manifest(State(state): State<AppState>, Path(vfr_id): Path<St
 async fn search_endpoint(
     State(state): State<AppState>,
     Query(params): Query<HashMap<String, String>>,
+    headers: HeaderMap,
 ) -> Response {
     let q = params
         .get("q")
@@ -1720,7 +1729,11 @@ async fn search_endpoint(
         .and_then(|s| s.parse().ok())
         .unwrap_or(24)
         .clamp(1, 200);
+    let html = wants_html(&headers);
     if q.is_empty() {
+        if html {
+            return Html(render_search_html(&state.urls, "", &object_type, &[])).into_response();
+        }
         return (
             StatusCode::OK,
             Json(json!({"results": [], "q": q, "type": object_type})),
@@ -1728,18 +1741,96 @@ async fn search_endpoint(
             .into_response();
     }
     match state.db.search_objects(&q, &object_type, limit).await {
-        Ok(results) => (
-            StatusCode::OK,
-            [(axum::http::header::CACHE_CONTROL, "public, max-age=60")],
-            Json(json!({"results": results, "q": q, "type": object_type})),
-        )
-            .into_response(),
+        Ok(results) => {
+            if html {
+                return Html(render_search_html(&state.urls, &q, &object_type, &results))
+                    .into_response();
+            }
+            (
+                StatusCode::OK,
+                [(axum::http::header::CACHE_CONTROL, "public, max-age=60")],
+                Json(json!({"results": results, "q": q, "type": object_type})),
+            )
+                .into_response()
+        }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(json!({"error": format!("search: {e}")})),
         )
             .into_response(),
     }
+}
+
+/// The cross-frontier search page: a form plus result rows. Findings link
+/// to their finding page; anything else lands on the frontier entry.
+fn render_search_html(urls: &PublicUrls, q: &str, object_type: &str, results: &[Value]) -> String {
+    let q_safe = escape_html(q);
+    let type_options: String = ["finding", "source", "evidence_atom", "proposal"]
+        .iter()
+        .map(|t| {
+            let sel = if *t == object_type { " selected" } else { "" };
+            format!(r#"<option value="{t}"{sel}>{t}</option>"#)
+        })
+        .collect();
+    let form = format!(
+        r#"<form method="get" action="/search" class="tm-paper" style="padding:14px 16px;display:flex;gap:10px;align-items:center;">
+  <input type="search" name="q" value="{q_safe}" placeholder="search live frontier state…" style="flex:1;font-family:var(--font-mono);font-size:13px;padding:8px 10px;background:transparent;border:1px solid var(--line);border-radius:6px;color:var(--ink-0);" autofocus>
+  <select name="type" style="font-family:var(--font-mono);font-size:12px;padding:8px;background:transparent;border:1px solid var(--line);border-radius:6px;color:var(--ink-1);">{type_options}</select>
+  <button type="submit" class="wb-chip" style="cursor:pointer;">search</button>
+</form>"#
+    );
+    let rows: String = results
+        .iter()
+        .filter_map(|r| {
+            let vfr = r.get("vfr_id").and_then(Value::as_str)?;
+            let obj = r.get("object")?;
+            let id = obj.get("id").and_then(Value::as_str).unwrap_or("");
+            let text = obj
+                .pointer("/assertion/text")
+                .and_then(Value::as_str)
+                .or_else(|| obj.get("claim").and_then(Value::as_str))
+                .or_else(|| obj.get("reason").and_then(Value::as_str))
+                .or_else(|| obj.get("title").and_then(Value::as_str))
+                .unwrap_or("");
+            let text: String = escape_html(&text.chars().take(160).collect::<String>());
+            let href = if object_type == "finding" && !id.is_empty() {
+                format!("/entries/{vfr}/findings/{id}")
+            } else {
+                format!("/entries/{vfr}")
+            };
+            Some(format!(
+                r#"<li><span class="link-rel">{vfr_short}</span> <span><a href="{href}"><code>{id}</code></a> · {text}</span></li>"#,
+                vfr_short = escape_html(&vfr.chars().take(12).collect::<String>()),
+                id = escape_html(id),
+            ))
+        })
+        .collect();
+    let body = if q.is_empty() {
+        String::new()
+    } else if rows.is_empty() {
+        r#"<p class="empty">No live object matches. The search is exact-substring over replayed state — try a shorter fragment.</p>"#.to_string()
+    } else {
+        format!(r#"<ul class="link-list">{rows}</ul>"#)
+    };
+    let count_note = if q.is_empty() {
+        "search every live frontier".to_string()
+    } else {
+        format!("{} result(s) for “{q_safe}”", results.len())
+    };
+    shell(
+        urls,
+        "Vela Hub · Search",
+        "entries",
+        "04 · Search",
+        "Cross-frontier search",
+        &count_note,
+        "",
+        &format!(
+            "{form}
+{body}"
+        ),
+        "exact-substring over verified, replayed state — never an index of claims nobody signed",
+    )
 }
 
 /// One page of a frontier's objects of a given type — lets detail surfaces
@@ -4184,7 +4275,80 @@ fn render_root_html(urls: &PublicUrls) -> String {
     )
 }
 
+/// A producer's public ledger: everything this pubkey signed, grouped by
+/// frontier. The page IS the reputation object — signed work, nothing else.
+fn render_producer_html(
+    urls: &PublicUrls,
+    pubkey: &str,
+    by_frontier: &std::collections::BTreeMap<String, Vec<Value>>,
+) -> String {
+    let pubkey_safe = escape_html(pubkey);
+    let total: usize = by_frontier.values().map(Vec::len).sum();
+    let sections: String = by_frontier
+        .iter()
+        .map(|(vfr, objs)| {
+            let vfr_safe = escape_html(vfr);
+            let items: String = objs
+                .iter()
+                .take(50)
+                .map(|o| {
+                    let otype = o.get("type").and_then(Value::as_str).unwrap_or("");
+                    let oid = o.get("id").and_then(Value::as_str).unwrap_or("");
+                    let summary = o
+                        .get("summary")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .chars()
+                        .take(120)
+                        .collect::<String>();
+                    let href = if otype == "finding" {
+                        format!("/entries/{vfr_safe}/findings/{oid}")
+                    } else {
+                        format!("/entries/{vfr_safe}")
+                    };
+                    format!(
+                        r#"<li><span class="link-rel">{otype}</span> <span><a href="{href}"><code>{oid}</code></a> · {summary}</span></li>"#,
+                        otype = escape_html(otype),
+                        oid = escape_html(oid),
+                        summary = escape_html(&summary),
+                    )
+                })
+                .collect();
+            format!(
+                r#"<section class="wb-section">
+  <div class="wb-section__head">
+    <span class="wb-section__t"><a href="/entries/{vfr_safe}">{vfr_safe}</a> · {n}</span>
+  </div>
+  <ul class="link-list">{items}</ul>
+</section>"#,
+                n = objs.len(),
+            )
+        })
+        .collect();
+    let main = if by_frontier.is_empty() {
+        r#"<p class="empty">No signed objects from this key are live on the index.</p>"#.to_string()
+    } else {
+        sections
+    };
+    shell(
+        urls,
+        "Vela Hub · Producer",
+        "entries",
+        "05 · Producer",
+        "Signed work",
+        &format!("{total} object(s) across {} frontier(s)", by_frontier.len()),
+        &format!(
+            r#"<div class="fd-dial"><div class="fd-dial__k">pubkey</div><div class="fd-dial__v mono" style="word-break:break-all;">{pubkey_safe}</div></div>"#
+        ),
+        &main,
+        "a producer's record is the signed objects that replay — not a profile anyone wrote",
+    )
+}
+
 fn render_entries_html(urls: &PublicUrls, entries: &[Value]) -> String {
+    // Name-first rows: the frontier's QUESTION is the identity a reader
+    // scans for; the vfr_ id is the machine handle underneath. Each row
+    // carries its doors (verify walkthrough, live search).
     let row = |entry: &Value| -> String {
         let s = |key: &str| -> String {
             entry
@@ -4199,10 +4363,10 @@ fn render_entries_html(urls: &PublicUrls, entries: &[Value]) -> String {
         let signed_at = s("signed_publish_at");
         format!(
             r#"<tr onclick="location.href='/entries/{vfr}'">
-  <td class="idx"><a href="/entries/{vfr}">{vfr}</a></td>
-  <td class="name">{name}</td>
+  <td class="name"><a href="/entries/{vfr}" style="font-family:var(--font-serif,serif);font-size:15px;">{name}</a><br><code style="font-size:11px;color:var(--ink-3);">{vfr}</code></td>
   <td class="owner">{owner}</td>
-  <td class="state"><span class="wb-chip wb-chip--live"><span class="wb-chip__dot"></span>latest</span></td>
+  <td class="state"><span class="wb-chip wb-chip--live"><span class="wb-chip__dot"></span>live</span></td>
+  <td class="doors"><a href="/entries/{vfr}/reproduce">verify</a></td>
   <td class="upd">{signed_at}</td>
 </tr>"#
         )
@@ -4210,21 +4374,22 @@ fn render_entries_html(urls: &PublicUrls, entries: &[Value]) -> String {
     let body_rows: String = entries.iter().map(row).collect();
     let count = entries.len();
     let main = if entries.is_empty() {
-        r#"<p class="empty">The registry is empty. Be the first to publish.</p>"#.to_string()
+        r#"<p class="empty">The index is empty. Bind a frontier repo once with <code>vela hub register-git</code>; after that, <code>git push</code> is publication.</p>"#.to_string()
     } else {
         format!(
             r#"<table class="fr-table">
   <thead>
     <tr>
-      <th>vfr_id</th>
-      <th>name</th>
+      <th>frontier</th>
       <th>owner</th>
       <th>state</th>
+      <th>doors</th>
       <th class="num">signed</th>
     </tr>
   </thead>
   <tbody>{body_rows}</tbody>
-</table>"#
+</table>
+<p class="fd-note" style="margin-top:14px;">Every row is re-derived from its git repo by strict replay — <a href="/search">search across all of them</a>, or connect an agent to <code>/mcp</code>.</p>"#
         )
     };
     shell(
@@ -4311,7 +4476,7 @@ fn render_entry_html(
             let mut undecided: Vec<_> = p
                 .released_diff_packs
                 .iter()
-                .filter(|r| r.verdict.is_none() && !r.member_proposals.is_empty())
+                .filter(|r| vela_edge::frontier_next::pack_awaits_decision(r, p))
                 .collect();
             undecided.sort_by(|a, b| a.summary.cmp(&b.summary));
             if undecided.is_empty() {

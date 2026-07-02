@@ -24,6 +24,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write        # OIDC for keyless Sigstore signing
+  attestations: write    # SLSA build provenance on the real assets
 
 jobs:
   build:
@@ -70,6 +72,14 @@ jobs:
           mv "${{ matrix.asset }}.sha256" "dist/${{ matrix.asset }}.sha256"
           echo "--- ${{ matrix.asset }}.sha256 ---"
           cat "dist/${{ matrix.asset }}.sha256"
+
+      # SLSA build provenance, recorded in the Sigstore transparency log,
+      # on the EXACT bytes users download. Verify before trusting:
+      #   gh attestation verify <file> --repo constellate-science/vela
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: dist/${{ matrix.asset }}
 
       - name: Upload to release
         uses: softprops/action-gh-release@v2
