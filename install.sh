@@ -37,14 +37,16 @@ trap 'rm -rf "$TMP"' EXIT
 echo "Installing vela ${TAG} for ${OS}/${ARCH}..."
 curl -fsSL "$URL" -o "$TMP/$BINARY"
 
-if curl -fsSL "$SUM_URL" -o "$TMP/$BINARY.sha256"; then
-  (
-    cd "$TMP"
-    shasum -a 256 -c "$BINARY.sha256"
-  )
-else
-  echo "Checksum file not found for ${NAME}; continuing without checksum verification."
-fi
+# Fail closed: a release asset without its checksum companion is not
+# installable. Silent unverified installs are how supply chains rot.
+curl -fsSL "$SUM_URL" -o "$TMP/$BINARY.sha256" || {
+  echo "ERROR: checksum file missing for ${NAME} (${SUM_URL}); refusing an unverified install." >&2
+  exit 1
+}
+(
+  cd "$TMP"
+  shasum -a 256 -c "$BINARY.sha256"
+)
 
 chmod +x "$TMP/$BINARY"
 mkdir -p "$BINDIR" 2>/dev/null || true

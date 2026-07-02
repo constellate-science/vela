@@ -6,3 +6,4 @@ pub mod frontier_health;
 pub mod provenance_compute;
 pub mod research_trace;
 pub mod signals;
+pub mod verify;

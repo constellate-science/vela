@@ -225,7 +225,7 @@ pub async fn run_command() {
             // Proof mode: BUILD a lean_kernel attachment and land it (the
             // mode that used to live on the retired `attest --proof`).
             if proof {
-                cmd_attest_proof(
+                cmd_attach_lean_proof(
                     frontier,
                     target,
                     solver.unwrap_or_else(|| "lean4@4.29.1".to_string()),
@@ -1033,7 +1033,7 @@ pub async fn run_command() {
             // Fidelity batch mode: sign a whole verdict file under one key
             // read and one save. Checked before the single --fidelity path.
             if let Some(batch) = batch {
-                cmd_attest_faithfulness_batch(frontier, batch, reviewer, key, json);
+                cmd_review_fidelity_batch(frontier, batch, reviewer, key, json);
                 return;
             }
             // Statement-fidelity mode: a signed `vsa_` human verdict on
@@ -1044,7 +1044,7 @@ pub async fn run_command() {
                 let target = target_id.clone().unwrap_or_else(|| {
                     fail_return("review: positional <finding-id> is required with --fidelity")
                 });
-                cmd_attest_faithfulness(
+                cmd_review_fidelity(
                     frontier,
                     target,
                     fidelity,
@@ -2737,34 +2737,9 @@ pub(crate) fn cmd_record(
                     &head_now[..head_now.len().min(16)]
                 )
             };
-            let conditions = format!(
-                "Record {} ({}; {}). Caveats: {}. Artifacts: {} hash-verified at propose.",
-                rc.id,
-                if signed { "signed" } else { "unsigned" },
-                staleness,
-                rc.caveats.join(" | "),
-                rc.artifacts.len(),
-            );
             let report = state::add_finding(
                 &frontier,
-                state::FindingDraftOptions {
-                    text: rc.assertion.clone(),
-                    assertion_type: rc.assertion_type.clone(),
-                    source: format!("record:{}", rc.id),
-                    source_type: "model_output".to_string(),
-                    author: rc.emitted_by.clone(),
-                    confidence: 0.3,
-                    evidence_type: rc.assertion_type.clone(),
-                    doi: None,
-                    year: None,
-                    url: None,
-                    source_authors: vec![],
-                    conditions_text: Some(conditions),
-                    evidence_spans: vec![],
-                    gap: false,
-                    negative_space: false,
-                    replication_attestation: None,
-                },
+                rc.to_finding_draft(&staleness, signed),
                 false, // NEVER applies: a record lands pending
             )
             .unwrap_or_else(|e| fail_return(&format!("record propose: {e}")));

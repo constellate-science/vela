@@ -179,6 +179,44 @@ impl ActivityRecord {
         Ok(format!("vrc_{}", &hex::encode(Sha256::digest(bytes))[..16]))
     }
 
+    /// Shape this record into the standard `finding.add` proposal draft —
+    /// the ONE conversion every landing surface (CLI, MCP, future
+    /// workbenches) uses, so a record always lands identically: pending,
+    /// authored by the record's emitter, caveats and staleness in the
+    /// conditions text a reviewer reads at accept time.
+    pub fn to_finding_draft(
+        &self,
+        staleness: &str,
+        signed: bool,
+    ) -> crate::state::FindingDraftOptions {
+        let conditions = format!(
+            "Record {} ({}; {}). Caveats: {}. Artifacts: {} hash-verified at propose.",
+            self.id,
+            if signed { "signed" } else { "unsigned" },
+            staleness,
+            self.caveats.join(" | "),
+            self.artifacts.len(),
+        );
+        crate::state::FindingDraftOptions {
+            text: self.assertion.clone(),
+            assertion_type: self.assertion_type.clone(),
+            source: format!("record:{}", self.id),
+            source_type: "model_output".to_string(),
+            author: self.emitted_by.clone(),
+            confidence: 0.3,
+            evidence_type: self.assertion_type.clone(),
+            doi: None,
+            year: None,
+            url: None,
+            source_authors: vec![],
+            conditions_text: Some(conditions),
+            evidence_spans: vec![],
+            gap: false,
+            negative_space: false,
+            replication_attestation: None,
+        }
+    }
+
     /// Full integrity check: schema, id re-derivation, namespace, and —
     /// when a signature is present — verification under the embedded
     /// pubkey. Returns whether the receipt is signed.

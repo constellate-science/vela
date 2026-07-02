@@ -635,7 +635,7 @@ fn resolve_faithfulness_signer(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn cmd_attest_faithfulness(
+pub(crate) fn cmd_review_fidelity(
     frontier: PathBuf,
     target: String,
     verdict: String,
@@ -685,7 +685,7 @@ pub(crate) fn cmd_attest_faithfulness(
 /// array or `{ "verdicts": [ ... ] }`, each row:
 /// `{ target, verdict, informal_ref, formal_ref, formal_statement_hash, note }`.
 /// All-or-nothing: if any row fails to build, nothing is saved.
-pub(crate) fn cmd_attest_faithfulness_batch(
+pub(crate) fn cmd_review_fidelity_batch(
     frontier: PathBuf,
     batch_path: PathBuf,
     reviewer: Option<String>,
@@ -773,7 +773,7 @@ pub(crate) fn cmd_attest_faithfulness_batch(
 /// fails the verifier gate's G1/G3: it reads "attested by CI", never "verified".
 /// Drafts a `verifier.attach` proposal exactly like `vela attach`.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn cmd_attest_proof(
+pub(crate) fn cmd_attach_lean_proof(
     frontier: PathBuf,
     target: String,
     solver: String,

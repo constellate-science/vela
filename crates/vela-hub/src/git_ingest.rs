@@ -1,9 +1,10 @@
 //! Git ingestion: the hub as an index over git-replayed state (ADR 0001,
 //! docs/HUB.md). For each frontier whose owner registered a git remote, the
 //! ingestor fetches the repo, replays the committed `.vela/events` log with
-//! the protocol library, verifies every signature and hash the same way
-//! `vela check --strict` does, and promotes the result through the SAME gate
-//! the legacy publish path uses (`HubDb::promote_frontier_snapshot`).
+//! the protocol library, holds it to the one canonical strict bar
+//! (`vela_edge::verify::verify_frontier_strict`), and promotes the result
+//! through the same gate the legacy publish path used
+//! (`HubDb::promote_frontier_snapshot`).
 //!
 //! Authority model, stated plainly: an ingested entry carries NO owner-signed
 //! manifest. Its authority is the repo's individually signed events, verified
@@ -21,7 +22,6 @@ use std::time::Duration;
 
 use crate::db::HubDb;
 use vela_protocol::events::{event_log_hash, snapshot_hash};
-use vela_protocol::project::Project;
 use vela_protocol::registry::RegistryEntry;
 
 /// Authority mode recorded on frontiers whose index rows derive from a git
@@ -144,17 +144,18 @@ async fn ingest_one(
     };
 
     // Replay + verify off the async runtime (the protocol code is sync).
+    // The strict bar is defined ONCE, in `vela_edge::verify` — the same
+    // bundle any indexer must hold a frontier to.
     let dir_cloned = frontier_dir.clone();
-    let project = tokio::task::spawn_blocking(move || load_and_verify(&dir_cloned))
-        .await
-        .map_err(|e| format!("verify task: {e}"))??;
+    let (project, fid) =
+        tokio::task::spawn_blocking(move || vela_edge::verify::verify_frontier_strict(&dir_cloned))
+            .await
+            .map_err(|e| format!("verify task: {e}"))??;
 
     // The repo must BE the registered frontier: a remote that replays to a
     // different frontier_id is a mis-registration (or a swap attack), not an
     // update.
-    if let Some(fid) = project.frontier_id.as_deref()
-        && fid != vfr_id
-    {
+    if fid != vfr_id {
         return Err(format!(
             "frontier_id mismatch: the repo replays to {fid}, registration is for {vfr_id}"
         ));
@@ -173,7 +174,7 @@ async fn ingest_one(
             .iter()
             .find(|a| a.public_key == owner_pubkey)
             .map(|a| a.id.clone())
-            .unwrap_or_else(|| "owner".to_string()),
+            .unwrap_or_else(|| "owner:unregistered-in-frontier".to_string()),
         owner_pubkey: owner_pubkey.to_string(),
         latest_snapshot_hash: snapshot_hash(&project),
         latest_event_log_hash: event_log_hash(&project.events),
@@ -191,63 +192,6 @@ async fn ingest_one(
     db.promote_frontier_snapshot(&entry, &project, None, AUTHORITY_GIT_INGESTED)
         .await?;
     Ok(Some(commit))
-}
-
-/// The verification contract, mirroring `vela check --strict`'s trust core:
-/// the loader IS the reducer (a load replays the log), the replay must
-/// reproduce the materialized state, and every error-severity signal —
-/// including every event-signature failure — refuses the ingest.
-fn load_and_verify(dir: &Path) -> Result<Project, String> {
-    // The schema/integrity validator FIRST: content-address re-derivation
-    // (a tampered signed object's id no longer re-derives), field shape, and
-    // signature well-formedness — the pass where `vela check` catches a
-    // byte-flipped event. Live red-test: a flipped vsa_ verdict inside a
-    // signed statement.attested event slipped past replay+signals alone.
-    let validation = vela_edge::validate::validate(dir);
-    if !validation.errors.is_empty() {
-        let first = validation
-            .errors
-            .iter()
-            .take(3)
-            .map(|e| format!("{}: {}", e.file, e.error))
-            .collect::<Vec<_>>()
-            .join(" | ");
-        return Err(format!(
-            "validation failed ({} error(s)): {first}",
-            validation.errors.len()
-        ));
-    }
-    let project =
-        vela_protocol::repo::load_from_path(dir).map_err(|e| format!("load/replay failed: {e}"))?;
-    // The loader deliberately DEGRADES a replay failure to a warning (a
-    // broken log must stay loadable for repair). An index must not: re-run
-    // the strict reducer replay and propagate its rejection — this is where
-    // a tampered signed event ("id does not re-derive") hard-fails.
-    vela_protocol::reducer::replayed_projection(&project)
-        .map_err(|e| format!("event-log replay rejected: {e}"))?;
-    let replay = vela_protocol::events::replay_report(&project);
-    if replay.status != "ok" {
-        return Err(format!(
-            "replay verification failed: {} ({} conflict(s))",
-            replay.status,
-            replay.conflicts.len()
-        ));
-    }
-    let signals = vela_edge::signals::analyze(&project, &[]);
-    let errors: Vec<String> = signals
-        .signals
-        .iter()
-        .filter(|s| s.severity == "error")
-        .map(|s| format!("{}: {}", s.kind, s.reason))
-        .collect();
-    if !errors.is_empty() {
-        return Err(format!(
-            "strict verification failed ({} error signal(s)): {}",
-            errors.len(),
-            errors.join(" | ")
-        ));
-    }
-    Ok(project)
 }
 
 // ── git plumbing (process git: the borrow-logistics choice — git is the
@@ -345,7 +289,8 @@ mod tests {
     #[test]
     fn verify_passes_on_clean_frontier() {
         let tmp = fixture_copy();
-        let project = load_and_verify(tmp.path()).expect("clean frontier must verify");
+        let (project, _fid) = vela_edge::verify::verify_frontier_strict(tmp.path())
+            .expect("clean frontier must verify");
         assert!(!project.events.is_empty());
     }
 
@@ -377,7 +322,8 @@ mod tests {
             tampered,
             "fixture must contain a signed statement.attested event"
         );
-        let err = load_and_verify(tmp.path()).expect_err("tampered event must refuse");
+        let err = vela_edge::verify::verify_frontier_strict(tmp.path())
+            .expect_err("tampered event must refuse");
         assert!(
             err.contains("validation failed") || err.contains("re-derive"),
             "expected an integrity refusal, got: {err}"

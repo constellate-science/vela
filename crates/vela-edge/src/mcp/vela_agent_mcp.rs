@@ -568,32 +568,19 @@ pub fn record_propose(args: &Value) -> Result<String, String> {
             project.frontier_id()
         ));
     }
-    let conditions = format!(
-        "Record {} ({}). Caveats: {}.",
-        rc.id,
-        if signed { "signed" } else { "unsigned" },
-        rc.caveats.join(" | "),
-    );
+    let head_now = vela_protocol::events::event_log_hash(&project.events);
+    let staleness = if head_now == rc.against_head {
+        "recorded against the current head".to_string()
+    } else {
+        format!(
+            "recorded against head {}…, current head {}… — review the delta",
+            &rc.against_head[..rc.against_head.len().min(16)],
+            &head_now[..head_now.len().min(16)]
+        )
+    };
     let report = vela_protocol::state::add_finding(
         &frontier_path,
-        vela_protocol::state::FindingDraftOptions {
-            text: rc.assertion.clone(),
-            assertion_type: rc.assertion_type.clone(),
-            source: format!("record:{}", rc.id),
-            source_type: "model_output".to_string(),
-            author: rc.emitted_by.clone(),
-            confidence: 0.3,
-            evidence_type: rc.assertion_type.clone(),
-            doi: None,
-            year: None,
-            url: None,
-            source_authors: vec![],
-            conditions_text: Some(conditions),
-            evidence_spans: vec![],
-            gap: false,
-            negative_space: false,
-            replication_attestation: None,
-        },
+        rc.to_finding_draft(&staleness, signed),
         false, // pending only: an MCP client never applies state
     )?;
     Ok(serde_json::json!({
