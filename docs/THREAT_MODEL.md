@@ -2,8 +2,8 @@
 
 This document is the substrate's honest read on its own attack
 surface. It exists because v0.107 is the first release where Vela
-ships as published software (`cargo install vela-cli`,
-`pip install vela-state`, signed frontiers on a public hub) rather
+shipped as published software (prebuilt release binaries via
+`install.sh`, signed frontiers on a public hub) rather
 than a development-only artifact. Public software is a target.
 
 [`SECURITY.md`](../SECURITY.md) covers the reporting policy. This
@@ -266,28 +266,38 @@ by the frontier's registered reviewer keys is refused, and a consumer's
   remains future work. The frontier's in-band actor records
   carry the rotation chain in the substrate-honest sense.
 
-### A9. Compromised crates.io account · Undefended at protocol layer
+### A9. Compromised install channel · Undefended at protocol layer
 
-If the `vela-cli` or `vela-protocol` crates.io account is
-compromised, an attacker can publish a malicious patch version that
-runs anything in `cargo install vela-cli` build / install. The
-substrate cannot prevent this; it inherits the security of
-crates.io's account auth.
+The install channel today is GitHub releases: `install.sh` fetches a
+prebuilt binary for the resolved release tag (or builds from source).
+A compromised GitHub account or Actions pipeline could ship a
+malicious asset; `curl | bash` inherits the security of GitHub's
+account auth plus TLS. The substrate cannot prevent this.
+
+Historical note: early releases (v0.102–v0.1xx) were also published
+to crates.io and PyPI. Neither channel is maintained — no vela crates
+exist on crates.io today, and the `vela-state` PyPI package is frozen
+at a pre-consolidation version. Do not install from either; treat the
+PyPI artifact as historical until it is re-published or formally
+yanked (a maintainer-account decision).
 
 **Mitigations available, not yet adopted:**
 
-- Sigstore / SLSA provenance attestations on published crates
-  would let consumers verify the publisher.
-- Pinning an exact version (`vela-cli = "=X.Y.Z"`) in downstream
-  Cargo.toml files would prevent silent rolls.
-- Reviewing the diff between published versions would catch
+- Sigstore / SLSA provenance attestations on release assets
+  would let consumers verify the publisher (release-provenance.yml
+  is the start of this).
+- Pinning an exact tag (`VELA_VERSION=v0.726.0 ./install.sh`)
+  prevents silent rolls.
+- Reviewing the diff between released versions would catch
   obvious malice; the GitHub release notes are the suggested
   audit trail.
 
-### A10. Compromised PyPI account · Undefended at protocol layer
+### A10. Stale package-registry artifacts · Accepted (documented above)
 
-Same shape as A9. `pip install vela-state` is as trustworthy as
-PyPI's account auth.
+The A9 historical note is the whole story: the dormant PyPI
+`vela-state` package is the one artifact an attacker could
+impersonate or a user could stumble into. Re-publish or yank is
+tracked as maintainer work.
 
 ### A11. Compromised hub server · Partial (witness-check Defended at v0.129)
 
