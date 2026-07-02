@@ -4,7 +4,7 @@
 //! No behavior change: code moved verbatim, visibility widened to
 //! pub(crate) so the router and handlers keep their call sites.
 
-use axum::http::{HeaderName, StatusCode};
+use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::Value;
 use vela_protocol::project::Project;
@@ -14,8 +14,10 @@ use crate::{HUB_VERSION, PublicUrls};
 pub(crate) const FONT_LINK: &str = r#"<link rel="preload" href="/static/fonts/inter-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/static/fonts/source-serif-4-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>"#;
 
-pub(crate) const FONT_INTER_400: &[u8] = include_bytes!("../../../web/fonts/inter-latin-400-normal.woff2");
-pub(crate) const FONT_INTER_600: &[u8] = include_bytes!("../../../web/fonts/inter-latin-600-normal.woff2");
+pub(crate) const FONT_INTER_400: &[u8] =
+    include_bytes!("../../../web/fonts/inter-latin-400-normal.woff2");
+pub(crate) const FONT_INTER_600: &[u8] =
+    include_bytes!("../../../web/fonts/inter-latin-600-normal.woff2");
 pub(crate) const FONT_SS4_400: &[u8] =
     include_bytes!("../../../web/fonts/source-serif-4-latin-400-normal.woff2");
 pub(crate) const FONT_SS4_400_ITALIC: &[u8] =
@@ -30,7 +32,8 @@ pub(crate) const WORKBENCH_CSS: &str = include_str!("../../../web/styles/workben
 pub(crate) const SITE_CSS: &str = include_str!("../../../web/styles/site.css");
 pub(crate) const FAVICON_SVG: &str = include_str!("../../../assets/brand/favicon.svg");
 pub(crate) const LOGO_MARK_SVG: &str = include_str!("../../../assets/brand/vela-logo-mark.svg");
-pub(crate) const LOGO_WORDMARK_SVG: &str = include_str!("../../../assets/brand/vela-logo-wordmark.svg");
+pub(crate) const LOGO_WORDMARK_SVG: &str =
+    include_str!("../../../assets/brand/vela-logo-wordmark.svg");
 pub(crate) const RETE_SVG: &str = include_str!("../../../assets/brand/rete.svg");
 
 // Hub-specific page styles. The frame and tokens come from the shared
@@ -1476,7 +1479,9 @@ pub(crate) fn is_replicated(b: &vela_protocol::bundle::FindingBundle) -> bool {
     b.evidence.replicated
 }
 
-pub(crate) fn finding_state(b: &vela_protocol::bundle::FindingBundle) -> (&'static str, &'static str) {
+pub(crate) fn finding_state(
+    b: &vela_protocol::bundle::FindingBundle,
+) -> (&'static str, &'static str) {
     use vela_protocol::bundle::ReviewState;
     if b.flags.retracted {
         return ("retracted", "lost");
@@ -2292,7 +2297,11 @@ pub(crate) fn render_finding_html(
     )
 }
 
-pub(crate) fn render_finding_unavailable_html(urls: &PublicUrls, vfr_id: &str, vf_id: &str) -> String {
+pub(crate) fn render_finding_unavailable_html(
+    urls: &PublicUrls,
+    vfr_id: &str,
+    vf_id: &str,
+) -> String {
     let vfr_safe = escape_html(vfr_id);
     let vf_safe = escape_html(vf_id);
     let main = format!(
@@ -2312,7 +2321,11 @@ pub(crate) fn render_finding_unavailable_html(urls: &PublicUrls, vfr_id: &str, v
     )
 }
 
-pub(crate) fn render_finding_not_found_html(urls: &PublicUrls, vfr_id: &str, vf_id: &str) -> String {
+pub(crate) fn render_finding_not_found_html(
+    urls: &PublicUrls,
+    vfr_id: &str,
+    vf_id: &str,
+) -> String {
     let vfr_safe = escape_html(vfr_id);
     let vf_safe = escape_html(vf_id);
     let main = format!(
@@ -2556,7 +2569,11 @@ pub(crate) fn render_pack_html(
     )
 }
 
-pub(crate) fn render_pack_unavailable_html(urls: &PublicUrls, vfr_id: &str, pack_id: &str) -> String {
+pub(crate) fn render_pack_unavailable_html(
+    urls: &PublicUrls,
+    vfr_id: &str,
+    pack_id: &str,
+) -> String {
     let vfr_safe = escape_html(vfr_id);
     let pack_safe = escape_html(pack_id);
     let main = format!(
@@ -2614,7 +2631,12 @@ pub(crate) fn repo_dir_from_remote(remote: &str) -> String {
 }
 
 /// The "verify this yourself" page body: clone, replay, reproduce.
-pub(crate) fn render_reproduce_html(urls: &PublicUrls, vfr_id: &str, rec: &Value, git_subdir: &str) -> String {
+pub(crate) fn render_reproduce_html(
+    urls: &PublicUrls,
+    vfr_id: &str,
+    rec: &Value,
+    git_subdir: &str,
+) -> String {
     let vfr_safe = escape_html(vfr_id);
     let s = |key: &str| -> String {
         rec.get(key)
@@ -3151,7 +3173,11 @@ pub(crate) fn render_not_found_html(urls: &PublicUrls, vfr_id: &str) -> String {
     )
 }
 
-pub(crate) fn render_entry_unavailable_html(urls: &PublicUrls, vfr_id: &str, reason: &str) -> String {
+pub(crate) fn render_entry_unavailable_html(
+    urls: &PublicUrls,
+    vfr_id: &str,
+    reason: &str,
+) -> String {
     let vfr_safe = escape_html(vfr_id);
     let reason_safe = escape_html(reason);
     let main = format!(
@@ -3172,7 +3198,6 @@ pub(crate) fn render_entry_unavailable_html(urls: &PublicUrls, vfr_id: &str, rea
         &vfr_safe,
     )
 }
-
 
 #[cfg(test)]
 mod reproduce_page_tests {
@@ -3207,4 +3232,3 @@ mod reproduce_page_tests {
         assert_eq!(repo_dir_from_remote(""), "<repo>");
     }
 }
-
