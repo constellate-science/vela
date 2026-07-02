@@ -1083,9 +1083,16 @@ pub fn summarize(frontier: &Project) -> EventLogSummary {
         if !seen.insert(event.id.clone()) {
             duplicate_ids.insert(event.id.clone());
         }
+        // An `attempt.claimed` lease may target a namespaced EXTERNAL
+        // obligation (e.g. `erdos:443` — work on a problem that has no
+        // finding yet). Coordination, not truth: not an orphan.
+        let external_obligation = event.kind == "attempt.claimed"
+            && event.target.id.contains(':')
+            && !event.target.id.starts_with("vf_");
         if event.target.r#type == "finding"
             && !finding_ids.contains(event.target.id.as_str())
             && event.kind != "finding.retracted"
+            && !external_obligation
         {
             orphan_targets.insert(event.target.id.clone());
         }
@@ -1991,6 +1998,40 @@ mod tests {
         let report = replay_report(&frontier);
         assert!(!report.ok);
         assert_eq!(report.event_log.orphan_targets, vec!["vf_missing"]);
+    }
+
+    #[test]
+    fn external_obligation_lease_is_not_an_orphan() {
+        // Swarm regression (2026-07-02): an `attempt.claimed` lease on a
+        // namespaced external target (erdos:443 — a problem with no
+        // finding yet) must not read as an orphan event; ten of them
+        // turned a green frontier red.
+        let mut frontier = project::assemble("test", Vec::new(), 0, 0, "test");
+        let mut event = new_finding_event(FindingEventInput {
+            kind: "attempt.claimed",
+            finding_id: "erdos:443",
+            actor_id: "agent:swarm-443",
+            actor_type: "agent",
+            reason: "obligation lease",
+            before_hash: "sha256:null",
+            after_hash: "sha256:null",
+            payload: serde_json::json!({
+                "obligation_id": "erdos:443",
+                "lease_ttl_seconds": 3600,
+                "claimant_actor": "agent:swarm-443",
+                "claimant_pubkey": "00",
+            }),
+            caveats: Vec::new(),
+            timestamp: None,
+        });
+        event.id = compute_event_id(&event);
+        frontier.events.push(event);
+        let report = replay_report(&frontier);
+        assert!(
+            report.event_log.orphan_targets.is_empty(),
+            "external obligation lease misread as orphan: {:?}",
+            report.event_log.orphan_targets
+        );
     }
 
     #[test]

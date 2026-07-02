@@ -804,18 +804,26 @@ pub fn analyze(frontier: &Project, diagnostics: &[Value]) -> SignalReport {
         signals.push(SignalItem {
             id: signal_id("pending_proposal_review", &proposal.id),
             kind: "pending_proposal_review".into(),
-            severity: "warning".to_string(),
+            // Info, deliberately: pending review is the INBOX (`vela
+            // inbox`), the normal state of a living frontier — not
+            // integrity debt. Strict measures whether the tree IS the
+            // signed state, not whether work is waiting.
+            severity: "info".to_string(),
             target: SignalTarget {
                 r#type: proposal.target.r#type.clone(),
                 id: proposal.target.id.clone(),
             },
             reason: format!(
-                "Pending {} proposal requires review before frontier truth changes.",
+                "Pending {} proposal awaits review (`vela inbox`).",
                 proposal.kind
             ),
             recommended_action:
-                "Review the proposal and accept or reject it before strict proof use.".to_string(),
-            blocks: vec!["strict_check".to_string(), "proof_ready".to_string()],
+                "Review the proposal and accept or reject it (`vela accept`, `--pack`).".to_string(),
+            // Blocks NOTHING: a pending proposal is not active frontier
+            // state (the caveat below) and therefore cannot be integrity
+            // debt on the state that IS active. Pending review is the
+            // inbox; strict and proof_ready measure the signed state.
+            blocks: vec![],
             caveats: vec!["Pending proposals are not active frontier state.".to_string()],
         });
     }
