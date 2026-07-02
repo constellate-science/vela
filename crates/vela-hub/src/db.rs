@@ -1500,18 +1500,19 @@ impl HubDb {
         Ok(row.map(|(pk,)| pk))
     }
 
-    /// Record every revoked actor in `project` into the authoritative,
-    /// append-only `frontier_revocations` log. Keyed by pubkey (lowercased
-    /// crypto identity); `ON CONFLICT DO NOTHING` makes it earliest-wins, so a
+    /// Record every revoked actor into the authoritative, append-only
+    /// `frontier_revocations` log. Keyed by pubkey (lowercased crypto
+    /// identity); `ON CONFLICT DO NOTHING` makes it earliest-wins, so a
     /// later snapshot that drops the revocation cannot un-revoke a key here.
-    /// Called on every promote. Returns the count of newly-recorded revocations.
+    /// Called on every git-ingest promote. Returns the count of
+    /// newly-recorded revocations.
     pub async fn record_revocations(
         &self,
         vfr_id: &str,
-        project: &Project,
+        actors: &[vela_protocol::sign::ActorRecord],
     ) -> Result<usize, String> {
         let mut recorded = 0usize;
-        for actor in &project.actors {
+        for actor in actors {
             let Some(revoked_at) = actor.revoked_at.as_deref() else {
                 continue;
             };
@@ -2013,7 +2014,8 @@ impl HubDb {
         // Record any revoked actors into the authoritative append-only log.
         // Append-only + earliest-wins: a key revoked in any promoted snapshot
         // stays revoked even if a later snapshot drops the revocation.
-        self.record_revocations(&entry.vfr_id, project).await?;
+        self.record_revocations(&entry.vfr_id, &project.actors)
+            .await?;
 
         Ok(EventFirstPromotionReport {
             vfr_id: entry.vfr_id.clone(),
@@ -3999,7 +4001,7 @@ mod tests {
             actor.revoked_reason = None;
         }
         let newly = db
-            .record_revocations(&entry.vfr_id, &project)
+            .record_revocations(&entry.vfr_id, &project.actors)
             .await
             .expect("re-record");
         assert_eq!(newly, 0, "the un-revoked snapshot records nothing new");

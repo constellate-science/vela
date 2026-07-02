@@ -200,11 +200,37 @@ async fn ingest_one(
     // promote WINS: ingested rows share the empty-signature key per vfr,
     // and the old DO-NOTHING insert froze signed_publish_at (and every
     // page cache keyed on it) at first ingestion.
+    refuse_unrevocations(db, vfr_id, &project.actors).await?;
     let raw = serde_json::to_value(&entry).map_err(|e| e.to_string())?;
     db.upsert_ingested_entry(&entry, &raw).await?;
     db.promote_frontier_snapshot(&entry, &project, None, AUTHORITY_GIT_INGESTED)
         .await?;
     Ok(Some(commit))
+}
+
+/// Monotonic revocation guard: the hub remembers every revocation it has
+/// ever promoted (earliest-wins, append-only, `frontier_revocations`). A
+/// force-pushed log in which a previously-revoked key is live again is
+/// the signature of key compromise, not a layout change — refuse it. A
+/// snapshot that keeps the revocation (or drops the actor entirely)
+/// passes.
+pub(crate) async fn refuse_unrevocations(
+    db: &HubDb,
+    vfr_id: &str,
+    actors: &[vela_protocol::sign::ActorRecord],
+) -> Result<(), String> {
+    for actor in actors {
+        if actor.revoked_at.is_some() {
+            continue;
+        }
+        if let Some((revoked_at, reason)) = db.is_pubkey_revoked(vfr_id, &actor.public_key).await? {
+            return Err(format!(
+                "snapshot un-revokes key {} (actor {}, revoked {} — {});                  a later log cannot un-revoke",
+                actor.public_key, actor.id, revoked_at, reason
+            ));
+        }
+    }
+    Ok(())
 }
 
 // ── git plumbing (process git: the borrow-logistics choice — git is the
@@ -275,6 +301,74 @@ async fn commit_timestamp(dir: &Path) -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn actor(id: &str, pubkey: &str, revoked_at: Option<&str>) -> vela_protocol::sign::ActorRecord {
+        serde_json::from_value(serde_json::json!({
+            "id": id,
+            "public_key": pubkey,
+            "created_at": "2026-01-01T00:00:00Z",
+            "revoked_at": revoked_at,
+            "revoked_reason": revoked_at.map(|_| "key compromised"),
+        }))
+        .expect("minimal actor record")
+    }
+
+    async fn sqlite_db() -> crate::db::HubDb {
+        let file = tempfile::NamedTempFile::new().expect("temp sqlite");
+        let url = format!("sqlite://{}", file.path().display());
+        let opts = <sqlx::sqlite::SqliteConnectOptions as std::str::FromStr>::from_str(&url)
+            .expect("sqlite opts")
+            .create_if_missing(true);
+        let pool = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(opts)
+            .await
+            .expect("sqlite connect");
+        crate::db::ensure_sqlite_schema(&pool)
+            .await
+            .expect("schema");
+        std::mem::forget(file);
+        crate::db::HubDb::Sqlite(pool)
+    }
+
+    /// The un-revocation attack: promote records a revocation; a later
+    /// force-pushed snapshot where the same key is live again must be
+    /// refused, while a snapshot keeping the revocation passes.
+    #[tokio::test]
+    async fn revoked_key_stays_revoked_across_snapshots() {
+        let db = sqlite_db().await;
+        let vfr = "vfr_guard_test";
+        let pk = "ab".repeat(32);
+
+        // Nothing remembered yet: a live key passes.
+        let live = vec![actor("reviewer:alice", &pk, None)];
+        refuse_unrevocations(&db, vfr, &live)
+            .await
+            .expect("clean slate passes");
+
+        // Record the revocation the way ingest does.
+        let revoked = vec![actor("reviewer:alice", &pk, Some("2026-06-01T00:00:00Z"))];
+        let n = db.record_revocations(vfr, &revoked).await.expect("record");
+        assert_eq!(n, 1);
+
+        // A snapshot that keeps the revocation passes.
+        refuse_unrevocations(&db, vfr, &revoked)
+            .await
+            .expect("kept revocation passes");
+        // A snapshot that drops the actor entirely passes.
+        refuse_unrevocations(&db, vfr, &[])
+            .await
+            .expect("dropped actor passes");
+        // A snapshot where the key is live again is refused.
+        let err = refuse_unrevocations(&db, vfr, &live)
+            .await
+            .expect_err("un-revocation refused");
+        assert!(err.contains("cannot un-revoke"), "{err}");
+        // Another frontier is unaffected.
+        refuse_unrevocations(&db, "vfr_other", &live)
+            .await
+            .expect("scoped per frontier");
+    }
 
     fn copy_tree(src: &Path, dst: &Path) {
         std::fs::create_dir_all(dst).unwrap();

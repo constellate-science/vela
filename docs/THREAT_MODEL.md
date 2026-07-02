@@ -191,6 +191,20 @@ sign arbitrary findings under that reviewer's id. **Mitigations:**
   can rotate within seconds; the rotation event is itself a
   canonical record. Pinned by
   `scripts/test-actor-rotate.sh`.
+- **v0.735: the hub remembers revocations across force-pushes.**
+  Every git-ingest promote records revoked actors into an
+  append-only, earliest-wins `frontier_revocations` log, and every
+  subsequent ingest refuses a snapshot in which a previously
+  revoked key is live again ("a later log cannot un-revoke"). A
+  compromised key cannot erase its own revocation by force-pushing
+  a rewritten event log — the index keeps the memory even when the
+  repo does not. Pinned by
+  `git_ingest::tests::revoked_key_stays_revoked_across_snapshots`.
+  (The hub's earlier signed-write endpoints — the anti-replay and
+  per-reviewer-key surface — were removed outright when the hub was
+  demoted to a read-only index: publication is `git push`, decisions
+  are signed events in the repo, and a surface that does not exist
+  cannot be replayed.)
 - Multi-sig threshold soundness (Theorem 11, v0.125) pins the
   algebraic shape of the per-finding accumulation rule:
   distinct-signer counting is sound under monotonicity,
