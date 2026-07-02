@@ -1000,6 +1000,7 @@ impl HubDb {
         vfr_id: &str,
         git_remote: &str,
         git_ref: &str,
+        git_subdir: &str,
         registered_by_pubkey: &str,
         registered_at: &str,
         raw_json: &Value,
@@ -1009,11 +1010,12 @@ impl HubDb {
                 sqlx::query(
                     r#"
                     INSERT INTO frontier_git_remotes
-                        (vfr_id, git_remote, git_ref, registered_by_pubkey, registered_at, raw_json)
-                    VALUES ($1, $2, $3, $4, $5, $6)
+                        (vfr_id, git_remote, git_ref, git_subdir, registered_by_pubkey, registered_at, raw_json)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
                     ON CONFLICT (vfr_id) DO UPDATE SET
                         git_remote = EXCLUDED.git_remote,
                         git_ref = EXCLUDED.git_ref,
+                        git_subdir = EXCLUDED.git_subdir,
                         registered_by_pubkey = EXCLUDED.registered_by_pubkey,
                         registered_at = EXCLUDED.registered_at,
                         raw_json = EXCLUDED.raw_json,
@@ -1024,6 +1026,7 @@ impl HubDb {
                 .bind(vfr_id)
                 .bind(git_remote)
                 .bind(git_ref)
+                .bind(git_subdir)
                 .bind(registered_by_pubkey)
                 .bind(registered_at)
                 .bind(raw_json)
@@ -1037,11 +1040,12 @@ impl HubDb {
                 sqlx::query(
                     r#"
                     INSERT INTO frontier_git_remotes
-                        (vfr_id, git_remote, git_ref, registered_by_pubkey, registered_at, raw_json)
-                    VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                        (vfr_id, git_remote, git_ref, git_subdir, registered_by_pubkey, registered_at, raw_json)
+                    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
                     ON CONFLICT (vfr_id) DO UPDATE SET
                         git_remote = excluded.git_remote,
                         git_ref = excluded.git_ref,
+                        git_subdir = excluded.git_subdir,
                         registered_by_pubkey = excluded.registered_by_pubkey,
                         registered_at = excluded.registered_at,
                         raw_json = excluded.raw_json,
@@ -1052,6 +1056,7 @@ impl HubDb {
                 .bind(vfr_id)
                 .bind(git_remote)
                 .bind(git_ref)
+                .bind(git_subdir)
                 .bind(registered_by_pubkey)
                 .bind(registered_at)
                 .bind(raw)
@@ -1064,12 +1069,12 @@ impl HubDb {
     }
 
     /// Every registered git-ingestion target with its cursor, for the
-    /// ingestor's tick. Row shape: (vfr_id, git_remote, git_ref,
+    /// ingestor's tick. Row shape: (vfr_id, git_remote, git_ref, git_subdir,
     /// last_ingested_commit, registered_by_pubkey).
     pub async fn git_ingest_targets(
         &self,
-    ) -> Result<Vec<(String, String, String, Option<String>, String)>, String> {
-        const Q: &str = "SELECT vfr_id, git_remote, git_ref, last_ingested_commit, \
+    ) -> Result<Vec<(String, String, String, String, Option<String>, String)>, String> {
+        const Q: &str = "SELECT vfr_id, git_remote, git_ref, git_subdir, last_ingested_commit, \
                          registered_by_pubkey FROM frontier_git_remotes";
         match self {
             Self::Postgres(p) => sqlx::query_as(Q)
@@ -3140,6 +3145,7 @@ pub const POSTGRES_EVENT_FIRST_SCHEMA: &[&str] = &[
         vfr_id TEXT PRIMARY KEY,
         git_remote TEXT NOT NULL,
         git_ref TEXT NOT NULL DEFAULT 'main',
+        git_subdir TEXT NOT NULL DEFAULT '',
         registered_by_pubkey TEXT NOT NULL,
         registered_at TEXT NOT NULL,
         raw_json JSONB NOT NULL,
@@ -3148,6 +3154,7 @@ pub const POSTGRES_EVENT_FIRST_SCHEMA: &[&str] = &[
         ingest_error TEXT,
         inserted_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )"#,
+    "ALTER TABLE frontier_git_remotes ADD COLUMN IF NOT EXISTS git_subdir TEXT NOT NULL DEFAULT ''",
 ];
 
 pub async fn ensure_postgres_event_first_schema(pool: &PgPool) -> Result<(), String> {
@@ -3344,6 +3351,7 @@ pub async fn ensure_sqlite_schema(pool: &SqlitePool) -> Result<(), String> {
             vfr_id TEXT PRIMARY KEY,
             git_remote TEXT NOT NULL,
             git_ref TEXT NOT NULL DEFAULT 'main',
+            git_subdir TEXT NOT NULL DEFAULT '',
             registered_by_pubkey TEXT NOT NULL,
             registered_at TEXT NOT NULL,
             raw_json TEXT NOT NULL,

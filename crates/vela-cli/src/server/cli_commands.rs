@@ -266,58 +266,6 @@ pub(crate) enum Commands {
         #[command(subcommand)]
         action: IdAction,
     },
-    /// Push a frontier's current state to the hub. The one verb to share
-    /// your work: owner, key, and hub come from your `vela id` profile, so
-    /// the common path is just `vela publish <frontier>`. A full,
-    /// idempotent publish (it replaces the hub's view), so it always
-    /// succeeds regardless of how the hub's log diverged.
-    Publish {
-        /// Path to the frontier (`.vela/` repo or frontier.json).
-        frontier: PathBuf,
-        /// Hub base URL. Optional: defaults to your configured identity's hub.
-        #[arg(long)]
-        to: Option<String>,
-        /// Optional SPDX license identifier for the registry entry.
-        #[arg(long)]
-        license: Option<String>,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Clone a published frontier from a hub into a fresh working `.vela/`
-    /// tree — the git-style pull. Reconstructs everything `vela reproduce`
-    /// needs (events, objects, witnesses, proof, lock) and verifies it
-    /// byte-for-byte against the publisher's signed hashes. Unlike
-    /// `registry pull` (which writes a single snapshot/export file), the
-    /// result is a working frontier you can reproduce, extend, and re-push.
-    ///
-    /// Compatibility shim. The direction (ADR 0001) is Git-native frontiers: a
-    /// frontier IS a git repo, so clone/pull/push are plain `git` and review is
-    /// a GitHub PR gated by the vela-check Action. See docs/FRONTIER_REPO.md.
-    /// This hub transport stays until the Git-native path is the live default.
-    Clone {
-        /// The frontier to clone: a `vfr_…` id, or a hub URL containing it
-        /// (e.g. https://hub.constellate.science/entries/vfr_…).
-        target: String,
-        /// Destination directory (created if absent). Defaults to the vfr id.
-        dest: Option<PathBuf>,
-        /// Hub/registry to clone from. Defaults to your configured hub.
-        #[arg(long)]
-        from: Option<String>,
-        /// Read artifact blobs from a local content-addressed mirror
-        /// (`<dir>/<hash>` or `<dir>/sha256/<hash>`) instead of the hub blob
-        /// tier. Used by the offline round-trip conformance pin.
-        #[arg(long)]
-        blobs_from: Option<PathBuf>,
-        #[arg(long)]
-        json: bool,
-    },
-    /// The workspace registry: which frontiers you have checked out and the
-    /// hub remote each tracks (a git-style "list of working copies"). The
-    /// conformance gate reads it instead of a hardcoded frontier list.
-    Workspace {
-        #[command(subcommand)]
-        action: WorkspaceAction,
-    },
     /// Manage the frontier's registered actor identities (Phase M, v0.4)
     Actor {
         #[command(subcommand)]
@@ -381,13 +329,6 @@ pub(crate) enum Commands {
         /// Reviewer attribution for the proposal-preview mode.
         #[arg(long, default_value = "reviewer:preview")]
         reviewer: String,
-        /// v0.140: registry locator to resolve `vfr_*` ids
-        /// against. Accepts a hub URL (`https://...`) or a local
-        /// registry path. Defaults to `~/.vela/registry/entries.json`.
-        /// Only consulted when `target` or `frontier_b` starts
-        /// with `vfr_`.
-        #[arg(long)]
-        from: Option<String>,
         #[arg(long)]
         json: bool,
         #[arg(long)]
@@ -550,15 +491,6 @@ pub(crate) enum Commands {
         /// proposal's decision reason so it stays auditable.
         #[arg(long)]
         force: bool,
-        /// After applying the accept locally, also deliver the signed
-        /// acceptance to the hub (the same human signature, under key custody).
-        /// Best-effort: a hub failure never unwinds the local accept. Resolves
-        /// the hub from your `vela id` profile unless `--to` overrides it.
-        #[arg(long)]
-        push: bool,
-        /// Hub URL to deliver the accept to (implies `--push`).
-        #[arg(long)]
-        to: Option<String>,
         /// Record a non-human co-author of this decision (an AI that drafted, a
         /// CI that attested), e.g. `agent:claude`. Signed-over attribution: you
         /// remain the accountable signer. Defaults to `$VELA_CO_AUTHOR` so an
@@ -1819,67 +1751,7 @@ pub(crate) enum QueueAction {
 }
 
 #[derive(Subcommand)]
-pub(crate) enum WorkspaceAction {
-    /// List the frontiers in the workspace registry (and their hub remotes).
-    List {
-        /// Read a specific workspace file instead of the default
-        /// (`$VELA_WORKSPACE`, else `~/.vela/workspace.json`).
-        #[arg(long)]
-        file: Option<PathBuf>,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Record a checked-out frontier and the hub it tracks. Upserts by path
-    /// (re-adding the same path updates it in place). Resolves the `vfr_…`
-    /// id from the frontier on disk.
-    Add {
-        /// Path to the frontier (`.vela/` repo or frontier.json).
-        frontier: PathBuf,
-        /// The hub this frontier pushes to / pulls from.
-        #[arg(long)]
-        remote: Option<String>,
-        /// Human-friendly name (defaults to the frontier's project name).
-        #[arg(long)]
-        name: Option<String>,
-        #[arg(long)]
-        file: Option<PathBuf>,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Drop a frontier from the workspace registry (by path).
-    Remove {
-        /// Path key to remove (as recorded by `add`).
-        frontier: String,
-        #[arg(long)]
-        file: Option<PathBuf>,
-        #[arg(long)]
-        json: bool,
-    },
-}
-
-#[derive(Subcommand)]
 pub(crate) enum RegistryAction {
-    /// Deprecate a published frontier on a hub: an owner-signed,
-    /// append-only lifecycle event. The entry vanishes from /entries and
-    /// /search but stays auditable at /entries/{vfr}/status — never a
-    /// silent deletion. Only the owner key that published the entry can
-    /// deprecate it (the re-publish continuity rule).
-    Deprecate {
-        /// The frontier to deprecate (vfr_…)
-        vfr_id: String,
-        /// Hub base URL (e.g. https://hub.constellate.science)
-        #[arg(long)]
-        to: String,
-        /// Path to the owner's Ed25519 private key. Optional: defaults to
-        /// your configured identity's key (`vela id`).
-        #[arg(long)]
-        key: Option<PathBuf>,
-        /// Why this frontier is retired (recorded in the signed receipt)
-        #[arg(long)]
-        reason: String,
-        #[arg(long)]
-        json: bool,
-    },
     /// Register a frontier's git remote on a hub — the one owner-signed act
     /// in the git-ingestion lane (docs/HUB.md: the hub is an index over
     /// git-replayed state). After this, `git push` IS publication: the hub
@@ -1894,6 +1766,11 @@ pub(crate) enum RegistryAction {
         /// Branch or ref the hub ingests
         #[arg(long, default_value = "main")]
         r#ref: String,
+        /// Subdirectory holding the frontier (multi-frontier monorepos,
+        /// e.g. frontiers/sidon-sets in vela-frontiers). Omit when the
+        /// repo root is the frontier.
+        #[arg(long, default_value = "")]
+        subdir: String,
         /// Hub base URL. Optional: defaults to your configured identity's hub.
         #[arg(long)]
         to: Option<String>,
@@ -1901,136 +1778,6 @@ pub(crate) enum RegistryAction {
         /// your configured identity's key (`vela id`).
         #[arg(long)]
         key: Option<PathBuf>,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Rotate a published frontier's owner key on a hub. Signed by the
-    /// CURRENT effective owner; the named successor key becomes the one
-    /// every owner check accepts (re-publish, deprecate, next rotation).
-    RotateOwner {
-        /// The frontier (vfr_…)
-        vfr_id: String,
-        /// Hub base URL
-        #[arg(long)]
-        to: String,
-        /// Path to the CURRENT owner's Ed25519 private key. Optional:
-        /// defaults to your configured identity's key (`vela id`).
-        #[arg(long)]
-        key: Option<PathBuf>,
-        /// Path to the successor PUBLIC key (hex), or the 64-char hex itself
-        #[arg(long)]
-        new_owner: String,
-        /// Why the key is rotating (recorded in the signed receipt)
-        #[arg(long)]
-        reason: String,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Manage a frontier's maintainer set on a hub (signed add/remove;
-    /// authority = effective owner or a current maintainer).
-    Maintainer {
-        /// add | remove | list
-        action: String,
-        vfr_id: String,
-        #[arg(long)]
-        to: String,
-        /// The maintainer's PUBLIC key (hex or path) for add/remove.
-        #[arg(long)]
-        maintainer: Option<String>,
-        /// Path to the AUTHORIZING private key (owner or maintainer).
-        #[arg(long)]
-        key: Option<PathBuf>,
-        #[arg(long, default_value = "maintainer-set update")]
-        reason: String,
-        #[arg(long)]
-        json: bool,
-    },
-    /// List all entries in a local registry
-    List {
-        /// Path or file:// URL of the registry; defaults to ~/.vela/registry/entries.json
-        #[arg(long)]
-        from: Option<String>,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Publish a frontier's current snapshot+event_log hashes to a registry
-    Publish {
-        /// Path to the frontier file
-        frontier: PathBuf,
-        /// Stable owner actor id (must be registered in the frontier).
-        /// Optional: defaults to your configured identity.
-        #[arg(long = "as", alias = "owner")]
-        owner: Option<String>,
-        /// Path to the owner's Ed25519 private key. Optional: defaults to
-        /// your configured identity's key.
-        #[arg(long)]
-        key: Option<PathBuf>,
-        /// Network locator under which the frontier is reachable
-        /// (file:// path or HTTP URL the publisher serves). Optional
-        /// since v0.55: when publishing to an HTTP hub, the hub's own
-        /// `/entries/<vfr>/snapshot` URL is auto-filled if omitted, and
-        /// the substrate is uploaded inline so locator divergence is
-        /// no longer a failure mode.
-        #[arg(long)]
-        locator: Option<String>,
-        /// Registry to publish to (path/URL); default ~/.vela/registry/entries.json
-        #[arg(long)]
-        to: Option<String>,
-        /// v0.154: optional SPDX license identifier
-        /// (e.g. `CC-BY-4.0`, `CC0-1.0`, `MIT`, `Apache-2.0`). The
-        /// license rides on the registry entry so consumers can
-        /// audit reuse rights without re-fetching the frontier.
-        #[arg(long)]
-        license: Option<String>,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Hub-native proposal — the frictionless second-signer on-ramp.
-    ///
-    /// A contributor with only a keypair and the hub URL submits a
-    /// signed `StateProposal` to a frontier's OPEN submission endpoint
-    /// (`POST /entries/{vfr}/proposals`). No local `.vela/` workspace,
-    /// no pre-registration: any valid Ed25519 self-signature is accepted
-    /// and enqueued to `pending_review` (actor.id is provenance, not
-    /// authority). This is the sibling of `registry append` (owner
-    /// deposits events directly) for everyone who is NOT the owner.
-    ///
-    /// The proposal id is content-addressed and the signature is taken
-    /// over the exact canonical preimage the hub re-derives, so a beat
-    /// here is the genuine "someone other than the maintainer wrote a
-    /// signed transition into the registry" event.
-    Propose {
-        /// Frontier address (`vfr_…`) to propose into.
-        vfr_id: String,
-        /// Hub base URL. Optional: defaults to your configured identity's hub.
-        #[arg(long)]
-        to: Option<String>,
-        /// Path to the proposer's Ed25519 private key. Optional: defaults to
-        /// your configured identity's key.
-        #[arg(long)]
-        key: Option<PathBuf>,
-        /// Proposer actor id. Optional: defaults to your configured identity.
-        #[arg(long = "as", alias = "actor")]
-        actor: Option<String>,
-        /// Actor type: `human` or `agent`.
-        #[arg(long, default_value = "human")]
-        actor_type: String,
-        /// Proposal kind (e.g. `finding.add`, `finding.review`).
-        #[arg(long, default_value = "finding.add")]
-        kind: String,
-        /// Human-readable reason for the proposal.
-        #[arg(long)]
-        reason: String,
-        /// Path to a JSON file holding the proposal payload (a finding
-        /// bundle or other change body). Use `-` to read from stdin.
-        #[arg(long)]
-        payload: PathBuf,
-        /// Source reference (repeatable), e.g. a DOI or URL.
-        #[arg(long = "source-ref")]
-        source_refs: Vec<String>,
-        /// Caveat to attach (repeatable).
-        #[arg(long = "caveat")]
-        caveats: Vec<String>,
         #[arg(long)]
         json: bool,
     },
@@ -2053,19 +1800,6 @@ pub(crate) enum RegistryAction {
         #[arg(long)]
         json: bool,
     },
-    /// v0.153: registry-wide verification. Reads a local
-    /// registry, walks every entry, runs entry-signature
-    /// verification per row, and surfaces a pass/fail summary.
-    /// Used by operators + dashboards to attest the registry is
-    /// internally consistent.
-    VerifyAll {
-        /// Local registry path. Defaults to
-        /// `~/.vela/registry/entries.json`.
-        #[arg(long)]
-        from: Option<PathBuf>,
-        #[arg(long)]
-        json: bool,
-    },
     /// v0.146: verify a frontier's owner-epoch chain transcript.
     /// Walks each transition, loads the corresponding policy,
     /// proposal, and attestation bundle, and re-runs the v0.145
@@ -2082,57 +1816,6 @@ pub(crate) enum RegistryAction {
         /// must be named `<id>.json` (e.g. `vop_abc123.json`).
         #[arg(long)]
         artifacts: PathBuf,
-        #[arg(long)]
-        json: bool,
-    },
-    /// v0.138: A8 graduation primitive. Rotate the owner key of a
-    /// published frontier. Revokes the current owner actor record
-    /// (sets `revoked_at` / `revoked_reason`), registers (or
-    /// promotes) the new owner actor record, and re-publishes the
-    /// frontier under the new owner key. Consumers who re-pull
-    /// after rotation receive the new entry signed under the new
-    /// `owner_pubkey`; the in-frontier actor record retains the
-    /// rotation timeline so the audit chain is reconstructable
-    /// from the frontier itself.
-    OwnerRotate {
-        /// Path to the frontier file
-        frontier: PathBuf,
-        /// Current owner actor id (must be registered and not revoked).
-        #[arg(long)]
-        current_owner: String,
-        /// New owner actor id (auto-registered if not already present).
-        #[arg(long)]
-        new_owner: String,
-        /// Path to the new owner's Ed25519 private key (hex-encoded).
-        #[arg(long)]
-        new_key: PathBuf,
-        /// Required reason (non-empty); recorded on the retired
-        /// owner's `revoked_reason` for the audit chain.
-        #[arg(long)]
-        reason: String,
-        /// Network locator under which the rotated frontier is
-        /// reachable. Same shape as `registry publish`: optional
-        /// when `--to` is an HTTP hub (auto-filled), required for
-        /// local registries.
-        #[arg(long)]
-        locator: Option<String>,
-        /// Registry to publish the rotated entry to. Same shape as
-        /// `registry publish --to`.
-        #[arg(long)]
-        to: Option<String>,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Pull and verify a frontier from a registry by `vfr_id`
-    Pull {
-        /// Frontier address (`vfr_…`)
-        vfr_id: String,
-        /// Registry to pull from
-        #[arg(long)]
-        from: Option<String>,
-        /// Output file path the pulled frontier lands at.
-        #[arg(long)]
-        out: PathBuf,
         #[arg(long)]
         json: bool,
     },

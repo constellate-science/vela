@@ -128,16 +128,15 @@ fn accept_paths_dispatch() {
 }
 
 /// The managed-identity verbs must be reachable through the clap-derived
-/// allowlist (the drift that bit `id`/`publish`).
+/// allowlist (the drift that bit `id`). `publish` is retired (ADR 0001
+/// Phase 2: git push is publication), so it is no longer asserted here.
 #[test]
 fn ergonomics_verbs_are_reachable() {
-    for verb in ["id", "publish"] {
-        let out = vela(&[verb, "--help"]);
-        assert!(
-            !combined(&out).contains("unknown or non-release command"),
-            "`{verb}` should be reachable"
-        );
-    }
+    let out = vela(&["id", "--help"]);
+    assert!(
+        !combined(&out).contains("unknown or non-release command"),
+        "`id` should be reachable"
+    );
 }
 
 /// The finding-mutation/graph verbs live ONLY under `vela finding <verb>`;

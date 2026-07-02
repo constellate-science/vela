@@ -76,90 +76,61 @@ in its `frontier.dependencies` array, pinning each remote frontier by
 `vfr_id` and `pinned_snapshot_hash`. Findings in the dependent frontier
 can then link to findings in the dep via `vf_<id>@vfr_<id>` link
 targets. The hub renders such links as clickable navigation between
-entries; clients use `vela registry pull <vfr> --transitive --from
-https://hub.constellate.science/entries` to fetch and verify the whole chain.
+entries; clients `git clone` each dep's frontier repo and verify the
+pinned `snapshot_hash` locally.
 
 The hub does not invent cross-frontier answers at storage time.
-Resolution happens client-side at pull time, where the canonical-JSON
-snapshot pin is the integrity guarantee.
+Resolution happens client-side, where the canonical-JSON snapshot pin
+is the integrity guarantee.
 
-Idempotency: `(vfr_id, signature)` is unique. Re-POSTing identical
-canonical bytes returns 200 with `duplicate=true`; the row is not
-duplicated. Two CLI runs spaced apart produce *different* manifests
-(each gets a fresh `signed_publish_at`), so both rows persist and the
-latest-publish-wins read returns the newer.
+## Publishing (git push)
 
-## Publishing
-
-```bash
-vela registry publish frontier.json \
-  --owner reviewer:my-id \
-  --key ~/.vela/keys/private.key \
-  --to https://hub.constellate.science
-```
-
-When publishing to an HTTP hub, the CLI includes the frontier substrate
-inline and auto-fills the manifest locator as the hub snapshot endpoint.
-The hub verifies the signature, snapshot hash, and event-log hash before
-promoting the frontier. The owner must already be registered as an actor
-in the frontier with a matching pubkey.
-
-## Pulling
+The legacy signed-manifest publish (`POST /entries`) and hub pull are
+retired (ADR 0001 Phase 2). Publication is `git push` to the frontier's
+repo; the hub's ingest loop re-derives the index from the committed
+event log. Bind the repo once:
 
 ```bash
-vela registry list --from https://hub.constellate.science/entries
-vela registry pull vfr_… --from https://hub.constellate.science/entries --out ./pulled.json
+vela registry register-git <vfr_id> --remote <repo-url>
 ```
 
-For an HTTP hub, `pull` first fetches
-`/entries/{vfr_id}/snapshot`, which is the event/projection-derived
-read path. It falls back to the entry's `network_locator` only when
-talking to older hubs that do not expose the snapshot endpoint. It always verifies
-signature, snapshot hash, and event-log hash before keeping the file.
+## Reading
 
-## Hub as remote (the `.vela/` decommit)
+```bash
+git clone <repo-url> && vela check <dir> --strict   # the authority path
+curl https://hub.constellate.science/entries        # the index view
+```
 
-A frontier's `.vela/` store is to Vela what `.git/` is to git: a local store
-that is **not committed**. Each canonical frontier carries its own
-`.gitignore` with `/.vela/`, so git tracks only the working tree (README,
-`frontier.yaml`, `SCOPE.md`, `witnesses/`, `sources/`) and the `.vela/` event
-log lives on the hub. This makes the hub the **remote of record** and the local
-`.vela/` a reconstructible cache, exactly as `git clone` / `git checkout`
-rebuild a working tree from a remote.
+## Git as remote (the frontier repo is the store)
 
-- **What is on the hub.** The science core — events, findings, proposals, and
-  content-addressed artifact blobs (witnesses + proof packets) — is uploaded by
-  `vela publish`. Everything else in `.vela/` (policy, releases, evaluations,
-  tool descriptors) is content-addressed into a signed **extras manifest**:
-  each loose file's hash is collected into an `ExtrasManifest` whose digest
-  rides in the signed `RegistryEntry.extras_manifest_hash`. That hash sits
-  **outside** `snapshot_hash` / `event_log_hash` (the canonical-bytes anchors
-  never move), so the extras travel as a complete byte-for-byte backup without
-  perturbing the integrity hashes. The result: a published frontier on the hub
-  is a complete backup of its committed-and-uncommitted state.
-- **What is never backed up.** `LOCAL_ONLY_DIRS` (`tasks/`, `workspaces/`) are
-  per-machine scratch — the worktree analogue. They are neither committed nor
-  hub-backed and are excluded from the extras manifest by `collect_extras`.
-- **The read side.** `vela clone <vfr|url>` reconstructs the full working
-  `.vela/` tree (event log + materialized `frontier.json` + witness/proof
-  sidecars fetched by content hash + `vela.lock`). `scripts/hydrate-frontiers.sh`
-  does the same for a monorepo checkout whose `.vela/` is absent. Both are no-ops
-  when `.vela/` is already present.
-- **The registry.** `scripts/workspace.json` is the git-style index of
-  checked-out frontiers and their hub remotes (`vela workspace add` writes it).
-  The conformance gate discovers its frontiers from it and fails closed if any
-  decommitted frontier is missing from it, so a cold clone and the gate always
-  agree on what is canonical.
+A frontier's committed `.vela/events` log IS the store of record. The public
+git repo (`constellate-science/vela-frontiers` for the canonical examples;
+any frontier repo for its own state) carries the signed events, witnesses,
+and sources; a plain `git clone` reproduces every witness with the hub
+offline. The internal monorepo hydrates reconstructable state from git
+(`scripts/hydrate-frontiers.sh`) with no hub fallback: a frontier git cannot
+supply is a real error, never something the index papers over.
+
+- **What is on the hub.** Nothing authoritative. The ingest loop fetches each
+  registered git remote, strictly replays the committed event log (validation,
+  reducer replay, signature signals), and promotes the result into the index
+  with `authority_mode='git_ingested'`. The hub row is a projection of the
+  repo, refreshed on every push.
+- **The read side.** `git clone` + `vela frontier materialize`. The retired
+  `vela clone`/`vela pull`/`vela workspace` verbs reconstructed working trees
+  from hub bytes; that transport is deleted (ADR 0001 Phase 2).
+- **The registry.** `scripts/workspace.json` remains as the conformance
+  gate's discovery floor (which frontiers are canonical, which are strict) —
+  gate configuration, not transport.
 
 ## Release verification boundary
 
 Two distinct senses of "source of truth" must not be conflated:
 
-- **Byte custody (the git-remote sense).** Since the `.vela/` decommit, the
-  hub IS the canonical store for a frontier's event-log bytes and witness
-  blobs; the local `.vela/` is a reconstructible cache (see "Hub as remote"
-  below). `vela clone` repopulates it from the hub the way `git checkout`
-  populates a working tree. In this sense the hub is the remote of record.
+- **Byte custody (the git-remote sense).** The frontier git repo is the
+  canonical store for the event-log bytes and witnesses; the hub's copy is an
+  ingest-derived projection. `git clone` is the read path. In this sense git
+  is the remote of record and the hub holds no bytes of its own authority.
 - **Scientific verdict (the trust sense).** The hub is signed transport. It is
   NOT the arbiter of what is true. Release checks can prove that the published
   `examples/sidon-sets` frontier id matches the expected snapshot and event-log
@@ -237,10 +208,8 @@ federation pattern from §Federation without a Postgres dependency.
 The SQLite backend serves every endpoint the Postgres one does:
 `GET /entries`, `GET /entries/{vfr_id}`,
 `GET /entries/{vfr_id}/events`, `GET /entries/{vfr_id}/depends-on`,
-`POST /entries`, `vela registry pull --from`, `vela registry mirror --to`.
-Verified end-to-end against the public hub: pulling a BBB-mirrored
-frontier from a SQLite hub returns byte-identical bytes with
-`verified=true`, same as pulling from `hub.constellate.science`.
+plus the git-remote registration and ingest loop — a self-hosted index
+over the same git repos, no Postgres dependency.
 
 ### Postgres (production)
 
@@ -496,8 +465,9 @@ retired):
 - Re-mirroring the same vfr returns `duplicate=true` from the
   destination (idempotent on the `(vfr_id, signature)` unique
   constraint).
-- `vela registry pull` against either hub produced byte-identical
-  bytes with same `verified=true`.
+- pulling (via the since-retired transport) against either hub produced
+  byte-identical bytes with `verified=true` — superseded by git clone,
+  where byte identity is git's own guarantee.
 - Snapshot hashes matched across hubs for the same vfr_id.
 
 The public live list is now the math-wedge frontiers: Sidon sets
@@ -509,8 +479,9 @@ frontier.
 
 What this unblocks for any institution that runs its own peer:
 
-- **Resilience:** mirror the public hub to a backup ahead of time and
-  keep `vela registry pull` working if the public hub is unreachable.
+- **Resilience:** any peer hub can register the same git remotes and
+  serve the same index if the public hub is unreachable; the repos
+  themselves are the store.
 - **Seeding:** a fresh hub instance can be primed from the public one
   without any signing roundtrip.
 - **Independent deploys:** mirror the public hub's content for offline

@@ -230,54 +230,10 @@ pub async fn run_command() {
         Commands::Reproduce { path, json } => cmd_reproduce(&path, json),
         Commands::Sign { action } => cmd_sign(action),
         Commands::Id { action } => cmd_id(action),
-        Commands::Publish {
-            frontier,
-            to,
-            license,
-            json,
-        } => {
-            // The friendly "share my work" verb: a full publish to the
-            // identity hub, with owner+key resolved from the profile inside
-            // the registry handler. Full (not delta) so it always succeeds.
-            //
-            // Doctrine note (HUB.md / ADR 0001): for a git-native frontier,
-            // `git push` IS publication — the hub re-derives its index from
-            // the repo once `vela registry register-git` binds the remote.
-            // This verb populates the legacy index lane only.
-            if !json {
-                eprintln!(
-                    "note: for a git-native frontier, `git push` is publication — bind the \
-                     repo once with `vela registry register-git <vfr> --remote <url>` and \
-                     the hub re-derives its index from git; this signed publish populates \
-                     the legacy index lane only."
-                );
-            }
-            let hub = crate::cli_identity::resolve_hub(to.as_deref());
-            cmd_registry(RegistryAction::Publish {
-                frontier,
-                owner: None,
-                key: None,
-                locator: None,
-                to: Some(hub),
-                license,
-                json,
-            });
-        }
-        Commands::Clone {
-            target,
-            dest,
-            from,
-            blobs_from,
-            json,
-        } => {
-            let hub = crate::cli_identity::resolve_hub(from.as_deref());
-            crate::cli_registry::cmd_clone(&target, dest, &hub, blobs_from.as_deref(), json);
-        }
         Commands::Actor { action } => cmd_actor(action),
         Commands::Frontier { action } => cmd_frontier(action),
         Commands::Queue { action } => cmd_queue(action),
         Commands::Registry { action } => cmd_registry(action),
-        Commands::Workspace { action } => crate::cli_registry::cmd_workspace(action),
         Commands::Init {
             path,
             name,
@@ -290,7 +246,6 @@ pub async fn run_command() {
             frontier_b,
             frontier,
             reviewer,
-            from,
             json,
             quiet,
         } => {
@@ -404,13 +359,12 @@ pub async fn run_command() {
                 } else {
                     None
                 };
-                let resolve_side = |side: &str, slot: &str| -> std::path::PathBuf {
+                let resolve_side = |side: &str, _slot: &str| -> std::path::PathBuf {
                     if side.starts_with("vfr_") {
-                        let tmp = _tmp.as_ref().expect("tempdir initialized above");
-                        let dest = tmp.path().join(format!("{slot}-{side}.json"));
-                        resolve_vfr_to_path(side, from.as_deref(), &dest)
-                            .unwrap_or_else(|e| fail_return(&e));
-                        dest
+                        fail_return(
+                            "diff by vfr_ id used the retired hub transport; `git clone` the \
+                             frontier repo and pass its path instead",
+                        )
                     } else {
                         std::path::PathBuf::from(side)
                     }
@@ -729,8 +683,6 @@ pub async fn run_command() {
             key,
             strict,
             force,
-            push,
-            to,
             co_author,
             generated_by,
             json,
@@ -760,22 +712,6 @@ pub async fn run_command() {
             .unwrap_or_else(|e| fail_return(&e));
             let v = &outcome.verdict;
 
-            // P3.4: after applying the accept locally, optionally deliver the
-            // same human signature to the hub. Best-effort — a hub failure
-            // never unwinds the local accept (which is already on disk).
-            let mut hub_result = serde_json::Value::Null;
-            if push || to.is_some() {
-                hub_result = deliver_accept_to_hub(
-                    &frontier,
-                    &proposal_id,
-                    &reviewer,
-                    &reason,
-                    key.as_deref(),
-                    to.as_deref(),
-                    json,
-                );
-            }
-
             let payload = json!({
                 "ok": true,
                 "command": "accept",
@@ -792,7 +728,6 @@ pub async fn run_command() {
                     "release_blocking_failed": v.release_blocking_failed,
                     "warnings": v.warnings,
                 },
-                "hub": hub_result,
             });
             if json {
                 print_json(&payload);
@@ -1906,7 +1841,7 @@ pub(crate) fn print_identity_created(identity: &crate::cli_identity::Identity, j
         "  vela actor add <frontier> {} --pubkey {}",
         identity.actor_id, identity.pubkey
     );
-    println!("Then `vela publish`, `vela propose`, and `vela accept` need no key flags.");
+    println!("Then `vela propose` and `vela accept` need no key flags.");
 }
 
 fn cmd_sign(action: SignAction) {
@@ -1970,48 +1905,6 @@ pub(crate) fn governance_chain_path(frontier: &Path) -> PathBuf {
         PathBuf::from(".")
     };
     dir.join(".vela").join("governance").join("chain.json")
-}
-
-/// Default local registry path (`~/.vela/registry/entries.json`).
-/// Free helper so non-`cmd_registry` callers can resolve it too.
-pub(crate) fn default_registry_path() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    PathBuf::from(home)
-        .join(".vela")
-        .join("registry")
-        .join("entries.json")
-}
-
-/// v0.140: resolve a `vfr_*` registry id to a concrete frontier
-/// path on disk. Loads the registry (local or hub URL), looks up
-/// the latest matching entry, fetches its substrate to `dest`,
-/// and runs the same verify-pull check `registry pull` uses. The
-/// caller is responsible for the lifetime of `dest` (typically a
-/// tempdir entry that is dropped after the consumer is done).
-fn resolve_vfr_to_path(vfr_id: &str, from: Option<&str>, dest: &Path) -> Result<(), String> {
-    use vela_protocol::registry;
-    let registry_data = match from {
-        Some(loc) if loc.starts_with("http") => registry::load_any(loc)?,
-        Some(loc) => {
-            let p = registry::resolve_local(loc)?;
-            registry::load_local(&p)?
-        }
-        None => {
-            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-            let p = PathBuf::from(home)
-                .join(".vela")
-                .join("registry")
-                .join("entries.json");
-            registry::load_local(&p)?
-        }
-    };
-    let entry = registry::find_latest(&registry_data, vfr_id)
-        .ok_or_else(|| format!("{vfr_id} not found in registry"))?;
-    registry::fetch_frontier_to_prefer_event_hub(&entry, from, dest)
-        .map_err(|e| format!("fetch frontier for {vfr_id}: {e}"))?;
-    registry::verify_pull(&entry, dest)
-        .map_err(|e| format!("pull verification failed for {vfr_id}: {e}"))?;
-    Ok(())
 }
 
 pub(crate) fn parse_signing_key(hex_str: &str) -> ed25519_dalek::SigningKey {
@@ -2531,90 +2424,6 @@ fn iso_week_bounds(
         .expect("00:00 valid")
         .and_utc();
     Ok((start, end))
-}
-
-/// v0.153: handle `vela registry verify-all`.
-pub(crate) fn cmd_verify_all(from: Option<PathBuf>, json: bool) {
-    use vela_protocol::registry;
-
-    let registry_path = match from {
-        Some(p) => registry::resolve_local(p.to_str().unwrap_or_default())
-            .unwrap_or_else(|e| fail_return(&e)),
-        None => default_registry_path(),
-    };
-    let registry_data = registry::load_local(&registry_path).unwrap_or_else(|e| fail_return(&e));
-
-    #[derive(serde::Serialize)]
-    struct EntryReport {
-        vfr_id: String,
-        signature_ok: bool,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        error: Option<String>,
-    }
-
-    let mut reports: Vec<EntryReport> = Vec::new();
-    let mut pass = 0usize;
-    let mut fail = 0usize;
-    for entry in &registry_data.entries {
-        match registry::verify_entry(entry) {
-            Ok(true) => {
-                pass += 1;
-                reports.push(EntryReport {
-                    vfr_id: entry.vfr_id.clone(),
-                    signature_ok: true,
-                    error: None,
-                });
-            }
-            Ok(false) => {
-                fail += 1;
-                reports.push(EntryReport {
-                    vfr_id: entry.vfr_id.clone(),
-                    signature_ok: false,
-                    error: Some("signature did not verify against owner_pubkey".to_string()),
-                });
-            }
-            Err(e) => {
-                fail += 1;
-                reports.push(EntryReport {
-                    vfr_id: entry.vfr_id.clone(),
-                    signature_ok: false,
-                    error: Some(e),
-                });
-            }
-        }
-    }
-
-    let ok = fail == 0;
-    let payload = json!({
-        "ok": ok,
-        "command": "registry.verify-all",
-        "registry": registry_path.display().to_string(),
-        "entry_count": registry_data.entries.len(),
-        "pass": pass,
-        "fail": fail,
-        "entries": reports,
-    });
-    if json {
-        print_json(&payload);
-    } else {
-        println!(
-            "{} verify-all over {}: {} pass, {} fail",
-            style::ok("registry"),
-            registry_path.display(),
-            pass,
-            fail
-        );
-        for r in &reports {
-            let badge = if r.signature_ok { "ok" } else { "FAIL" };
-            println!("  {badge}  {}", r.vfr_id);
-            if let Some(e) = &r.error {
-                println!("        {e}");
-            }
-        }
-    }
-    if !ok {
-        std::process::exit(1);
-    }
 }
 
 /// v0.146: verify the owner-epoch chain transcript for a frontier.
@@ -3404,13 +3213,11 @@ Usage:
 Setup (once):
   id            Set up your key + identity once (then no --key/--actor/--hub flags)
   init          Initialize a new frontier repo
-  clone         Clone a frontier from the hub into a working tree (reproduces + extends)
 
-Producer loop (clone -> reproduce -> ingest -> propose -> publish):
+Producer loop (git clone -> reproduce -> ingest -> propose -> git push):
   reproduce     Re-verify stored witnesses from scratch (frozen exact verifiers)
   ingest        Ingest a paper, dataset, or Carina packet (dispatches by file type)
   propose       Create a finding.review proposal
-  publish       Push a frontier to the hub (owner/key/hub from your identity; alias: push)
 
 Sync:
   status        One-screen frontier state
@@ -3448,11 +3255,10 @@ Inspect (read-only):
 Nouns (subcommand groups; run `vela <noun> --help`):
   frontier      Scaffold (`new`), materialize, and manage frontier metadata + deps
   finding       Per-finding verbs: add, review, note, caveat, revise, reject, retract, link, supersede
-  registry      Publish, pull, list; maintainer add/remove, deprecate, rotate-owner
+  registry      register-git (bind a frontier repo; git push is publication) + log audits
   actor         Register Ed25519 publisher identities in a frontier
   sign          Signing and signature verification
   agents        Generate agent-config adapters from VELA.md (sync | doctor | diff)
-  workspace     List/add/remove checked-out frontiers + their hub remotes (the gate reads this)
   atlas         Cross-frontier projection: lift one frontier's calculus over a whole field
   policy        Inspect / evaluate the policy-bound acceptance engine (permit/defer/deny)
   serve         Serve a read-only frontier over MCP stdio or HTTP (the local review server)
@@ -3482,13 +3288,12 @@ Monolithic frontier file:
   FINDING_ID=$(jq -r '.findings[0].id' frontier.json)
   vela propose frontier.json "$FINDING_ID" --status contested --reason "Mouse-only evidence" --apply
 
-Publish your own frontier (see docs/PUBLISHING.md):
-  vela frontier new ./frontier.json --name "Your bounded question"
-  vela finding add ./frontier.json --assertion "..." --author "reviewer:you" --apply
-  vela sign generate-keypair --out keys
-  vela actor add ./frontier.json reviewer:you --pubkey "$(cat keys/public.key)"
-  vela registry publish ./frontier.json --owner reviewer:you --key keys/private.key \
-      --to https://hub.constellate.science
+Publish your own frontier (git push IS publication):
+  vela init my-frontier && cd my-frontier
+  vela finding add . --assertion "..." --author "reviewer:you" --apply
+  git push                        # the repo's committed .vela/events is the authority
+  vela registry register-git <vfr_id> --remote <your-repo-url>   # once; the hub
+                                  # re-derives its index from the repo on every push
 "#,
         env!("CARGO_PKG_VERSION"),
         deprecated_line,
@@ -3646,96 +3451,6 @@ pub(crate) fn print_json<T: Serialize + ?Sized>(value: &T) {
         "{}",
         serde_json::to_string_pretty(value).expect("serialize json output")
     );
-}
-
-/// Render an Engine verdict under an accept (human output). Quiet on a
-/// clean pass so the common case stays uncluttered; speaks up for
-/// warnings and forced overrides.
-/// P3.4: deliver a locally-applied accept to the hub under key custody. The
-/// human has already signed + applied the accept on disk; this re-signs the
-/// canonical accept preimage and POSTs it so the hub records the same
-/// decision. Best-effort and non-fatal: any failure is logged, the local
-/// accept stands, and the returned JSON reports the outcome.
-fn deliver_accept_to_hub(
-    frontier: &std::path::Path,
-    proposal_id: &str,
-    reviewer: &str,
-    reason: &str,
-    key: Option<&std::path::Path>,
-    to: Option<&str>,
-    json: bool,
-) -> serde_json::Value {
-    let Some(signing_key) = crate::cli_identity::resolve_signing_key_opt(key) else {
-        if !json {
-            eprintln!(
-                "  ! --push needs a signing key (--key or `vela id create`); local accept applied, hub delivery skipped"
-            );
-        }
-        return json!({"ok": false, "error": "no signing key for hub delivery"});
-    };
-    let hub = crate::cli_identity::resolve_hub(to);
-    let project = match repo::load_from_path(frontier) {
-        Ok(p) => p,
-        Err(e) => return json!({"ok": false, "error": format!("load frontier: {e}")}),
-    };
-    let vfr = project.frontier_id();
-    // ADR 0001 Phase 0d: bind the head we are accepting against. The hub
-    // recomputes this from its own pre-accept copy of the frontier, so the
-    // signature only verifies if our local view is in sync with the hub
-    // (a stale local head fails fast — pull first). event_log_hash is the
-    // id-canonical, load-path-independent commitment.
-    let parent_event_log_hash = vela_protocol::events::event_log_hash(&project.events);
-    let preimage = match proposals::accept_preimage_bytes(
-        &vfr,
-        proposal_id,
-        reviewer,
-        reason,
-        &parent_event_log_hash,
-    ) {
-        Ok(b) => b,
-        Err(e) => return json!({"ok": false, "error": format!("accept preimage: {e}")}),
-    };
-    let sig_hex = hex::encode(sign::sign_bytes(&signing_key, &preimage));
-    let pk_hex = sign::pubkey_hex(&signing_key);
-    match vela_protocol::registry::post_accept_to_hub(
-        &hub,
-        &vfr,
-        proposal_id,
-        reason,
-        &pk_hex,
-        &sig_hex,
-    ) {
-        Ok((status, text)) => {
-            let ok = (200..300).contains(&status);
-            if !json {
-                if ok {
-                    println!("  hub:   delivered accept to {hub} (HTTP {status})");
-                } else {
-                    eprintln!("  ! hub accept delivery failed (HTTP {status}): {text}");
-                    // The hub re-derives the reviewer id from the SIGNER KEY,
-                    // not the --reviewer string. A signature-blaming 401 almost
-                    // always means the key registers as a different actor than
-                    // the name that was signed over.
-                    if status == 401 && text.contains("does not verify") {
-                        eprintln!(
-                            "    hint: the hub identifies the reviewer by your signing KEY, not the \
-                             --reviewer name '{reviewer}'. Re-run with --reviewer set to the actor \
-                             your key is registered under on this frontier, or fix your `vela id` profile."
-                        );
-                    }
-                    eprintln!("    the local accept is applied; re-run with --push to retry.");
-                }
-            }
-            json!({"ok": ok, "http_status": status, "hub": hub})
-        }
-        Err(e) => {
-            if !json {
-                eprintln!("  ! hub accept delivery failed: {e}");
-                eprintln!("    the local accept is applied; re-run with --push to retry.");
-            }
-            json!({"ok": false, "error": e, "hub": hub})
-        }
-    }
 }
 
 pub(crate) fn print_engine_verdict(v: &proposals::EngineVerdict) {

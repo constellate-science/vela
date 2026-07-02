@@ -64,10 +64,13 @@ mod surface_tests {
         });
     }
 
-    /// The v0.700 released command set. A regression guard: later
-    /// consolidation batches may NEST these (keeping a hidden top-level
-    /// alias) but must never make one unreachable. `is_science_subcommand`
-    /// counts aliases, so a nested-with-alias command still passes here.
+    /// The v0.700 released command set, minus the bespoke hub transport
+    /// retired at v0.721 (ADR 0001 Phase 2: `publish`, `clone`, `workspace`
+    /// — git push is publication; the hub re-derives its index from
+    /// registered git remotes). A regression guard: later consolidation
+    /// batches may NEST these (keeping a hidden top-level alias) but must
+    /// never make one unreachable. `is_science_subcommand` counts aliases,
+    /// so a nested-with-alias command still passes here.
     const V0700_BASELINE: &[&str] = &[
         "accept",
         "accept-batch",
@@ -94,7 +97,6 @@ mod surface_tests {
         "proof",
         "proposals",
         "propose",
-        "publish",
         "queue",
         "registry",
         "reproduce",

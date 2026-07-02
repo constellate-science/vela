@@ -48,4 +48,4 @@ VF=$("$VELA" finding add "$FRONTIER" \
 "$VELA" attest "$FRONTIER" "$VF" --verdict "$VERDICT" \
   --informal-ref "erdosproblems.com/$N" --formal-ref "$FORMAL_REF" \
   --formal-statement-hash "$HASH" --note "$NOTE" --reviewer "$REVIEWER"
-echo "signed. next: vela frontier materialize $FRONTIER && vela publish $FRONTIER --to https://hub.constellate.science"
+echo "signed. next: vela frontier materialize $FRONTIER && git push  # git push is publication; bind once with vela registry register-git"

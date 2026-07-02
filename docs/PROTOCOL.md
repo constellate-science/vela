@@ -380,10 +380,10 @@ matching `vfr_id` in `frontier.dependencies` with both a `locator` and a
 `pinned_snapshot_hash`. Strict validation refuses cross-frontier targets
 without a declared dep.
 
-`vela registry pull <vfr> --transitive` walks the dependency graph and
-verifies that every fetched dep's actual snapshot matches the dependent's
-pinned hash. The pin is the integrity guarantee; partial trust is not a
-state v0.8 supports.
+Consumers resolve a dep by cloning its frontier repo (the `locator`) and
+verifying the replayed snapshot matches the dependent's pinned hash. The
+pin is the integrity guarantee; partial trust is not a state v0.8
+supports.
 
 ## 6. proposal and event protocol
 

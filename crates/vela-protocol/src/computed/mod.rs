@@ -7,4 +7,3 @@ pub mod registry;
 pub mod sources;
 pub mod state;
 pub mod transfer_registry;
-pub mod workspace;

@@ -75,13 +75,14 @@ pub fn spawn(db: HubDb, cfg: GitIngestConfig) {
 pub async fn run_once(db: &HubDb, cfg: &GitIngestConfig) -> Result<usize, String> {
     let targets = db.git_ingest_targets().await?;
     let mut ingested = 0;
-    for (vfr_id, remote, git_ref, last_commit, owner_pubkey) in targets {
+    for (vfr_id, remote, git_ref, subdir, last_commit, owner_pubkey) in targets {
         match ingest_one(
             db,
             cfg,
             &vfr_id,
             &remote,
             &git_ref,
+            &subdir,
             last_commit.as_deref(),
             &owner_pubkey,
         )
@@ -107,12 +108,14 @@ pub async fn run_once(db: &HubDb, cfg: &GitIngestConfig) -> Result<usize, String
 
 /// Ingest a single frontier. Returns Ok(Some(commit)) on promotion,
 /// Ok(None) when already at the tip.
+#[allow(clippy::too_many_arguments)]
 async fn ingest_one(
     db: &HubDb,
     cfg: &GitIngestConfig,
     vfr_id: &str,
     remote: &str,
     git_ref: &str,
+    subdir: &str,
     last_commit: Option<&str>,
     owner_pubkey: &str,
 ) -> Result<Option<String>, String> {
@@ -124,8 +127,24 @@ async fn ingest_one(
     }
     let commit_time = commit_timestamp(&dir).await?;
 
+    // A multi-frontier monorepo (vela-frontiers) registers each frontier at
+    // a signed subdirectory; a plain frontier repo replays from its root.
+    let frontier_dir = if subdir.is_empty() {
+        dir.clone()
+    } else {
+        let sub = dir.join(subdir);
+        // The clone is fetched fresh above; a subdir escaping it is a
+        // malicious registration, not a layout.
+        if !sub.starts_with(&dir) || !sub.exists() {
+            return Err(format!(
+                "registered subdir '{subdir}' not found in the repo"
+            ));
+        }
+        sub
+    };
+
     // Replay + verify off the async runtime (the protocol code is sync).
-    let dir_cloned = dir.clone();
+    let dir_cloned = frontier_dir.clone();
     let project = tokio::task::spawn_blocking(move || load_and_verify(&dir_cloned))
         .await
         .map_err(|e| format!("verify task: {e}"))??;

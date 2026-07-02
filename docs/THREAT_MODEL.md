@@ -293,11 +293,11 @@ PyPI's account auth.
 
 `hub.constellate.science` is a single hub today. If it is compromised:
 
-- `registry list` could omit entries.
-- `registry pull` for a previously-unseen `vfr_id` could
-  return tampered bytes (signature verification catches this
-  ONLY if the consumer already has the expected
-  `owner_pubkey`).
+- the index could omit entries (discovery lies).
+- the index could serve a stale or wrong projection; but bytes
+  come from the frontier's git repo, so a consumer running
+  `git clone` + `vela check --strict` is unaffected — the hub
+  no longer serves bytes a verifier depends on.
 
 **Mitigations:**
 

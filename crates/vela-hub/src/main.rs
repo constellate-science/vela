@@ -16,7 +16,9 @@
 //!   GET  /entries/{vfr_id}          - single live frontier entry
 //!   GET  /entries/{vfr_id}/events   - cursor-paginated event log
 //!   GET  /entries/{vfr_id}/snapshot - derived materialized snapshot
-//!   POST /entries                   - publish a signed manifest with optional substrate
+//!   (publication is `git push`: POST /entries retired — the ingest loop
+//!   re-derives the index from registered git remotes; the one write left
+//!   is POST /entries/{vfr}/git-remote, the owner-signed registration)
 //!   GET  /healthz                   - liveness
 //!   GET  /                          - banner + endpoint list
 
@@ -47,14 +49,12 @@ use tokio::sync::RwLock;
 // sibling binaries such as `vela-hub-backfill-event-first` can reuse them.
 // Same modules, just imported through the crate root instead of
 // declared inline.
-use db::{HubDb, SnapshotMeta, ensure_postgres_event_first_schema, ensure_sqlite_schema};
+use db::{HubDb, ensure_postgres_event_first_schema, ensure_sqlite_schema};
 use tower_http::cors::CorsLayer;
 use vela_hub::db;
 use vela_hub::storage::Storage;
 use vela_protocol::canonical;
-use vela_protocol::events::{event_log_hash, snapshot_hash};
 use vela_protocol::project::Project;
-use vela_protocol::registry::{RegistryEntry as ProtocolEntry, verify_entry};
 use vela_protocol::sign as vsign;
 
 const HUB_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -544,7 +544,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .route("/healthz", get(healthz))
         .route("/metrics", get(metrics_prometheus))
         .route("/.well-known/vela", get(well_known_vela))
-        .route("/entries", get(list_entries).post(publish_entry))
+        .route("/entries", get(list_entries))
         .route("/entries/{vfr_id}", get(get_entry))
         .route(
             "/entries/{vfr_id}/git-remote",
@@ -1353,6 +1353,7 @@ async fn register_git_remote(
             &vfr_id,
             &rec.git_remote,
             &rec.git_ref,
+            &rec.git_subdir,
             &rec.signer_pubkey_hex,
             &rec.registered_at,
             &body,
@@ -2575,279 +2576,6 @@ async fn get_proof_packet_download(
         .into_response()
 }
 
-/// Publish a signed manifest. The doctrine here is the entire shape of
-/// the hub: anyone can POST, the signature is the bind. We deserialize
-/// the body, verify the signature against the declared `owner_pubkey`,
-/// and persist the canonical bytes verbatim. The hub stores; clients
-/// verify on read. Idempotent on `(vfr_id, signature)` — re-posting the
-/// same signed manifest returns 200 without inserting again.
-///
-/// v0.55: optional top-level `substrate` field. When present, the hub
-/// deserializes it as a `Project`, verifies that
-/// `snapshot_hash(&project) == manifest.latest_snapshot_hash` and
-/// `event_log_hash(&project.events) == manifest.latest_event_log_hash`,
-/// and stores it content-addressed in `frontier_snapshots`. The
-/// substrate inherits the manifest's authority transitively: the
-/// signature commits to the snapshot hash, and the hash equality check
-/// is what binds the inline content to the signed manifest. Backwards
-/// compatible: publishes without `substrate` are retained as registry
-/// history, but they are not promoted to live event-first reads.
-async fn publish_entry(
-    State(state): State<AppState>,
-    Json(body): Json<Value>,
-) -> (StatusCode, Json<Value>) {
-    // Split out the optional substrate before deserializing the manifest.
-    // The manifest schema does not include `substrate`, so we strip it
-    // out of the value we hand to `serde_json::from_value` (otherwise an
-    // unknown-field error would block backwards compat publishers from
-    // adding it). The stripped manifest is what we store in raw_json.
-    let mut manifest_value = body.clone();
-    let substrate_value = if let Value::Object(map) = &mut manifest_value {
-        map.remove("substrate")
-    } else {
-        None
-    };
-
-    let entry: ProtocolEntry = match serde_json::from_value(manifest_value.clone()) {
-        Ok(e) => e,
-        Err(e) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"ok": false, "error": format!("schema: {e}")})),
-            );
-        }
-    };
-
-    match verify_entry(&entry) {
-        Ok(true) => {}
-        Ok(false) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"ok": false, "error": "signature does not verify"})),
-            );
-        }
-        Err(e) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                Json(json!({"ok": false, "error": format!("verify: {e}")})),
-            );
-        }
-    }
-
-    // If substrate is inline, verify hash equality against the manifest
-    // BEFORE uploading or inserting anything. Reject a publish where the
-    // signed hashes don't match the inline content — that would let an
-    // attacker store bogus substrate under the manifest's authority.
-    let prepared_snapshot = if let Some(substrate_raw) = substrate_value {
-        match prepare_inline_snapshot(&entry, substrate_raw) {
-            Ok(prep) => Some(prep),
-            Err(e) => {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    Json(json!({"ok": false, "error": e})),
-                );
-            }
-        }
-    } else {
-        None
-    };
-
-    // Upload substrate to object storage BEFORE inserting either DB row.
-    // If the upload fails, neither the manifest nor the snapshot meta
-    // row gets written. The publish stays atomic. Skipped when
-    // substrate is absent (manifest-only registry publish) or
-    // when the hub has no S3 backend configured.
-    let blob_url = if let Some((hash, _, snapshot_payload, _)) = &prepared_snapshot {
-        if let Some(storage) = &state.storage {
-            // size guard: the canonical bytes from prepare_inline_snapshot
-            // are what we actually upload (so the public bytes byte-match
-            // what was hashed). 100 MB cap mirrors the old DB constraint.
-            let bytes = match canonical::to_canonical_bytes(
-                &serde_json::to_value(snapshot_payload).unwrap_or(Value::Null),
-            ) {
-                Ok(b) => b,
-                Err(e) => {
-                    return (
-                        StatusCode::BAD_REQUEST,
-                        Json(json!({"ok": false, "error": format!("canonicalize: {e}")})),
-                    );
-                }
-            };
-            match storage.put(hash, bytes, "application/json").await {
-                Ok(url) => Some(url),
-                Err(e) => {
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        Json(json!({"ok": false, "error": format!("storage put: {e}")})),
-                    );
-                }
-            }
-        } else if state.db.is_sqlite() {
-            // Local/SQLite mode: the DB file IS the durable local store;
-            // the snapshot lands in materialized_snapshot_json and reads
-            // are served from it. This is what makes the restore drill
-            // (and offline hub stand-up) possible from repo contents
-            // alone. No blob URL exists in this mode.
-            None
-        } else {
-            // Production without storage: don't accept inline substrate
-            // silently — the manifest would land referencing a snapshot
-            // that's nowhere to be found.
-            return (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Json(json!({
-                    "ok": false,
-                    "error": "hub has no object-storage backend configured; cannot accept inline substrate"
-                })),
-            );
-        }
-    } else {
-        None
-    };
-
-    // Idempotent manifest insert. The UNIQUE (vfr_id, signature) index
-    // ensures re-posting an identical signed manifest is a no-op.
-    let manifest_inserted = match state.db.insert_entry(&entry, &manifest_value).await {
-        Ok(b) => b,
-        Err(e) => {
-            return (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"ok": false, "error": format!("db: {e}")})),
-            );
-        }
-    };
-
-    // Durable receipt: archive the canonical manifest bytes to object
-    // storage, content-addressed by their own sha256. The signed manifest
-    // is the publish receipt; after this it outlives the database.
-    if let Some(storage) = &state.storage
-        && let (Ok(manifest_bytes), Ok(mhash)) = (
-            vela_protocol::canonical::to_canonical_bytes(&manifest_value),
-            vela_protocol::canonical::sha256_canonical(&manifest_value),
-        )
-    {
-        let key = format!("manifest/{mhash}");
-        match storage.put(&key, manifest_bytes, "application/json").await {
-            Ok(url) => {
-                if let Err(e) = state
-                    .db
-                    .set_manifest_blob_url(&entry.vfr_id, &entry.signature, &url)
-                    .await
-                {
-                    tracing::warn!(%entry.vfr_id, error = %e, "manifest archived but url not recorded");
-                }
-            }
-            Err(e) => {
-                tracing::warn!(%entry.vfr_id, error = %e, "manifest archive failed; receipt remains db-only");
-            }
-        }
-    }
-
-    // Snapshot meta insert. Idempotent on snapshot_hash — safe to retry
-    // even on a duplicate manifest publish (the meta row may have been
-    // missing while the manifest was already there).
-    let mut snapshot_inserted = false;
-    if let (Some((hash, schema_version, _, size_bytes)), Some(url)) =
-        (&prepared_snapshot, &blob_url)
-    {
-        match state
-            .db
-            .insert_snapshot(hash, schema_version, *size_bytes, url, "application/json")
-            .await
-        {
-            Ok(b) => snapshot_inserted = b,
-            Err(e) => {
-                tracing::warn!(%entry.vfr_id, error = %e, "snapshot meta insert failed; manifest + blob stored");
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({
-                        "ok": true,
-                        "manifest": "inserted",
-                        "blob": "uploaded",
-                        "snapshot_meta": "failed",
-                        "error": format!("snapshot db: {e}"),
-                    })),
-                );
-            }
-        }
-    }
-
-    let mut event_first_promoted = false;
-    let mut event_first_error: Option<String> = None;
-    if let Some((_, schema_version, substrate_value, size_bytes)) = &prepared_snapshot {
-        match serde_json::from_value::<Project>(substrate_value.clone()) {
-            Ok(project) => {
-                let meta = SnapshotMeta {
-                    blob_url: blob_url.clone().unwrap_or_default(),
-                    content_type: "application/json".to_string(),
-                    schema_version: schema_version.clone(),
-                    size_bytes: *size_bytes,
-                };
-                match state
-                    .db
-                    .promote_frontier_snapshot(&entry, &project, Some(&meta), "manifest_snapshot")
-                    .await
-                {
-                    Ok(report) => {
-                        tracing::info!(
-                            vfr_id = %report.vfr_id,
-                            events = report.events_count,
-                            findings = report.findings_count,
-                            "event-first frontier promoted"
-                        );
-                        event_first_promoted = true;
-                        state.db_cache.write().await.clear();
-                    }
-                    Err(e) => {
-                        tracing::warn!(%entry.vfr_id, error = %e, "event-first promotion failed");
-                        event_first_error = Some(e.clone());
-                        let _ = state
-                            .db
-                            .record_publish_audit_failed(&entry, &e, "manifest_snapshot")
-                            .await;
-                    }
-                }
-            }
-            Err(e) => {
-                let msg = format!("substrate schema after verification: {e}");
-                event_first_error = Some(msg.clone());
-                let _ = state
-                    .db
-                    .record_publish_audit_failed(&entry, &msg, "manifest_snapshot")
-                    .await;
-            }
-        }
-    } else {
-        let msg = "publish did not include inline substrate; event-first promotion skipped";
-        if manifest_inserted {
-            event_first_error = Some(msg.to_string());
-            let _ = state
-                .db
-                .record_publish_audit_failed(&entry, msg, "manifest_only")
-                .await;
-        }
-    }
-
-    let status = if manifest_inserted {
-        StatusCode::CREATED
-    } else {
-        StatusCode::OK
-    };
-    (
-        status,
-        Json(json!({
-            "ok": true,
-            "duplicate": !manifest_inserted,
-            "vfr_id": entry.vfr_id,
-            "signed_publish_at": entry.signed_publish_at,
-            "snapshot_inserted": snapshot_inserted,
-            "blob_url": blob_url,
-            "event_first_promoted": event_first_promoted,
-            "event_first_error": event_first_error,
-        })),
-    )
-}
-
 /// Return the materialized frontier state for `vfr_id`.
 ///
 /// The event/projection tables are the source of truth after the
@@ -3166,63 +2894,6 @@ async fn get_entry_events_stream(
     Sse::new(stream)
         .keep_alive(KeepAlive::default())
         .into_response()
-}
-
-/// Validate an inline substrate against a signed manifest. Returns the
-/// canonical pieces ready for `insert_snapshot`: snapshot_hash, schema
-/// version, substrate value, byte size.
-fn prepare_inline_snapshot(
-    entry: &ProtocolEntry,
-    substrate_raw: Value,
-) -> Result<(String, String, Value, i32), String> {
-    // Parse into Project so we can call the canonical hash functions.
-    // These are the same functions the publisher used to compute the
-    // hashes in the signed manifest — single source of canonicalisation.
-    let project: Project = serde_json::from_value(substrate_raw.clone())
-        .map_err(|e| format!("substrate schema: {e}"))?;
-
-    let computed_snapshot = snapshot_hash(&project);
-    if computed_snapshot != entry.latest_snapshot_hash {
-        return Err(format!(
-            "substrate snapshot_hash mismatch: manifest declares {}, inline content hashes to {}",
-            entry.latest_snapshot_hash, computed_snapshot
-        ));
-    }
-
-    let computed_event_log = event_log_hash(&project.events);
-    if computed_event_log != entry.latest_event_log_hash {
-        return Err(format!(
-            "substrate event_log_hash mismatch: manifest declares {}, inline events hash to {}",
-            entry.latest_event_log_hash, computed_event_log
-        ));
-    }
-
-    // schema_version: pull from the substrate's `schema` field if present,
-    // else from project.vela_version; else "unknown".
-    let schema_version = substrate_raw
-        .get("schema")
-        .and_then(|v| v.as_str())
-        .or_else(|| substrate_raw.get("vela_version").and_then(|v| v.as_str()))
-        .unwrap_or("unknown")
-        .to_string();
-
-    // size_bytes: serialize once for the size estimate. The CHECK
-    // constraint enforces < 100 MB; we surface a clear error here
-    // rather than letting the DB raise it.
-    let bytes = canonical::to_canonical_bytes(&substrate_raw)
-        .map_err(|e| format!("canonicalize substrate: {e}"))?;
-    let size_bytes: i32 = bytes
-        .len()
-        .try_into()
-        .map_err(|_| "substrate exceeds i32 byte limit".to_string())?;
-    if bytes.len() >= 100 * 1024 * 1024 {
-        return Err(format!(
-            "substrate too large: {} bytes exceeds 100 MB limit",
-            bytes.len()
-        ));
-    }
-
-    Ok((computed_snapshot, schema_version, substrate_raw, size_bytes))
 }
 
 // ── HTML rendering ───────────────────────────────────────────────────

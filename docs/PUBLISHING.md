@@ -93,40 +93,32 @@ This proves that the packet is internally replayable and hash-bound.
 It does not prove the claims matter; it proves they are what was
 signed.
 
-## Hub mirror
+## Hub index (git push is publication)
 
-The public hub mirrors signed frontier state:
+The public hub is a read-only index over git-replayed state:
 
 ```text
 https://hub.constellate.science
 ```
 
-For a fresh frontier file, publish with:
+Publication is `git push`: the frontier repo's committed `.vela/events`
+log is the authority, and the hub re-derives its index by fetching the
+repo and strictly replaying it. The one owner-signed act is binding the
+repo to its `vfr_` id, once:
 
 ```bash
-vela sign generate-keypair --out keys
-vela actor add ./frontier.json reviewer:you \
-  --pubkey "$(cat keys/public.key)"
+vela frontier materialize .
+vela check . --strict --json
+git push
 
-vela registry publish ./frontier.json \
-  --owner reviewer:you \
-  --key keys/private.key \
-  --to https://hub.constellate.science \
-  --json
+vela registry register-git <vfr_id> \
+  --remote https://github.com/you/your-frontier.git
 ```
 
-For split frontier repositories, materialize and lock before
-publishing a snapshot:
-
-```bash
-vela frontier materialize <frontier>
-vela check <frontier> --strict --json
-vela proof <frontier> --out /tmp/<frontier>-proof
-```
-
-The hub can withhold or go stale. It should not be treated as the
-scientific authority. Consumers should verify with `vela registry pull`,
-`vela check`, and `vela verify`.
+After registration every push refreshes the index on the next ingest
+sweep. The hub can lag or go down; it is never the scientific
+authority. Consumers verify with `git clone` + `vela check --strict`,
+which re-derives everything locally with no hub dependency.
 
 ## Optional dataset-style mirror
 

@@ -158,8 +158,9 @@ Vela is version control for scientific state: signed append-only event logs per 
 ### Sixty seconds: verify what we claim
 
 The public `examples/` ship the witness sets, so `vela reproduce` works straight
-from a clone. The full event log (for `check`, `status`, and `serve`) is the
-maintained frontier on the hub; fetch it with `vela clone` first.
+from a clone. The full event log (for `check`, `status`, and `serve`) lives in
+the frontier's git repo (`constellate-science/vela-frontiers` for the canonical
+examples); `git clone` it — the committed `.vela/events` is the authority.
 
 ```bash
 cargo build --release --bin vela            # in vendor/vela
