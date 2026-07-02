@@ -34,7 +34,7 @@ A governance promise is only as good as its enforcement. Here it is mechanical:
   operator cannot fabricate acceptance without the key, and a forged event fails replay.
 - The reducer is a pure fold and the loader is the reducer (no second read path), so a hosted view
   that diverges from the log is detectable by anyone who replays.
-- A receipt is provenance, never a verdict. Registering a witness does not accept a claim.
+- A record is provenance, never a verdict. Registering a witness does not accept a claim.
 
 These are the frozen primitives (see `PROTOCOL.md`); governance is their consequence, not a
 separate layer.

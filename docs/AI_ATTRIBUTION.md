@@ -236,7 +236,4 @@ substrate questions:
 - `docs/PROTOCOL.md`. Normative event semantics.
 - `docs/CARINA.md` §v0.3. The Proof primitive.
 - `docs/PROTOCOL.md`. The canonical event log walkthrough.
-- `docs/RELAY.md`. The four adapter shapes that produce
-  AI-drafted proposals.
-- `examples/early-ad/`. The first reference chain.
 - `examples/sidon-sets/`. The mathematical reference chain.

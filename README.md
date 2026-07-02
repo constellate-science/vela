@@ -83,7 +83,7 @@ confidence. A finding can be reviewer-accepted and still gate
 | `crates/vela-protocol` | The reference reducer — the normative state-transition function. |
 | `crates/vela-cli` | The `vela` command-line tool. |
 | `crates/vela-verify` | Frozen, independent exact verifiers (Sidon, Golomb, cap, B_h, covering, constant-weight, Costas, linear codes, and the Erdős certificate kinds: interval-product #1056, CRT partial cover #203, Kummer no-carry #684, min-binom-gcd #700, binomial deficiency #1093, exception enumeration #1094) — the reference verifier registry behind the gate and `vela reproduce`. |
-| `crates/vela-hub` | The federation hub: registry plus signed propose / accept. |
+| `crates/vela-hub` | The hub: a read-only index over git-replayed state (its one write is the owner-signed git-remote registration). |
 | `clients/` | Standalone Python + TypeScript reducers — the second and third conformance implementations of the reference reducer. |
 | `bindings/` | Python HTTP SDK: a client for `vela serve --http` (read endpoints + signed write tools). Not a reducer. |
 | `conformance/` | The cross-implementation test-vector suite (reducer fixtures + gate reject-vectors). |
@@ -109,6 +109,9 @@ curl -fsSL https://raw.githubusercontent.com/constellate-science/vela/main/insta
 
 ## The working loop
 
+The full 25-verb porcelain reference, with a worked
+record → propose → pack → accept example, is [docs/CLI.md](docs/CLI.md).
+
 ```sh
 vela status <frontier>          # one screen: replay verdict, proposals, judgment
 vela serve <frontier>           # MCP tools incl. task_packet (the agent entry contract)
@@ -126,7 +129,7 @@ track it against the conformance vectors in `conformance/`.
 
 ## Contribute to a live frontier
 
-Anyone with a keypair can deposit a signed transition into the public registry
+Anyone with a keypair can land a signed transition on a public frontier
 in one command:
 
 ```sh

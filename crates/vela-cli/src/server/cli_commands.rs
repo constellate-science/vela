@@ -225,8 +225,9 @@ pub(crate) enum Commands {
         #[command(subcommand)]
         action: FrontierAction,
     },
-    /// Publish, list, or pull frontiers through a registry
-    /// (Phase S, v0.5: verifiable distribution)
+    /// The index: bind a frontier's git remote once (register-git),
+    /// then `git push` is publication. Verification verbs
+    /// (witness-check, verify-chain, verify-log) hold hubs honest.
     Hub {
         #[command(subcommand)]
         action: HubAction,
@@ -1491,12 +1492,11 @@ pub(crate) enum TransferAction {
 
 #[derive(Subcommand)]
 pub(crate) enum FrontierAction {
-    /// Scaffold a fresh, publishable `frontier.json` stub. The result
-    /// passes `vela check --strict` immediately and is ready to accept
-    /// findings via `vela finding add` and a publish via `vela registry
-    /// publish`. Use this instead of `vela init` when you intend to
-    /// publish to a hub — `init` creates a `.vela/` repo, which is not
-    /// directly publishable in v0.
+    /// Scaffold a fresh `frontier.json` stub. The result passes
+    /// `vela check --strict` immediately and is ready to accept
+    /// findings via `vela finding add`. Prefer `vela init` for new
+    /// work: it creates the event-logged `.vela/` repo, and `git push`
+    /// is publication (bind once with `vela hub register-git`).
     New {
         /// Path to write the new frontier file (e.g. `./frontier.json`).
         path: PathBuf,

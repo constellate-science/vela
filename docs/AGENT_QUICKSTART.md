@@ -31,6 +31,13 @@ Agents may not — the engine refuses these for `agent:`/`ci:` actors:
 Always export `VELA_ACTOR_ID=agent:<your-name>` and pass
 `--as agent:<your-name>` on writes. Never run bare decision verbs.
 
+The identity grammar, in full: `--as <actor>` is THE acting-identity flag
+on every write verb. `--author` exists only on `finding add`/`finding
+supersede` (the claim's author, distinct from who is acting), and
+`--verifier-actor` names the mechanical identity a frozen-verifier
+attachment is drafted for (e.g. `agent:vela-verify`). Nothing else names
+an identity.
+
 ## The loop, end to end
 
 ```bash
@@ -107,7 +114,12 @@ The loop scales by composition, not new machinery:
 1. **Claim before long work**: `vela_claim_task` (MCP, draft profile)
    leases an obligation under your OWN agent key; a live competing lease
    returns `already_claimed_by` — route around it. A lease coordinates;
-   it never decides.
+   it never decides. Lifecycle: the `attempt.claimed` event carries a TTL
+   (default 24h); an expired lease is simply ignored by the next claimer,
+   and landing your pack is what closes the work — there is no unclaim
+   ceremony. Obligation ids may be frontier-external and namespaced
+   (`erdos:443`); strict replay treats such leases as coordination, not
+   orphaned targets.
 2. **Watch, don't poll blind**: `GET /entries/{vfr}/events/stream?since=<cursor>`
    (SSE, cursor-resumable) streams what changed.
 3. **One pack per session**: bundle your session's proposals into a
@@ -128,13 +140,13 @@ above for writes.
 
 ## Doctrine, one paragraph
 
-Activity is not state. A model run, a notebook, a receipt, a search hit —
+Activity is not state. A model run, a notebook, a record, a search hit —
 all of it is source material until a proposal passes review and a human
 key signs the accept. The log is trustworthy by construction; a claim
 becomes trusted state only through the gate. Your job as an agent is to
-make the reviewer''s decision easy: hash-bound artifacts, honest caveats,
+make the reviewer's decision easy: hash-bound artifacts, honest caveats,
 reproducible verifier runs — and never to make the decision yourself.
 
-See also: [PROTOCOL.md](PROTOCOL.md) (the object model and receipt spec),
+See also: [PROTOCOL.md](PROTOCOL.md) (the object model and record spec),
 [VERIFICATION.md](VERIFICATION.md) (the gate), [HUB.md](HUB.md)
 (git-native publication), [THREAT_MODEL.md](THREAT_MODEL.md).

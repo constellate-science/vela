@@ -6,8 +6,9 @@ ships as published software (`cargo install vela-cli`,
 `pip install vela-state`, signed frontiers on a public hub) rather
 than a development-only artifact. Public software is a target.
 
-`SECURITY.md` covers the reporting policy. This document covers
-what is actually defended, what is not, and what is deferred.
+[`SECURITY.md`](../SECURITY.md) covers the reporting policy. This
+document covers what is actually defended, what is not, and what is
+deferred.
 
 ## Scope
 
@@ -209,38 +210,35 @@ sign arbitrary findings under that reviewer's id. **Mitigations:**
 
 ### A8. Compromised owner key for a published frontier · Mitigated at v0.138, hardened at v0.145
 
-A frontier published to a hub carries a signed registry entry
-naming an `owner_pubkey`. If that key is compromised, the
+A frontier registered on a hub carries an owner-signed git-remote
+registration naming an `owner_pubkey`. If that key is compromised, the
 attacker can:
 
-- publish new versions of the frontier to the same hub
-- pull-and-republish a frontier under their control
+- re-point the frontier's registered git remote at a repo they control
+
+They still cannot fabricate accepted state: the ingest loop strictly
+replays the committed event log, so a repo whose events are not signed
+by the frontier's registered reviewer keys is refused, and a consumer's
+`git clone` + `vela check --strict` never touches the hub at all.
 
 **Mitigations:**
 
-- Pull verifies the owner signature against the registry
-  entry's `owner_pubkey`. A pulled frontier whose signature
-  doesn't validate is rejected (`scripts/test-publish-pull-roundtrip.sh`).
-- The signed registry entry is content-addressed; tampering
-  with the entry on the hub would change its hash and any
-  consumer that pinned the entry would notice.
-- v0.138 ships `vela registry owner-rotate`. The legitimate
-  owner (or anyone able to detect compromise out-of-band) can
-  rotate the owner key: revoke the old owner actor record with
-  a recorded reason, register the new owner actor record, and
-  re-publish under the new owner key. Consumers who re-pull
-  after the rotation receive the new entry signed under the new
-  `owner_pubkey`; the in-frontier actors array retains the
-  rotation timeline (`revoked_at` / `revoked_reason` on the
-  retired record, `created_at` on the new record) so the audit
-  chain is reconstructable from the frontier itself.
-- v0.145 hardens the rotation primitive with multi-sig
-  governance. A per-frontier `vela.registry_governance_policy.v0.1`
-  (v0.144) declares a quorum of eligible attesters and a
-  threshold; `vela registry owner-rotate-governed` runs a
-  three-step flow (propose -> attest -> apply) where the apply
-  step verifies the attestation bundle satisfies the policy
-  before executing the v0.138 mutation. The verifier checks:
+- The registration is content-addressed and owner-signed; the hub
+  verifies the signature before re-pointing, and tampering with the
+  stored registration changes its hash.
+- Owner-key rotation happens in the frontier itself: `vela actor rotate`
+  revokes the old actor record with a recorded reason and registers the
+  new key under a versioned id, so the rotation timeline (`revoked_at` /
+  `revoked_reason` on the retired record, `created_at` on the new
+  record) is reconstructable from the frontier alone. (The retired
+  hub-side `vela registry owner-rotate` verb did this against registry
+  entries; the in-frontier primitive is the surviving path.)
+- v0.145's multi-sig governance survives as the owner-epoch chain. A
+  per-frontier `vela.registry_governance_policy.v0.1` (v0.144) declares
+  a quorum of eligible attesters and a threshold; the rotation flow is
+  propose -> attest -> apply, and `vela hub verify-chain` re-runs the
+  quorum verification over the recorded chain transcript. The verifier
+  checks:
   signatures valid against attester pubkeys, attester not
   revoked at `signed_at`, attester in `rotate_quorum.eligible_actors`,
   duplicate attester ids counted once, proposal not expired,
@@ -250,6 +248,8 @@ attacker can:
   fully-compromised current owner key alone is insufficient
   authority for non-bootstrap rotations: the threshold of
   distinct eligible attesters must approve.
+- The heading's version stamps (v0.138 / v0.145) date when each
+  primitive first shipped; the verbs above are the current surface.
 
 **Out of scope (deferred to future cycle):**
 
@@ -269,7 +269,7 @@ attacker can:
 ### A9. Compromised crates.io account · Undefended at protocol layer
 
 If the `vela-cli` or `vela-protocol` crates.io account is
-compromised, an attacker can publish a malicious 0.107.1 that
+compromised, an attacker can publish a malicious patch version that
 runs anything in `cargo install vela-cli` build / install. The
 substrate cannot prevent this; it inherits the security of
 crates.io's account auth.
@@ -278,8 +278,8 @@ crates.io's account auth.
 
 - Sigstore / SLSA provenance attestations on published crates
   would let consumers verify the publisher.
-- Pinning `vela-cli = "=0.107.0"` in downstream Cargo.toml
-  files would prevent silent rolls.
+- Pinning an exact version (`vela-cli = "=X.Y.Z"`) in downstream
+  Cargo.toml files would prevent silent rolls.
 - Reviewing the diff between published versions would catch
   obvious malice; the GitHub release notes are the suggested
   audit trail.
@@ -307,7 +307,7 @@ PyPI's account auth.
 - The hub's `/release.json` ships a `git_sha` that ties the
   deployed site to a specific commit;
   `scripts/check-live-release.sh` cross-checks this.
-- **v0.129:** `vela registry witness-check <vfr_id> --hubs
+- **v0.129:** `vela hub witness-check <vfr_id> --hubs
   <a,b,c>` fetches the same registry entry from multiple
   hubs, canonicalizes each via the substrate's
   `to_canonical_bytes` helper, and asserts byte-identical
@@ -318,10 +318,11 @@ PyPI's account auth.
   detectable. The substrate does not adjudicate which hub
   is correct in a split; that is the operator's call. Pinned
   by `scripts/test-registry-witness.sh`.
-- The v0.20 `vela registry mirror` primitive remains
-  available for seeding a second hub from the first; v0.129
-  closes the verification half by giving consumers a
-  cross-hub agreement signal.
+- Seeding a second hub is now trivial by construction: register
+  the same git remotes on it and let its ingest loop re-derive the
+  index (the retired `vela registry mirror` copied registry bytes
+  instead). v0.129's witness-check closes the verification half by
+  giving consumers a cross-hub agreement signal.
 
 **Deferred:**
 
@@ -463,14 +464,15 @@ git history.
   `.gitignore`, so future quickstart-scaffolded frontiers
   committed as reference examples do not carry the keys
   directory.
-- `docs/SECURITY_INCIDENTS.md` records the v0.111.0 leak
-  (`vsi_2026-05-10-erdos-key-leak`) including what was at
-  risk, what was actually exposed, why git history was not
-  rewritten, and lessons learned.
-- The reference frontiers at `examples/early-ad`,
-  `examples/sidon-sets`, `examples/erdos-problems`, and the
-  project-layer frontiers under `projects/*` audit clean: no
-  `keys/` directory in any of them.
+- The v0.111.0 incident (`vsi_2026-05-10-erdos-key-leak`) is the
+  reason this item exists: a reference frontier briefly carried a
+  scaffolded keypair in public git history. The exposed key had
+  performed zero signing operations, it was removed and treated as
+  compromised (never to be re-registered), and git history was left
+  unrewritten — the leak is itself part of the honest record.
+- The reference frontiers under `examples/` and the project-layer
+  frontiers under `projects/*` audit clean: no `keys/` directory in
+  any of them.
 
 **Not defended:**
 
@@ -517,8 +519,8 @@ correct." It does not. Vela makes claims durable.
 
 ## Reporting a vulnerability
 
-See `SECURITY.md`. Email the maintainer; do not open public
-issues. Include reproduction steps and the affected component.
+See [`SECURITY.md`](../SECURITY.md). Email the maintainer; do not open
+public issues. Include reproduction steps and the affected component.
 
 ## What is deferred
 

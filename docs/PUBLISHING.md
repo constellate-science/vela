@@ -212,7 +212,8 @@ the bridge is a theorem. Frozen verifiers are the only trust anchor; everything 
 It builds the frozen Rust verifiers, re-verifies every stored witness from scratch (`vela reproduce`),
 runs the Lean build (the transfer and keystone theorems must compile, or the gate fails), and asserts the
 Python and Rust trust gates agree on the frozen conformance vectors. Exits 0 only if all of that holds on
-your machine. Read the canonical six files it rests on (`docs/CANON.md`) and you have read Vela.
+your machine. Read `docs/PROTOCOL.md` (the wire spec) and `docs/VERIFICATION.md`
+(what the gate holds) and you have read Vela.
 
 ### Re-verify a result directly
 
@@ -407,10 +408,12 @@ knowledge change → Frontier PR → verification checks → review → accept �
 1. **Open it.** A proposed transition is a signed `vpr_` proposal.
    - Local: `vela propose <frontier> <vf_id> --status accepted --reviewer reviewer:you --reason "…"`
      (or `vela note` / `vela finding add` without `--apply` to leave it pending).
-   - Over the wire to the hub: `vela registry propose <vfr_id> --to https://hub.constellate.science --key <key> --actor reviewer:you --reason "…" --payload finding.json`.
-   - The proposal is content-addressed and signed over the exact canonical bytes
-     the hub re-derives. Admission to the *log* rests on the signature, never on
-     claimed identity.
+   - Remote: push the proposal on a branch of the frontier's git repo and open
+     an ordinary git PR — the hub is a read-only index, so there is no
+     over-the-wire propose. The `vela-check` reusable GitHub Action holds the
+     branch to `vela check --strict` before any human looks at it.
+   - The proposal is content-addressed and signed over exact canonical bytes.
+     Admission to the *log* rests on the signature, never on claimed identity.
 
 2. **Check it.** The PR carries its verification, not a promise of it.
    - A construction ships a `*.witness.json`; `vela reproduce` re-checks it with

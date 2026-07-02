@@ -26,7 +26,6 @@ model.*
 |---|---|
 | The protocol-correctness guarantees (replay, hash-DAG, signatures, merge, quorum) | **Part I**, §1–§16 |
 | The epistemic calculus (provenance algebra, Belnap/bilattice status, κ, admission, transfers) | **Part II**, §17–§39 |
-| The narrative companion | `docs/THEORY_NARRATIVE.md` |
 | The implementation-facing invariants that must survive product changes | `docs/PROTOCOL.md` |
 
 Citation convention: Part I theorems are **Core Theorem N**, Part II's are
@@ -80,8 +79,7 @@ over scoped frontier state. Papers, datasets, lab logs, benchmark outputs,
 agent traces, and reviews are source activity until they become proposals,
 diffs, accepted events, and replayed state.
 
-For the narrative companion to this document, see
-`docs/THEORY_NARRATIVE.md`. For the implementation-facing invariants that must
+For the implementation-facing invariants that must
 survive product and protocol changes, see `docs/PROTOCOL.md`. The frontier
 calculus that this formal core carries is Part II below.
 
@@ -1274,7 +1272,7 @@ used directly in the witness-check argument). Verifies with
 `lake build Vela.FrontierIdDeterminism`.
 
 **Substrate role.** This is the substrate-side guarantee that the
-v0.129 `vela registry witness-check` primitive (A11 cross-hub
+v0.129 `vela hub witness-check` primitive (A11 cross-hub
 divergence detector) implicitly assumes: when two hubs agree on
 the canonical bytes for a given `vfr_*`, they agree on the
 frontier's underlying state. The Rust implementation lives at
@@ -4267,7 +4265,7 @@ replays the 12 canonical fixtures through the Python reducer (currently 12/12, i
 | **Descriptor preservation** under accept/eval/replay | §6 (reducer arms) | `ReducerModel.lean` `acceptPack_preserves_descriptors`, `eval_then_pack_preserves`, `replay_preserves_descriptors` (de-hollowed T28/T34, now proven) | `tests/conformance/` descriptor cases |
 | **Cross-frontier transfer soundness** (verified transports) | §9.1 constellation (THEORY.md) | `Transfer.lean` `transfer_sound` (T23) + concrete `translateTransfer`/`sidon_translate_sound` | the certified-frontier transfers (Sidon→B_h, code→E8) |
 | **Signature stability / uniqueness** | §6 signing | `Signing.lean` (T6), `SignatureUniqueness.lean` (T10), `MultiSigThreshold.lean` (T11) | `tests/conformance/` signing cases |
-| **Spec-surface freeze** (event/proposal kinds frozen per version) | `SPEC_VERSION.md` | — (hash discipline) | `conformance/spec-surface.v1.json` `surface_sha256` |
+| **Spec-surface freeze** (event/proposal kinds frozen per version) | `conformance/spec-surface.v1.json` | — (hash discipline) | `spec-surface.v1.json` `surface_sha256` |
 
 ## Honesty notes (from Appendix A, the theorem audit)
 
@@ -4637,4 +4635,4 @@ atlas stays a pure derived projection. No fabricated edges.
 
 - [PROTOCOL.md](PROTOCOL.md): the normative wire spec: events, bundles, ids.
 - [THEORY.md](THEORY.md): the formal core and the frontier calculus.
-- [CANON.md](../../../docs/CANON.md): the front door and the canonical set.
+- [VERIFICATION.md](VERIFICATION.md): what the conformance gate holds, and why.

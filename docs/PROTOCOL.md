@@ -166,8 +166,7 @@ projections at `research-traces/research-traces.json` and
 
 The `Trajectory` (v0.50) and `NegativeResult` (v0.49) primitives map
 to what AI-research-runtime systems call workstreams and failed
-explorations respectively. See `docs/RESEARCH_RUNTIME.md` for the
-runtime-side concept mapping and §6.1 / §6.3 below for the kernel
+explorations respectively. See §6.1 / §6.3 below for the kernel
 event surface.
 
 ### 2.5 artifact packet
@@ -1140,19 +1139,21 @@ rules. Material additions, in cycle order:
   hash-DAG log integrity). See `lean/Vela/`.
 - v0.91: README-demo gate scripts/test-readme-demo.sh.
 - v0.92: `POST /api/proposals/from-carina` agent
-  write-target.
+  write-target. (Retired.)
 - v0.94: public conformance contract at `conformance/`.
-- v0.95: `vela discord` aggregate CLI.
+- v0.95: `vela discord` aggregate CLI. (Retired.)
 - v0.96: replay perf characterized at O(N^2); deferred to
   v0.105.
-- v0.97: `/api/discord` HTTP endpoint mirroring CLI.
+- v0.97: `/api/discord` HTTP endpoint mirroring CLI. (Retired.)
 - v0.99: mixed-folder ingest dispatches every content type
   in stable order (notes / scout / data) with an unhandled-
   extension warn line.
 - v0.100: publish-pull round-trip exercised end-to-end
-  against the live hub.
+  against the live hub. (The publish/pull transport is retired,
+  ADR 0001 Phase 2; publication is `git push`.)
 - v0.101: `vela registry publish` auto-registers the owner
-  actor when the actors set is empty.
+  actor when the actors set is empty. (`registry publish` is
+  retired; see v0.720+.)
 - v0.102: ingest-doi hint plus README path-precedence note;
   full crates.io + PyPI publish round (v0.102 is the first
   published binary that matches repo state since v0.77).
@@ -1171,9 +1172,8 @@ rules. Material additions, in cycle order:
   Public `apply_event` signature unchanged; replay loop
   uses the new `apply_event_indexed`.
 
-For per-cycle release notes (started, ended, baseline,
-result, gates, notes), see
-`docs/SESSION_LOG_2026-05-08.md`.
+Per-cycle session logs are internal working notes and are
+not vendored in this distribution.
 
 ## State integrity and impact
 
@@ -1184,11 +1184,10 @@ replay output. A proposal can be pending, accepted, rejected, or held for
 revision, but it does not become trusted frontier state until an accepted event
 exists and replay agrees with the materialized state.
 
-The protocol exposes two read-only checks:
+The protocol exposes one read-only structural check:
 
 ```bash
 vela check <FRONTIER> --strict [--json]
-vela impact <FRONTIER> <vf_id> [--depth N] [--json]
 ```
 
 `vela check --strict` reports duplicate event ids, orphan event targets, replay
@@ -1196,9 +1195,11 @@ conflicts, accepted proposals without applied events, accepted events without
 proposal ids, stale proof state, and accepted artifact proposals that lack a
 source locator or content hash.
 
-`vela impact` reports declared downstream dependents for a finding across
-`supports`, `depends`, `contradicts`, and cross-frontier targets. It is
-non-mutating and does not change confidence.
+Downstream-dependent analysis (formerly `vela impact`) lives in the graph
+surfaces: the `blast_radius` MCP tool reports declared dependents for a
+finding across `supports`, `depends`, `contradicts`, and cross-frontier
+targets, and the hub serves reverse deps at `GET /entries/{vfr_id}/depends-on`.
+Both are non-mutating and do not change confidence.
 
 *Vela Protocol Specification v0.105.0 - May 2026*
 
@@ -1239,12 +1240,13 @@ record for Workstream 0 (the aggressive minimal core).
   Python finding-state digest, gate step `gate-conformance-py-rust`); canonical hashing vectors
   (`conformance/canonical-hashing.json`, `verify_canonical_hashing.py`).
 
-#### 3. Receipt
+#### 3. Witness record
 - **Is:** a content-addressed witness that a verification or retrieval happened: a
   `VerifierAttachment`, a signed manifest, a witness blob under `vela-verify`. Provenance, not a
-  verdict; registering a receipt never accepts a claim.
-- **Frozen contract:** a receipt addresses exact bytes (the witness / manifest), and re-checking
-  those bytes under the frozen verifier reproduces the same pass/fail. A receipt carries no trust
+  verdict; registering a witness never accepts a claim. (The portable claim
+  packet built on this contract is the activity record, §6b.)
+- **Frozen contract:** a witness record addresses exact bytes (the witness / manifest), and re-checking
+  those bytes under the frozen verifier reproduces the same pass/fail. A witness record carries no trust
   weight on its own; acceptance is a separate key-custody event.
 - **Pinned by:** `vela reproduce` (every witness re-checks under the frozen `vela-verify`);
   canonical hashing vectors for the content addresses.
@@ -1573,7 +1575,7 @@ table.
 | `vgp_` | registry governance policy |
 | `vop_` | owner-rotate proposal |
 | `vab_` | owner-rotate attestation bundle |
-| `vrc_` | registry checkpoint |
+| `vrc_` | activity record (`record.rs`; a retired registry-checkpoint writer historically shared this prefix) |
 | `vac_` | actor handle |
 | `vsi_` | search index |
 
@@ -1742,8 +1744,8 @@ able to open a frontier cold, read its event log, and verify its integrity
 against the materialized state.
 
 The authoritative spec is this document. The kernel spec is
-`docs/CARINA.md`. `CONTRIBUTING.md` walks through adding a new event
-kind. This section is the concrete walkthrough that none of those is.
+`docs/CARINA.md`. This section is the concrete walkthrough that
+neither of those is.
 
 ### 1. What the event log is
 
@@ -2072,23 +2074,20 @@ They match the digests this command prints, by construction.
 
 ### 5. Federation: same event log, two hubs
 
-When a peer hub serves a copy of an event log, the consumer fetches
-the manifest, verifies the hub's signature on it, and diffs the
-manifest's event ids against the local `.vela/events/` directory.
-The full sequence is documented at `docs/FEDERATION.md`.
+When a peer hub serves a copy of an event log, a consumer diffs the
+peer's event ids against the local `.vela/events/` directory. Under
+the git-native model this is ordinary git: two hubs indexing the same
+frontier repo agree by construction, and `vela hub witness-check`
+asserts byte-identical agreement across hubs.
 
-The diff is recorded as canonical events. `vela federation sync
---via-hub` appends one `frontier.synced_with_peer` event per call
-plus one `frontier.conflict_detected` event per disagreement. A
-`conflict_detected` event names the local event id, the peer's
-event id, and the field that diverges.
-
-A reviewer resolves a conflict by emitting
-`frontier.conflict_resolved` (introduced in v0.59), which links
-back to the original `conflict_detected` event id and records the
-verdict. The v0.70 `vela federation push-resolution` command
-propagates that resolution back to the originating hub so the
-peer's substrate can pick it up on its next sync.
+The event vocabulary for recording a divergence survives from the
+retired `vela federation` CLI plane: `frontier.synced_with_peer`
+records a comparison, `frontier.conflict_detected` names the local
+event id, the peer's event id, and the field that diverges, and a
+reviewer resolves a conflict by emitting `frontier.conflict_resolved`
+(v0.59), which links back to the original `conflict_detected` event
+id and records the verdict. These are canonical events like any
+other; historical logs containing them replay unchanged.
 
 The doctrine is symmetric: the diff itself is part of the event log,
 not metadata about it. A reviewer cannot resolve a federation

@@ -225,8 +225,7 @@ observed in running code).
   library is available here, so it is a real-curve-library task; FRI is the transparent alternative and
   avoids KZG's trusted setup) swapped in for the O(n)-verifier IPA; a fast prover/curve library to run
   the O(K log m) circuit at record sizes (a(16)=503); and on the Lean side, discharging more concrete
-  transfer soundnesses (e.g. code → kissing) — see `docs/COMPUTE_FRONTIER.md` for the highest-leverage
-  compute-intensive directions.
+  transfer soundnesses (e.g. code → kissing).
 - **The unwillable part:** one external participant submits a verified delta and relies on the succinct
   proof. That experiment, not more theory, decides whether PCK is a breakthrough or an elegant dead end.
 

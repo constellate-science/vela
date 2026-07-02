@@ -7,21 +7,21 @@ from a clean clone. The hub is a convenience layer: cross-frontier search,
 reverse-dependency lookup, producer/reviewer pages, projection and event-stream
 APIs, and the editorial "live" filter. It does not own byte custody (git + LFS
 do), and it is not the write authority for acceptance (a reviewer's signed
-`review.accepted` event in a PR is). Its write endpoints are now limited to index
-population: the git-ingestion lane is LIVE — an owner binds a repo once
+`review.accepted` event in a PR is). Its one write endpoint is the owner-signed
+git-remote registration: an owner binds a repo once
 (`vela hub register-git <vfr> --remote <url>`, or POST
 `/entries/{vfr}/git-remote` with a signed `vela.frontier-git-remote.v0.1`
-record), and the hub re-derives the index by fetching the repo, strictly
-replaying the committed `.vela/events` log (validation + reducer replay +
-signature signals; a tampered signed event is refused with "id does not
-re-derive"), and promoting through the same gate as the legacy publish,
-with `authority_mode='git_ingested'`. `git push` is publication; the
-legacy signed publish remains as a deprecated index-population lane.
+record), and the hub re-derives the index by fetching the repo and holding it
+to the one strict bundle (`verify_frontier_strict`: content-address
+validation, strict reducer replay — never the loader's repair-lenient
+degrade — and error-severity signature signals; a tampered signed event is
+refused with "id does not re-derive"), then promoting with
+`authority_mode='git_ingested'`. `git push` is publication. The signed
+manifest publish (`POST /entries`) is removed (ADR 0001 Phase 2).
 
-The hub is the public HTTP surface for signed frontier publications.
-The signed registry entry is the publish receipt. Live reads come from
-verified event and projection tables, and snapshot blobs remain derived
-export artifacts.
+The hub is the public HTTP read surface for frontier state. Live reads
+come from verified event and projection tables, and snapshot blobs
+remain derived export artifacts.
 
 Clients verify locally on read, so a compromised hub can withhold or
 reorder, but cannot fabricate or tamper without breaking signatures and
@@ -36,8 +36,9 @@ The public hub is **<https://hub.constellate.science>**.
   `frontiers.materialized_snapshot_json` are projections from verified
   substrate.
 - **The signature is the bind, not access control.** Anyone with an
-  Ed25519 key can publish their own `vfr_id`. There is no allowlist of
-  pubkeys on the public v0 hub.
+  Ed25519 key can register their own `vfr_id`'s git remote. There is no
+  allowlist of pubkeys on the public v0 hub; the strict-replay gate, not
+  identity, decides what goes live.
 - **Snapshots are exports.** `GET /entries/{vfr_id}/snapshot` serves a
   derived materialized snapshot. `?redirect=cdn` may return the
   content-addressed object-storage copy when one exists.
@@ -52,22 +53,23 @@ The public hub is **<https://hub.constellate.science>**.
 |---|---|
 | `GET /` | Banner + endpoint list + version. |
 | `GET /healthz` | Liveness; reports DB reachability. |
-| `GET /entries` | Live frontiers, returned as manifest-compatible JSON for older clients. |
+| `GET /entries` | Live frontiers, returned as `vela.registry-entry.v0.1` index rows. |
 | `GET /entries/{vfr_id}` | One live frontier entry. HTML reads the hub projection and renders findings inline. |
 | `GET /entries/{vfr_id}/events?since=<event_id>&limit=<n>&kind=&target=` | Cursor-paginated canonical event log ordered by `seq`. Unknown cursors return 400. |
 | `GET /entries/{vfr_id}/events/stream?since=<event_id>` | Server-sent event stream. Emits backlog, then heartbeat while idle. |
 | `GET /frontier/{vfr_id}/inbox` | Agent-facing alias for the event stream. |
 | `GET /entries/{vfr_id}/snapshot` | Derived materialized snapshot JSON. `?redirect=cdn` redirects to the immutable blob when available. |
 | `GET /entries/{vfr_id}/findings/{vf_id}` | Single-finding view: claim, conditions, evidence, links. Cross-frontier links navigate when dependencies are published. |
-| `POST /entries` | Publish a signed manifest. Inline `substrate` is verified and decomposed into event/projection tables. |
+| `GET /entries/{vfr_id}/packs/{vsd_id}` | Pack review page: summary, member proposals with evidence-diff links, verdict state. |
+| `GET /entries/{vfr_id}/reproduce` | Verify-this-yourself page: the clone → `vela check --strict` → `vela reproduce` block plus last-ingest commit and time. |
+| `GET /entries/{vfr_id}/git-remote` | The frontier's registered git remote (url, ref, subdir, last ingest). |
+| `POST /entries/{vfr_id}/git-remote` | The one write: an owner-signed `vela.frontier-git-remote.v0.1` registration binding the frontier to its repo. |
 
-`POST /entries` body shape: a registry entry matching
-`vela.registry-entry.v0.1`, optionally with a sibling `substrate`
-object. The signed preimage is still the registry entry alone. The hub
-verifies the signature, verifies the substrate hashes against the
-manifest, stores snapshot metadata when object storage is configured,
-then promotes events and projections. See
-[REGISTRY.md](REGISTRY.md#manifest-format).
+Historical note: `POST /entries` (the signed-manifest publish) was the
+pre-git-native write path and is removed. Index rows are synthesized by
+the ingest loop from strictly replayed repos; the
+`vela.registry-entry.v0.1` shape survives only as the read-side row
+format of `GET /entries`.
 
 ### v0.8: cross-frontier composition
 
@@ -341,8 +343,8 @@ latest rows get `frontier_publish_audit.status = 'failed'` and do not
 appear in `/entries`.
 
 Direct Postgres publish helpers are intentionally absent after the
-event-first cutover. New publishes go through `POST /entries` so
-signature verification, snapshot hashing, event decomposition, audit
+event-first cutover. New state arrives through the git-ingest loop so
+strict replay, signature verification, event decomposition, audit
 recording, and projection promotion happen in one path.
 
 Deploy:
@@ -402,10 +404,10 @@ flyctl deploy --config crates/vela-hub/fly.toml \
 ```
 
 If a latest registry row fails verification, do not patch around it in
-the database. Republish the frontier through `POST /entries` or run the
-event-first backfill after the source locator is repaired. The failed row
-belongs in `frontier_publish_audit`; it should not be promoted to
-`frontiers`.
+the database. Fix the frontier repo and push (the ingest loop retries
+every sweep), or run the event-first backfill after the source locator
+is repaired. The failed row belongs in `frontier_publish_audit`; it
+should not be promoted to `frontiers`.
 
 Nightly or pre-demo audit:
 
