@@ -76,6 +76,13 @@
   --brass:          oklch(50.6% 0.116 78);    /* contested, dissent (≈ #8A6A1F) */
   --winter:         oklch(70.0% 0.040 232);   /* inferred, speculative, cross-frontier (≈ #8FA7B7) */
 
+  /* State washes — engraved-chip backgrounds for the materials above. */
+  --moss-soft:      color-mix(in oklch, var(--moss) 14%, transparent);
+  --brass-soft:     color-mix(in oklch, var(--brass) 14%, transparent);
+  --cinnabar-soft:  color-mix(in oklch, var(--cinnabar) 9%, transparent);
+  --winter-soft:    color-mix(in oklch, var(--winter) 14%, transparent);
+  --stone-soft:     color-mix(in oklch, var(--stone) 12%, transparent);
+
   /* ── Aurora teal — calibration mark, cross-frontier signal, the cool
      counterpoint to gold. Used for instrument readouts where gold would
      overstate. Reads as "fiducial reference" not "luxury accent."     */
