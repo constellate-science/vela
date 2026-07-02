@@ -159,10 +159,28 @@ pub(crate) fn cmd_status(path: &Path, json: bool) {
     if !live_leases.is_empty() {
         println!("  leases:      {} live", live_leases.len());
         for l in live_leases.iter().take(5) {
+            let remaining = chrono::DateTime::parse_from_rfc3339(&l.claimed_at)
+                .ok()
+                .map(|t| {
+                    (t + chrono::Duration::seconds(l.lease_ttl_seconds as i64))
+                        .signed_duration_since(chrono::Utc::now())
+                })
+                .map(|d| {
+                    let m = d.num_minutes().max(0);
+                    if m >= 60 {
+                        format!("expires in {}h{:02}m", m / 60, m % 60)
+                    } else {
+                        format!("expires in {m}m")
+                    }
+                })
+                .unwrap_or_else(|| format!("ttl {}s", l.lease_ttl_seconds));
             println!(
-                "    · {} by {} (ttl {}s from {})",
-                l.obligation_id, l.claimant_actor, l.lease_ttl_seconds, l.claimed_at
+                "    · {}  {}  ({remaining})",
+                l.obligation_id, l.claimant_actor
             );
+        }
+        if live_leases.len() > 5 {
+            println!("    … +{} more", live_leases.len() - 5);
         }
     }
     if attestation_count + registration_count > 0 {
@@ -183,6 +201,16 @@ pub(crate) fn cmd_status(path: &Path, json: bool) {
         project.actors.len(),
     );
     println!();
+    match vela_protocol::acceptance_policy::load_active_policy(path) {
+        Ok(Some(vp)) => println!("  policy:      live ({})", vp.policy.id),
+        Ok(None) if path.join(".vela/policies/active.json").exists() => {
+            println!(
+                "  policy:      {}",
+                style::warn("staged — one signature activates it")
+            );
+        }
+        _ => {}
+    }
     if pending_total > 0 {
         println!(
             "  {}  {pending_total} pending proposals",
@@ -191,6 +219,12 @@ pub(crate) fn cmd_status(path: &Path, json: bool) {
         for (k, n) in &pending_by_kind {
             println!("    · {n:>3}  {k}");
         }
+        println!();
+        println!("  next:  vela inbox .   then decide under your key (vela accept)");
+    } else if !replay.ok {
+        println!("  {}  replay diverged", style::warn("!!"));
+        println!();
+        println!("  next:  vela check . --strict");
     } else {
         println!("  {}  inbox clean", style::ok("ok"));
     }
@@ -250,17 +284,41 @@ pub(crate) fn cmd_log(path: &Path, limit: usize, kind_filter: Option<&str>, json
         println!("  (no events)");
         return;
     }
+    // Columns fitted to the visible page, not fixed guesses: the kind
+    // and actor columns take their widest visible value (capped).
+    let kind_w = events
+        .iter()
+        .map(|e| e.kind.as_str().chars().count())
+        .max()
+        .unwrap_or(10)
+        .min(28);
+    let actor_w = events
+        .iter()
+        .map(|e| e.actor.id.chars().count())
+        .max()
+        .unwrap_or(6)
+        .min(24);
     for e in &events {
         let when = fmt_timestamp(&e.timestamp);
-        let target_short = if e.target.id.len() > 22 {
-            format!("{}…", &e.target.id[..21])
-        } else {
-            e.target.id.clone()
+        let clip = |s: &str, w: usize| -> String {
+            if s.chars().count() > w {
+                let cut: String = s.chars().take(w.saturating_sub(1)).collect();
+                format!("{cut}…")
+            } else {
+                s.to_string()
+            }
         };
-        let reason: String = e.reason.chars().take(70).collect();
+        let target_short = clip(&e.target.id, 22);
+        let reason: String = e.reason.chars().take(60).collect();
         println!(
-            "  {:<19}  {:<32}  {:<24}  {}",
-            when, e.kind, target_short, reason
+            "  {:<11}  {:<kw$}  {:<aw$}  {:<22}  {}",
+            when,
+            clip(e.kind.as_str(), kind_w),
+            clip(&e.actor.id, actor_w),
+            target_short,
+            reason,
+            kw = kind_w,
+            aw = actor_w,
         );
     }
     println!();
@@ -441,23 +499,27 @@ pub(crate) fn cmd_inbox(path: &Path, kind_filter: Option<&str>, limit: usize, js
         );
     }
     // Undecided packs, so the reviewer sees the changeset units first.
-    let undecided: Vec<_> = project
+    let mut undecided: Vec<_> = project
         .released_diff_packs
         .iter()
         .filter(|r| r.verdict.is_none() && !r.member_proposals.is_empty())
         .collect();
+    undecided.sort_by(|a, b| a.summary.cmp(&b.summary).then(a.pack_id.cmp(&b.pack_id)));
     if !undecided.is_empty() {
         println!();
         println!("  packs awaiting one decision:");
-        for r in undecided {
+        for r in &undecided {
+            let n = r.member_proposals.len();
             println!(
-                "    {}  {} member(s)  — {}",
+                "    {}  {:>2} member{}  {}",
                 r.pack_id,
-                r.member_proposals.len(),
+                n,
+                if n == 1 { " " } else { "s" },
                 r.summary.chars().take(60).collect::<String>()
             );
-            println!("      accept: vela accept . --pack {}", r.pack_id);
         }
+        println!();
+        println!("  decide:  vela accept . --pack <vsd_id>    (one atomic verdict per pack)");
     }
     println!();
 }

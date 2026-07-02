@@ -87,7 +87,12 @@ pub fn run(frontier_arg: Option<&Path>, port: u16) -> DoctorReport {
         blocking.push("frontier_load_failed".to_string());
     }
     if frontier_load_ok && !policy_ok {
-        blocking.push("policy_missing_or_invalid".to_string());
+        // Nothing scaffolds the review-policy documents today (even the
+        // reference fixtures lack them), so their absence is advice, not
+        // a blocker — doctor must not fail every real frontier.
+        warnings.push(
+            "review-policy documents not configured (optional; `vela policy show .`)".to_string(),
+        );
     }
     if frontier_load_ok && !evidence_ci_ok {
         blocking.push("evidence_ci_release_blocking".to_string());
@@ -95,7 +100,11 @@ pub fn run(frontier_arg: Option<&Path>, port: u16) -> DoctorReport {
     if !workbench_port_available {
         blocking.push("workbench_port_unavailable".to_string());
     }
-    if !release_binary_exists {
+    // Only meaningful inside the substrate dev checkout (the gate
+    // scripts want target/release); an installed binary user is never
+    // missing it — they are running it.
+    let dev_checkout = Path::new("Cargo.toml").is_file() && Path::new("crates").is_dir();
+    if dev_checkout && !release_binary_exists {
         warnings.push("release binary missing; run cargo build --release --bin vela".to_string());
     }
     if !has_jq {

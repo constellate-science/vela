@@ -5,10 +5,21 @@ use super::*;
 
 /// Walk up from `cwd` looking for a `.vela/` directory. Returns the
 /// first parent that contains one, or `None` if none found.
+/// A frontier's `.vela` (it has the event log), NOT the user config
+/// dir — `~/.vela` holds keys/identity/hub.env, and a parent walk from
+/// anywhere under $HOME would otherwise "find" it and load the config
+/// dir as an empty frontier.
+fn is_frontier_store(store: &Path) -> bool {
+    store.is_dir()
+        && (store.join("events").is_dir()
+            || store.join("proposals").is_dir()
+            || store.join("genesis.json").is_file())
+}
+
 fn find_vela_repo() -> Option<PathBuf> {
     let mut cur = std::env::current_dir().ok()?;
     loop {
-        if cur.join(".vela").is_dir() {
+        if is_frontier_store(&cur.join(".vela")) {
             return Some(cur);
         }
         if !cur.pop() {
@@ -166,6 +177,14 @@ pub(crate) fn run_session() {
 
     print_session_dashboard(&project, &repo_path);
 
+    // Piped or scripted invocation: the dashboard IS the answer. A
+    // prompt loop over a closed stdin never sees EOF as "stop" from
+    // read_line's Ok(0), so it would spin forever printing prompts.
+    use std::io::IsTerminal;
+    if !std::io::stdin().is_terminal() {
+        return;
+    }
+
     use std::io::{BufRead, Write};
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
@@ -173,8 +192,9 @@ pub(crate) fn run_session() {
         print!("  > ");
         stdout.flush().ok();
         let mut line = String::new();
-        if stdin.lock().read_line(&mut line).is_err() {
-            break;
+        match stdin.lock().read_line(&mut line) {
+            Ok(0) | Err(_) => break, // EOF ends the session
+            Ok(_) => {}
         }
         let input = line.trim();
         if input.is_empty() {
@@ -195,5 +215,27 @@ pub(crate) fn run_session() {
             }
         };
         answer(&project, input, false);
+    }
+}
+
+#[cfg(test)]
+mod frontier_store_tests {
+    use super::is_frontier_store;
+
+    #[test]
+    fn config_shaped_vela_dir_is_not_a_frontier() {
+        let tmp = std::env::temp_dir().join(format!("vela-store-test-{}", std::process::id()));
+        // The user config shape: keys + identity, no event log.
+        let config = tmp.join("config/.vela");
+        std::fs::create_dir_all(config.join("keys")).unwrap();
+        std::fs::write(config.join("identity.json"), "{}").unwrap();
+        assert!(!is_frontier_store(&config));
+
+        // The frontier shape: an events directory.
+        let frontier = tmp.join("frontier/.vela");
+        std::fs::create_dir_all(frontier.join("events")).unwrap();
+        assert!(is_frontier_store(&frontier));
+
+        std::fs::remove_dir_all(&tmp).ok();
     }
 }
