@@ -294,7 +294,12 @@ class VelaAgent:
         hub_url: str = "https://vela-hub.fly.dev",
         timeout_seconds: float = 30.0,
     ) -> dict[str, Any]:
-        """POST a signed Scientific Diff Pack to a Vela hub.
+        """RETIRED: the hub's write endpoints are gone (git push is
+        publication; the hub re-derives its index from registered git
+        remotes). Kept as a loud error so old agent code fails with
+        instructions instead of a silent 404/405.
+
+        POST a signed Scientific Diff Pack to a Vela hub.
 
         Reads the pack from `.vela/diff_packs/<pack_id>.json` and the
         member proposal stubs from `.vela/agent_proposals/` (the SDK
@@ -311,6 +316,11 @@ class VelaAgent:
         published. It does NOT auto-accept the pack — the verdict
         flow stays on v0.203 workbench + v0.205 promoter.
         """
+        raise RuntimeError(
+            "publish_to_hub is retired: git push IS publication. Bind the repo "
+            "once with `vela hub register-git <vfr> --remote <url>`; the hub "
+            "re-derives its index on every push."
+        )
         import json as _json
         import urllib.request
 
