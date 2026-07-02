@@ -722,7 +722,7 @@ async fn get_mcp() -> (StatusCode, Json<serde_json::Value>) {
     (
         StatusCode::METHOD_NOT_ALLOWED,
         Json(serde_json::json!({
-            "error": "stateless MCP endpoint: POST a JSON-RPC message; no server-initiated stream is offered"
+            "error": {"kind": "INVALID_ARG", "message": "stateless MCP endpoint: POST a JSON-RPC message; no server-initiated stream is offered"}
         })),
     )
 }
@@ -756,9 +756,10 @@ async fn post_webhook_github(
     let Some(secret) = state.webhook_secret.clone() else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(serde_json::json!({
-                "error": "webhook lane not configured (set VELA_HUB_WEBHOOK_SECRET)"
-            })),
+            Json(error_body(
+                "UNAVAILABLE",
+                "webhook lane not configured (set VELA_HUB_WEBHOOK_SECRET)",
+            )),
         );
     };
     let signature = headers
@@ -768,7 +769,10 @@ async fn post_webhook_github(
     if !github_signature_ok(&secret, &body, signature) {
         return (
             StatusCode::UNAUTHORIZED,
-            Json(serde_json::json!({"error": "invalid or missing X-Hub-Signature-256"})),
+            Json(error_body(
+                "PERMISSION_DENIED",
+                "invalid or missing X-Hub-Signature-256",
+            )),
         );
     }
     let event = headers
@@ -811,9 +815,18 @@ fn wants_html(headers: &HeaderMap) -> bool {
         .is_some_and(|s| s.contains("text/html"))
 }
 
+/// The one JSON error body shape, shared with `vela serve`'s HTTP surface
+/// and the MCP envelope's kind vocabulary:
+/// `{"error": {"kind": "...", "message": "..."}}`.
+fn error_body(kind: &str, message: impl Into<String>) -> Value {
+    json!({"error": {"kind": kind, "message": message.into()}})
+}
+
 #[derive(Debug, Deserialize)]
 struct EventQuery {
-    since: Option<String>,
+    /// The last-seen `vev_…` event id; events strictly after it are
+    /// returned. Omit to start from the genesis event.
+    cursor: Option<String>,
     limit: Option<usize>,
     kind: Option<String>,
     target: Option<String>,
@@ -1007,7 +1020,7 @@ async fn healthz(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
             Json(json!({
                 "ok": false,
                 "db": "unreachable",
-                "error": e,
+                "error": {"kind": "UNAVAILABLE", "message": e},
                 "version": HUB_VERSION,
                 "cache": cache,
             })),
@@ -1057,7 +1070,7 @@ async fn list_entries(State(state): State<AppState>, headers: HeaderMap) -> Resp
             }
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("query: {e}")})),
+                Json(error_body("INTERNAL", format!("query: {e}"))),
             )
                 .into_response()
         }
@@ -1141,14 +1154,17 @@ async fn get_sidon_frontier_map(
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(json!({ "error": "frontier not found", "vfr_id": vfr_id })),
+                Json(error_body(
+                    "NOT_FOUND",
+                    format!("frontier not found: {vfr_id}"),
+                )),
             )
                 .into_response();
         }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": e })),
+                Json(error_body("INTERNAL", e)),
             )
                 .into_response();
         }
@@ -1158,10 +1174,10 @@ async fn get_sidon_frontier_map(
         Err(e) => {
             return (
                 StatusCode::UNPROCESSABLE_ENTITY,
-                Json(json!({
-                    "error": format!("not a live Sidon frontier: {e}"),
-                    "vfr_id": vfr_id,
-                })),
+                Json(error_body(
+                    "INVALID_ARG",
+                    format!("not a live Sidon frontier ({vfr_id}): {e}"),
+                )),
             )
                 .into_response();
         }
@@ -1173,7 +1189,7 @@ async fn get_sidon_frontier_map(
         Ok(m) => (StatusCode::OK, Json(m)).into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({ "error": e })),
+            Json(error_body("INTERNAL", e)),
         )
             .into_response(),
     }
@@ -1195,14 +1211,17 @@ async fn get_sidon_observation(
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(json!({ "error": "frontier not found", "vfr_id": vfr_id })),
+                Json(error_body(
+                    "NOT_FOUND",
+                    format!("frontier not found: {vfr_id}"),
+                )),
             )
                 .into_response();
         }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": e })),
+                Json(error_body("INTERNAL", e)),
             )
                 .into_response();
         }
@@ -1212,10 +1231,10 @@ async fn get_sidon_observation(
         Err(e) => {
             return (
                 StatusCode::UNPROCESSABLE_ENTITY,
-                Json(json!({
-                    "error": format!("not a live Sidon frontier: {e}"),
-                    "vfr_id": vfr_id,
-                })),
+                Json(error_body(
+                    "INVALID_ARG",
+                    format!("not a live Sidon frontier ({vfr_id}): {e}"),
+                )),
             )
                 .into_response();
         }
@@ -1226,7 +1245,7 @@ async fn get_sidon_observation(
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({ "error": e })),
+                Json(error_body("INTERNAL", e)),
             )
                 .into_response();
         }
@@ -1306,7 +1325,7 @@ async fn get_entry(
                         "ok": false,
                         "status": "unavailable",
                         "vfr_id": vfr_id,
-                        "error": audit.error.unwrap_or_else(|| "frontier failed verification".to_string()),
+                        "error": {"kind": "UNAVAILABLE", "message": audit.error.unwrap_or_else(|| "frontier failed verification".to_string())},
                         "authority_mode": audit.authority_mode,
                     })),
                 )
@@ -1321,14 +1340,14 @@ async fn get_entry(
             } else {
                 (
                     StatusCode::NOT_FOUND,
-                    Json(json!({"error": format!("{vfr_id} not found")})),
+                    Json(error_body("NOT_FOUND", format!("{vfr_id} not found"))),
                 )
                     .into_response()
             }
         }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("query: {e}")})),
+            Json(error_body("INTERNAL", format!("query: {e}"))),
         )
             .into_response(),
     }
@@ -1351,14 +1370,17 @@ async fn get_proposal_evidence_diff(
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(json!({"ok": false, "error": format!("{vfr_id} not found on this hub")})),
+                Json(error_body(
+                    "NOT_FOUND",
+                    format!("{vfr_id} not found on this hub"),
+                )),
             )
                 .into_response();
         }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"ok": false, "error": format!("project query: {e}")})),
+                Json(error_body("INTERNAL", format!("project query: {e}"))),
             )
                 .into_response();
         }
@@ -1369,11 +1391,7 @@ async fn get_proposal_evidence_diff(
         "reviewer:evidence-diff-preview",
     ) {
         Ok(delta) => Json(delta).into_response(),
-        Err(e) => (
-            StatusCode::NOT_FOUND,
-            Json(json!({"ok": false, "error": e})),
-        )
-            .into_response(),
+        Err(e) => (StatusCode::NOT_FOUND, Json(error_body("NOT_FOUND", e))).into_response(),
     }
 }
 
@@ -1390,12 +1408,12 @@ async fn get_entry_summary(State(state): State<AppState>, Path(vfr_id): Path<Str
             .into_response(),
         Ok(None) => (
             StatusCode::NOT_FOUND,
-            Json(json!({"error": format!("{vfr_id} not found")})),
+            Json(error_body("NOT_FOUND", format!("{vfr_id} not found"))),
         )
             .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("summary: {e}")})),
+            Json(error_body("INTERNAL", format!("summary: {e}"))),
         )
             .into_response(),
     }
@@ -1415,7 +1433,7 @@ async fn get_entry_status(State(state): State<AppState>, Path(vfr_id): Path<Stri
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("query: {e}")})),
+                Json(error_body("INTERNAL", format!("query: {e}"))),
             )
                 .into_response();
         }
@@ -1427,7 +1445,7 @@ async fn get_entry_status(State(state): State<AppState>, Path(vfr_id): Path<Stri
     if !known && deprecation.is_none() {
         return (
             StatusCode::NOT_FOUND,
-            Json(json!({"error": format!("{vfr_id} not found")})),
+            Json(error_body("NOT_FOUND", format!("{vfr_id} not found"))),
         )
             .into_response();
     }
@@ -1446,12 +1464,15 @@ async fn get_git_remote(State(state): State<AppState>, Path(vfr_id): Path<String
         Ok(Some(rec)) => Json(json!({"vfr_id": vfr_id, "git": rec})).into_response(),
         Ok(None) => (
             StatusCode::NOT_FOUND,
-            Json(json!({"error": format!("{vfr_id} has no registered git remote")})),
+            Json(error_body(
+                "NOT_FOUND",
+                format!("{vfr_id} has no registered git remote"),
+            )),
         )
             .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("query: {e}")})),
+            Json(error_body("INTERNAL", format!("query: {e}"))),
         )
             .into_response(),
     }
@@ -1474,7 +1495,10 @@ async fn register_git_remote(
         Err(e) => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(json!({"error": format!("registration parse: {e}")})),
+                Json(error_body(
+                    "INVALID_ARG",
+                    format!("registration parse: {e}"),
+                )),
             )
                 .into_response();
         }
@@ -1482,7 +1506,10 @@ async fn register_git_remote(
     if rec.vfr_id != vfr_id {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({"error": "registration vfr_id does not match the path"})),
+            Json(error_body(
+                "INVALID_ARG",
+                "registration vfr_id does not match the path",
+            )),
         )
             .into_response();
     }
@@ -1491,14 +1518,17 @@ async fn register_git_remote(
         Ok(false) => {
             return (
                 StatusCode::UNAUTHORIZED,
-                Json(json!({"error": "registration signature does not verify"})),
+                Json(error_body(
+                    "PERMISSION_DENIED",
+                    "registration signature does not verify",
+                )),
             )
                 .into_response();
         }
         Err(e) => {
             return (
                 StatusCode::BAD_REQUEST,
-                Json(json!({"error": format!("registration: {e}")})),
+                Json(error_body("INVALID_ARG", format!("registration: {e}"))),
             )
                 .into_response();
         }
@@ -1511,7 +1541,10 @@ async fn register_git_remote(
         Ok(Some(owner)) if owner != rec.signer_pubkey_hex => {
             return (
                 StatusCode::FORBIDDEN,
-                Json(json!({"error": "signer is not the frontier's effective owner"})),
+                Json(error_body(
+                    "PERMISSION_DENIED",
+                    "signer is not the frontier's effective owner",
+                )),
             )
                 .into_response();
         }
@@ -1519,7 +1552,7 @@ async fn register_git_remote(
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("owner lookup: {e}")})),
+                Json(error_body("INTERNAL", format!("owner lookup: {e}"))),
             )
                 .into_response();
         }
@@ -1539,7 +1572,7 @@ async fn register_git_remote(
     {
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("store: {e}")})),
+            Json(error_body("INTERNAL", format!("store: {e}"))),
         )
             .into_response();
     }
@@ -1563,7 +1596,7 @@ async fn list_maintainers(State(state): State<AppState>, Path(vfr_id): Path<Stri
         .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("query: {e}")})),
+            Json(error_body("INTERNAL", format!("query: {e}"))),
         )
             .into_response(),
     }
@@ -1597,14 +1630,20 @@ async fn get_blob(State(state): State<AppState>, Path(hash): Path<String>) -> Re
     if !is_sha256_hex(&hash) {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": "blob id must be a 64-char sha256 hex string"})),
+            Json(error_body(
+                "INVALID_ARG",
+                "blob id must be a 64-char sha256 hex string",
+            )),
         )
             .into_response();
     }
     let Some(storage) = &state.storage else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({"ok": false, "error": "hub has no object storage configured"})),
+            Json(error_body(
+                "UNAVAILABLE",
+                "hub has no object storage configured",
+            )),
         )
             .into_response();
     };
@@ -1632,7 +1671,7 @@ async fn get_blob(State(state): State<AppState>, Path(hash): Path<String>) -> Re
         Ok(true) => redirect(),
         Ok(false) => (
             StatusCode::NOT_FOUND,
-            Json(json!({"ok": false, "error": format!("blob {hash} not found")})),
+            Json(error_body("NOT_FOUND", format!("blob {hash} not found"))),
         )
             .into_response(),
         // A HEAD that errors (not a clean 404) must NOT block a blob that may
@@ -1673,7 +1712,7 @@ async fn get_producer(
         }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("query: {e}")})),
+            Json(error_body("INTERNAL", format!("query: {e}"))),
         )
             .into_response(),
     }
@@ -1685,14 +1724,14 @@ async fn get_entry_manifest(State(state): State<AppState>, Path(vfr_id): Path<St
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(json!({"error": format!("{vfr_id} not found")})),
+                Json(error_body("NOT_FOUND", format!("{vfr_id} not found"))),
             )
                 .into_response();
         }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("query: {e}")})),
+                Json(error_body("INTERNAL", format!("query: {e}"))),
             )
                 .into_response();
         }
@@ -1706,7 +1745,7 @@ async fn get_entry_manifest(State(state): State<AppState>, Path(vfr_id): Path<St
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("index: {e}")})),
+                Json(error_body("INTERNAL", format!("index: {e}"))),
             )
                 .into_response();
         }
@@ -1775,7 +1814,7 @@ async fn search_endpoint(
         }
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("search: {e}")})),
+            Json(error_body("INTERNAL", format!("search: {e}"))),
         )
             .into_response(),
     }
@@ -1876,14 +1915,14 @@ async fn get_entry_objects(
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(json!({"error": format!("{vfr_id} not found")})),
+                Json(error_body("NOT_FOUND", format!("{vfr_id} not found"))),
             )
                 .into_response();
         }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("query: {e}")})),
+                Json(error_body("INTERNAL", format!("query: {e}"))),
             )
                 .into_response();
         }
@@ -1905,7 +1944,7 @@ async fn get_entry_objects(
             .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("objects: {e}")})),
+            Json(error_body("INTERNAL", format!("objects: {e}"))),
         )
             .into_response(),
     }
@@ -1925,12 +1964,15 @@ async fn get_entry_object(
             .into_response(),
         Ok(None) => (
             StatusCode::NOT_FOUND,
-            Json(json!({"error": format!("{object_id} not found in {vfr_id}")})),
+            Json(error_body(
+                "NOT_FOUND",
+                format!("{object_id} not found in {vfr_id}"),
+            )),
         )
             .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("object: {e}")})),
+            Json(error_body("INTERNAL", format!("object: {e}"))),
         )
             .into_response(),
     }
@@ -1961,14 +2003,14 @@ async fn get_log_sth(State(state): State<AppState>, Path(vfr_id): Path<String>) 
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(json!({"error": format!("{vfr_id} not found")})),
+                Json(error_body("NOT_FOUND", format!("{vfr_id} not found"))),
             )
                 .into_response();
         }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("query: {e}")})),
+                Json(error_body("INTERNAL", format!("query: {e}"))),
             )
                 .into_response();
         }
@@ -1976,7 +2018,11 @@ async fn get_log_sth(State(state): State<AppState>, Path(vfr_id): Path<String>) 
     let leaves = match log_leaves(&state, &vfr_id).await {
         Ok(l) => l,
         Err(e) => {
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e}))).into_response();
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(error_body("INTERNAL", e)),
+            )
+                .into_response();
         }
     };
     let root = vela_protocol::merkle::merkle_root(&leaves);
@@ -2038,7 +2084,7 @@ async fn get_log_proof(
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("events: {e}")})),
+                Json(error_body("INTERNAL", format!("events: {e}"))),
             )
                 .into_response();
         }
@@ -2056,7 +2102,7 @@ async fn get_log_proof(
             Err(e) => {
                 return (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(json!({"error": format!("event parse: {e}")})),
+                    Json(error_body("INTERNAL", format!("event parse: {e}"))),
                 )
                     .into_response();
             }
@@ -2067,7 +2113,10 @@ async fn get_log_proof(
         None => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(json!({"error": format!("event {event_id} not in {vfr_id}")})),
+                Json(error_body(
+                    "NOT_FOUND",
+                    format!("event {event_id} not in {vfr_id}"),
+                )),
             )
                 .into_response();
         }
@@ -2077,7 +2126,7 @@ async fn get_log_proof(
         None => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "proof generation failed"})),
+                Json(error_body("INTERNAL", "proof generation failed")),
             )
                 .into_response();
         }
@@ -2118,7 +2167,11 @@ async fn get_log_consistency(
     let leaves = match log_leaves(&state, &vfr_id).await {
         Ok(l) => l,
         Err(e) => {
-            return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e}))).into_response();
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(error_body("INTERNAL", e)),
+            )
+                .into_response();
         }
     };
     let total = leaves.len();
@@ -2127,9 +2180,10 @@ async fn get_log_consistency(
     if m == 0 || m > n || n > total {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({
-                "error": format!("require 1 <= first <= second <= tree_size; got first={m}, second={n}, tree_size={total}"),
-            })),
+            Json(error_body(
+                "INVALID_ARG",
+                format!("require 1 <= first <= second <= tree_size; got first={m}, second={n}, tree_size={total}"),
+            )),
         )
             .into_response();
     }
@@ -2138,7 +2192,10 @@ async fn get_log_consistency(
         None => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": "consistency proof generation failed"})),
+                Json(error_body(
+                    "INTERNAL",
+                    "consistency proof generation failed",
+                )),
             )
                 .into_response();
         }
@@ -2181,7 +2238,7 @@ async fn get_diff_pack(State(state): State<AppState>, Path(pack_id): Path<String
     if !pack_id.starts_with("vsd_") {
         return (
             StatusCode::BAD_REQUEST,
-            Json(json!({"error": "pack_id must start with `vsd_`"})),
+            Json(error_body("INVALID_ARG", "pack_id must start with `vsd_`")),
         )
             .into_response();
     }
@@ -2189,15 +2246,17 @@ async fn get_diff_pack(State(state): State<AppState>, Path(pack_id): Path<String
         Ok(Some(value)) => (StatusCode::OK, Json(value)).into_response(),
         Ok(None) => (
             StatusCode::NOT_FOUND,
-            Json(json!({
-                "error": format!("{pack_id} not found on this hub"),
-                "hub_note": "v0.201: A pack lands here when a `diff_pack.released` event has been applied on a frontier this hub mirrors.",
-            })),
+            Json(error_body(
+                "NOT_FOUND",
+                format!(
+                    "{pack_id} not found on this hub (a pack lands here when a `diff_pack.released` event has been applied on a frontier this hub mirrors)"
+                ),
+            )),
         )
             .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("query: {e}")})),
+            Json(error_body("INTERNAL", format!("query: {e}"))),
         )
             .into_response(),
     }
@@ -2224,7 +2283,7 @@ async fn get_depends_on(
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("query: {e}")})),
+                Json(error_body("INTERNAL", format!("query: {e}"))),
             )
                 .into_response();
         }
@@ -2291,14 +2350,14 @@ async fn get_finding(
             }
             return (
                 StatusCode::NOT_FOUND,
-                Json(json!({"error": format!("{vfr_id} not found")})),
+                Json(error_body("NOT_FOUND", format!("{vfr_id} not found"))),
             )
                 .into_response();
         }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("query: {e}")})),
+                Json(error_body("INTERNAL", format!("query: {e}"))),
             )
                 .into_response();
         }
@@ -2321,7 +2380,10 @@ async fn get_finding(
         }
         return (
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({"error": "frontier projection unavailable; pull via the CLI to inspect"})),
+            Json(error_body(
+                "UNAVAILABLE",
+                "frontier projection unavailable; pull via the CLI to inspect",
+            )),
         )
             .into_response();
     };
@@ -2336,7 +2398,7 @@ async fn get_finding(
         }
         return (
             StatusCode::NOT_FOUND,
-            Json(json!({"error": format!("{vf_id} not in {vfr_id}")})),
+            Json(error_body("NOT_FOUND", format!("{vf_id} not in {vfr_id}"))),
         )
             .into_response();
     };
@@ -2372,7 +2434,7 @@ async fn get_finding(
             Ok(v) => (StatusCode::OK, Json(v)).into_response(),
             Err(e) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("serialize: {e}")})),
+                Json(error_body("INTERNAL", format!("serialize: {e}"))),
             )
                 .into_response(),
         }
@@ -2403,14 +2465,14 @@ async fn get_pack_review(
             }
             return (
                 StatusCode::NOT_FOUND,
-                Json(json!({"error": format!("{vfr_id} not found")})),
+                Json(error_body("NOT_FOUND", format!("{vfr_id} not found"))),
             )
                 .into_response();
         }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("query: {e}")})),
+                Json(error_body("INTERNAL", format!("query: {e}"))),
             )
                 .into_response();
         }
@@ -2427,7 +2489,10 @@ async fn get_pack_review(
         }
         return (
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({"error": "frontier projection unavailable; pull via the CLI to inspect"})),
+            Json(error_body(
+                "UNAVAILABLE",
+                "frontier projection unavailable; pull via the CLI to inspect",
+            )),
         )
             .into_response();
     };
@@ -2446,7 +2511,10 @@ async fn get_pack_review(
         }
         return (
             StatusCode::NOT_FOUND,
-            Json(json!({"error": format!("{pack_id} not released on {vfr_id}")})),
+            Json(error_body(
+                "NOT_FOUND",
+                format!("{pack_id} not released on {vfr_id}"),
+            )),
         )
             .into_response();
     };
@@ -2458,7 +2526,7 @@ async fn get_pack_review(
             Ok(v) => (StatusCode::OK, Json(v)).into_response(),
             Err(e) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("serialize: {e}")})),
+                Json(error_body("INTERNAL", format!("serialize: {e}"))),
             )
                 .into_response(),
         }
@@ -2476,7 +2544,7 @@ async fn get_reproduce(State(state): State<AppState>, Path(vfr_id): Path<String>
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("query: {e}")})),
+                Json(error_body("INTERNAL", format!("query: {e}"))),
             )
                 .into_response();
         }
@@ -2496,7 +2564,7 @@ async fn get_reproduce(State(state): State<AppState>, Path(vfr_id): Path<String>
                 .into_response(),
             Err(e) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("query: {e}")})),
+                Json(error_body("INTERNAL", format!("query: {e}"))),
             )
                 .into_response(),
         };
@@ -2544,14 +2612,14 @@ async fn get_finding_context(
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(json!({"error": format!("{vfr_id} not found")})),
+                Json(error_body("NOT_FOUND", format!("{vfr_id} not found"))),
             )
                 .into_response();
         }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("query: {e}")})),
+                Json(error_body("INTERNAL", format!("query: {e}"))),
             )
                 .into_response();
         }
@@ -2563,7 +2631,10 @@ async fn get_finding_context(
     let Some(project) = load_substrate(&state, &vfr_id, signed_at).await else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({"error": "frontier projection unavailable; pull via the CLI to inspect"})),
+            Json(error_body(
+                "UNAVAILABLE",
+                "frontier projection unavailable; pull via the CLI to inspect",
+            )),
         )
             .into_response();
     };
@@ -2573,7 +2644,7 @@ async fn get_finding_context(
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("serialize: {e}")})),
+                Json(error_body("INTERNAL", format!("serialize: {e}"))),
             )
                 .into_response();
         }
@@ -2594,7 +2665,7 @@ async fn get_finding_context(
     else {
         return (
             StatusCode::NOT_FOUND,
-            Json(json!({"error": format!("{vf_id} not in {vfr_id}")})),
+            Json(error_body("NOT_FOUND", format!("{vf_id} not in {vfr_id}"))),
         )
             .into_response();
     };
@@ -2711,14 +2782,14 @@ async fn get_finding_gate_status(
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(json!({"error": format!("{vfr_id} not found")})),
+                Json(error_body("NOT_FOUND", format!("{vfr_id} not found"))),
             )
                 .into_response();
         }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("query: {e}")})),
+                Json(error_body("INTERNAL", format!("query: {e}"))),
             )
                 .into_response();
         }
@@ -2731,7 +2802,10 @@ async fn get_finding_gate_status(
     let Some(project) = load_substrate(&state, &vfr_id, signed_at).await else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({"error": "frontier projection unavailable; pull via the CLI to inspect"})),
+            Json(error_body(
+                "UNAVAILABLE",
+                "frontier projection unavailable; pull via the CLI to inspect",
+            )),
         )
             .into_response();
     };
@@ -2745,7 +2819,7 @@ async fn get_finding_gate_status(
         Some(body) => (StatusCode::OK, Json(body)).into_response(),
         None => (
             StatusCode::NOT_FOUND,
-            Json(json!({"error": format!("{vf_id} not in {vfr_id}")})),
+            Json(error_body("NOT_FOUND", format!("{vf_id} not in {vfr_id}"))),
         )
             .into_response(),
     }
@@ -2765,14 +2839,14 @@ async fn get_frontier_gate_status(
         Ok(None) => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(json!({"error": format!("{vfr_id} not found")})),
+                Json(error_body("NOT_FOUND", format!("{vfr_id} not found"))),
             )
                 .into_response();
         }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("query: {e}")})),
+                Json(error_body("INTERNAL", format!("query: {e}"))),
             )
                 .into_response();
         }
@@ -2784,7 +2858,10 @@ async fn get_frontier_gate_status(
     let Some(project) = load_substrate(&state, &vfr_id, signed_at).await else {
         return (
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(json!({"error": "frontier projection unavailable; pull via the CLI to inspect"})),
+            Json(error_body(
+                "UNAVAILABLE",
+                "frontier projection unavailable; pull via the CLI to inspect",
+            )),
         )
             .into_response();
     };
@@ -2967,7 +3044,10 @@ async fn get_proof_packet_download(
         None => {
             return (
                 StatusCode::NOT_FOUND,
-                Json(json!({"error": "no proof packet available for this entry"})),
+                Json(error_body(
+                    "NOT_FOUND",
+                    "no proof packet available for this entry",
+                )),
             )
                 .into_response();
         }
@@ -2981,14 +3061,14 @@ async fn get_proof_packet_download(
         if let Err(e) = tar.append_dir_all(&label, &dir) {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("tar: {e}")})),
+                Json(error_body("INTERNAL", format!("tar: {e}"))),
             )
                 .into_response();
         }
         if let Err(e) = tar.into_inner().and_then(|enc| enc.finish()) {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("gz: {e}")})),
+                Json(error_body("INTERNAL", format!("gz: {e}"))),
             )
                 .into_response();
         }
@@ -3035,7 +3115,7 @@ async fn get_entry_snapshot(
                         "ok": false,
                         "status": "unavailable",
                         "vfr_id": vfr_id,
-                        "error": audit.error.unwrap_or_else(|| "frontier failed verification".to_string()),
+                        "error": {"kind": "UNAVAILABLE", "message": audit.error.unwrap_or_else(|| "frontier failed verification".to_string())},
                         "authority_mode": audit.authority_mode,
                     })),
                 )
@@ -3043,14 +3123,14 @@ async fn get_entry_snapshot(
             }
             return (
                 StatusCode::NOT_FOUND,
-                Json(json!({"error": format!("{vfr_id} not found")})),
+                Json(error_body("NOT_FOUND", format!("{vfr_id} not found"))),
             )
                 .into_response();
         }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("query: {e}")})),
+                Json(error_body("INTERNAL", format!("query: {e}"))),
             )
                 .into_response();
         }
@@ -3063,10 +3143,10 @@ async fn get_entry_snapshot(
     if snap_hash.is_empty() {
         return (
             StatusCode::FAILED_DEPENDENCY,
-            Json(json!({
-                "error": "registry entry missing latest_snapshot_hash",
-                "vfr_id": vfr_id,
-            })),
+            Json(error_body(
+                "UNAVAILABLE",
+                format!("registry entry for {vfr_id} is missing latest_snapshot_hash"),
+            )),
         )
             .into_response();
     }
@@ -3120,7 +3200,10 @@ async fn get_entry_snapshot(
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("event-first snapshot read: {e}")})),
+                Json(error_body(
+                    "INTERNAL",
+                    format!("event-first snapshot read: {e}"),
+                )),
             )
                 .into_response();
         }
@@ -3133,7 +3216,7 @@ async fn get_entry_snapshot(
             "status": "unavailable",
             "vfr_id": vfr_id,
             "snapshot_hash": snap_hash,
-            "error": "frontier projection unavailable",
+            "error": {"kind": "UNAVAILABLE", "message": "frontier projection unavailable"},
         })),
     )
         .into_response()
@@ -3156,7 +3239,7 @@ async fn get_entry_events(
                         "ok": false,
                         "status": "unavailable",
                         "vfr_id": vfr_id,
-                        "error": audit.error.unwrap_or_else(|| "frontier failed verification".to_string()),
+                        "error": {"kind": "UNAVAILABLE", "message": audit.error.unwrap_or_else(|| "frontier failed verification".to_string())},
                         "authority_mode": audit.authority_mode,
                     })),
                 )
@@ -3164,14 +3247,14 @@ async fn get_entry_events(
             }
             return (
                 StatusCode::NOT_FOUND,
-                Json(json!({"error": format!("{vfr_id} not found")})),
+                Json(error_body("NOT_FOUND", format!("{vfr_id} not found"))),
             )
                 .into_response();
         }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("query: {e}")})),
+                Json(error_body("INTERNAL", format!("query: {e}"))),
             )
                 .into_response();
         }
@@ -3182,7 +3265,7 @@ async fn get_entry_events(
         .db
         .event_page(
             &vfr_id,
-            params.since.as_deref(),
+            params.cursor.as_deref(),
             limit,
             params.kind.as_deref(),
             params.target.as_deref(),
@@ -3203,12 +3286,15 @@ async fn get_entry_events(
             .into_response(),
         Err(e) if e.starts_with("cursor_not_found:") => (
             StatusCode::BAD_REQUEST,
-            Json(json!({"error": e.trim_start_matches("cursor_not_found: ")})),
+            Json(error_body(
+                "INVALID_ARG",
+                e.trim_start_matches("cursor_not_found: "),
+            )),
         )
             .into_response(),
         Err(e) => (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"error": format!("events query: {e}")})),
+            Json(error_body("INTERNAL", format!("events query: {e}"))),
         )
             .into_response(),
     }
@@ -3242,7 +3328,7 @@ async fn get_entry_events_stream(
                         "ok": false,
                         "status": "unavailable",
                         "vfr_id": vfr_id,
-                        "error": audit.error.unwrap_or_else(|| "frontier failed verification".to_string()),
+                        "error": {"kind": "UNAVAILABLE", "message": audit.error.unwrap_or_else(|| "frontier failed verification".to_string())},
                         "authority_mode": audit.authority_mode,
                     })),
                 )
@@ -3250,14 +3336,14 @@ async fn get_entry_events_stream(
             }
             return (
                 StatusCode::NOT_FOUND,
-                Json(json!({"error": format!("{vfr_id} not found")})),
+                Json(error_body("NOT_FOUND", format!("{vfr_id} not found"))),
             )
                 .into_response();
         }
         Err(e) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(json!({"error": format!("query: {e}")})),
+                Json(error_body("INTERNAL", format!("query: {e}"))),
             )
                 .into_response();
         }
@@ -3267,7 +3353,7 @@ async fn get_entry_events_stream(
     let stream_vfr = vfr_id.clone();
     let kind = params.kind.clone();
     let target = params.target.clone();
-    let mut cursor = params.since.clone();
+    let mut cursor = params.cursor.clone();
     let stream = async_stream::stream! {
         loop {
             match stream_state
@@ -3313,7 +3399,7 @@ async fn get_entry_events_stream(
                 Err(e) => {
                     let payload = json!({
                         "vfr_id": stream_vfr,
-                        "error": e,
+                        "error": {"kind": "INTERNAL", "message": e},
                     });
                     yield Ok::<Event, std::convert::Infallible>(
                         Event::default()
@@ -3346,9 +3432,12 @@ const FONT_LINK: &str = r#"<link rel="preload" href="/static/fonts/inter-latin-4
 
 const FONT_INTER_400: &[u8] = include_bytes!("../../../web/fonts/inter-latin-400-normal.woff2");
 const FONT_INTER_600: &[u8] = include_bytes!("../../../web/fonts/inter-latin-600-normal.woff2");
-const FONT_SS4_400: &[u8] = include_bytes!("../../../web/fonts/source-serif-4-latin-400-normal.woff2");
-const FONT_SS4_400_ITALIC: &[u8] = include_bytes!("../../../web/fonts/source-serif-4-latin-400-italic.woff2");
-const FONT_JBM_400: &[u8] = include_bytes!("../../../web/fonts/jetbrains-mono-latin-400-normal.woff2");
+const FONT_SS4_400: &[u8] =
+    include_bytes!("../../../web/fonts/source-serif-4-latin-400-normal.woff2");
+const FONT_SS4_400_ITALIC: &[u8] =
+    include_bytes!("../../../web/fonts/source-serif-4-latin-400-italic.woff2");
+const FONT_JBM_400: &[u8] =
+    include_bytes!("../../../web/fonts/jetbrains-mono-latin-400-normal.woff2");
 
 // Embedded design-system files. Compiled into the binary so the runtime
 // has no external file dependency; touching any of these forces a rebuild.
@@ -4085,6 +4174,16 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Links — the deleted chrome carried these; without them every anchor
+   falls back to browser blue. */
+a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--rule-3);
+  text-underline-offset: 2px;
+}
+a:hover { color: var(--ink-0); text-decoration-color: var(--gold-ink); }
+
 .hub-header {
   position: sticky; top: 0; z-index: 20;
   background: var(--paper-0);
@@ -4139,7 +4238,19 @@ body {
   font-size: var(--text-lede); line-height: 1.5; color: var(--ink-2);
   max-width: 60ch; margin: 0; text-wrap: pretty;
 }
-.wb-head__aside { flex-shrink: 0; }
+.wb-head__aside {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink-3);
+  display: inline-flex;
+  gap: 8px;
+  align-items: baseline;
+  padding-top: 6px;
+}
+.wb-head__aside a { color: var(--ink-3); text-decoration-color: var(--rule-2); }
+.wb-head__aside a:hover { color: var(--gold-ink); }
+.wb-head__aside span { color: var(--ink-4); }
 
 .wb-main { min-width: 0; }
 
