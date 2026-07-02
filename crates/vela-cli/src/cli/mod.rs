@@ -306,41 +306,96 @@ pub async fn run_command() {
                 if json {
                     print_json(&payload);
                 } else {
-                    println!("vela diff · proposal preview");
-                    println!("  proposal: {}", target);
-                    println!("  kind: {}", preview.kind);
+                    // The reviewer's one-screen answer to "what would this
+                    // change, and what does it actually SAY": the proposal's
+                    // own text, the shape delta, the engine's prospective
+                    // verdict with the warnings NAMED, and the decision verb.
+                    let proposal = repo::load_from_path(&frontier_root).ok().and_then(|proj| {
+                        let found = proj.proposals.iter().find(|p| p.id == target).cloned();
+                        let pack = proj
+                            .released_diff_packs
+                            .iter()
+                            .filter(|r| r.verdict.is_none())
+                            .find(|r| r.member_proposals.iter().any(|m| m == &target))
+                            .map(|r| r.pack_id.clone());
+                        found.map(|p| (p, pack))
+                    });
+                    println!();
                     println!(
-                        "  findings: {} -> {}",
-                        preview.findings_before, preview.findings_after
+                        "  {}",
+                        format!("VELA · DIFF · {target}").to_uppercase().dimmed()
                     );
+                    println!("  {}", vela_protocol::cli_style::tick_row(60));
+                    let pack_id = match &proposal {
+                        Some((p, pack)) => {
+                            println!("  kind:      {}   by {}", p.kind, p.actor.id);
+                            let reason: String = p.reason.chars().take(90).collect();
+                            if !reason.is_empty() {
+                                println!("  reason:    {reason}");
+                            }
+                            if let Some(text) = p
+                                .payload
+                                .pointer("/finding/assertion/text")
+                                .and_then(serde_json::Value::as_str)
+                            {
+                                println!("  proposes:  {}", wrap_line(text, 78));
+                            }
+                            pack.clone()
+                        }
+                        None => {
+                            println!("  kind:      {}", preview.kind);
+                            None
+                        }
+                    };
                     println!(
-                        "  artifacts: {} -> {}",
-                        preview.artifacts_before, preview.artifacts_after
-                    );
-                    println!(
-                        "  events: {} -> {}",
-                        preview.events_before, preview.events_after
+                        "  shape:     findings {} -> {} · events {} -> {} · artifacts {} -> {}",
+                        preview.findings_before,
+                        preview.findings_after,
+                        preview.events_before,
+                        preview.events_after,
+                        preview.artifacts_before,
+                        preview.artifacts_after,
                     );
                     if !preview.changed_findings.is_empty() {
-                        println!(
-                            "  findings changed: {}",
-                            preview.changed_findings.join(", ")
-                        );
+                        println!("  changes:   {}", preview.changed_findings.join(", "));
                     }
                     if let Some(v) = &verdict {
                         match v.status.as_str() {
-                            "pass" => println!("  engine: evidence-ci clean if accepted"),
-                            "warn" => println!(
-                                "  engine: {} new review warning(s) if accepted",
-                                v.new_warnings.len()
-                            ),
-                            "blocked" => println!(
-                                "  engine: WOULD BLOCK — {} new release-blocking failure(s)",
-                                v.new_blocking.len()
-                            ),
-                            other => println!("  engine: {other}"),
+                            "pass" => println!("  engine:    evidence-ci clean if accepted"),
+                            "warn" => {
+                                println!(
+                                    "  engine:    {} new review warning(s) if accepted",
+                                    v.new_warnings.len()
+                                );
+                                for w in v.new_warnings.iter().take(5) {
+                                    println!("    · {w}");
+                                }
+                                if v.new_warnings.len() > 5 {
+                                    println!("    … +{} more", v.new_warnings.len() - 5);
+                                }
+                            }
+                            "blocked" => {
+                                println!(
+                                    "  engine:    WOULD BLOCK — {} new release-blocking failure(s)",
+                                    v.new_blocking.len()
+                                );
+                                for b in v.new_blocking.iter().take(5) {
+                                    println!("    · {b}");
+                                }
+                            }
+                            other => println!("  engine:    {other}"),
                         }
                     }
+                    println!();
+                    match pack_id {
+                        Some(pack) => println!(
+                            "  decide:    vela accept . --pack {pack}    (this proposal rides its pack)"
+                        ),
+                        None => println!(
+                            "  decide:    vela accept . --id {target}    (or: vela proposals reject . {target} --reason \"…\")"
+                        ),
+                    }
+                    println!();
                 }
             } else {
                 let b_str = frontier_b.unwrap_or_else(|| {
@@ -2592,7 +2647,11 @@ pub(crate) fn cmd_pack(
             }));
         } else {
             println!();
-            println!("  {}", format!("VELA · PACK · {pid}").to_uppercase());
+            println!(
+                "  {}",
+                format!("VELA · PACK · {pid}").to_uppercase().dimmed()
+            );
+            println!("  {}", vela_protocol::cli_style::tick_row(60));
             println!("  summary:  {}", rec.summary);
             println!(
                 "  verdict:  {}",
@@ -2604,13 +2663,30 @@ pub(crate) fn cmd_pack(
             println!("  released: {}", rec.released_at);
             println!("  members ({}):", rec.member_proposals.len());
             for m in &rec.member_proposals {
-                let kind = project
+                let (kind, text) = project
                     .proposals
                     .iter()
                     .find(|p| &p.id == m)
-                    .map(|p| p.kind.clone())
+                    .map(|p| {
+                        let text = p
+                            .payload
+                            .pointer("/finding/assertion/text")
+                            .and_then(serde_json::Value::as_str)
+                            .filter(|t| !t.is_empty())
+                            .unwrap_or(&p.reason)
+                            .chars()
+                            .take(72)
+                            .collect::<String>();
+                        (p.kind.clone(), text)
+                    })
                     .unwrap_or_default();
-                println!("    · {m}  {kind}");
+                println!("    · {m}  {kind:<13}  {text}");
+            }
+            if rec.verdict.is_none() {
+                println!();
+                println!(
+                    "  decide:   vela accept . --pack {pid}    (preview a member: vela diff <vpr_id>)"
+                );
             }
         }
         return;

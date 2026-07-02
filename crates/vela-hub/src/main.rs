@@ -1239,11 +1239,23 @@ async fn get_entry(
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
                 let frontier = load_substrate(&state, &vfr_id, signed_at).await;
+                let git_remote = state
+                    .db
+                    .get_git_remote(&vfr_id)
+                    .await
+                    .ok()
+                    .flatten()
+                    .and_then(|v| {
+                        v.get("git_remote")
+                            .and_then(|r| r.as_str())
+                            .map(str::to_string)
+                    });
                 Html(render_entry_html(
                     &state.urls,
                     &vfr_id,
                     &value,
                     frontier.as_deref(),
+                    git_remote.as_deref(),
                 ))
                 .into_response()
             } else {
@@ -4236,8 +4248,8 @@ fn render_entry_html(
     vfr_id: &str,
     entry: &Value,
     frontier: Option<&Project>,
+    git_remote: Option<&str>,
 ) -> String {
-    let hub_url = escape_html(&urls.hub);
     let s = |key: &str| -> String {
         entry
             .get(key)
@@ -4263,8 +4275,21 @@ fn render_entry_html(
 
     // Note line varies by whether the frontier loaded.
     let note = if let Some(p) = frontier {
+        let pending = p
+            .proposals
+            .iter()
+            .filter(|pr| pr.status == "pending_review" && pr.applied_event_id.is_none())
+            .count();
+        let pending_note = if pending > 0 {
+            format!(
+                " · {pending} proposal{} pending review",
+                if pending == 1 { "" } else { "s" }
+            )
+        } else {
+            String::new()
+        };
         format!(
-            r#"{count} signed finding{plural} · {events} canonical event{events_plural}. Signed by <span class="t-mono">{owner}</span> at <span class="t-mono">{signed_at}</span>."#,
+            r#"{count} signed finding{plural} · {events} canonical event{events_plural}{pending_note}. Signed by <span class="t-mono">{owner}</span> at <span class="t-mono">{signed_at}</span>."#,
             count = p.findings.len(),
             plural = if p.findings.len() == 1 { "" } else { "s" },
             events = p.events.len(),
@@ -4279,6 +4304,49 @@ fn render_entry_html(
     let constellation = render_findings_constellation(vfr_id, frontier);
     let findings_section = render_findings_section(vfr_id, frontier);
 
+    // Open changesets: undecided packs are the reviewer's units of work;
+    // orphaning their pages behind an unlinked URL hides the queue.
+    let packs_section = frontier
+        .map(|p| {
+            let mut undecided: Vec<_> = p
+                .released_diff_packs
+                .iter()
+                .filter(|r| r.verdict.is_none() && !r.member_proposals.is_empty())
+                .collect();
+            undecided.sort_by(|a, b| a.summary.cmp(&b.summary));
+            if undecided.is_empty() {
+                return String::new();
+            }
+            let items: String = undecided
+                .iter()
+                .map(|r| {
+                    format!(
+                        r#"<li><span class="link-rel">pending</span> <span><a href="/entries/{vfr_safe}/packs/{pid}"><code>{pid}</code></a> · {members} member{plural} · {summary}</span></li>"#,
+                        pid = escape_html(&r.pack_id),
+                        members = r.member_proposals.len(),
+                        plural = if r.member_proposals.len() == 1 { "" } else { "s" },
+                        summary = escape_html(&r.summary.chars().take(80).collect::<String>()),
+                    )
+                })
+                .collect();
+            format!(
+                r#"
+    <section class="wb-section">
+      <div class="wb-section__head">
+        <span class="wb-section__num">§P</span>
+        <span class="wb-section__t">Open changesets · {n}</span>
+        <span class="wb-section__aside">one key-custody decision each</span>
+      </div>
+      <ul class="link-list">{items}</ul>
+    </section>"#,
+                n = undecided.len(),
+            )
+        })
+        .unwrap_or_default();
+
+    let remote_display = git_remote
+        .map(escape_html)
+        .unwrap_or_else(|| "&lt;this frontier's registered repo&gt;".to_string());
     let main = format!(
         r#"<div class="fd">
   <article>
@@ -4287,6 +4355,7 @@ fn render_entry_html(
 
     {constellation}
     {findings_section}
+    {packs_section}
 
     <section class="wb-section">
       <div class="wb-section__head">
@@ -4296,10 +4365,10 @@ fn render_entry_html(
       </div>
       <div class="tm-paper">
         <div class="tm-paper__bar"><span>git clone · {vfr_safe}</span></div>
-        <div class="tm-paper__body"><span class="tm-ps">$</span> <span class="tm-cmd">git clone</span> &lt;this frontier's registered repo&gt; \
-  <span class="tm-flag">--from</span> {hub_url}/entries \
-  <span class="tm-flag">--out</span> ./pulled.json</div>
+        <div class="tm-paper__body"><span class="tm-ps">$</span> <span class="tm-cmd">git clone</span> {remote_display}
+<span class="tm-ps">$</span> <span class="tm-cmd">vela check</span> &lt;dir&gt; <span class="tm-flag">--strict</span></div>
       </div>
+      <p class="fd-note">Full walkthrough (clone → strict check → frozen-verifier reproduce, with the last-ingest commit): <a href="/entries/{vfr_safe}/reproduce">/entries/{vfr_safe}/reproduce</a></p>
     </section>
 
     <section class="wb-section">
@@ -5365,8 +5434,25 @@ fn render_pack_html(
         )
     };
     let n_members = rec.applied_members.len() + rec.sdk_only_members.len();
+    // A PENDING pack is exactly what a reviewer opens this page for, and
+    // the release event carries its proposed members — render them, each
+    // with its evidence-diff link, instead of "Members · 0".
+    let n_display = if n_members == 0 && rec.verdict.is_none() {
+        rec.member_proposals.len()
+    } else {
+        n_members
+    };
     let members_html = if n_members == 0 {
-        if rec.verdict.is_none() {
+        if rec.verdict.is_none() && !rec.member_proposals.is_empty() {
+            let items: String = rec
+                .member_proposals
+                .iter()
+                .map(|m| member_li(m, "proposed"))
+                .collect();
+            format!(
+                r#"<ul class="link-list">{items}</ul><p class="empty">Proposed members from the signed release event; attribution finalizes with the verdict (<code>diff_pack.reviewed</code>).</p>"#
+            )
+        } else if rec.verdict.is_none() {
             format!(
                 r#"<p class="empty">Member attribution lands with the verdict (<code>diff_pack.reviewed</code>). Until then, the signed pack body at <a href="/diff-packs/{pack_safe}">/diff-packs/{pack_safe}</a> lists the member proposal ids.</p>"#
             )
@@ -5420,8 +5506,8 @@ fn render_pack_html(
     <section class="wb-section">
       <div class="wb-section__head">
         <span class="wb-section__num">§3</span>
-        <span class="wb-section__t">Members · {n_members}</span>
-        <span class="wb-section__aside">applied · sdk-only</span>
+        <span class="wb-section__t">Members · {n_display}</span>
+        <span class="wb-section__aside">proposed · applied · sdk-only</span>
       </div>
       {members_html}
     </section>
@@ -5434,7 +5520,7 @@ fn render_pack_html(
       <div class="fd-dial__k" style="margin-top:16px;">released</div>
       <div class="fd-dial__v mono">{released_at}</div>
       <div class="fd-dial__k" style="margin-top:16px;">members</div>
-      <div class="fd-dial__v mono">{n_members}</div>
+      <div class="fd-dial__v mono">{n_display}</div>
     </div>
 
     <div class="fd-dial">

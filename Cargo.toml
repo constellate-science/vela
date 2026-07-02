@@ -28,7 +28,7 @@ resolver = "3"
 # (0.700, 0.710, 0.720, ...). The patch field stays 0. The older `v0.X`
 # micro-version markers in comments/docs are historical provenance and do not
 # compare to this.
-version = "0.728.0"
+version = "0.729.0"
 edition = "2024"
 license = "Apache-2.0 OR MIT"
 repository = "https://github.com/constellate-science/vela"
@@ -72,9 +72,9 @@ tempfile = "3"
 
 # Internal crates. `version` is required so cargo publish can resolve
 # the dep against crates.io; `path` is used for in-workspace builds.
-vela-protocol = { path = "crates/vela-protocol", version = "0.728.0" }
-vela-protocol-core = { path = "crates/vela-protocol-core", version = "0.728.0" }
-vela-verify = { path = "crates/vela-verify", version = "0.728.0" }
+vela-protocol = { path = "crates/vela-protocol", version = "0.729.0" }
+vela-protocol-core = { path = "crates/vela-protocol-core", version = "0.729.0" }
+vela-verify = { path = "crates/vela-verify", version = "0.729.0" }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

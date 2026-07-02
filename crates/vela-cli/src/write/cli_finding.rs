@@ -70,6 +70,38 @@ pub(crate) fn cmd_finding_show(frontier: &Path, finding_id: &str, json_out: bool
         _ => "trust tier: candidate".dimmed(),
     };
     println!("  {tier_line}");
+    // The verification gate (G1–G4), derived — never stored. Reviewer
+    // accept and machine seal are DIFFERENT facts; a finding can be
+    // human-accepted and still needs_verification, and hiding that gap
+    // is the exact failure the gate exists to prevent.
+    {
+        use vela_protocol::verifier_attachment::{GateStatus, claim_digest, derive_gate_status};
+        if let Some(bundle) = project.findings.iter().find(|b| b.id == finding_id) {
+            let attachments: Vec<_> = project
+                .verifier_attachments
+                .iter()
+                .filter(|a| a.target == finding_id)
+                .cloned()
+                .collect();
+            let outcome = derive_gate_status(&claim_digest(&bundle.assertion.text), &attachments);
+            let status_json = serde_json::json!(outcome.status);
+            let status_str = status_json.as_str().unwrap_or("unknown");
+            let line = format!(
+                "verification: {status_str} ({} attachment{})",
+                attachments.len(),
+                if attachments.len() == 1 { "" } else { "s" }
+            );
+            let line = match outcome.status {
+                GateStatus::Verified => line.green(),
+                GateStatus::Refuted => line.red(),
+                _ => line.yellow(),
+            };
+            println!("  {line}");
+            for reason in outcome.reasons.iter().take(3) {
+                println!("    · {reason}");
+            }
+        }
+    }
     if let Some(atoms) = ctx.get("evidence_atoms").and_then(Value::as_array) {
         println!("  evidence atoms: {}", atoms.len());
         for a in atoms.iter().take(12) {
