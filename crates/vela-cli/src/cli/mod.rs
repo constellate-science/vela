@@ -374,6 +374,7 @@ pub async fn run_command() {
                 diff::run(&frontier_a, &frontier_b_path, json, quiet);
             }
         }
+        Commands::Receipt { action } => cmd_receipt(action),
         Commands::Proposals { action } => cmd_proposals(action),
         Commands::Lean { action } => cmd_lean(action),
         Commands::Attempt { action } => crate::cli_lean::cmd_attempt(action),
@@ -2614,6 +2615,300 @@ fn collect_witness_files_into(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
+/// Vela Receipts v0: emit / validate / apply. The portable claim packet —
+/// evidence-bound activity shaped so the merge layer can judge it. `apply`
+/// lands a PENDING proposal; deciding stays with a human key.
+pub(crate) fn cmd_receipt(action: crate::cli_commands::ReceiptAction) {
+    use crate::cli_commands::ReceiptAction;
+    use vela_protocol::receipt::{Receipt, ReceiptDraft, ReceiptEvidence, ReceiptVerifierRun};
+
+    fn hash_file(path: &std::path::Path) -> Result<String, String> {
+        use sha2::{Digest, Sha256};
+        let bytes = std::fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+        Ok(hex::encode(Sha256::digest(&bytes)))
+    }
+
+    match action {
+        ReceiptAction::Emit {
+            frontier,
+            assertion,
+            r#type,
+            evidence,
+            caveats,
+            verifier_runs,
+            actor,
+            key,
+            out,
+            json,
+        } => {
+            let project = repo::load_from_path(&frontier)
+                .unwrap_or_else(|e| fail_return(&format!("load frontier: {e}")));
+            let vfr = project.frontier_id();
+            let head = vela_protocol::events::event_log_hash(&project.events);
+            let mut atoms = Vec::new();
+            for spec in &evidence {
+                let (path_str, kind) = match spec.rsplit_once(':') {
+                    Some((p, k)) if !k.contains('/') && !k.contains('\\') => {
+                        (p.to_string(), k.to_string())
+                    }
+                    _ => (spec.clone(), "witness".to_string()),
+                };
+                let path = std::path::Path::new(&path_str);
+                let sha = hash_file(path)
+                    .unwrap_or_else(|e| fail_return(&format!("--evidence {spec}: {e}")));
+                // locator relative to the frontier when possible, so the
+                // receipt travels with the repo.
+                let locator = path
+                    .strip_prefix(&frontier)
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_else(|_| path_str.clone());
+                atoms.push(ReceiptEvidence {
+                    kind,
+                    locator,
+                    sha256: sha,
+                    note: String::new(),
+                });
+            }
+            let mut runs = Vec::new();
+            for spec in &verifier_runs {
+                let parts: Vec<&str> = spec.splitn(4, ':').collect();
+                if parts.len() < 3 {
+                    fail(&format!(
+                        "--verifier-run must be method:outcome:logfile[:solver], got '{spec}'"
+                    ));
+                }
+                let output_hash = hash_file(std::path::Path::new(parts[2]))
+                    .unwrap_or_else(|e| fail_return(&format!("--verifier-run {spec}: {e}")));
+                runs.push(ReceiptVerifierRun {
+                    method: parts[0].to_string(),
+                    outcome: parts[1].to_string(),
+                    output_hash,
+                    solver: parts.get(3).map(|s| s.to_string()).unwrap_or_default(),
+                });
+            }
+            let emitted_by = crate::cli_identity::resolve_actor(actor.as_deref());
+            // Custody: an agent-/ci-actor emit NEVER auto-resolves the
+            // configured (human) identity key — that would put a human's
+            // signature on machine-emitted content. An agent signs only
+            // with a key passed EXPLICITLY (its own); otherwise the
+            // receipt is honestly unsigned.
+            let signing_key = if key.is_none()
+                && (emitted_by.starts_with("agent:") || emitted_by.starts_with("ci:"))
+            {
+                None
+            } else {
+                crate::cli_identity::resolve_signing_key_opt(key.as_deref())
+            };
+            let receipt = Receipt::build(
+                ReceiptDraft {
+                    frontier_id: vfr,
+                    against_head: head,
+                    assertion,
+                    assertion_type: r#type,
+                    evidence: atoms,
+                    verifier_runs: runs,
+                    caveats,
+                    emitted_by,
+                    emitted_at: chrono::Utc::now().to_rfc3339(),
+                },
+                signing_key.as_ref(),
+            )
+            .unwrap_or_else(|e| fail_return(&e));
+            let dest = out.unwrap_or_else(|| {
+                frontier
+                    .join("receipts")
+                    .join(format!("{}.json", receipt.id))
+            });
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent)
+                    .unwrap_or_else(|e| fail_return(&format!("mkdir {}: {e}", parent.display())));
+            }
+            std::fs::write(
+                &dest,
+                serde_json::to_string_pretty(&receipt)
+                    .unwrap_or_else(|e| fail_return(&e.to_string())),
+            )
+            .unwrap_or_else(|e| fail_return(&format!("write {}: {e}", dest.display())));
+            let signed = !receipt.signature.is_empty();
+            if json {
+                print_json(&json!({
+                    "ok": true,
+                    "command": "receipt.emit",
+                    "id": receipt.id,
+                    "signed": signed,
+                    "frontier_id": receipt.frontier_id,
+                    "against_head": receipt.against_head,
+                    "evidence": receipt.evidence.len(),
+                    "wrote_to": dest.display().to_string(),
+                }));
+            } else {
+                println!(
+                    "{} {} emitted ({} evidence atom(s), {}) -> {}",
+                    style::ok("receipt"),
+                    receipt.id,
+                    receipt.evidence.len(),
+                    if signed { "signed" } else { "UNSIGNED" },
+                    dest.display()
+                );
+                if !signed {
+                    eprintln!(
+                        "  note: unsigned — valid to carry and apply; a reviewer sees signed=false"
+                    );
+                }
+            }
+        }
+        ReceiptAction::Validate {
+            receipt,
+            frontier,
+            evidence_root,
+            json,
+        } => {
+            let raw = std::fs::read_to_string(&receipt)
+                .unwrap_or_else(|e| fail_return(&format!("read {}: {e}", receipt.display())));
+            let rc: Receipt = serde_json::from_str(&raw)
+                .unwrap_or_else(|e| fail_return(&format!("receipt parse: {e}")));
+            let signed = rc.verify().unwrap_or_else(|e| fail_return(&e));
+            let root = evidence_root
+                .or_else(|| frontier.clone())
+                .or_else(|| receipt.parent().map(|p| p.to_path_buf()))
+                .unwrap_or_else(|| std::path::PathBuf::from("."));
+            let mut missing = Vec::new();
+            let mut mismatched = Vec::new();
+            for atom in &rc.evidence {
+                let p = root.join(&atom.locator);
+                match hash_file(&p) {
+                    Ok(h) if h == atom.sha256 => {}
+                    Ok(_) => mismatched.push(atom.locator.clone()),
+                    Err(_) => missing.push(atom.locator.clone()),
+                }
+            }
+            let mut frontier_match = None;
+            if let Some(dir) = &frontier {
+                let project = repo::load_from_path(dir)
+                    .unwrap_or_else(|e| fail_return(&format!("load frontier: {e}")));
+                frontier_match = Some(project.frontier_id() == rc.frontier_id);
+            }
+            let ok = mismatched.is_empty() && missing.is_empty() && frontier_match.unwrap_or(true);
+            if json {
+                print_json(&json!({
+                    "ok": ok,
+                    "command": "receipt.validate",
+                    "id": rc.id,
+                    "signed": signed,
+                    "evidence_verified": rc.evidence.len() - missing.len() - mismatched.len(),
+                    "evidence_missing": missing,
+                    "evidence_mismatched": mismatched,
+                    "frontier_match": frontier_match,
+                }));
+            } else if ok {
+                println!(
+                    "{} {} valid ({} evidence atom(s) re-derived, {})",
+                    style::ok("receipt"),
+                    rc.id,
+                    rc.evidence.len(),
+                    if signed { "signed" } else { "UNSIGNED" }
+                );
+            } else {
+                for l in &missing {
+                    eprintln!("  missing evidence: {l}");
+                }
+                for l in &mismatched {
+                    eprintln!("  HASH MISMATCH: {l}");
+                }
+                if frontier_match == Some(false) {
+                    eprintln!("  frontier_id does not match the given frontier");
+                }
+                fail("receipt validation failed");
+            }
+            if !ok {
+                std::process::exit(1);
+            }
+        }
+        ReceiptAction::Apply {
+            receipt,
+            frontier,
+            json,
+        } => {
+            let raw = std::fs::read_to_string(&receipt)
+                .unwrap_or_else(|e| fail_return(&format!("read {}: {e}", receipt.display())));
+            let rc: Receipt = serde_json::from_str(&raw)
+                .unwrap_or_else(|e| fail_return(&format!("receipt parse: {e}")));
+            let signed = rc.verify().unwrap_or_else(|e| fail_return(&e));
+            let project = repo::load_from_path(&frontier)
+                .unwrap_or_else(|e| fail_return(&format!("load frontier: {e}")));
+            if project.frontier_id() != rc.frontier_id {
+                fail(&format!(
+                    "receipt is for {}, this frontier is {}",
+                    rc.frontier_id,
+                    project.frontier_id()
+                ));
+            }
+            // Everything the reviewer needs at accept time rides in the
+            // conditions text: the receipt id (content-addressed — the full
+            // packet is re-fetchable), the head delta, and the caveats.
+            let head_now = vela_protocol::events::event_log_hash(&project.events);
+            let staleness = if head_now == rc.against_head {
+                "emitted against the current head".to_string()
+            } else {
+                format!(
+                    "emitted against head {}…, current head {}… — review the delta",
+                    &rc.against_head[..rc.against_head.len().min(16)],
+                    &head_now[..head_now.len().min(16)]
+                )
+            };
+            let conditions = format!(
+                "Receipt {} ({}; {}). Caveats: {}. Evidence: {} atom(s), hashes verified at apply.",
+                rc.id,
+                if signed { "signed" } else { "unsigned" },
+                staleness,
+                rc.caveats.join(" | "),
+                rc.evidence.len(),
+            );
+            let report = state::add_finding(
+                &frontier,
+                state::FindingDraftOptions {
+                    text: rc.assertion.clone(),
+                    assertion_type: rc.assertion_type.clone(),
+                    source: format!("receipt:{}", rc.id),
+                    source_type: "model_output".to_string(),
+                    author: rc.emitted_by.clone(),
+                    confidence: 0.3,
+                    evidence_type: rc.assertion_type.clone(),
+                    doi: None,
+                    year: None,
+                    url: None,
+                    source_authors: vec![],
+                    conditions_text: Some(conditions),
+                    evidence_spans: vec![],
+                    gap: false,
+                    negative_space: false,
+                    replication_attestation: None,
+                },
+                false, // NEVER apply: a receipt lands as a pending proposal
+            )
+            .unwrap_or_else(|e| fail_return(&format!("receipt apply: {e}")));
+            if json {
+                print_json(&json!({
+                    "ok": true,
+                    "command": "receipt.apply",
+                    "receipt": rc.id,
+                    "proposal_id": report.proposal_id,
+                    "status": report.proposal_status,
+                    "signed": signed,
+                }));
+            } else {
+                println!(
+                    "{} {} landed as proposal {} ({}) — a human key decides from here",
+                    style::ok("receipt"),
+                    rc.id,
+                    report.proposal_id,
+                    report.proposal_status
+                );
+            }
+        }
+    }
+}
+
 fn cmd_init(path: &Path, name: &str, template: &str, initialize_git: bool, json_output: bool) {
     if path.join(".vela").exists() {
         fail(&format!(
@@ -3215,6 +3510,8 @@ Setup (once):
   init          Initialize a new frontier repo
 
 Producer loop (git clone -> reproduce -> ingest -> propose -> git push):
+  receipt       Emit/validate/apply portable claim packets (vrc_) — evidence-bound
+                proposals any workbench can emit; apply lands them pending review
   reproduce     Re-verify stored witnesses from scratch (frozen exact verifiers)
   ingest        Ingest a paper, dataset, or Carina packet (dispatches by file type)
   propose       Create a finding.review proposal

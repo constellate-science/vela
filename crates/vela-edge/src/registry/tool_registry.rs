@@ -454,21 +454,17 @@ pub fn all_tools() -> Vec<ToolDefinition> {
                 "Resulting pack is reviewer-pending until a reviewer issues a verdict via the local review queue + diff-pack promoter.",
             ],
         ),
-        // An autonomous agent submits a SIGNED StateProposal to a remote hub.
-        // Proposes only: the hub forces pending_review and a human reviewer
-        // must accept through the strict gate (an AI never signs an accept).
+        // An agent lands a Vela Receipt on the LOCAL frontier as a pending
+        // proposal — the git-native write path (the remote hub-propose lane
+        // is retired; git push publishes, the hub re-indexes). Proposes
+        // only: a human reviewer must accept before anything changes state.
         tool(
-            "vela_agent_propose_to_hub",
-            "Submit a signed StateProposal to a remote Vela hub over MCP. The agent signs with VELA_AGENT_KEY_HEX (the same canonical bytes the hub verifies) and POSTs to {hub}/entries/{vfr}/proposals. The proposal is authored by the agent's `agent:*` id and lands as pending_review; a human reviewer must accept it through the strict gate before it changes state. Proposes only — never accepts.",
+            "vela_receipt_apply",
+            "Land a Vela Receipt (vrc_ JSON emitted by `vela receipt emit` or any workbench) on the local frontier as a PENDING proposal. Validates the receipt (id re-derivation + signature when present) and refuses a frontier mismatch. Never accepts — a human key decides; `git push` publishes and the hub re-derives its index.",
             json!({"type": "object", "properties": {
-                "hub": {"type": "string", "description": "Hub base URL (or set VELA_HUB env), e.g. https://hub.constellate.science"},
-                "vfr": {"type": "string", "description": "The vfr_ frontier id on the hub."},
-                "kind": {"type": "string", "description": "Proposal kind, e.g. finding.note, finding.caveat, finding.confidence_revise, finding.retract."},
-                "target": {"type": "string", "description": "The vf_ finding id this change targets."},
-                "reason": {"type": "string", "description": "Why this change — the reviewer reads this."},
-                "actor": {"type": "string", "description": "The proposing actor id; must start with `agent:`. Defaults to agent:mcp."},
-                "payload": {"description": "Kind-specific payload, e.g. {\"text\": \"…\"} for note/caveat, {\"confidence\": 0.5} for confidence_revise, {} for retract."}
-            }, "required": ["vfr", "kind", "target", "reason"]}),
+                "frontier_path": {"type": "string", "description": "Path to the frontier repo."},
+                "receipt_path": {"type": "string", "description": "Path to the receipt JSON (vrc_…)."}
+            }, "required": ["frontier_path", "receipt_path"]}),
             PermissionLevel::Write,
             true,
             vec![

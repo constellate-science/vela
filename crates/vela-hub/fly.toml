@@ -31,6 +31,12 @@ primary_region = "yyz"
     method = "GET"
     path = "/healthz"
 
+[env]
+  # Git ingestion (the index re-derives from registered frontier repos).
+  # 300s between sweeps; scratch clones live on the machine's ephemeral disk.
+  VELA_HUB_GIT_INGEST_INTERVAL_SECS = "300"
+  VELA_HUB_GIT_INGEST_DIR = "/tmp/vela-hub-git-ingest"
+
 [[vm]]
   memory = "1gb"
   cpu_kind = "shared"

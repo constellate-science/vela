@@ -69,6 +69,7 @@ pub mod payload_type {
     pub const STATEMENT_ATTESTATION: &str = "application/vnd.vela.statement_attestation+json";
     pub const ANCHOR: &str = "application/vnd.vela.anchor+json";
     pub const ACCEPT: &str = "application/vnd.vela.accept+json";
+    pub const RECEIPT: &str = "application/vnd.vela.receipt+json";
     pub const REGISTRY_DEPRECATION: &str = "application/vnd.vela.registry.deprecation+json";
     pub const REGISTRY_GIT_REMOTE: &str = "application/vnd.vela.registry.git_remote+json";
     pub const REGISTRY_ROTATION: &str = "application/vnd.vela.registry.rotation+json";

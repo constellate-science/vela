@@ -1,0 +1,273 @@
+//! Vela Receipts (v0): the portable claim packet.
+//!
+//! A receipt is a structured PROPOSAL to change frontier state — emitted by
+//! any workbench (an AI agent, a notebook, an HPC job, a lab system),
+//! carried anywhere (a PR, an email, an artifact store), and landed on a
+//! frontier as a pending proposal for a human key to accept. It is the
+//! doctrine "activity is not state" made portable: a receipt is NOT truth;
+//! it is evidence-bound activity shaped so the merge layer can judge it.
+//!
+//! Design, deliberately git-small:
+//! - content-addressed (`vrc_` + sha256(canonical body, id="")[:16]) so a
+//!   receipt is immutable and citable the moment it exists;
+//! - frontier-pinned: it names the `vfr_` it proposes against AND the
+//!   `event_log_hash` head it was emitted against, so a reviewer sees
+//!   exactly how stale it is (the decision-delta);
+//! - evidence-bound: every artifact ref carries a sha256 the validator
+//!   re-derives from bytes, so a receipt can't cite what it can't show;
+//! - signature optional at emit (an agent without a key may still emit;
+//!   `signed=false` is loud), MANDATORY judgment at accept (the human key,
+//!   as everywhere in Vela). Trust enters at the gate, not the emitter.
+
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+
+pub const RECEIPT_SCHEMA: &str = "vela.receipt.v0.1";
+
+/// One evidence artifact the claim rests on. `locator` is where the bytes
+/// live (a path relative to the receipt, a URL, a content-addressed blob);
+/// `sha256` is what makes the reference binding.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReceiptEvidence {
+    /// What kind of artifact: `witness`, `log`, `dataset`, `notebook`,
+    /// `proof`, `analysis` — free-form, one word.
+    pub kind: String,
+    pub locator: String,
+    /// sha256 (hex) of the artifact's exact bytes.
+    pub sha256: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub note: String,
+}
+
+/// A verifier run the emitter already performed (mechanical provenance,
+/// not a verdict): `method` names the verifier, `outcome` its result,
+/// `output_hash` content-addresses its output.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReceiptVerifierRun {
+    pub method: String,
+    pub outcome: String,
+    pub output_hash: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub solver: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Receipt {
+    pub schema: String,
+    /// Content-addressed id: `vrc_` + sha256(canonical body, id = "")[:16].
+    pub id: String,
+    /// The frontier this proposes against.
+    pub frontier_id: String,
+    /// The frontier head (`event_log_hash`) at emit time — the staleness pin.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub against_head: String,
+    /// The claim: what the emitter asserts is now known / bounded / refuted.
+    pub assertion: String,
+    /// Claim type, mirroring finding types: `theoretical`, `computational`,
+    /// `empirical`, `negative`.
+    pub assertion_type: String,
+    pub evidence: Vec<ReceiptEvidence>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub verifier_runs: Vec<ReceiptVerifierRun>,
+    /// What this claim does NOT establish. Required non-empty: a receipt
+    /// with no stated limits is advertising, not science.
+    pub caveats: Vec<String>,
+    /// Who emitted (agent:…, ci:…, reviewer:…). Agents welcome — emitting
+    /// is proposing, never deciding.
+    pub emitted_by: String,
+    pub emitted_at: String,
+    /// Ed25519 over the canonical body with `signature` empty. OPTIONAL:
+    /// an unsigned receipt is still validatable and landable; `validate`
+    /// reports `signed=false` loudly.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub signature: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub signer_pubkey_hex: String,
+}
+
+pub struct ReceiptDraft {
+    pub frontier_id: String,
+    pub against_head: String,
+    pub assertion: String,
+    pub assertion_type: String,
+    pub evidence: Vec<ReceiptEvidence>,
+    pub verifier_runs: Vec<ReceiptVerifierRun>,
+    pub caveats: Vec<String>,
+    pub emitted_by: String,
+    pub emitted_at: String,
+}
+
+impl Receipt {
+    /// Build and content-address; sign iff a key is supplied.
+    pub fn build(
+        draft: ReceiptDraft,
+        key: Option<&ed25519_dalek::SigningKey>,
+    ) -> Result<Self, String> {
+        if draft.assertion.trim().is_empty() {
+            return Err("receipt assertion cannot be empty".to_string());
+        }
+        if !draft.frontier_id.starts_with("vfr_") {
+            return Err(format!(
+                "receipt frontier_id must be a vfr_… id, got '{}'",
+                draft.frontier_id
+            ));
+        }
+        if draft.evidence.is_empty() {
+            return Err(
+                "a receipt with no evidence is a slogan; attach at least one artifact".to_string(),
+            );
+        }
+        for atom in &draft.evidence {
+            if atom.sha256.len() != 64 || hex::decode(&atom.sha256).is_err() {
+                return Err(format!(
+                    "evidence '{}' sha256 must be 32 bytes of hex",
+                    atom.locator
+                ));
+            }
+        }
+        if draft.caveats.iter().all(|c| c.trim().is_empty()) {
+            return Err(
+                "a receipt must state at least one caveat (what this does NOT establish)"
+                    .to_string(),
+            );
+        }
+        if draft.emitted_by.trim().is_empty() {
+            return Err("emitted_by is required (agent:…, ci:…, or reviewer:…)".to_string());
+        }
+        let mut rc = Receipt {
+            schema: RECEIPT_SCHEMA.to_string(),
+            id: String::new(),
+            frontier_id: draft.frontier_id,
+            against_head: draft.against_head,
+            assertion: draft.assertion,
+            assertion_type: draft.assertion_type,
+            evidence: draft.evidence,
+            verifier_runs: draft.verifier_runs,
+            caveats: draft.caveats,
+            emitted_by: draft.emitted_by,
+            emitted_at: draft.emitted_at,
+            signature: String::new(),
+            signer_pubkey_hex: key
+                .map(|k| hex::encode(k.verifying_key().to_bytes()))
+                .unwrap_or_default(),
+        };
+        rc.id = rc.derive_id()?;
+        if let Some(k) = key {
+            use ed25519_dalek::Signer;
+            rc.signature = hex::encode(k.sign(&rc.signing_bytes()?).to_bytes());
+        }
+        Ok(rc)
+    }
+
+    /// Canonical bytes with `signature` cleared (the id is signed content;
+    /// the signature is not part of the id).
+    pub fn signing_bytes(&self) -> Result<Vec<u8>, String> {
+        let mut c = self.clone();
+        c.signature = String::new();
+        let body = crate::canonical::to_canonical_bytes(&c)?;
+        Ok(crate::signing_input::signing_input(
+            crate::signing_input::SigVersion::V0,
+            crate::signing_input::payload_type::RECEIPT,
+            &body,
+        ))
+    }
+
+    pub fn derive_id(&self) -> Result<String, String> {
+        let mut c = self.clone();
+        c.id = String::new();
+        c.signature = String::new();
+        let bytes = crate::canonical::to_canonical_bytes(&c)?;
+        Ok(format!("vrc_{}", &hex::encode(Sha256::digest(bytes))[..16]))
+    }
+
+    /// Full integrity check: schema, id re-derivation, namespace, and —
+    /// when a signature is present — verification under the embedded
+    /// pubkey. Returns whether the receipt is signed.
+    pub fn verify(&self) -> Result<bool, String> {
+        if self.schema != RECEIPT_SCHEMA {
+            return Err(format!(
+                "receipt schema must be {RECEIPT_SCHEMA}, got {}",
+                self.schema
+            ));
+        }
+        let derived = self.derive_id()?;
+        if derived != self.id {
+            return Err(format!(
+                "receipt id does not re-derive: stored {}, derived {derived}",
+                self.id
+            ));
+        }
+        if self.signature.is_empty() {
+            return Ok(false);
+        }
+        use ed25519_dalek::Verifier;
+        let pk_bytes: [u8; 32] = hex::decode(&self.signer_pubkey_hex)
+            .map_err(|e| format!("pubkey hex: {e}"))?
+            .try_into()
+            .map_err(|_| "pubkey must be 32 bytes".to_string())?;
+        let vk = ed25519_dalek::VerifyingKey::from_bytes(&pk_bytes)
+            .map_err(|e| format!("pubkey: {e}"))?;
+        let sig_bytes: [u8; 64] = hex::decode(&self.signature)
+            .map_err(|e| format!("signature hex: {e}"))?
+            .try_into()
+            .map_err(|_| "signature must be 64 bytes".to_string())?;
+        let sig = ed25519_dalek::Signature::from_bytes(&sig_bytes);
+        vk.verify(&self.signing_bytes()?, &sig)
+            .map_err(|_| "receipt signature does not verify".to_string())?;
+        Ok(true)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn draft() -> ReceiptDraft {
+        ReceiptDraft {
+            frontier_id: "vfr_0123456789abcdef".into(),
+            against_head: "sha256:abc".into(),
+            assertion: "a(17) >= 292 for the Sidon frontier".into(),
+            assertion_type: "computational".into(),
+            evidence: vec![ReceiptEvidence {
+                kind: "witness".into(),
+                locator: "witnesses/a17.json".into(),
+                sha256: "a".repeat(64),
+                note: String::new(),
+            }],
+            verifier_runs: vec![],
+            caveats: vec!["lower bound only; optimality not established".into()],
+            emitted_by: "agent:claude".into(),
+            emitted_at: "2026-07-01T00:00:00Z".into(),
+        }
+    }
+
+    fn key() -> ed25519_dalek::SigningKey {
+        ed25519_dalek::SigningKey::from_bytes(&[7u8; 32])
+    }
+
+    #[test]
+    fn unsigned_receipt_builds_and_verifies_as_unsigned() {
+        let r = Receipt::build(draft(), None).unwrap();
+        assert!(r.id.starts_with("vrc_"));
+        assert!(!r.verify().unwrap());
+    }
+
+    #[test]
+    fn signed_receipt_verifies_and_tamper_fails() {
+        let r = Receipt::build(draft(), Some(&key())).unwrap();
+        assert!(r.verify().unwrap());
+        let mut bad = r.clone();
+        bad.assertion = "a(17) >= 300".into();
+        assert!(bad.verify().is_err()); // id no longer re-derives
+    }
+
+    #[test]
+    fn receipt_without_evidence_or_caveats_refused() {
+        let mut d = draft();
+        d.evidence.clear();
+        assert!(Receipt::build(d, None).is_err());
+        let mut d = draft();
+        d.caveats = vec!["".into()];
+        assert!(Receipt::build(d, None).is_err());
+    }
+}

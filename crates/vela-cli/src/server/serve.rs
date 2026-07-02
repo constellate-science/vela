@@ -1043,7 +1043,7 @@ async fn execute_tool(
         // one-shot calls — the agent does its own session bookkeeping
         // and only invokes Vela when ready to submit.
         "vela_agent_submit_diff_pack" => (vela_edge::vela_agent_mcp::submit_diff_pack(args), None),
-        "vela_agent_propose_to_hub" => (vela_edge::vela_agent_mcp::propose_to_hub(args), None),
+        "vela_receipt_apply" => (vela_edge::vela_agent_mcp::receipt_apply(args), None),
         // v0.214: read-side tools. None require VELA_AGENT_KEY_HEX.
         "vela_agent_get_pack" => (vela_edge::vela_agent_mcp::get_pack(args), None),
         "vela_agent_list_packs" => (vela_edge::vela_agent_mcp::list_packs(args), None),

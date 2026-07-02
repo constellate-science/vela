@@ -312,6 +312,7 @@ pub fn initialize(path: &Path, options: InitOptions<'_>) -> Result<serde_json::V
     write_frontier_card(path, options.name, options.template)?;
     write_scope(path, options.name)?;
     let next_commands = crate::frontier_template::apply(path, options.name, options.template)?;
+    write_git_native_scaffold(path, options.name)?;
     if options.initialize_git && !path.join(".git").exists() {
         let status = std::process::Command::new("git")
             .arg("init")
@@ -335,7 +336,11 @@ pub fn initialize(path: &Path, options: InitOptions<'_>) -> Result<serde_json::V
             "SCOPE.md",
             "frontier.yaml",
             "frontier.json",
-            "vela.lock"
+            "vela.lock",
+            ".gitignore",
+            ".github/workflows/vela-frontier.yml",
+            "VELA.md",
+            ".mcp.json"
         ],
         "next_commands": next_commands
     });
@@ -348,6 +353,123 @@ pub fn initialize(path: &Path, options: InitOptions<'_>) -> Result<serde_json::V
         );
     }
     Ok(payload)
+}
+
+/// The git-native, AI-drivable scaffold: everything a fresh frontier needs
+/// so that `git push` is publication, CI is the gate, and any agent can
+/// drive it through MCP — written at init so the five-minute path is real.
+///
+/// - `.gitignore` COMMITS `.vela/` (the event log IS the repo; only
+///   per-machine scratch is ignored) — the git-native inversion.
+/// - `.github/workflows/vela-frontier.yml` consumes the shared vela-check
+///   Action: every push re-derives the frontier from a clean checkout.
+/// - `VELA.md` is the canonical agent charter (`vela agents sync` generates
+///   CLAUDE.md / AGENTS.md / editor adapters from it).
+/// - `.mcp.json` serves the read-only MCP profile to any client opening
+///   the repo; write verbs stay behind explicit human sessions.
+fn write_git_native_scaffold(path: &Path, name: &str) -> Result<(), String> {
+    let write = |rel: &str, contents: String| -> Result<(), String> {
+        let dest = path.join(rel);
+        if dest.exists() {
+            return Ok(()); // never clobber an existing choice
+        }
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent).map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+        }
+        fs::write(&dest, contents).map_err(|e| format!("write {}: {e}", dest.display()))
+    };
+
+    write(
+        ".gitignore",
+        "# Git-native frontier: .vela/events IS the authority and IS committed.\n\
+         # Only per-machine scratch stays out of history.\n\
+         /.vela/tasks/\n/.vela/workspaces/\n/target/\n"
+            .to_string(),
+    )?;
+
+    write(
+        ".github/workflows/vela-frontier.yml",
+        r#"name: Verify the signed frontier
+
+# The git-native gate: on every change to the signed frontier, the shared
+# vela-check action re-derives it from a clean checkout and proves the
+# working tree IS the signed state (replay + strict check + hash parity).
+# It NEVER signs: acceptance stays a human-keyed event in the repo.
+on:
+  push:
+    branches: [main]
+    paths: [".vela/**", "frontier.json", "frontier.yaml", "vela.lock", "proof/**"]
+  pull_request:
+    paths: [".vela/**", "frontier.json", "frontier.yaml", "vela.lock", "proof/**"]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: constellate-science/vela@main
+"#
+        .to_string(),
+    )?;
+
+    write(
+        "VELA.md",
+        format!(
+            r#"# {name} — agent charter
+
+This frontier is driven by `vela` + `git`. Agents propose; a human key
+accepts. `vela agents sync` regenerates CLAUDE.md / AGENTS.md / editor
+adapters from this file — edit here, never there.
+
+## Agent rules
+
+Agents may:
+
+- inspect state: `vela status .`, `vela inbox .`, `vela check .`
+- draft findings and receipts: `vela finding add . --author agent:<name> …`,
+  `vela receipt emit . …` / `vela receipt apply <receipt> .`
+- run the verifiers: `vela reproduce .`, `vela check . --strict`
+- rebuild derived views: `vela frontier materialize .`
+
+Agents may not:
+
+- accept, reject, or attest anything (human-key decisions; the engine
+  refuses agent actors on every truth-bearing verb)
+- sign with a human's key, or run bare review verbs without
+  `VELA_ACTOR_ID=agent:<name>` exported
+
+## Fast commands
+
+```bash
+vela status .                 # where the frontier stands
+vela inbox .                  # pending proposals awaiting a human key
+vela check . --strict         # the full trust gate, locally
+vela frontier materialize .   # regenerate derived views after events land
+git push                      # publication (CI re-derives; the hub re-indexes)
+```
+"#
+        ),
+    )?;
+
+    write(
+        ".mcp.json",
+        r#"{
+  "mcpServers": {
+    "vela": {
+      "command": "vela",
+      "args": ["serve", ".", "--profile", "read-only"]
+    }
+  }
+}
+"#
+        .to_string(),
+    )?;
+
+    Ok(())
 }
 
 pub fn materialize(path: &Path) -> Result<serde_json::Value, String> {

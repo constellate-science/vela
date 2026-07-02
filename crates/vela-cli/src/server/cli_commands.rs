@@ -643,6 +643,15 @@ pub(crate) enum Commands {
     /// (e.g. a second reviewer countersigning a finding.reviewed
     /// event, or a Lean run attesting a Stupp-protocol claim by
     /// pointing at its accept event).
+    /// Vela Receipts (v0): the portable claim packet. `emit` shapes work
+    /// into an evidence-bound, content-addressed proposal; `validate`
+    /// re-derives every hash it cites; `apply` lands it on a frontier as a
+    /// pending proposal for a human key to accept. A receipt is not truth —
+    /// it is activity shaped so the merge layer can judge it.
+    Receipt {
+        #[command(subcommand)]
+        action: ReceiptAction,
+    },
     Attest {
         /// Frontier path. Required.
         frontier: PathBuf,
@@ -1745,6 +1754,72 @@ pub(crate) enum QueueAction {
     Clear {
         #[arg(long)]
         queue_file: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+}
+
+#[derive(Subcommand)]
+pub(crate) enum ReceiptAction {
+    /// Emit a receipt from work you just did: the claim, the evidence
+    /// files (hashed at emit), the caveats, pinned against the frontier's
+    /// current head. Signs iff a key is available; unsigned receipts are
+    /// valid and loudly marked.
+    Emit {
+        /// The frontier this proposes against (a repo dir).
+        frontier: PathBuf,
+        /// What you assert is now known / bounded / refuted.
+        #[arg(long)]
+        assertion: String,
+        /// theoretical | computational | empirical | negative
+        #[arg(long, default_value = "computational")]
+        r#type: String,
+        /// Evidence artifact `path[:kind]` (kind defaults to `witness`).
+        /// Repeatable; at least one required. The file is hashed at emit.
+        #[arg(long = "evidence", required = true)]
+        evidence: Vec<String>,
+        /// What this does NOT establish. Repeatable; at least one required.
+        #[arg(long = "caveat", required = true)]
+        caveats: Vec<String>,
+        /// A verifier run you already performed: `method:outcome:logfile[:solver]`.
+        /// The log file is hashed. Repeatable.
+        #[arg(long = "verifier-run")]
+        verifier_runs: Vec<String>,
+        /// Who emits (defaults to $VELA_ACTOR_ID / your identity).
+        #[arg(long)]
+        actor: Option<String>,
+        /// Signing key (optional — agents without keys emit unsigned).
+        #[arg(long)]
+        key: Option<PathBuf>,
+        /// Where to write the receipt (default: receipts/<vrc_id>.json
+        /// under the frontier).
+        #[arg(long)]
+        out: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Validate a receipt: schema, id re-derivation, signature (if
+    /// present), and every evidence hash re-derived from bytes.
+    Validate {
+        /// Path to the receipt JSON.
+        receipt: PathBuf,
+        /// Frontier dir to check the vfr_ binding against (optional).
+        #[arg(long)]
+        frontier: Option<PathBuf>,
+        /// Root for resolving relative evidence locators (defaults to the
+        /// receipt's directory).
+        #[arg(long)]
+        evidence_root: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
+    },
+    /// Land a validated receipt on a frontier as a PENDING proposal (the
+    /// agent-propose / human-accept boundary: apply never decides).
+    Apply {
+        /// Path to the receipt JSON.
+        receipt: PathBuf,
+        /// The frontier repo to land on.
+        frontier: PathBuf,
         #[arg(long)]
         json: bool,
     },

@@ -538,106 +538,73 @@ pub fn submit_diff_pack(args: &Value) -> Result<String, String> {
     .unwrap_or_default())
 }
 
-/// `vela_agent_propose_to_hub` — an autonomous agent submits a signed
-/// StateProposal to a REMOTE hub over MCP, on its own timeline.
-///
-/// The agent holds its key in `VELA_AGENT_KEY_HEX`, builds + signs the
-/// proposal here (the same canonical bytes the hub verifies), and POSTs it
-/// to `{hub}/entries/{vfr}/proposals`. The proposal is authored by the
-/// agent's `agent:*` id — a real producer write, the north-star "agent
-/// submission accepted after verification".
-///
-/// Key custody holds: this PROPOSES only. The hub forces status to
-/// pending_review and a human reviewer must accept it through the strict
-/// gate (an AI never signs an accept). A self-signature on a proposal
-/// confers no authority — it only binds authorship, exactly as the web and
-/// CLI propose paths do.
-///
-/// Args: `hub` (or VELA_HUB env), `vfr`, `kind`, `target` (vf_ id),
-/// `reason`, optional `actor` (default `agent:mcp`) and `payload`.
-pub fn propose_to_hub(args: &Value) -> Result<String, String> {
-    let key = signing_key_from_env()?;
-    let hub = args
-        .get("hub")
+/// `vela_receipt_apply` — land a Vela Receipt (vrc_) on the LOCAL frontier
+/// as a pending proposal. The git-native successor to the retired
+/// propose-to-hub lane: the agent works in the repo, the receipt becomes a
+/// reviewable proposal, `git push` publishes, the hub re-indexes. Never
+/// decides — the proposal waits for a human key.
+pub fn receipt_apply(args: &Value) -> Result<String, String> {
+    let frontier_path: PathBuf = args
+        .get("frontier_path")
         .and_then(Value::as_str)
-        .map(str::to_string)
-        .or_else(|| std::env::var("VELA_HUB").ok())
-        .ok_or("missing 'hub' arg or VELA_HUB env")?;
-    let vfr = args
-        .get("vfr")
+        .ok_or("frontier_path required")?
+        .into();
+    let receipt_path: PathBuf = args
+        .get("receipt_path")
         .and_then(Value::as_str)
-        .ok_or("missing 'vfr' (the vfr_ frontier id on the hub)")?;
-    let kind = args
-        .get("kind")
-        .and_then(Value::as_str)
-        .ok_or("missing 'kind' (e.g. finding.note, finding.caveat, finding.retract)")?;
-    let target_id = args
-        .get("target")
-        .and_then(Value::as_str)
-        .ok_or("missing 'target' (the vf_ finding id)")?;
-    let reason = args
-        .get("reason")
-        .and_then(Value::as_str)
-        .ok_or("missing 'reason'")?;
-    let actor = args
-        .get("actor")
-        .and_then(Value::as_str)
-        .unwrap_or("agent:mcp");
-    let payload = args.get("payload").cloned().unwrap_or(Value::Null);
-
-    let proposal = vela_protocol::proposals::new_proposal(
-        kind,
-        vela_protocol::events::StateTarget {
-            r#type: "finding".to_string(),
-            id: target_id.to_string(),
-        },
-        actor,
-        "agent",
-        reason,
-        payload,
-        Vec::new(),
-        Vec::new(),
-    );
-    let signature = vela_protocol::sign::sign_proposal(&proposal, &key)?;
-    let pubkey = hex::encode(key.verifying_key().to_bytes());
-    let body = serde_json::to_string(&proposal).map_err(|e| format!("serialize proposal: {e}"))?;
-    let url = format!("{}/entries/{vfr}/proposals", hub.trim_end_matches('/'));
-
-    // The MCP serve handler runs inside a tokio runtime; `reqwest::blocking`
-    // builds its own runtime and panics if dropped inside an async context.
-    // Run the POST on a dedicated OS thread so it never touches the async
-    // runtime, and join it back.
-    let url_t = url.clone();
-    let (status_code, text) = std::thread::spawn(move || -> Result<(u16, String), String> {
-        let resp = reqwest::blocking::Client::new()
-            .post(&url_t)
-            .header("X-Vela-Signer-Pubkey", &pubkey)
-            .header("X-Vela-Signature", &signature)
-            .header("content-type", "application/json")
-            .body(body)
-            .send()
-            .map_err(|e| format!("POST {url_t}: {e}"))?;
-        let status = resp.status().as_u16();
-        let text = resp.text().unwrap_or_default();
-        Ok((status, text))
-    })
-    .join()
-    .map_err(|_| "propose_to_hub network thread panicked".to_string())??;
-
-    if (200..300).contains(&status_code) {
-        let hub_response: Value = serde_json::from_str(&text).unwrap_or(Value::String(text));
-        Ok(serde_json::to_string(&json!({
-            "ok": true,
-            "proposal_id": proposal.id,
-            "actor": actor,
-            "status_code": status_code,
-            "hub_response": hub_response,
-            "note": "Proposed only. A human reviewer must accept through the strict gate before this changes state.",
-        }))
-        .unwrap_or_default())
-    } else {
-        Err(format!("hub propose -> HTTP {status_code}: {text}"))
+        .ok_or("receipt_path required")?
+        .into();
+    let raw = std::fs::read_to_string(&receipt_path)
+        .map_err(|e| format!("read {}: {e}", receipt_path.display()))?;
+    let rc: vela_protocol::receipt::Receipt =
+        serde_json::from_str(&raw).map_err(|e| format!("receipt parse: {e}"))?;
+    let signed = rc.verify()?;
+    let project = vela_protocol::repo::load_from_path(&frontier_path)
+        .map_err(|e| format!("load frontier: {e}"))?;
+    if project.frontier_id() != rc.frontier_id {
+        return Err(format!(
+            "receipt is for {}, this frontier is {}",
+            rc.frontier_id,
+            project.frontier_id()
+        ));
     }
+    let conditions = format!(
+        "Receipt {} ({}). Caveats: {}.",
+        rc.id,
+        if signed { "signed" } else { "unsigned" },
+        rc.caveats.join(" | "),
+    );
+    let report = vela_protocol::state::add_finding(
+        &frontier_path,
+        vela_protocol::state::FindingDraftOptions {
+            text: rc.assertion.clone(),
+            assertion_type: rc.assertion_type.clone(),
+            source: format!("receipt:{}", rc.id),
+            source_type: "model_output".to_string(),
+            author: rc.emitted_by.clone(),
+            confidence: 0.3,
+            evidence_type: rc.assertion_type.clone(),
+            doi: None,
+            year: None,
+            url: None,
+            source_authors: vec![],
+            conditions_text: Some(conditions),
+            evidence_spans: vec![],
+            gap: false,
+            negative_space: false,
+            replication_attestation: None,
+        },
+        false, // pending only: an MCP client never applies state
+    )?;
+    Ok(serde_json::json!({
+        "ok": true,
+        "receipt": rc.id,
+        "signed": signed,
+        "proposal_id": report.proposal_id,
+        "status": report.proposal_status,
+        "note": "pending; a human key accepts. git push publishes.",
+    })
+    .to_string())
 }
 
 // Note: the write-side tools here mutate VELA_AGENT_KEY_HEX (the
