@@ -24,10 +24,11 @@ pub(crate) fn cmd_frontier(action: FrontierAction) {
             json,
         } => {
             if path.exists() && !force {
-                fail(&format!(
-                    "{} already exists; pass --force to overwrite",
-                    path.display()
-                ));
+                crate::ui::fail_with(
+                    crate::ui::ErrorKind::Exists,
+                    &format!("{} already exists", path.display()),
+                    Some("pass --force to overwrite"),
+                );
             }
             let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
             let project = project::Project {

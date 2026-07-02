@@ -201,7 +201,7 @@ pub(crate) fn cmd_proposals(action: ProposalAction) {
             key,
             json,
         } => {
-            let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
+            let reviewer = crate::cli_identity::resolve_decision_actor(reviewer.as_deref());
             let signing_key = crate::cli_identity::resolve_signing_key_opt(key.as_deref());
             let event_id = proposals::accept_at_path_signed(
                 &frontier,
@@ -240,7 +240,7 @@ pub(crate) fn cmd_proposals(action: ProposalAction) {
             key,
             json,
         } => {
-            let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
+            let reviewer = crate::cli_identity::resolve_decision_actor(reviewer.as_deref());
             let signing_key = crate::cli_identity::resolve_signing_key_opt(key.as_deref());
             proposals::reject_at_path_signed(
                 &frontier,
@@ -357,7 +357,7 @@ pub(crate) fn cmd_queue(action: QueueAction) {
                 }
                 return;
             }
-            let actor = crate::cli_identity::resolve_actor(actor.as_deref());
+            let actor = crate::cli_identity::resolve_decision_actor(actor.as_deref());
             let signing_key = crate::cli_identity::resolve_signing_key(key.as_deref());
             let mut signed_count = 0usize;
             let mut remaining = Vec::new();
@@ -579,9 +579,13 @@ fn resolve_faithfulness_signer(
 ) -> (String, ed25519_dalek::SigningKey) {
     let by = crate::cli_identity::resolve_actor(reviewer.as_deref());
     if !by.starts_with("reviewer:") {
-        fail(&format!(
-            "attest: statement faithfulness is human judgment by design; reviewer must be a reviewer: actor, got '{by}'"
-        ));
+        crate::ui::fail_with(
+            crate::ui::ErrorKind::Custody,
+            &format!(
+                "attest: statement faithfulness is human judgment by design; reviewer must be a reviewer: actor, got '{by}'"
+            ),
+            Some("run under a human identity: `vela id show`, or pass --as reviewer:<handle>"),
+        );
     }
     let signing_key = crate::cli_identity::resolve_signing_key(key);
     (by, signing_key)

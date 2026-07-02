@@ -31,6 +31,17 @@ primary_region = "yyz"
     method = "GET"
     path = "/healthz"
 
+  # Readiness: fails until the hosted-MCP projection is built, so a
+  # rolling deploy keeps the old machine serving /mcp until the new one
+  # is actually ready (~minutes for the first build on a fresh disk).
+  # Deploy with `--wait-timeout 600` so flyctl outlasts the build.
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "8s"
+    grace_period = "30s"
+    method = "GET"
+    path = "/readyz"
+
 [env]
   # Git ingestion (the index re-derives from registered frontier repos).
   # 300s between sweeps; scratch clones live on the machine's ephemeral disk.

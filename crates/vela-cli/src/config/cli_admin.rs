@@ -36,10 +36,11 @@ pub(crate) fn cmd_id(action: IdAction) {
             json,
         } => {
             if load_identity().is_some() && !force {
-                fail(&format!(
-                    "an identity already exists ({}). Run `vela id show`, or pass --force to overwrite.",
-                    identity_path().display()
-                ));
+                crate::ui::fail_with(
+                    crate::ui::ErrorKind::Exists,
+                    &format!("an identity already exists ({})", identity_path().display()),
+                    Some("run `vela id show` to inspect it, or pass --force to overwrite"),
+                );
             }
             let handle = handle
                 .or_else(|| std::env::var("USER").ok())
@@ -74,10 +75,11 @@ pub(crate) fn cmd_id(action: IdAction) {
             json,
         } => {
             if load_identity().is_some() && !force {
-                fail(&format!(
-                    "an identity already exists ({}). Run `vela id show`, or pass --force to overwrite.",
-                    identity_path().display()
-                ));
+                crate::ui::fail_with(
+                    crate::ui::ErrorKind::Exists,
+                    &format!("an identity already exists ({})", identity_path().display()),
+                    Some("run `vela id show` to inspect it, or pass --force to overwrite"),
+                );
             }
             let hex = std::fs::read_to_string(&key)
                 .unwrap_or_else(|e| fail_return(&format!("read key {}: {e}", key.display())));

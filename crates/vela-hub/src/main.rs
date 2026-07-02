@@ -572,6 +572,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .route("/", get(root))
         .route("/healthz", get(healthz))
+        .route("/readyz", get(readyz))
         .route("/metrics", get(metrics_prometheus))
         .route("/.well-known/vela", get(well_known_vela))
         .route("/entries", get(list_entries))
@@ -832,6 +833,52 @@ struct EventQuery {
     target: Option<String>,
 }
 
+/// Strict query parsing for the event endpoints: an unknown parameter is
+/// a 400, not a silent no-op. A client still sending the retired
+/// `?since=` gets told, instead of silently receiving page one.
+fn parse_event_query(
+    params: &HashMap<String, String>,
+    allowed: &[&str],
+) -> Result<EventQuery, Box<Response>> {
+    if let Some(unknown) = params.keys().find(|k| !allowed.contains(&k.as_str())) {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(error_body(
+                "INVALID_ARG",
+                format!(
+                    "unknown query parameter `{unknown}` (allowed: {})",
+                    allowed.join(", ")
+                ),
+            )),
+        )
+            .into_response()
+            .into());
+    }
+    let limit = match params.get("limit") {
+        Some(v) => match v.parse::<usize>() {
+            Ok(n) => Some(n),
+            Err(_) => {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    Json(error_body(
+                        "INVALID_ARG",
+                        format!("limit `{v}` is not a number"),
+                    )),
+                )
+                    .into_response()
+                    .into());
+            }
+        },
+        None => None,
+    };
+    Ok(EventQuery {
+        cursor: params.get("cursor").cloned(),
+        limit,
+        kind: params.get("kind").cloned(),
+        target: params.get("target").cloned(),
+    })
+}
+
 #[derive(Debug, Deserialize)]
 struct SnapshotQuery {
     redirect: Option<String>,
@@ -845,6 +892,7 @@ fn root_json() -> Value {
         "endpoints": [
             "GET  /              - this banner",
             "GET  /healthz       - liveness + db-cache metrics",
+            "GET  /readyz        - readiness (MCP projection built)",
             "GET  /entries       - live frontiers, manifest-compatible JSON",
             "GET  /entries/{vfr_id} - single entry",
             "GET  /entries/{vfr_id}/events - cursor-paginated canonical event log",
@@ -1000,6 +1048,42 @@ async fn well_known_vela(State(state): State<AppState>) -> Json<Value> {
             "mode": "unsigned",
             "note": "set VELA_HUB_SIGNING_KEY_PATH on the hub to enable detached pure-Ed25519 signatures over this discovery manifest",
         })),
+    }
+}
+
+/// Readiness, as distinct from liveness: a machine is READY only once
+/// its hosted-MCP projection is built (or there is genuinely nothing to
+/// build). Wired as a fly http check so a rolling deploy keeps the old
+/// machine serving `/mcp` until the new one has finished its first
+/// projection build — a deploy never blanks the public endpoint.
+async fn readyz(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
+    if state.mcp.read().await.is_some() {
+        return (
+            StatusCode::OK,
+            Json(json!({"ready": true, "mcp": "projection built", "version": HUB_VERSION})),
+        );
+    }
+    match state.db.list_live_entries().await {
+        Ok(entries) if entries.is_empty() => (
+            StatusCode::OK,
+            Json(json!({"ready": true, "mcp": "no frontiers registered", "version": HUB_VERSION})),
+        ),
+        Ok(entries) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({
+                "ready": false,
+                "mcp": format!("projection building ({} frontiers)", entries.len()),
+                "version": HUB_VERSION,
+            })),
+        ),
+        Err(e) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({
+                "ready": false,
+                "error": {"kind": "UNAVAILABLE", "message": e},
+                "version": HUB_VERSION,
+            })),
+        ),
     }
 }
 
@@ -3225,8 +3309,12 @@ async fn get_entry_snapshot(
 async fn get_entry_events(
     State(state): State<AppState>,
     Path(vfr_id): Path<String>,
-    Query(params): Query<EventQuery>,
+    Query(raw): Query<HashMap<String, String>>,
 ) -> Response {
+    let params = match parse_event_query(&raw, &["cursor", "limit", "kind", "target"]) {
+        Ok(p) => p,
+        Err(resp) => return *resp,
+    };
     match state.db.get_live_entry(&vfr_id).await {
         Ok(Some(_)) => {}
         Ok(None) => {
@@ -3314,8 +3402,12 @@ async fn get_entry_events(
 async fn get_entry_events_stream(
     State(state): State<AppState>,
     Path(vfr_id): Path<String>,
-    Query(params): Query<EventQuery>,
+    Query(raw): Query<HashMap<String, String>>,
 ) -> Response {
+    let params = match parse_event_query(&raw, &["cursor", "kind", "target"]) {
+        Ok(p) => p,
+        Err(resp) => return *resp,
+    };
     match state.db.get_live_entry(&vfr_id).await {
         Ok(Some(_)) => {}
         Ok(None) => {

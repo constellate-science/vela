@@ -124,6 +124,26 @@ pub(crate) fn resolve_actor(flag: Option<&str>) -> String {
     }
 }
 
+/// Resolve the acting identity for a DECISION verb (accept / reject /
+/// sign) and refuse agent-lane actors with the custody exit code before
+/// the engine is even reached. The engine remains the authority — this
+/// pre-check only types the refusal (exit 4 instead of a generic 1).
+pub(crate) fn resolve_decision_actor(flag: Option<&str>) -> String {
+    let actor = resolve_actor(flag);
+    if actor.starts_with("agent:") || actor.starts_with("ci:") {
+        crate::ui::fail_with(
+            crate::ui::ErrorKind::Custody,
+            &format!(
+                "`{actor}` cannot decide: committing truth-bearing state is a key-custody human act"
+            ),
+            Some(
+                "a human runs this under their own identity (`vela id show`); agents draft with `vela propose` / `vela pack`",
+            ),
+        );
+    }
+    actor
+}
+
 /// Resolve the hub base URL. `--to` / `--hub` flag wins, then
 /// `$VELA_HUB_URL`, then the profile, then the baked-in default hub (so an
 /// unconfigured `verify` against a known vfr still works).

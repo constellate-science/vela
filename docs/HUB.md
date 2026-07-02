@@ -418,8 +418,14 @@ Deploy the hub:
 
 ```bash
 flyctl deploy --config crates/vela-hub/fly.toml \
-  --dockerfile crates/vela-hub/Dockerfile --depot=true .
+  --dockerfile crates/vela-hub/Dockerfile --depot=true --wait-timeout 600 .
 ```
+
+**Always pass `--wait-timeout 600`.** New machines fail the `/readyz`
+check until their hosted-MCP projection finishes its first build
+(~minutes on a fresh disk); the long wait lets flyctl outlast the build
+while the old machine keeps serving `/mcp`. A deploy never blanks the
+public endpoint.
 
 **Always pass `--depot=true`.** `vela-hub` lives in the `vela-237` org, but
 flyctl's default remote builder is the `fly-builder-*` app in the (currently

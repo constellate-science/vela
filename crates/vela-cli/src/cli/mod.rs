@@ -790,7 +790,7 @@ pub async fn run_command() {
             let publish_opts = crate::config::git_publish::PublishOptions::new(no_commit, no_push);
             // Pack mode: one decision for a whole changeset.
             if let Some(pack_id) = pack {
-                let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
+                let reviewer = crate::cli_identity::resolve_decision_actor(reviewer.as_deref());
                 let signing_key = crate::cli_identity::resolve_signing_key_opt(key.as_deref());
                 let reason = reason
                     .clone()
@@ -861,7 +861,7 @@ pub async fn run_command() {
                 let reason = reason
                     .clone()
                     .unwrap_or_else(|| "accepted via batch review".to_string());
-                let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
+                let reviewer = crate::cli_identity::resolve_decision_actor(reviewer.as_deref());
                 // Sign with the configured identity's key (managed-identity model):
                 // key custody, not the typed name, is the accept authority.
                 let signing_key = crate::cli_identity::resolve_signing_key_opt(None);
@@ -1011,7 +1011,7 @@ pub async fn run_command() {
                     "run `vela inbox .` first — it lists the pending vpr_/vsd_ ids and the exact accept command",
                 )
             });
-            let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
+            let reviewer = crate::cli_identity::resolve_decision_actor(reviewer.as_deref());
             let reason = reason.unwrap_or_else(|| "accepted via review".to_string());
             let signing_key = crate::cli_identity::resolve_signing_key_opt(key.as_deref());
             let provenance = crate::cli_identity::resolve_co_author_provenance(
@@ -2982,10 +2982,14 @@ pub(crate) fn cmd_record(
 
 fn cmd_init(path: &Path, name: &str, template: &str, initialize_git: bool, json_output: bool) {
     if path.join(".vela").exists() {
-        fail(&format!(
-            "already initialized: {} exists",
-            path.join(".vela").display()
-        ));
+        crate::ui::fail_with(
+            crate::ui::ErrorKind::Exists,
+            &format!(
+                "already initialized: {} exists",
+                path.join(".vela").display()
+            ),
+            Some("run `vela status` to see the frontier that already lives here"),
+        );
     }
     let payload = frontier_repo::initialize(
         path,

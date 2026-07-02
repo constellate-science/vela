@@ -26,7 +26,6 @@ use serde_json::json;
 use vela_protocol::cli_style as style;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)] // the kinds ARE the contract; call sites migrate onto them incrementally
 pub enum ErrorKind {
     /// Wrong invocation: missing/invalid arguments.
     Usage,
@@ -39,6 +38,7 @@ pub enum ErrorKind {
     /// The domain said no: gate red, verification failed, replay broken.
     Domain,
     /// Our fault: unexpected internal failure.
+    #[allow(dead_code)] // part of the published contract; no CLI path is honestly internal yet
     Internal,
 }
 
