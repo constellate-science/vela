@@ -1841,7 +1841,7 @@ fn render_search_html(urls: &PublicUrls, q: &str, object_type: &str, results: &[
         urls,
         "Vela Hub · Search",
         "entries",
-        "04 · Search",
+        "Search",
         "Cross-frontier search",
         &count_note,
         "",
@@ -4403,7 +4403,7 @@ fn render_root_html(urls: &PublicUrls) -> String {
         urls,
         "Vela Hub",
         "hub",
-        "00 · Hub",
+        "Hub",
         "Vela Hub",
         "Signed registry manifests over HTTP. Open publishing, signature-gated; clients verify locally.",
         &format!(
@@ -4473,7 +4473,7 @@ fn render_producer_html(
         urls,
         "Vela Hub · Producer",
         "entries",
-        "05 · Producer",
+        "Producer",
         "Signed work",
         &format!("{total} object(s) across {} frontier(s)", by_frontier.len()),
         &format!(
@@ -4535,7 +4535,7 @@ fn render_entries_html(urls: &PublicUrls, entries: &[Value]) -> String {
         urls,
         "Vela Hub · Entries",
         "entries",
-        &format!("01 · Entries · <span style=\"color:var(--ink-2);\">{count} signed</span>"),
+        &format!("Entries · <span style=\"color:var(--ink-2);\">{count} signed</span>"),
         "Registry",
         "Latest-publish-wins per <code>vfr_id</code>. Click through for the manifest, the pull recipe, and the raw signed bytes.",
         &format!(
@@ -4654,7 +4654,6 @@ fn render_entry_html(
     let main = format!(
         r#"<div class="fd">
   <article>
-    <p class="fd-claim">{name}</p>
     <p class="fd-note">{note}</p>
 
     {constellation}
@@ -4761,7 +4760,7 @@ fn render_entry_html(
         urls,
         &format!("Vela Hub · {vfr_id}"),
         "entries",
-        &format!("02 · Entry · <span style=\"color:var(--ink-2);\">{vfr_safe}</span>"),
+        &format!("Entry · <span style=\"color:var(--ink-2);\">{vfr_safe}</span>"),
         &name,
         "One signed manifest, read end-to-end. Pull the frontier from the network locator; verify hashes locally.",
         &format!(
@@ -5587,7 +5586,7 @@ fn render_finding_html(
         urls,
         &format!("Vela Hub · {}", &bundle.id),
         "entries",
-        &format!("03 · Finding · <span style=\"color:var(--ink-2);\">{vf_safe}</span>"),
+        &format!("Finding · <span style=\"color:var(--ink-2);\">{vf_safe}</span>"),
         "Finding",
         &claim_html,
         &format!(
@@ -5851,7 +5850,7 @@ fn render_pack_html(
         urls,
         &format!("Vela Hub · {}", rec.pack_id),
         "entries",
-        &format!("03 · Pack · <span style=\"color:var(--ink-2);\">{pack_safe}</span>"),
+        &format!("Pack · <span style=\"color:var(--ink-2);\">{pack_safe}</span>"),
         "Diff pack review",
         &summary,
         &format!(
@@ -6050,7 +6049,7 @@ fn render_reproduce_html(urls: &PublicUrls, vfr_id: &str, rec: &Value, git_subdi
         urls,
         &format!("Vela Hub · reproduce · {vfr_id}"),
         "entries",
-        &format!("05 · Reproduce · <span style=\"color:var(--ink-2);\">{vfr_safe}</span>"),
+        &format!("Reproduce · <span style=\"color:var(--ink-2);\">{vfr_safe}</span>"),
         "Reproduce",
         "Two commands re-derive this frontier's state from its source repository. Nothing here requires trusting the hub.",
         &format!(
@@ -6072,7 +6071,7 @@ fn render_reproduce_no_remote_html(urls: &PublicUrls, vfr_id: &str) -> String {
         urls,
         "Vela Hub · reproduce",
         "entries",
-        &format!("05 · Reproduce · <span style=\"color:var(--ink-2);\">{vfr_safe}</span>"),
+        &format!("Reproduce · <span style=\"color:var(--ink-2);\">{vfr_safe}</span>"),
         "No registered repository",
         "Reproduction needs a source repository; this frontier has not registered one.",
         &format!(r#"<a href="/entries/{vfr_safe}">← Entry</a>"#),
@@ -6101,7 +6100,7 @@ fn render_no_packet_html(urls: &PublicUrls, vfr_id: &str) -> String {
         urls,
         "Vela Hub · no proof packet",
         "entries",
-        &format!("04 · Proof · <span style=\"color:var(--ink-2);\">{vfr_safe}</span>"),
+        &format!("Proof · <span style=\"color:var(--ink-2);\">{vfr_safe}</span>"),
         "No proof packet",
         "The hub has no packet for this entry. Generate one with the CLI and serve it via VELA_PROOF_PACKET_DIR.",
         &format!(r#"<a href="/entries/{vfr_safe}">← Entry</a>"#),
@@ -6427,7 +6426,7 @@ fn render_proof_packet_html(
         urls,
         &format!("Vela Hub · proof · {vfr_id}"),
         "entries",
-        &format!("04 · Proof · <span style=\"color:var(--ink-2);\">{vfr_safe}</span>"),
+        &format!("Proof · <span style=\"color:var(--ink-2);\">{vfr_safe}</span>"),
         "Proof packet",
         "Manifest, signed-trace chain, integrity lock, and the file-by-file SHA-256 table the skeptic actually wants to see.",
         &format!(
