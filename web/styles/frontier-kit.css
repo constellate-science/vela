@@ -46,10 +46,10 @@
     --paper-edge: oklch(32.0% 0.035 258);
 
     --ink-0: oklch(95.0% 0.010 250);
-    --ink-1: oklch(90.0% 0.012 250);
+    --ink-1: oklch(93.0% 0.012 250);
     --ink-2: oklch(78.0% 0.016 250);
     --ink-3: oklch(64.0% 0.020 250);
-    --ink-4: oklch(52.0% 0.022 252);
+    --ink-4: oklch(50.0% 0.022 252);
 
     --rule-1: color-mix(in oklch, var(--ink-1) 8%, transparent);
     --rule-2: color-mix(in oklch, var(--ink-1) 16%, transparent);
