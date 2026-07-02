@@ -454,17 +454,18 @@ pub fn all_tools() -> Vec<ToolDefinition> {
                 "Resulting pack is reviewer-pending until a reviewer issues a verdict via the local review queue + diff-pack promoter.",
             ],
         ),
-        // An agent lands a Vela Receipt on the LOCAL frontier as a pending
-        // proposal — the git-native write path (the remote hub-propose lane
-        // is retired; git push publishes, the hub re-indexes). Proposes
-        // only: a human reviewer must accept before anything changes state.
+        // An agent lands an activity record on the LOCAL frontier as a
+        // pending proposal — the git-native write path (the remote
+        // hub-propose lane is retired; git push publishes, the hub
+        // re-indexes). Proposes only: a human reviewer must accept before
+        // anything changes state.
         tool(
-            "vela_receipt_apply",
-            "Land a Vela Receipt (vrc_ JSON emitted by `vela receipt emit` or any workbench) on the local frontier as a PENDING proposal. Validates the receipt (id re-derivation + signature when present) and refuses a frontier mismatch. Never accepts — a human key decides; `git push` publishes and the hub re-derives its index.",
+            "vela_record_propose",
+            "Land an activity record (vrc_ JSON emitted by `vela record` or any workbench) on the local frontier as a PENDING proposal. Validates the record (id re-derivation + signature when present) and refuses a frontier mismatch. Never accepts — a human key decides; `git push` publishes and the hub re-derives its index.",
             json!({"type": "object", "properties": {
                 "frontier_path": {"type": "string", "description": "Path to the frontier repo."},
-                "receipt_path": {"type": "string", "description": "Path to the receipt JSON (vrc_…)."}
-            }, "required": ["frontier_path", "receipt_path"]}),
+                "record_path": {"type": "string", "description": "Path to the record JSON (vrc_…)."}
+            }, "required": ["frontier_path", "record_path"]}),
             PermissionLevel::Write,
             true,
             vec![

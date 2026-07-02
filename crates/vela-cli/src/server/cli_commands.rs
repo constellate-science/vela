@@ -540,8 +540,31 @@ pub(crate) enum Commands {
         #[arg(long)]
         target: String,
         /// Path to a JSON file holding the VerifierAttachment object.
+        /// Omit with --proof to BUILD a lean_kernel attachment instead.
+        #[arg(long, required_unless_present = "proof")]
+        attachment_file: Option<PathBuf>,
+        /// Build-and-attach a `lean_kernel` CI verifier attachment (the
+        /// mode that used to live on the retired `attest --proof`).
         #[arg(long)]
-        attachment_file: PathBuf,
+        proof: bool,
+        /// Proof mode: solver identity (e.g. lean4@4.29.1).
+        #[arg(long)]
+        solver: Option<String>,
+        /// Proof mode: the CI verifier actor (e.g. ci:github-actions).
+        #[arg(long = "verifier-actor")]
+        verifier_actor: Option<String>,
+        /// Proof mode: the axiom footprint is kernel-clean
+        /// (`[propext, Classical.choice, Quot.sound]`); omit for Compromised.
+        #[arg(long = "axioms-clean")]
+        axioms_clean: bool,
+        /// Proof mode: an undischarged hypothesis the theorem assumes as a
+        /// parameter. Repeatable; any such hypothesis makes the proof
+        /// CONDITIONAL.
+        #[arg(long = "undischarged-hypothesis")]
+        undischarged_hypothesis: Vec<String>,
+        /// Proof mode: what was verified (the reviewer reads this).
+        #[arg(long)]
+        note: Option<String>,
         /// Reviewer authority applying the attachment (e.g. `reviewer:opus`).
         /// Optional: defaults to your `vela id`.
         #[arg(long = "as", alias = "reviewer")]
@@ -643,16 +666,53 @@ pub(crate) enum Commands {
     /// (e.g. a second reviewer countersigning a finding.reviewed
     /// event, or a Lean run attesting a Stupp-protocol claim by
     /// pointing at its accept event).
-    /// Vela Receipts (v0): the portable claim packet. `emit` shapes work
-    /// into an evidence-bound, content-addressed proposal; `validate`
-    /// re-derives every hash it cites; `apply` lands it on a frontier as a
-    /// pending proposal for a human key to accept. A receipt is not truth —
-    /// it is activity shaped so the merge layer can judge it.
-    Receipt {
-        #[command(subcommand)]
-        action: ReceiptAction,
+    /// Record activity into a portable claim packet (vrc_): the claim, the
+    /// artifact files (hashed at record time), the caveats, pinned against
+    /// the frontier's current head. One verb, git-plain:
+    /// `vela record <dir> --claim …` records; `vela record <file.json>`
+    /// validates (every hash re-derived); add `--propose <dir>` to land it
+    /// as a PENDING proposal. A record is not truth — it is activity shaped
+    /// so the merge layer can judge it; a human key decides.
+    Record {
+        /// A frontier dir (record mode) or a vrc_ JSON file (validate mode).
+        target: PathBuf,
+        /// What you assert is now known / bounded / refuted (record mode).
+        #[arg(long)]
+        claim: Option<String>,
+        /// theoretical | computational | empirical | negative
+        #[arg(long, default_value = "computational")]
+        r#type: String,
+        /// Artifact file `path[:kind]` (kind defaults to `witness`), hashed
+        /// at record time. Repeatable; record mode requires at least one.
+        #[arg(long = "artifact")]
+        artifacts: Vec<String>,
+        /// What this does NOT establish. Repeatable; record mode requires
+        /// at least one.
+        #[arg(long = "caveat")]
+        caveats: Vec<String>,
+        /// A verifier run you already performed: `method:outcome:logfile[:solver]`.
+        #[arg(long = "verifier-run")]
+        verifier_runs: Vec<String>,
+        /// Who records (defaults to $VELA_ACTOR_ID / your identity).
+        #[arg(long)]
+        actor: Option<String>,
+        /// Signing key (optional — agents without keys record unsigned).
+        #[arg(long)]
+        key: Option<PathBuf>,
+        /// Where to write the record (default: records/<vrc_id>.json).
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Validate mode: land the validated record on this frontier as a
+        /// pending proposal.
+        #[arg(long)]
+        propose: Option<PathBuf>,
+        #[arg(long)]
+        json: bool,
     },
-    Attest {
+    /// Human review judgments, signed with YOUR key: statement-fidelity
+    /// verdicts (single or batch) and role-scoped reviewer attestations.
+    /// Everything here is a decision — agents are refused by the engine.
+    Review {
         /// Frontier path. Required.
         frontier: PathBuf,
         /// Role-scoped target id (`vev_*`, `vsd_*`, `vrp_*`, or `vpf_*`).
@@ -708,8 +768,8 @@ pub(crate) enum Commands {
         /// (`faithful`, `variant`, or `unfaithful`). When present, writes a
         /// signed `vsa_` statement attestation against the positional
         /// target finding id. Reserved for `reviewer:` actors by design.
-        #[arg(long)]
-        verdict: Option<String>,
+        #[arg(long, alias = "verdict")]
+        fidelity: Option<String>,
         /// Faithfulness: where the informal problem lives
         /// (e.g. `erdosproblems.com/214`).
         #[arg(long = "informal-ref")]
@@ -727,32 +787,6 @@ pub(crate) enum Commands {
         /// rubber stamp.
         #[arg(long)]
         note: Option<String>,
-        /// Proof-attestation mode: attach a `lean_kernel` CI verification to
-        /// the positional target finding (the hosted Lean proof compiled clean
-        /// against its pinned toolchain). Attested by CI, not an independent
-        /// reproduction; a lone such attachment fails the gate's G1/G3 by
-        /// design.
-        #[arg(long)]
-        proof: bool,
-        /// Proof: solver id, for example `lean4@4.29.1`.
-        #[arg(long)]
-        solver: Option<String>,
-        /// Proof: the verifier actor, for example
-        /// `ci:github-actions:willblair0708/lean-proofs`.
-        #[arg(long = "verifier-actor")]
-        verifier_actor: Option<String>,
-        /// Proof: the axiom footprint is kernel-clean
-        /// (`[propext, Classical.choice, Quot.sound]`), setting method
-        /// integrity to Sound; omit for Compromised.
-        #[arg(long = "axioms-clean")]
-        axioms_clean: bool,
-        /// Proof: an undischarged hypothesis the theorem assumes as a parameter,
-        /// e.g. `h_duke : DukeTheoremStatement`. Repeatable. Even with
-        /// `--axioms-clean`, any such hypothesis makes the proof CONDITIONAL: the
-        /// gate will not let the attachment reach `verified` (`#print axioms`
-        /// cannot see a hypothesis parameter).
-        #[arg(long = "undischarged-hypothesis")]
-        undischarged_hypothesis: Vec<String>,
         /// Faithfulness batch mode: a JSON file of verdicts to sign under one
         /// key read and one save (a bare array or `{"verdicts": [...]}`, each
         /// row `{target, verdict, informal_ref, formal_ref,
@@ -769,8 +803,8 @@ pub(crate) enum Commands {
 #[derive(Subcommand)]
 pub(crate) enum IdAction {
     /// One-time setup: generate a key, store it, and remember your actor id
-    /// and default hub. After this, `vela publish` / `vela accept` /
-    /// `vela propose` need no `--key`/`--actor`/`--hub` flags.
+    /// and default hub. After this, `vela accept` / `vela propose` /
+    /// `vela review` need no `--key`/`--actor`/`--hub` flags.
     Create {
         /// Your handle, e.g. `alice`. Becomes `reviewer:alice` (or
         /// `agent:alice` with --agent). Defaults to `$USER`.
@@ -1754,72 +1788,6 @@ pub(crate) enum QueueAction {
     Clear {
         #[arg(long)]
         queue_file: Option<PathBuf>,
-        #[arg(long)]
-        json: bool,
-    },
-}
-
-#[derive(Subcommand)]
-pub(crate) enum ReceiptAction {
-    /// Emit a receipt from work you just did: the claim, the evidence
-    /// files (hashed at emit), the caveats, pinned against the frontier's
-    /// current head. Signs iff a key is available; unsigned receipts are
-    /// valid and loudly marked.
-    Emit {
-        /// The frontier this proposes against (a repo dir).
-        frontier: PathBuf,
-        /// What you assert is now known / bounded / refuted.
-        #[arg(long)]
-        assertion: String,
-        /// theoretical | computational | empirical | negative
-        #[arg(long, default_value = "computational")]
-        r#type: String,
-        /// Evidence artifact `path[:kind]` (kind defaults to `witness`).
-        /// Repeatable; at least one required. The file is hashed at emit.
-        #[arg(long = "evidence", required = true)]
-        evidence: Vec<String>,
-        /// What this does NOT establish. Repeatable; at least one required.
-        #[arg(long = "caveat", required = true)]
-        caveats: Vec<String>,
-        /// A verifier run you already performed: `method:outcome:logfile[:solver]`.
-        /// The log file is hashed. Repeatable.
-        #[arg(long = "verifier-run")]
-        verifier_runs: Vec<String>,
-        /// Who emits (defaults to $VELA_ACTOR_ID / your identity).
-        #[arg(long)]
-        actor: Option<String>,
-        /// Signing key (optional — agents without keys emit unsigned).
-        #[arg(long)]
-        key: Option<PathBuf>,
-        /// Where to write the receipt (default: receipts/<vrc_id>.json
-        /// under the frontier).
-        #[arg(long)]
-        out: Option<PathBuf>,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Validate a receipt: schema, id re-derivation, signature (if
-    /// present), and every evidence hash re-derived from bytes.
-    Validate {
-        /// Path to the receipt JSON.
-        receipt: PathBuf,
-        /// Frontier dir to check the vfr_ binding against (optional).
-        #[arg(long)]
-        frontier: Option<PathBuf>,
-        /// Root for resolving relative evidence locators (defaults to the
-        /// receipt's directory).
-        #[arg(long)]
-        evidence_root: Option<PathBuf>,
-        #[arg(long)]
-        json: bool,
-    },
-    /// Land a validated receipt on a frontier as a PENDING proposal (the
-    /// agent-propose / human-accept boundary: apply never decides).
-    Apply {
-        /// Path to the receipt JSON.
-        receipt: PathBuf,
-        /// The frontier repo to land on.
-        frontier: PathBuf,
         #[arg(long)]
         json: bool,
     },

@@ -179,7 +179,7 @@ vela status <frontier>                      # one-screen truth
 2. **Pull a task packet.** `vela serve examples/erdos-problems` exposes MCP tools; `task_packet` for a problem number returns the statement, allowed outputs mapped to verifiers, banked do-not-regrind routes, and open targets ranked by what rests on them.
 3. **Lease before long work.** `vela claim <frontier> <obligation-id> --ttl 86400 --by <actor> --key <key>` so other producers route around you.
 4. **Produce a state transition.** A witness that passes `vela reproduce`, a finding proposed via `vela propose`, or a signed attempt (failures included: they are ledger entries, not noise).
-5. **Authority is custody.** An agent may propose; only a key-holding human accepts (`vela accept --key`). Statement faithfulness is a separate signed verdict (`vela attest --scope formalism-fidelity`): the kernel proves the formal statement follows; only a human attests it is the problem anyone meant.
+5. **Authority is custody.** An agent may propose; only a key-holding human accepts (`vela accept --key`). Statement fidelity is a separate signed verdict (`vela review --fidelity …`): the kernel proves the formal statement follows; only a human attests it is the problem anyone meant.
 
 ### The objects
 

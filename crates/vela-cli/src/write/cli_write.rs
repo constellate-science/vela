@@ -542,7 +542,7 @@ pub(crate) fn cmd_claim(
     }
 }
 
-/// `vela attest <frontier> <finding_id> --verdict ...`: write a signed
+/// `vela review <frontier> <finding_id> --fidelity ...`: write a signed
 /// statement-faithfulness attestation (`vsa_`) — the human judgment that a
 /// FORMAL statement faithfully encodes an INFORMAL problem. Reserved for
 /// `reviewer:` actors by design: `StatementAttestation::build` refuses any
@@ -677,7 +677,7 @@ pub(crate) fn cmd_attest_faithfulness(
     }
 }
 
-/// `vela attest faithfulness --batch <file>`: sign a whole list of faithfulness
+/// `vela review <frontier> --batch <file>`: sign a whole list of fidelity
 /// verdicts under ONE key read and ONE save, instead of one keyed command per
 /// verdict. Each verdict is still a human judgment signed by the reviewer's own
 /// key; batching only removes the per-verdict repetition (the migration of the
@@ -765,7 +765,7 @@ pub(crate) fn cmd_attest_faithfulness_batch(
     }
 }
 
-/// `vela attest <frontier> <finding_id> --proof ...`: attach a `lean_kernel`
+/// `vela attach <frontier> --target <finding_id> --proof ...`: attach a `lean_kernel`
 /// CI verification to a proof finding. It records that the hosted Lean proof
 /// compiled clean against its pinned toolchain (axiom footprint kernel-only),
 /// as attested by CI, NOT an independent reproduction. A single such attachment

@@ -74,7 +74,7 @@ pub const EVENT_KIND_EVIDENCE_ATOM_LOCATOR_REPAIRED: &str = "evidence_atom.locat
 pub const EVENT_KIND_FINDING_SPAN_REPAIRED: &str = "finding.span_repaired";
 
 /// v0.79.4: Per-event attestation. The substrate's existing
-/// frontier-wide signing path (`vela attest <frontier>`) is
+/// frontier-wide signing path (`vela review <frontier>`) is
 /// coarse-grained: it signs every unsigned finding under one key.
 /// Per-event attestation lets a reviewer or external verifier
 /// attest one specific canonical event (`vev_*`) by emitting a

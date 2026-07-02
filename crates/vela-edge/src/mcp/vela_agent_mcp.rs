@@ -538,38 +538,38 @@ pub fn submit_diff_pack(args: &Value) -> Result<String, String> {
     .unwrap_or_default())
 }
 
-/// `vela_receipt_apply` — land a Vela Receipt (vrc_) on the LOCAL frontier
-/// as a pending proposal. The git-native successor to the retired
-/// propose-to-hub lane: the agent works in the repo, the receipt becomes a
-/// reviewable proposal, `git push` publishes, the hub re-indexes. Never
-/// decides — the proposal waits for a human key.
-pub fn receipt_apply(args: &Value) -> Result<String, String> {
+/// `vela_record_propose` — land an activity record (vrc_) on the LOCAL
+/// frontier as a pending proposal. The git-native agent write path: the
+/// agent works in the repo, the record becomes a reviewable proposal,
+/// `git push` publishes, the hub re-indexes. Never decides — the proposal
+/// waits for a human key.
+pub fn record_propose(args: &Value) -> Result<String, String> {
     let frontier_path: PathBuf = args
         .get("frontier_path")
         .and_then(Value::as_str)
         .ok_or("frontier_path required")?
         .into();
-    let receipt_path: PathBuf = args
-        .get("receipt_path")
+    let record_path: PathBuf = args
+        .get("record_path")
         .and_then(Value::as_str)
-        .ok_or("receipt_path required")?
+        .ok_or("record_path required")?
         .into();
-    let raw = std::fs::read_to_string(&receipt_path)
-        .map_err(|e| format!("read {}: {e}", receipt_path.display()))?;
-    let rc: vela_protocol::receipt::Receipt =
-        serde_json::from_str(&raw).map_err(|e| format!("receipt parse: {e}"))?;
+    let raw = std::fs::read_to_string(&record_path)
+        .map_err(|e| format!("read {}: {e}", record_path.display()))?;
+    let rc: vela_protocol::record::ActivityRecord =
+        serde_json::from_str(&raw).map_err(|e| format!("record parse: {e}"))?;
     let signed = rc.verify()?;
     let project = vela_protocol::repo::load_from_path(&frontier_path)
         .map_err(|e| format!("load frontier: {e}"))?;
     if project.frontier_id() != rc.frontier_id {
         return Err(format!(
-            "receipt is for {}, this frontier is {}",
+            "record is for {}, this frontier is {}",
             rc.frontier_id,
             project.frontier_id()
         ));
     }
     let conditions = format!(
-        "Receipt {} ({}). Caveats: {}.",
+        "Record {} ({}). Caveats: {}.",
         rc.id,
         if signed { "signed" } else { "unsigned" },
         rc.caveats.join(" | "),
@@ -579,7 +579,7 @@ pub fn receipt_apply(args: &Value) -> Result<String, String> {
         vela_protocol::state::FindingDraftOptions {
             text: rc.assertion.clone(),
             assertion_type: rc.assertion_type.clone(),
-            source: format!("receipt:{}", rc.id),
+            source: format!("record:{}", rc.id),
             source_type: "model_output".to_string(),
             author: rc.emitted_by.clone(),
             confidence: 0.3,
@@ -598,7 +598,7 @@ pub fn receipt_apply(args: &Value) -> Result<String, String> {
     )?;
     Ok(serde_json::json!({
         "ok": true,
-        "receipt": rc.id,
+        "record": rc.id,
         "signed": signed,
         "proposal_id": report.proposal_id,
         "status": report.proposal_status,

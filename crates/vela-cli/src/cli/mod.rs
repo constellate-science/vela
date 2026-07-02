@@ -212,10 +212,36 @@ pub async fn run_command() {
             frontier,
             target,
             attachment_file,
+            proof,
+            solver,
+            verifier_actor,
+            axioms_clean,
+            undischarged_hypothesis,
+            note,
             reviewer,
             reason,
             json,
         } => {
+            // Proof mode: BUILD a lean_kernel attachment and land it (the
+            // mode that used to live on the retired `attest --proof`).
+            if proof {
+                cmd_attest_proof(
+                    frontier,
+                    target,
+                    solver.unwrap_or_else(|| "lean4@4.29.1".to_string()),
+                    verifier_actor.unwrap_or_else(|| {
+                        fail_return("attach: --verifier-actor is required with --proof")
+                    }),
+                    axioms_clean,
+                    undischarged_hypothesis,
+                    note.unwrap_or_else(|| fail_return("attach: --note is required with --proof")),
+                    None,
+                    json,
+                );
+                return;
+            }
+            let attachment_file = attachment_file
+                .unwrap_or_else(|| fail_return("attach: --attachment-file is required"));
             // Reviewer authority defaults from `vela id`.
             let reviewer = crate::cli_identity::resolve_actor(reviewer.as_deref());
             cmd_attach(
@@ -374,7 +400,31 @@ pub async fn run_command() {
                 diff::run(&frontier_a, &frontier_b_path, json, quiet);
             }
         }
-        Commands::Receipt { action } => cmd_receipt(action),
+        Commands::Record {
+            target,
+            claim,
+            r#type,
+            artifacts,
+            caveats,
+            verifier_runs,
+            actor,
+            key,
+            out,
+            propose,
+            json,
+        } => cmd_record(
+            &target,
+            claim,
+            r#type,
+            artifacts,
+            caveats,
+            verifier_runs,
+            actor,
+            key,
+            out,
+            propose,
+            json,
+        ),
         Commands::Proposals { action } => cmd_proposals(action),
         Commands::Lean { action } => cmd_lean(action),
         Commands::Attempt { action } => crate::cli_lean::cmd_attempt(action),
@@ -957,7 +1007,7 @@ pub async fn run_command() {
             }
         }
 
-        Commands::Attest {
+        Commands::Review {
             frontier,
             target_id,
             scopes,
@@ -972,70 +1022,43 @@ pub async fn run_command() {
             proof_id,
             signature,
             key,
-            verdict,
+            fidelity,
             informal_ref,
             formal_ref,
             formal_statement_hash,
             note,
-            proof,
-            solver,
-            verifier_actor,
-            axioms_clean,
-            undischarged_hypothesis,
             batch,
             json,
         } => {
-            // Proof-attestation mode: a `lean_kernel` CI verifier attachment on
-            // a proof finding. Keyed on --proof so the other modes are untouched.
-            if proof {
-                let target = target_id.clone().unwrap_or_else(|| {
-                    fail_return("attest: positional <finding-id> is required with --proof")
-                });
-                cmd_attest_proof(
-                    frontier,
-                    target,
-                    solver.unwrap_or_else(|| "lean4@4.29.1".to_string()),
-                    verifier_actor.unwrap_or_else(|| {
-                        fail_return("attest: --verifier-actor is required with --proof")
-                    }),
-                    axioms_clean,
-                    undischarged_hypothesis,
-                    note.clone()
-                        .unwrap_or_else(|| fail_return("attest: --note is required with --proof")),
-                    key,
-                    json,
-                );
-                return;
-            }
-            // Faithfulness batch mode: sign a whole verdict file under one key
-            // read and one save. Checked before the single --verdict path.
+            // Fidelity batch mode: sign a whole verdict file under one key
+            // read and one save. Checked before the single --fidelity path.
             if let Some(batch) = batch {
                 cmd_attest_faithfulness_batch(frontier, batch, reviewer, key, json);
                 return;
             }
-            // Statement-faithfulness mode: a signed `vsa_` human verdict on
+            // Statement-fidelity mode: a signed `vsa_` human verdict on
             // whether the formal statement encodes the informal problem.
-            // Keyed on --verdict so the reviewer-identity and per-event
+            // Keyed on --fidelity so the reviewer-identity and per-event
             // modes below are untouched.
-            if let Some(verdict) = verdict {
+            if let Some(fidelity) = fidelity {
                 let target = target_id.clone().unwrap_or_else(|| {
-                    fail_return("attest: positional <finding-id> is required with --verdict")
+                    fail_return("review: positional <finding-id> is required with --fidelity")
                 });
                 cmd_attest_faithfulness(
                     frontier,
                     target,
-                    verdict,
+                    fidelity,
                     informal_ref.unwrap_or_else(|| {
-                        fail_return("attest: --informal-ref is required with --verdict")
+                        fail_return("review: --informal-ref is required with --fidelity")
                     }),
                     formal_ref.unwrap_or_else(|| {
-                        fail_return("attest: --formal-ref is required with --verdict")
+                        fail_return("review: --formal-ref is required with --fidelity")
                     }),
                     formal_statement_hash.unwrap_or_else(|| {
-                        fail_return("attest: --formal-statement-hash is required with --verdict")
+                        fail_return("review: --formal-statement-hash is required with --fidelity")
                     }),
                     note.unwrap_or_else(|| {
-                        fail_return("attest: --note is required with --verdict")
+                        fail_return("review: --note is required with --fidelity")
                     }),
                     reviewer,
                     key,
@@ -1045,15 +1068,15 @@ pub async fn run_command() {
             }
             if let Some(target_id) = target_id {
                 let parsed_scopes = reviewer_identity::parse_scopes(&scopes)
-                    .unwrap_or_else(|e| fail_return(&format!("attest: {e}")));
+                    .unwrap_or_else(|e| fail_return(&format!("review: {e}")));
                 let reviewer = reviewer.unwrap_or_else(|| {
-                    fail_return("attest: --reviewer is required for target attestations")
+                    fail_return("review: --reviewer is required for target attestations")
                 });
                 let role = role.unwrap_or_else(|| {
-                    fail_return("attest: --role is required for target attestations")
+                    fail_return("review: --role is required for target attestations")
                 });
                 let reason = reason.unwrap_or_else(|| {
-                    fail_return("attest: --reason is required for target attestations")
+                    fail_return("review: --reason is required for target attestations")
                 });
                 let report = reviewer_identity::record(
                     &frontier,
@@ -2615,12 +2638,26 @@ fn collect_witness_files_into(dir: &Path, out: &mut Vec<PathBuf>) {
     }
 }
 
-/// Vela Receipts v0: emit / validate / apply. The portable claim packet —
-/// evidence-bound activity shaped so the merge layer can judge it. `apply`
-/// lands a PENDING proposal; deciding stays with a human key.
-pub(crate) fn cmd_receipt(action: crate::cli_commands::ReceiptAction) {
-    use crate::cli_commands::ReceiptAction;
-    use vela_protocol::receipt::{Receipt, ReceiptDraft, ReceiptEvidence, ReceiptVerifierRun};
+/// `vela record` — the one-verb activity-record surface. A frontier dir
+/// records; a vrc_ JSON file validates; `--propose <dir>` lands the
+/// validated record as a PENDING proposal. Deciding stays with a human key.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn cmd_record(
+    target: &Path,
+    claim: Option<String>,
+    assertion_type: String,
+    artifacts: Vec<String>,
+    caveats: Vec<String>,
+    verifier_runs: Vec<String>,
+    actor: Option<String>,
+    key: Option<std::path::PathBuf>,
+    out: Option<std::path::PathBuf>,
+    propose: Option<std::path::PathBuf>,
+    json: bool,
+) {
+    use vela_protocol::record::{
+        ActivityRecord, ActivityRecordDraft, RecordArtifact, RecordVerifierRun,
+    };
 
     fn hash_file(path: &std::path::Path) -> Result<String, String> {
         use sha2::{Digest, Sha256};
@@ -2628,248 +2665,92 @@ pub(crate) fn cmd_receipt(action: crate::cli_commands::ReceiptAction) {
         Ok(hex::encode(Sha256::digest(&bytes)))
     }
 
-    match action {
-        ReceiptAction::Emit {
-            frontier,
-            assertion,
-            r#type,
-            evidence,
-            caveats,
-            verifier_runs,
-            actor,
-            key,
-            out,
-            json,
-        } => {
-            let project = repo::load_from_path(&frontier)
-                .unwrap_or_else(|e| fail_return(&format!("load frontier: {e}")));
-            let vfr = project.frontier_id();
-            let head = vela_protocol::events::event_log_hash(&project.events);
-            let mut atoms = Vec::new();
-            for spec in &evidence {
-                let (path_str, kind) = match spec.rsplit_once(':') {
-                    Some((p, k)) if !k.contains('/') && !k.contains('\\') => {
-                        (p.to_string(), k.to_string())
+    // ── validate mode: the target is a vrc_ JSON file ─────────────────────
+    if target.is_file() {
+        let raw = std::fs::read_to_string(target)
+            .unwrap_or_else(|e| fail_return(&format!("read {}: {e}", target.display())));
+        let rc: ActivityRecord = serde_json::from_str(&raw)
+            .unwrap_or_else(|e| fail_return(&format!("record parse: {e}")));
+        let signed = rc.verify().unwrap_or_else(|e| fail_return(&e));
+        // Locators are frontier-relative; the record usually lives in
+        // <frontier>/records/. Try the propose target, the record's dir,
+        // its parent (the frontier), then cwd.
+        let mut roots: Vec<std::path::PathBuf> = Vec::new();
+        if let Some(fr) = &propose {
+            roots.push(fr.clone());
+        }
+        if let Some(dir) = target.parent() {
+            roots.push(dir.to_path_buf());
+            if let Some(up) = dir.parent() {
+                roots.push(up.to_path_buf());
+            }
+        }
+        roots.push(std::path::PathBuf::from("."));
+        let mut missing = Vec::new();
+        let mut mismatched = Vec::new();
+        for atom in &rc.artifacts {
+            let mut state = "missing";
+            for root in &roots {
+                match hash_file(&root.join(&atom.locator)) {
+                    Ok(h) if h == atom.sha256 => {
+                        state = "ok";
+                        break;
                     }
-                    _ => (spec.clone(), "witness".to_string()),
-                };
-                let path = std::path::Path::new(&path_str);
-                let sha = hash_file(path)
-                    .unwrap_or_else(|e| fail_return(&format!("--evidence {spec}: {e}")));
-                // locator relative to the frontier when possible, so the
-                // receipt travels with the repo.
-                let locator = path
-                    .strip_prefix(&frontier)
-                    .map(|p| p.display().to_string())
-                    .unwrap_or_else(|_| path_str.clone());
-                atoms.push(ReceiptEvidence {
-                    kind,
-                    locator,
-                    sha256: sha,
-                    note: String::new(),
-                });
-            }
-            let mut runs = Vec::new();
-            for spec in &verifier_runs {
-                let parts: Vec<&str> = spec.splitn(4, ':').collect();
-                if parts.len() < 3 {
-                    fail(&format!(
-                        "--verifier-run must be method:outcome:logfile[:solver], got '{spec}'"
-                    ));
+                    Ok(_) => state = "mismatched",
+                    Err(_) => {}
                 }
-                let output_hash = hash_file(std::path::Path::new(parts[2]))
-                    .unwrap_or_else(|e| fail_return(&format!("--verifier-run {spec}: {e}")));
-                runs.push(ReceiptVerifierRun {
-                    method: parts[0].to_string(),
-                    outcome: parts[1].to_string(),
-                    output_hash,
-                    solver: parts.get(3).map(|s| s.to_string()).unwrap_or_default(),
-                });
             }
-            let emitted_by = crate::cli_identity::resolve_actor(actor.as_deref());
-            // Custody: an agent-/ci-actor emit NEVER auto-resolves the
-            // configured (human) identity key — that would put a human's
-            // signature on machine-emitted content. An agent signs only
-            // with a key passed EXPLICITLY (its own); otherwise the
-            // receipt is honestly unsigned.
-            let signing_key = if key.is_none()
-                && (emitted_by.starts_with("agent:") || emitted_by.starts_with("ci:"))
-            {
-                None
-            } else {
-                crate::cli_identity::resolve_signing_key_opt(key.as_deref())
-            };
-            let receipt = Receipt::build(
-                ReceiptDraft {
-                    frontier_id: vfr,
-                    against_head: head,
-                    assertion,
-                    assertion_type: r#type,
-                    evidence: atoms,
-                    verifier_runs: runs,
-                    caveats,
-                    emitted_by,
-                    emitted_at: chrono::Utc::now().to_rfc3339(),
-                },
-                signing_key.as_ref(),
-            )
-            .unwrap_or_else(|e| fail_return(&e));
-            let dest = out.unwrap_or_else(|| {
-                frontier
-                    .join("receipts")
-                    .join(format!("{}.json", receipt.id))
-            });
-            if let Some(parent) = dest.parent() {
-                std::fs::create_dir_all(parent)
-                    .unwrap_or_else(|e| fail_return(&format!("mkdir {}: {e}", parent.display())));
-            }
-            std::fs::write(
-                &dest,
-                serde_json::to_string_pretty(&receipt)
-                    .unwrap_or_else(|e| fail_return(&e.to_string())),
-            )
-            .unwrap_or_else(|e| fail_return(&format!("write {}: {e}", dest.display())));
-            let signed = !receipt.signature.is_empty();
-            if json {
-                print_json(&json!({
-                    "ok": true,
-                    "command": "receipt.emit",
-                    "id": receipt.id,
-                    "signed": signed,
-                    "frontier_id": receipt.frontier_id,
-                    "against_head": receipt.against_head,
-                    "evidence": receipt.evidence.len(),
-                    "wrote_to": dest.display().to_string(),
-                }));
-            } else {
-                println!(
-                    "{} {} emitted ({} evidence atom(s), {}) -> {}",
-                    style::ok("receipt"),
-                    receipt.id,
-                    receipt.evidence.len(),
-                    if signed { "signed" } else { "UNSIGNED" },
-                    dest.display()
-                );
-                if !signed {
-                    eprintln!(
-                        "  note: unsigned — valid to carry and apply; a reviewer sees signed=false"
-                    );
-                }
+            match state {
+                "ok" => {}
+                "mismatched" => mismatched.push(atom.locator.clone()),
+                _ => missing.push(atom.locator.clone()),
             }
         }
-        ReceiptAction::Validate {
-            receipt,
-            frontier,
-            evidence_root,
-            json,
-        } => {
-            let raw = std::fs::read_to_string(&receipt)
-                .unwrap_or_else(|e| fail_return(&format!("read {}: {e}", receipt.display())));
-            let rc: Receipt = serde_json::from_str(&raw)
-                .unwrap_or_else(|e| fail_return(&format!("receipt parse: {e}")));
-            let signed = rc.verify().unwrap_or_else(|e| fail_return(&e));
-            let root = evidence_root
-                .or_else(|| frontier.clone())
-                .or_else(|| receipt.parent().map(|p| p.to_path_buf()))
-                .unwrap_or_else(|| std::path::PathBuf::from("."));
-            let mut missing = Vec::new();
-            let mut mismatched = Vec::new();
-            for atom in &rc.evidence {
-                let p = root.join(&atom.locator);
-                match hash_file(&p) {
-                    Ok(h) if h == atom.sha256 => {}
-                    Ok(_) => mismatched.push(atom.locator.clone()),
-                    Err(_) => missing.push(atom.locator.clone()),
-                }
+        let ok = missing.is_empty() && mismatched.is_empty();
+        if !ok {
+            for l in &missing {
+                eprintln!("  missing artifact: {l}");
             }
-            let mut frontier_match = None;
-            if let Some(dir) = &frontier {
-                let project = repo::load_from_path(dir)
-                    .unwrap_or_else(|e| fail_return(&format!("load frontier: {e}")));
-                frontier_match = Some(project.frontier_id() == rc.frontier_id);
+            for l in &mismatched {
+                eprintln!("  HASH MISMATCH: {l}");
             }
-            let ok = mismatched.is_empty() && missing.is_empty() && frontier_match.unwrap_or(true);
-            if json {
-                print_json(&json!({
-                    "ok": ok,
-                    "command": "receipt.validate",
-                    "id": rc.id,
-                    "signed": signed,
-                    "evidence_verified": rc.evidence.len() - missing.len() - mismatched.len(),
-                    "evidence_missing": missing,
-                    "evidence_mismatched": mismatched,
-                    "frontier_match": frontier_match,
-                }));
-            } else if ok {
-                println!(
-                    "{} {} valid ({} evidence atom(s) re-derived, {})",
-                    style::ok("receipt"),
-                    rc.id,
-                    rc.evidence.len(),
-                    if signed { "signed" } else { "UNSIGNED" }
-                );
-            } else {
-                for l in &missing {
-                    eprintln!("  missing evidence: {l}");
-                }
-                for l in &mismatched {
-                    eprintln!("  HASH MISMATCH: {l}");
-                }
-                if frontier_match == Some(false) {
-                    eprintln!("  frontier_id does not match the given frontier");
-                }
-                fail("receipt validation failed");
-            }
-            if !ok {
-                std::process::exit(1);
-            }
+            fail("record validation failed");
         }
-        ReceiptAction::Apply {
-            receipt,
-            frontier,
-            json,
-        } => {
-            let raw = std::fs::read_to_string(&receipt)
-                .unwrap_or_else(|e| fail_return(&format!("read {}: {e}", receipt.display())));
-            let rc: Receipt = serde_json::from_str(&raw)
-                .unwrap_or_else(|e| fail_return(&format!("receipt parse: {e}")));
-            let signed = rc.verify().unwrap_or_else(|e| fail_return(&e));
+        // ── optional landing: --propose <frontier> ────────────────────────
+        if let Some(frontier) = propose {
             let project = repo::load_from_path(&frontier)
                 .unwrap_or_else(|e| fail_return(&format!("load frontier: {e}")));
             if project.frontier_id() != rc.frontier_id {
                 fail(&format!(
-                    "receipt is for {}, this frontier is {}",
+                    "record is for {}, this frontier is {}",
                     rc.frontier_id,
                     project.frontier_id()
                 ));
             }
-            // Everything the reviewer needs at accept time rides in the
-            // conditions text: the receipt id (content-addressed — the full
-            // packet is re-fetchable), the head delta, and the caveats.
             let head_now = vela_protocol::events::event_log_hash(&project.events);
             let staleness = if head_now == rc.against_head {
-                "emitted against the current head".to_string()
+                "recorded against the current head".to_string()
             } else {
                 format!(
-                    "emitted against head {}…, current head {}… — review the delta",
+                    "recorded against head {}…, current head {}… — review the delta",
                     &rc.against_head[..rc.against_head.len().min(16)],
                     &head_now[..head_now.len().min(16)]
                 )
             };
             let conditions = format!(
-                "Receipt {} ({}; {}). Caveats: {}. Evidence: {} atom(s), hashes verified at apply.",
+                "Record {} ({}; {}). Caveats: {}. Artifacts: {} hash-verified at propose.",
                 rc.id,
                 if signed { "signed" } else { "unsigned" },
                 staleness,
                 rc.caveats.join(" | "),
-                rc.evidence.len(),
+                rc.artifacts.len(),
             );
             let report = state::add_finding(
                 &frontier,
                 state::FindingDraftOptions {
                     text: rc.assertion.clone(),
                     assertion_type: rc.assertion_type.clone(),
-                    source: format!("receipt:{}", rc.id),
+                    source: format!("record:{}", rc.id),
                     source_type: "model_output".to_string(),
                     author: rc.emitted_by.clone(),
                     confidence: 0.3,
@@ -2884,14 +2765,14 @@ pub(crate) fn cmd_receipt(action: crate::cli_commands::ReceiptAction) {
                     negative_space: false,
                     replication_attestation: None,
                 },
-                false, // NEVER apply: a receipt lands as a pending proposal
+                false, // NEVER applies: a record lands pending
             )
-            .unwrap_or_else(|e| fail_return(&format!("receipt apply: {e}")));
+            .unwrap_or_else(|e| fail_return(&format!("record propose: {e}")));
             if json {
                 print_json(&json!({
                     "ok": true,
-                    "command": "receipt.apply",
-                    "receipt": rc.id,
+                    "command": "record.propose",
+                    "record": rc.id,
                     "proposal_id": report.proposal_id,
                     "status": report.proposal_status,
                     "signed": signed,
@@ -2899,12 +2780,145 @@ pub(crate) fn cmd_receipt(action: crate::cli_commands::ReceiptAction) {
             } else {
                 println!(
                     "{} {} landed as proposal {} ({}) — a human key decides from here",
-                    style::ok("receipt"),
+                    style::ok("record"),
                     rc.id,
                     report.proposal_id,
                     report.proposal_status
                 );
             }
+            return;
+        }
+        if json {
+            print_json(&json!({
+                "ok": true,
+                "command": "record.validate",
+                "id": rc.id,
+                "signed": signed,
+                "artifacts_verified": rc.artifacts.len(),
+            }));
+        } else {
+            println!(
+                "{} {} valid ({} artifact(s) re-derived, {})",
+                style::ok("record"),
+                rc.id,
+                rc.artifacts.len(),
+                if signed { "signed" } else { "UNSIGNED" }
+            );
+        }
+        return;
+    }
+
+    // ── record mode: the target is a frontier dir ─────────────────────────
+    let claim = claim.unwrap_or_else(|| {
+        fail_return("record mode needs --claim (or pass a vrc_ JSON file to validate)")
+    });
+    if artifacts.is_empty() {
+        fail("record mode needs at least one --artifact <path[:kind]>");
+    }
+    if caveats.is_empty() {
+        fail("record mode needs at least one --caveat (what this does NOT establish)");
+    }
+    let project = repo::load_from_path(target)
+        .unwrap_or_else(|e| fail_return(&format!("load frontier: {e}")));
+    let vfr = project.frontier_id();
+    let head = vela_protocol::events::event_log_hash(&project.events);
+    let mut atoms = Vec::new();
+    for spec in &artifacts {
+        let (path_str, kind) = match spec.rsplit_once(':') {
+            Some((p, k)) if !k.contains('/') && !k.contains('\\') => (p.to_string(), k.to_string()),
+            _ => (spec.clone(), "witness".to_string()),
+        };
+        let path = std::path::Path::new(&path_str);
+        let sha =
+            hash_file(path).unwrap_or_else(|e| fail_return(&format!("--artifact {spec}: {e}")));
+        let locator = path
+            .strip_prefix(target)
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|_| path_str.clone());
+        atoms.push(RecordArtifact {
+            kind,
+            locator,
+            sha256: sha,
+            note: String::new(),
+        });
+    }
+    let mut runs = Vec::new();
+    for spec in &verifier_runs {
+        let parts: Vec<&str> = spec.splitn(4, ':').collect();
+        if parts.len() < 3 {
+            fail(&format!(
+                "--verifier-run must be method:outcome:logfile[:solver], got '{spec}'"
+            ));
+        }
+        let output_hash = hash_file(std::path::Path::new(parts[2]))
+            .unwrap_or_else(|e| fail_return(&format!("--verifier-run {spec}: {e}")));
+        runs.push(RecordVerifierRun {
+            method: parts[0].to_string(),
+            outcome: parts[1].to_string(),
+            output_hash,
+            solver: parts.get(3).map(|s| s.to_string()).unwrap_or_default(),
+        });
+    }
+    let emitted_by = crate::cli_identity::resolve_actor(actor.as_deref());
+    // Custody: an agent-/ci-actor record NEVER auto-resolves the configured
+    // (human) identity key. An agent signs only with a key passed
+    // EXPLICITLY (its own); otherwise the record is honestly unsigned.
+    let signing_key =
+        if key.is_none() && (emitted_by.starts_with("agent:") || emitted_by.starts_with("ci:")) {
+            None
+        } else {
+            crate::cli_identity::resolve_signing_key_opt(key.as_deref())
+        };
+    let record = ActivityRecord::build(
+        ActivityRecordDraft {
+            frontier_id: vfr,
+            against_head: head,
+            assertion: claim,
+            assertion_type,
+            artifacts: atoms,
+            verifier_runs: runs,
+            caveats,
+            emitted_by,
+            emitted_at: chrono::Utc::now().to_rfc3339(),
+        },
+        signing_key.as_ref(),
+    )
+    .unwrap_or_else(|e| fail_return(&e));
+    let dest = out.unwrap_or_else(|| target.join("records").join(format!("{}.json", record.id)));
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent)
+            .unwrap_or_else(|e| fail_return(&format!("mkdir {}: {e}", parent.display())));
+    }
+    std::fs::write(
+        &dest,
+        serde_json::to_string_pretty(&record).unwrap_or_else(|e| fail_return(&e.to_string())),
+    )
+    .unwrap_or_else(|e| fail_return(&format!("write {}: {e}", dest.display())));
+    let signed = !record.signature.is_empty();
+    if json {
+        print_json(&json!({
+            "ok": true,
+            "command": "record",
+            "id": record.id,
+            "signed": signed,
+            "frontier_id": record.frontier_id,
+            "against_head": record.against_head,
+            "artifacts": record.artifacts.len(),
+            "wrote_to": dest.display().to_string(),
+        }));
+    } else {
+        println!(
+            "{} {} recorded ({} artifact(s), {}) -> {}",
+            style::ok("record"),
+            record.id,
+            record.artifacts.len(),
+            if signed { "signed" } else { "UNSIGNED" },
+            dest.display()
+        );
+        if !signed {
+            eprintln!(
+                "  note: unsigned — valid to carry and propose; a reviewer sees signed=false"
+            );
         }
     }
 }
@@ -3510,8 +3524,8 @@ Setup (once):
   init          Initialize a new frontier repo
 
 Producer loop (git clone -> reproduce -> ingest -> propose -> git push):
-  receipt       Emit/validate/apply portable claim packets (vrc_) — evidence-bound
-                proposals any workbench can emit; apply lands them pending review
+  record        Record activity into a portable claim packet (vrc_): claim +
+                hashed artifacts + caveats; --propose lands it pending review
   reproduce     Re-verify stored witnesses from scratch (frozen exact verifiers)
   ingest        Ingest a paper, dataset, or Carina packet (dispatches by file type)
   propose       Create a finding.review proposal
@@ -3528,7 +3542,8 @@ Review (maintainers):
   accept        Apply a proposal under your reviewer key
   accept-batch  Apply several pending proposals under one reviewer decision
   land          Land a result in one step: accept a vpr_ proposal or a vf_ finding's pending add
-  attest        Sign findings under your private key
+  review        Signed human judgments: statement-fidelity verdicts (--fidelity,
+                --batch) and role-scoped reviewer attestations
   proposals     Inspect, validate, export, import, accept, or reject write proposals
 
 Verify:

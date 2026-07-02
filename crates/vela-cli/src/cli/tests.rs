@@ -67,7 +67,8 @@ mod surface_tests {
     /// The v0.700 released command set, minus the bespoke hub transport
     /// retired at v0.721 (ADR 0001 Phase 2: `publish`, `clone`, `workspace`
     /// — git push is publication; the hub re-derives its index from
-    /// registered git remotes). A regression guard: later consolidation
+    /// registered git remotes) and minus `attest`, renamed to `review`
+    /// at v0.722 (one family for everything a human key decides). A regression guard: later consolidation
     /// batches may NEST these (keeping a hidden top-level alias) but must
     /// never make one unreachable. `is_science_subcommand` counts aliases,
     /// so a nested-with-alias command still passes here.
@@ -77,7 +78,6 @@ mod surface_tests {
         "actor",
         "attach",
         "attempt",
-        "attest",
         "check",
         "claim",
         "completions",

@@ -431,7 +431,7 @@ Agents may:
 
 - inspect state: `vela status .`, `vela inbox .`, `vela check .`
 - draft findings and receipts: `vela finding add . --author agent:<name> …`,
-  `vela receipt emit . …` / `vela receipt apply <receipt> .`
+  `vela record . --claim … --artifact …` / `vela record <vrc_file> --propose .`
 - run the verifiers: `vela reproduce .`, `vela check . --strict`
 - rebuild derived views: `vela frontier materialize .`
 

@@ -419,7 +419,7 @@ knowledge change → Frontier PR → verification checks → review → accept �
      (`vela gate check`); with zero, it sits at `needs_verification` even after a
      reviewer accepts it.
    - A formal claim carries a faithfulness attestation
-     (`vela attest --scope formalism-fidelity`) so the formal statement is
+     (`vela review --scope formalism-fidelity`) so the formal statement is
      attested to match the informal one.
 
 3. **Review it.** A scoped human decision is the merge authority.

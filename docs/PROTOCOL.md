@@ -822,14 +822,16 @@ Earlier releases are documented inline in the sections above.
 - **v0.72**: cross-impl fixture coverage for v0.67 to v0.71 events; `docs/PROTOCOL.md` backfill; `CONTRIBUTING.md` and `clients/python/README.md` added.
 - **v0.73**: `bridge.reviewed` validator gains `validate_bridge_reviewed_against_state` for state-aware tightening (§6.5); cross-impl JSON fixture export extended to cover v0.67 to v0.71 event kinds; developer walkthrough of the event log (now §The canonical event log).
 
-## 6b. receipts (v0)
+## 6b. activity records (v0)
 
-A **Vela Receipt** (`vela.receipt.v0.1`, id `vrc_` + sha256(canonical body,
-id="")[:16]) is the portable claim packet: a structured PROPOSAL to change
-frontier state that any workbench — an AI agent, a notebook, an HPC job, a
-lab system — can emit and any carrier (a PR, an artifact store, an email)
-can move. A receipt is not truth; it is evidence-bound activity shaped so
-the merge layer can judge it.
+An **activity record** (`vela.activity-record.v0.1`, id `vrc_` +
+sha256(canonical body, id="")[:16]) is the portable claim packet: a
+structured PROPOSAL to change frontier state that any workbench — an AI
+agent, a notebook, an HPC job, a lab system — can record and any carrier
+(a PR, an artifact store, an email) can move. It lives in the ACTIVITY
+plane (the claim-centric sibling of the action-centric ActivityEnvelope):
+a record is not truth; it is activity shaped so the merge layer can judge
+it.
 
 Required structure:
 
@@ -837,23 +839,24 @@ Required structure:
   time, so the reviewer sees exactly how stale the claim is;
 - `assertion` + `assertion_type` (`theoretical | computational | empirical
   | negative`);
-- `evidence[]` — at least one artifact, each with `kind`, `locator`, and a
-  `sha256` the validator re-derives from bytes (a receipt cannot cite what
+- `artifacts[]` — at least one, each with `kind`, `locator`, and a
+  `sha256` the validator re-derives from bytes (a record cannot cite what
   it cannot show);
 - `caveats[]` — at least one non-empty statement of what the claim does
   NOT establish;
-- `emitted_by` — any actor; agents welcome (emitting is proposing, never
+- `emitted_by` — any actor; agents welcome (recording is proposing, never
   deciding);
 - `signature` — optional Ed25519 over the canonical body
-  (`application/vnd.vela.receipt+json` under the signing facade). An
-  unsigned receipt is valid and loudly reported as `signed=false`. An
-  agent-actor emit never auto-resolves a configured human key: it signs
+  (`application/vnd.vela.activity_record+json` under the signing facade).
+  An unsigned record is valid and loudly reported as `signed=false`. An
+  agent-actor record never auto-resolves a configured human key: it signs
   only with a key passed explicitly, or not at all.
 
-Lifecycle: `vela receipt emit` (hash + pin + write) → `vela receipt
-validate` (schema, id re-derivation, signature, every evidence hash) →
-`vela receipt apply` (lands as a `finding.add` proposal in
-`pending_review`; apply NEVER accepts). Acceptance stays a human-keyed
+Lifecycle: `vela record <frontier> --claim …` (hash + pin + write) →
+`vela record <vrc_file>` (validate: schema, id re-derivation, signature,
+every artifact hash) → `vela record <vrc_file> --propose <frontier>`
+(lands as a `finding.add` proposal in `pending_review`; propose NEVER
+accepts). Acceptance stays a human-keyed
 decision through the standard proposal gate; `git push` publishes and the
 hub re-derives its index.
 
